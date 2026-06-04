@@ -2,14 +2,21 @@ import re
 import json
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple
 
-# WhatsApp export: [M/D/YY, H:MM:SS AM/PM] Sender: message
+# Old WhatsApp export: M/D/YY, H:MM - Sender: message
 MSG_HEADER = re.compile(
     r"^[\u200e\u200f\u202a-\u202e\u2066-\u2069]*"
+    r"(\d{1,2}/\d{1,2}/\d{2,4}),\s+"
+    r"(\d{1,2}:\d{2})\s+-\s+"
+    r"(.*)$",
+)
+
+# New-format export header used only to find the overlap cutoff in _chat.txt
+NEW_FORMAT_HEADER = re.compile(
+    r"^[\u200e\u200f\u202a-\u202e\u2066-\u2069]*"
     r"\[(\d{1,2}/\d{1,2}/\d{2,4}),\s+"
-    r"(\d{1,2}:\d{2}:\d{2}[\u202f\s]+(?:AM|PM))\]"
-    r"\s+(.*?):\s*(.*)$",
+    r"(\d{1,2}:\d{2}:\d{2}[\u202f\s]+(?:AM|PM))\]",
     re.IGNORECASE,
 )
 
@@ -30,6 +37,7 @@ SYSTEM_PATTERNS = (
     re.compile(r"^this message was deleted\.?$", re.IGNORECASE),
     re.compile(r"^you added .+$", re.IGNORECASE),
     re.compile(r"^(.+?) added (.+)$"),
+    re.compile(r"created group", re.IGNORECASE),
 )
 
 
@@ -44,9 +52,9 @@ def normalize_content(content: str) -> str:
     return content.strip()
 
 
-def parse_datetime(date_str: str, time_str: str) -> datetime:
+def parse_old_datetime(date_str: str, time_str: str) -> datetime:
     normalized_time = time_str.replace("\u202f", " ").strip()
-    for fmt in ("%m/%d/%y, %H:%M:%S %p", "%m/%d/%Y, %H:%M:%S %p"):
+    for fmt in ("%m/%d/%y, %H:%M", "%m/%d/%Y, %H:%M"):
         try:
             return datetime.strptime(f"{date_str}, {normalized_time}", fmt)
         except ValueError:
@@ -54,9 +62,42 @@ def parse_datetime(date_str: str, time_str: str) -> datetime:
     raise ValueError(f"Invalid date format: {date_str}, {time_str}")
 
 
+def parse_new_format_datetime(date_str: str, time_str: str) -> datetime:
+    normalized_time = time_str.replace("\u202f", " ").strip()
+    for fmt in ("%m/%d/%y, %I:%M:%S %p", "%m/%d/%Y, %I:%M:%S %p"):
+        try:
+            return datetime.strptime(f"{date_str}, {normalized_time}", fmt)
+        except ValueError:
+            continue
+    raise ValueError(f"Invalid date format: {date_str}, {time_str}")
+
+
+def get_oldest_new_format_timestamp(file_path: Path) -> Optional[datetime]:
+    oldest = None
+
+    with file_path.open(encoding="utf-8") as f:
+        for line in f:
+            match = NEW_FORMAT_HEADER.match(line)
+            if not match:
+                continue
+            date_str, time_str = match.groups()
+            timestamp = parse_new_format_datetime(date_str, time_str)
+            if oldest is None or timestamp < oldest:
+                oldest = timestamp
+
+    return oldest
+
+
+def split_sender_content(rest: str) -> Tuple[Optional[str], str]:
+    if ": " in rest:
+        sender, content = rest.split(": ", 1)
+        return sender, content
+    return None, rest
+
+
 def is_system_message(content: str) -> bool:
     cleaned = clean_text(content)
-    if not cleaned:
+    if not cleaned or cleaned.lower() == "null":
         return True
 
     for pattern in SYSTEM_PATTERNS:
@@ -69,7 +110,7 @@ def is_system_message(content: str) -> bool:
     return False
 
 
-def parse_messages(file_path: Path) -> List[Dict]:
+def parse_messages(file_path: Path, cutoff: Optional[datetime] = None) -> List[Dict]:
     messages = []
     last_timestamp = None
 
@@ -79,10 +120,19 @@ def parse_messages(file_path: Path) -> List[Dict]:
             match = MSG_HEADER.match(line)
 
             if match:
-                date_str, time_str, sender, content = match.groups()
-                timestamp = parse_datetime(date_str, time_str)
+                date_str, time_str, rest = match.groups()
+                timestamp = parse_old_datetime(date_str, time_str)
+                if cutoff is not None and timestamp >= cutoff:
+                    last_timestamp = None
+                    continue
+
+                sender, content = split_sender_content(rest)
                 content = normalize_content(content)
-                if is_system_message(content):
+                if sender is None:
+                    if is_system_message(rest):
+                        continue
+                    sender = ""
+                elif is_system_message(content):
                     continue
 
                 sender = clean_text(sender)
@@ -102,6 +152,10 @@ def parse_messages(file_path: Path) -> List[Dict]:
                     })
                 last_timestamp = timestamp
             elif messages:
+                if cutoff is not None and (
+                    last_timestamp is None or last_timestamp >= cutoff
+                ):
+                    continue
                 continuation = normalize_content(line)
                 if continuation:
                     messages[-1]["content"] += "\n" + continuation
@@ -112,11 +166,13 @@ def parse_messages(file_path: Path) -> List[Dict]:
 
 
 def main():
-    data_path = Path(__file__).resolve().parent / "data"
-    input_file = data_path / "_chat.txt"
-    output_file = data_path / "messages.json"
+    data_path = Path(__file__).resolve().parent.parent / "data"
+    input_file = data_path / "_chat_old.txt"
+    cutoff_file = data_path / "_chat.txt"
+    output_file = data_path / "messages_old.json"
 
-    messages = parse_messages(input_file)
+    cutoff = get_oldest_new_format_timestamp(cutoff_file)
+    messages = parse_messages(input_file, cutoff=cutoff)
 
     with output_file.open("w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=2)
