@@ -7,46 +7,31 @@ import numpy as np
 
 from preprocessing.models import Message
 from threads_split.models import Thread, ThreadConfig
-from threads_split.scoring import attach_score, decide_assignment, new_thread_score
+from threads_split.scoring import ThreadScorer
 
 
 class ThreadAssigner:
-    def __init__(self, config: ThreadConfig | None = None):
+    def __init__(
+        self,
+        messages: Sequence[Message],
+        message_embeddings: Sequence[np.ndarray],
+        config: ThreadConfig | None = None
+        ):
         self.config = config or ThreadConfig()
         self.open_threads: list[Thread] = []
         self.closed_threads: list[Thread] = []
+        self.messages: Sequence[Message] = messages
+        self.message_embeddings: Sequence[np.ndarray] = message_embeddings
+        self.scorer: ThreadScorer = ThreadScorer(self.config, self.messages, self.message_embeddings)
 
     def process_messages(
         self,
-        all_messages: Sequence[Message],
-        all_embeddings: Sequence[np.ndarray],
-        batch_start: int,
-        batch_end: int,
-        *,
-        reset: bool = False,
-        finalize: bool = True,
     ) -> list[Thread]:
-        if reset:
-            Thread.reset_counter()
-            self.open_threads = []
-            self.closed_threads = []
-
-        for stream_index in range(batch_start, batch_end):
-            message = all_messages[stream_index]
-            previous_message_time = (
-                all_messages[stream_index - 1].datetime if stream_index > 0 else None
-            )
+        for message_index in range(len(self.messages)):
+            message = self.messages[message_index]
+            previous_message_time = self.messages[message_index - 1].datetime if message_index > 0 else None
             self._close_stale_threads(message.datetime)
-            self._assign_message(
-                stream_index,
-                message,
-                all_messages,
-                all_embeddings,
-                previous_message_time,
-            )
-
-        if not finalize:
-            return []
+            self._assign_message(message_index, message, previous_message_time)
 
         self._flush_open_threads()
         all_threads = self.closed_threads.copy()
@@ -55,42 +40,34 @@ class ThreadAssigner:
 
     def _assign_message(
         self,
-        stream_index: int,
+        message_index: int,
         message: Message,
-        all_messages: Sequence[Message],
-        all_embeddings: Sequence[np.ndarray],
         previous_message_time,
     ) -> None:
-        message_embedding = all_embeddings[stream_index]
+        message_embedding = self.message_embeddings[message_index]
         candidates = [
-            attach_score(
-                message,
-                stream_index,
-                message_embedding,
-                thread,
-                all_messages,
-                all_embeddings,
-                self.config,
-            )
+            self.scorer.attach_score(message, message_index, message_embedding, thread)
             for thread in self.open_threads
         ]
-        new_score = new_thread_score(
+        new_score = self.scorer.new_thread_score(
             message,
-            stream_index,
+            message_index,
             message_embedding,
             self.open_threads,
-            all_messages,
-            all_embeddings,
             previous_message_time,
-            self.config,
         )
-        chosen_thread = decide_assignment(candidates, new_score, self.config)
+        chosen_thread = self.scorer.decide_assignment(candidates, new_score)
 
         if chosen_thread is None:
-            thread = Thread.create(stream_index, message, message_embedding, self.config)
+            thread = Thread.create(
+                message_index,
+                message,
+                message_embedding,
+                self.config.topic_embedding_window,
+            )
             self.open_threads.append(thread)
         else:
-            chosen_thread.add_message(stream_index, message, message_embedding, self.config)
+            chosen_thread.add_message(message_index, message, message_embedding)
 
         self._enforce_open_thread_cap()
 

@@ -65,31 +65,31 @@ class Thread:
         num_unique_senders: int,
         topic_embedding: np.ndarray,
         summary_embedding: np.ndarray,
+        topic_embedding_window: int,
         is_open: bool = True,
         recent_embeddings: list[np.ndarray] | None = None,
-        process_indices: list[int] | None = None,
     ):
         self.thread_id = thread_id
         self.start_time = start_time
         self.last_time = last_time
         self.participants = participants
         self.message_ids = message_ids
-        self.process_indices = process_indices or []
         self.last_sender = last_sender
         self.num_messages = num_messages
         self.num_unique_senders = num_unique_senders
         self.topic_embedding = topic_embedding
         self.summary_embedding = summary_embedding
+        self.topic_embedding_window = topic_embedding_window
         self.is_open = is_open
         self.recent_embeddings = recent_embeddings or []
 
     @classmethod
     def create(
         cls,
-        stream_index: int,
+        message_index: int,
         message: Message,
         embedding: np.ndarray,
-        config: ThreadConfig,
+        topic_embedding_window: int,
     ) -> Thread:
         cls._counter += 1
         thread_id = f"thread-{cls._counter:04d}"
@@ -99,30 +99,24 @@ class Thread:
             start_time=message.datetime,
             last_time=message.datetime,
             participants=participants,
-            message_ids=[stream_index],
+            message_ids=[message_index],
             last_sender=message.sender,
             num_messages=1,
             num_unique_senders=1,
             topic_embedding=embedding.copy(),
             summary_embedding=embedding.copy(),
+            topic_embedding_window=topic_embedding_window,
             is_open=True,
             recent_embeddings=[embedding.copy()],
-            process_indices=[stream_index],
         )
-
-    @classmethod
-    def reset_counter(cls) -> None:
-        cls._counter = 0
 
     def add_message(
         self,
-        stream_index: int,
+        message_index: int,
         message: Message,
         embedding: np.ndarray,
-        config: ThreadConfig,
     ) -> None:
-        self.message_ids.append(stream_index)
-        self.process_indices.append(stream_index)
+        self.message_ids.append(message_index)
         self.last_time = message.datetime
         self.last_sender = message.sender
         self.num_messages += 1
@@ -131,9 +125,8 @@ class Thread:
             self.num_unique_senders += 1
 
         self.recent_embeddings.append(embedding.copy())
-        window = config.topic_embedding_window
-        if len(self.recent_embeddings) > window:
-            self.recent_embeddings = self.recent_embeddings[-window:]
+        if len(self.recent_embeddings) > self.topic_embedding_window:
+            self.recent_embeddings = self.recent_embeddings[-self.topic_embedding_window :]
 
         self.topic_embedding = np.mean(self.recent_embeddings, axis=0)
         self.summary_embedding = self.topic_embedding.copy()
@@ -141,22 +134,10 @@ class Thread:
     def to_dict(self, messages: Sequence[Message]) -> dict[str, Any]:
         thread_messages = []
         message_refs = []
-        for stream_index in self.message_ids:
-            message = messages[stream_index]
-            msg_dict = message.to_dict()
-            source_file = getattr(message, "source_file", None)
-            source_index = getattr(message, "source_index", stream_index)
-            if source_file is not None:
-                msg_dict["source_file"] = str(source_file)
-                msg_dict["source_index"] = source_index
-            thread_messages.append(msg_dict)
-            message_refs.append(
-                {
-                    "source_file": str(source_file) if source_file is not None else None,
-                    "source_index": source_index,
-                    "stream_index": stream_index,
-                }
-            )
+        for message_index in self.message_ids:
+            message = messages[message_index]
+            thread_messages.append(message.to_dict())
+            message_refs.append({"message_index": message_index})
         return {
             "thread_id": self.thread_id,
             "start_time": self.start_time.isoformat(),
