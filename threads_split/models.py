@@ -22,7 +22,6 @@ class ThreadConfig:
     close_after_hours: float = 24.0
     recent_messages_for_semantic: int = 5
     position_decay_gamma: float = 0.95
-    lexical_blend_weight: float = 0.15
     b1_gap: float = 0.4
     b2_low_similarity: float = 0.6
     gap_normalize_minutes: float = 360.0
@@ -41,7 +40,6 @@ class ThreadConfig:
             "close_after_hours": self.close_after_hours,
             "recent_messages_for_semantic": self.recent_messages_for_semantic,
             "position_decay_gamma": self.position_decay_gamma,
-            "lexical_blend_weight": self.lexical_blend_weight,
             "b1_gap": self.b1_gap,
             "b2_low_similarity": self.b2_low_similarity,
             "gap_normalize_minutes": self.gap_normalize_minutes,

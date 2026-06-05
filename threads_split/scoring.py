@@ -10,16 +10,6 @@ from threads_split.embedding import cosine_similarity
 from threads_split.models import ScoredCandidate, Thread, ThreadConfig
 
 
-def lexical_jaccard(text_a: str, text_b: str) -> float:
-    tokens_a = set(text_a.lower().split())
-    tokens_b = set(text_b.lower().split())
-    if not tokens_a or not tokens_b:
-        return 0.0
-    intersection = tokens_a & tokens_b
-    union = tokens_a | tokens_b
-    return len(intersection) / len(union)
-
-
 def social_score(message: Message, thread: Thread) -> float:
     if message.sender == thread.last_sender:
         return 1.0
@@ -41,7 +31,6 @@ class ThreadScorer:
 
     def semantic_similarity(
         self,
-        message: Message,
         message_index: int,
         message_embedding: np.ndarray,
         thread: Thread,
@@ -54,24 +43,11 @@ class ThreadScorer:
             cosine = cosine_similarity(message_embedding, thread_embedding)
             delta_n = abs(message_index - thread_message_index)
             position_factor = self.config.position_decay_gamma ** delta_n
-            lexical = lexical_jaccard(message.content, self.messages[thread_message_index].content)
-            combined = (
-                (1.0 - self.config.lexical_blend_weight) * cosine
-                + self.config.lexical_blend_weight * lexical
-            )
-            score = combined * position_factor
+            score = cosine * position_factor
             best_score = max(best_score, score)
 
         summary_cosine = cosine_similarity(message_embedding, thread.summary_embedding)
-        summary_lexical = max(
-            (lexical_jaccard(message.content, self.messages[mid].content) for mid in recent_ids),
-            default=0.0,
-        )
-        summary_score = (
-            (1.0 - self.config.lexical_blend_weight) * summary_cosine
-            + self.config.lexical_blend_weight * summary_lexical
-        )
-        return max(best_score, summary_score)
+        return max(best_score, summary_cosine)
 
     def attach_score(
         self,
@@ -80,7 +56,7 @@ class ThreadScorer:
         message_embedding: np.ndarray,
         thread: Thread,
     ) -> ScoredCandidate:
-        semantic = self.semantic_similarity(message, message_index, message_embedding, thread)
+        semantic = self.semantic_similarity(message_index, message_embedding, thread)
         temporal = self.time_proximity(message.datetime, thread.last_time)
         social = social_score(message, thread)
         total = (
@@ -110,7 +86,7 @@ class ThreadScorer:
         if not open_threads:
             return 0.0
         return max(
-            self.semantic_similarity(message, message_index, message_embedding, thread)
+            self.semantic_similarity(message_index, message_embedding, thread)
             for thread in open_threads
         )
 
