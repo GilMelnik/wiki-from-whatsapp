@@ -18,82 +18,79 @@ class ThreadAssigner:
 
     def process_messages(
         self,
-        messages: Sequence[Message],
-        message_embeddings: Sequence[np.ndarray],
+        all_messages: Sequence[Message],
+        all_embeddings: Sequence[np.ndarray],
+        batch_start: int,
+        batch_end: int,
+        *,
+        reset: bool = False,
+        finalize: bool = True,
     ) -> list[Thread]:
-        Thread.reset_counter()
-        self.open_threads = []
-        self.closed_threads = []
+        if reset:
+            Thread.reset_counter()
+            self.open_threads = []
+            self.closed_threads = []
 
-        previous_message_time = None
-        for process_index, message in enumerate(messages):
-            source_index = getattr(message, "source_index", process_index)
+        for stream_index in range(batch_start, batch_end):
+            message = all_messages[stream_index]
+            previous_message_time = (
+                all_messages[stream_index - 1].datetime if stream_index > 0 else None
+            )
             self._close_stale_threads(message.datetime)
             self._assign_message(
-                source_index,
-                process_index,
+                stream_index,
                 message,
-                messages,
-                message_embeddings,
+                all_messages,
+                all_embeddings,
                 previous_message_time,
             )
-            previous_message_time = message.datetime
+
+        if not finalize:
+            return []
 
         self._flush_open_threads()
-        all_threads = self.closed_threads + self.open_threads
+        all_threads = self.closed_threads.copy()
         all_threads.sort(key=lambda t: t.start_time)
         return all_threads
 
     def _assign_message(
         self,
-        source_index: int,
-        process_index: int,
+        stream_index: int,
         message: Message,
-        messages: Sequence[Message],
-        message_embeddings: Sequence[np.ndarray],
+        all_messages: Sequence[Message],
+        all_embeddings: Sequence[np.ndarray],
         previous_message_time,
     ) -> None:
+        message_embedding = all_embeddings[stream_index]
         candidates = [
             attach_score(
                 message,
-                process_index,
-                message_embeddings[process_index],
+                stream_index,
+                message_embedding,
                 thread,
-                messages,
-                message_embeddings,
+                all_messages,
+                all_embeddings,
                 self.config,
             )
             for thread in self.open_threads
         ]
         new_score = new_thread_score(
             message,
-            process_index,
-            message_embeddings[process_index],
+            stream_index,
+            message_embedding,
             self.open_threads,
-            messages,
-            message_embeddings,
+            all_messages,
+            all_embeddings,
             previous_message_time,
             self.config,
         )
         chosen_thread = decide_assignment(candidates, new_score, self.config)
 
         if chosen_thread is None:
-            thread = Thread.create(
-                source_index,
-                message,
-                message_embeddings[process_index],
-                self.config,
-                process_index=process_index,
-            )
+            thread = Thread.create(stream_index, message, message_embedding, self.config)
             self.open_threads.append(thread)
         else:
-            chosen_thread.add_message(
-                source_index,
-                message,
-                message_embeddings[process_index],
-                self.config,
-                process_index=process_index,
-            )
+            chosen_thread.add_message(stream_index, message, message_embedding, self.config)
 
         self._enforce_open_thread_cap()
 

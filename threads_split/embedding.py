@@ -6,7 +6,7 @@ import numpy as np
 
 
 class Embedder:
-    def __init__(self, model_name: str = "paraphrase-multilingual-mpnet-base-v2", batch_size: int = 64):
+    def __init__(self, model_name: str = "intfloat/multilingual-e5-large", batch_size: int = 64):
         self.model_name = model_name
         self.batch_size = batch_size
         self._model = None
@@ -31,6 +31,11 @@ class Embedder:
             _ = self.model
         return self._embedding_dim  # type: ignore[return-value]
 
+    def _prepare_text(self, text: str) -> str:
+        if "e5" in self.model_name.lower():
+            return f"query: {text}"
+        return text
+
     def encode_messages(self, texts: Sequence[str]) -> list[np.ndarray]:
         if not texts:
             return []
@@ -54,7 +59,7 @@ class Embedder:
         for idx, text in enumerate(texts):
             if text and text.strip():
                 non_empty_indices.append(idx)
-                non_empty_texts.append(text.strip())
+                non_empty_texts.append(self._prepare_text(text.strip()))
 
         batch_vectors = np.zeros((len(texts), dim), dtype=np.float32)
         if non_empty_texts:

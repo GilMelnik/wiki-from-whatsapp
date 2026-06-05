@@ -144,7 +144,14 @@ class AssignerLifecycleTests(unittest.TestCase):
             np.array([0.0, 0.0, 1.0]),
         ]
         assigner = ThreadAssigner(self.config)
-        threads = assigner.process_messages(messages, embeddings)
+        threads = assigner.process_messages(
+            messages,
+            embeddings,
+            batch_start=0,
+            batch_end=len(messages),
+            reset=True,
+            finalize=True,
+        )
         self.assertEqual(len(threads), 3)
 
     def test_auto_close_after_24_hours(self):
@@ -154,7 +161,14 @@ class AssignerLifecycleTests(unittest.TestCase):
         ]
         embeddings = [np.array([1.0, 0.0]), np.array([0.0, 1.0])]
         assigner = ThreadAssigner(self.config)
-        threads = assigner.process_messages(messages, embeddings)
+        threads = assigner.process_messages(
+            messages,
+            embeddings,
+            batch_start=0,
+            batch_end=len(messages),
+            reset=True,
+            finalize=True,
+        )
         self.assertEqual(len(threads), 2)
 
 

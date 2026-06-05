@@ -26,7 +26,7 @@ class ThreadConfig:
     b1_gap: float = 0.4
     b2_low_similarity: float = 0.6
     gap_normalize_minutes: float = 360.0
-    embedding_model: str = "paraphrase-multilingual-mpnet-base-v2"
+    embedding_model: str = "intfloat/multilingual-e5-large"
     topic_embedding_window: int = 5
 
     def to_dict(self) -> dict[str, Any]:
@@ -86,22 +86,20 @@ class Thread:
     @classmethod
     def create(
         cls,
-        msg_index: int,
+        stream_index: int,
         message: Message,
         embedding: np.ndarray,
         config: ThreadConfig,
-        process_index: int | None = None,
     ) -> Thread:
         cls._counter += 1
         thread_id = f"thread-{cls._counter:04d}"
         participants = {message.sender}
-        proc_idx = process_index if process_index is not None else msg_index
         return cls(
             thread_id=thread_id,
             start_time=message.datetime,
             last_time=message.datetime,
             participants=participants,
-            message_ids=[msg_index],
+            message_ids=[stream_index],
             last_sender=message.sender,
             num_messages=1,
             num_unique_senders=1,
@@ -109,7 +107,7 @@ class Thread:
             summary_embedding=embedding.copy(),
             is_open=True,
             recent_embeddings=[embedding.copy()],
-            process_indices=[proc_idx],
+            process_indices=[stream_index],
         )
 
     @classmethod
@@ -118,15 +116,13 @@ class Thread:
 
     def add_message(
         self,
-        msg_index: int,
+        stream_index: int,
         message: Message,
         embedding: np.ndarray,
         config: ThreadConfig,
-        process_index: int | None = None,
     ) -> None:
-        self.message_ids.append(msg_index)
-        proc_idx = process_index if process_index is not None else msg_index
-        self.process_indices.append(proc_idx)
+        self.message_ids.append(stream_index)
+        self.process_indices.append(stream_index)
         self.last_time = message.datetime
         self.last_sender = message.sender
         self.num_messages += 1
@@ -143,18 +139,31 @@ class Thread:
         self.summary_embedding = self.topic_embedding.copy()
 
     def to_dict(self, messages: Sequence[Message]) -> dict[str, Any]:
-        id_to_message = {getattr(m, "source_index", idx): m for idx, m in enumerate(messages)}
         thread_messages = []
-        for message_id in self.message_ids:
-            message = id_to_message.get(message_id)
-            if message is not None:
-                thread_messages.append(message.to_dict())
+        message_refs = []
+        for stream_index in self.message_ids:
+            message = messages[stream_index]
+            msg_dict = message.to_dict()
+            source_file = getattr(message, "source_file", None)
+            source_index = getattr(message, "source_index", stream_index)
+            if source_file is not None:
+                msg_dict["source_file"] = str(source_file)
+                msg_dict["source_index"] = source_index
+            thread_messages.append(msg_dict)
+            message_refs.append(
+                {
+                    "source_file": str(source_file) if source_file is not None else None,
+                    "source_index": source_index,
+                    "stream_index": stream_index,
+                }
+            )
         return {
             "thread_id": self.thread_id,
             "start_time": self.start_time.isoformat(),
             "last_time": self.last_time.isoformat(),
             "participants": sorted(self.participants),
             "message_ids": self.message_ids,
+            "message_refs": message_refs,
             "num_messages": self.num_messages,
             "num_unique_senders": self.num_unique_senders,
             "last_sender": self.last_sender,
