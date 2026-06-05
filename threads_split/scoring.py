@@ -20,24 +20,12 @@ def lexical_jaccard(text_a: str, text_b: str) -> float:
     return len(intersection) / len(union)
 
 
-def time_proximity(message_time: datetime, thread_last_time: datetime, config: ThreadConfig) -> float:
-    gap_minutes = max(0.0, (message_time - thread_last_time).total_seconds() / 60.0)
-    return float(np.exp(-gap_minutes / config.tau_minutes))
-
-
 def social_score(message: Message, thread: Thread) -> float:
     if message.sender == thread.last_sender:
         return 1.0
     if message.sender in thread.participants:
         return 0.75
     return 0.0
-
-
-def normalized_gap_from_previous(current_time: datetime, previous_time: datetime | None, config: ThreadConfig) -> float:
-    if previous_time is None:
-        return 1.0
-    gap_minutes = max(0.0, (current_time - previous_time).total_seconds() / 60.0)
-    return min(1.0, gap_minutes / config.gap_normalize_minutes)
 
 
 class ThreadScorer:
@@ -93,7 +81,7 @@ class ThreadScorer:
         thread: Thread,
     ) -> ScoredCandidate:
         semantic = self.semantic_similarity(message, message_index, message_embedding, thread)
-        temporal = time_proximity(message.datetime, thread.last_time, self.config)
+        temporal = self.time_proximity(message.datetime, thread.last_time)
         social = social_score(message, thread)
         total = (
             self.config.w_semantic * semantic
@@ -107,6 +95,10 @@ class ThreadScorer:
             time_score=temporal,
             social_score=social,
         )
+
+    def time_proximity(self, message_time: datetime, thread_last_time: datetime) -> float:
+        gap_minutes = max(0.0, (message_time - thread_last_time).total_seconds() / 60.0)
+        return float(np.exp(-gap_minutes / self.config.tau_minutes))
 
     def max_semantic_to_open_threads(
         self,
@@ -130,12 +122,16 @@ class ThreadScorer:
         open_threads: Sequence[Thread],
         previous_message_time: datetime | None,
     ) -> float:
-        gap_component = normalized_gap_from_previous(message.datetime, previous_message_time, self.config)
-        max_semantic = self.max_semantic_to_open_threads(
-            message, message_index, message_embedding, open_threads
-        )
+        gap_component = self.normalized_gap_from_previous(message.datetime, previous_message_time)
+        max_semantic = self.max_semantic_to_open_threads(message, message_index, message_embedding, open_threads)
         low_similarity_component = 1.0 - max_semantic
         return self.config.b1_gap * gap_component + self.config.b2_low_similarity * low_similarity_component
+
+    def normalized_gap_from_previous(self, current_time: datetime, previous_time: datetime | None) -> float:
+        if previous_time is None:
+            return 1.0
+        gap_minutes = max(0.0, (current_time - previous_time).total_seconds() / 60.0)
+        return min(1.0, gap_minutes / self.config.gap_normalize_minutes)
 
     def decide_assignment(
         self,
