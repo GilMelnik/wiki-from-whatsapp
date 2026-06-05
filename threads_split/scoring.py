@@ -46,8 +46,8 @@ class ThreadScorer:
             score = cosine * position_factor
             best_score = max(best_score, score)
 
-        summary_cosine = cosine_similarity(message_embedding, thread.summary_embedding)
-        return max(best_score, summary_cosine)
+        recent_embeddings_cosine = cosine_similarity(message_embedding, thread.recent_embeddings_mean)
+        return max(best_score, recent_embeddings_cosine)
 
     def attach_score(
         self,
@@ -76,31 +76,15 @@ class ThreadScorer:
         gap_minutes = max(0.0, (message_time - thread_last_time).total_seconds() / 60.0)
         return float(np.exp(-gap_minutes / self.config.tau_minutes))
 
-    def max_semantic_to_open_threads(
-        self,
-        message: Message,
-        message_index: int,
-        message_embedding: np.ndarray,
-        open_threads: Sequence[Thread],
-    ) -> float:
-        if not open_threads:
-            return 0.0
-        return max(
-            self.semantic_similarity(message_index, message_embedding, thread)
-            for thread in open_threads
-        )
-
     def new_thread_score(
         self,
         message: Message,
-        message_index: int,
-        message_embedding: np.ndarray,
-        open_threads: Sequence[Thread],
         previous_message_time: datetime | None,
+        candidates: Sequence[ScoredCandidate],
     ) -> float:
         gap_component = self.normalized_gap_from_previous(message.datetime, previous_message_time)
-        max_semantic = self.max_semantic_to_open_threads(message, message_index, message_embedding, open_threads)
-        low_similarity_component = 1.0 - max_semantic
+        max_candidate = max(candidates.attach_score for candidates in candidates) if candidates else 0.0
+        low_similarity_component = 1.0 - max_candidate
         return self.config.b1_gap * gap_component + self.config.b2_low_similarity * low_similarity_component
 
     def normalized_gap_from_previous(self, current_time: datetime, previous_time: datetime | None) -> float:

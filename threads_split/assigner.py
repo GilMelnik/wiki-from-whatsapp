@@ -49,13 +49,7 @@ class ThreadAssigner:
             self.scorer.attach_score(message, message_index, message_embedding, thread)
             for thread in self.open_threads
         ]
-        new_score = self.scorer.new_thread_score(
-            message,
-            message_index,
-            message_embedding,
-            self.open_threads,
-            previous_message_time,
-        )
+        new_score = self.scorer.new_thread_score(message, previous_message_time, candidates)
         chosen_thread = self.scorer.decide_assignment(candidates, new_score)
 
         if chosen_thread is None:
@@ -63,7 +57,7 @@ class ThreadAssigner:
                 message_index,
                 message,
                 message_embedding,
-                self.config.topic_embedding_window,
+                self.config.recent_embeddings_window,
             )
             self.open_threads.append(thread)
         else:

@@ -26,7 +26,7 @@ class ThreadConfig:
     b2_low_similarity: float = 0.6
     gap_normalize_minutes: float = 360.0
     embedding_model: str = "intfloat/multilingual-e5-large"
-    topic_embedding_window: int = 5
+    recent_embeddings_window: int = 5
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -44,7 +44,7 @@ class ThreadConfig:
             "b2_low_similarity": self.b2_low_similarity,
             "gap_normalize_minutes": self.gap_normalize_minutes,
             "embedding_model": self.embedding_model,
-            "topic_embedding_window": self.topic_embedding_window,
+            "recent_embeddings_window": self.recent_embeddings_window,
         }
 
 
@@ -61,9 +61,8 @@ class Thread:
         last_sender: str,
         num_messages: int,
         num_unique_senders: int,
-        topic_embedding: np.ndarray,
-        summary_embedding: np.ndarray,
-        topic_embedding_window: int,
+        recent_embeddings_mean: np.ndarray,
+        recent_embeddings_window: int,
         is_open: bool = True,
         recent_embeddings: list[np.ndarray] | None = None,
     ):
@@ -75,9 +74,8 @@ class Thread:
         self.last_sender = last_sender
         self.num_messages = num_messages
         self.num_unique_senders = num_unique_senders
-        self.topic_embedding = topic_embedding
-        self.summary_embedding = summary_embedding
-        self.topic_embedding_window = topic_embedding_window
+        self.recent_embeddings_mean = recent_embeddings_mean
+        self.recent_embeddings_window = recent_embeddings_window
         self.is_open = is_open
         self.recent_embeddings = recent_embeddings or []
 
@@ -87,7 +85,7 @@ class Thread:
         message_index: int,
         message: Message,
         embedding: np.ndarray,
-        topic_embedding_window: int,
+        recent_embeddings_window: int,
     ) -> Thread:
         cls._counter += 1
         thread_id = f"thread-{cls._counter:04d}"
@@ -101,9 +99,8 @@ class Thread:
             last_sender=message.sender,
             num_messages=1,
             num_unique_senders=1,
-            topic_embedding=embedding.copy(),
-            summary_embedding=embedding.copy(),
-            topic_embedding_window=topic_embedding_window,
+            recent_embeddings_mean=embedding.copy(),
+            recent_embeddings_window=recent_embeddings_window,
             is_open=True,
             recent_embeddings=[embedding.copy()],
         )
@@ -123,11 +120,10 @@ class Thread:
             self.num_unique_senders += 1
 
         self.recent_embeddings.append(embedding.copy())
-        if len(self.recent_embeddings) > self.topic_embedding_window:
-            self.recent_embeddings = self.recent_embeddings[-self.topic_embedding_window :]
+        if len(self.recent_embeddings) > self.recent_embeddings_window:
+            self.recent_embeddings = self.recent_embeddings[-self.recent_embeddings_window :]
 
-        self.topic_embedding = np.mean(self.recent_embeddings, axis=0)
-        self.summary_embedding = self.topic_embedding.copy()
+        self.recent_embeddings_mean = np.mean(self.recent_embeddings, axis=0)
 
     def to_dict(self, messages: Sequence[Message]) -> dict[str, Any]:
         thread_messages = []
