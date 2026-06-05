@@ -19,14 +19,14 @@ class ThreadConfig:
     margin: float = 0.08
     tau_minutes: float = 90.0
     max_open_threads: int = 5
-    close_after_hours: float = 24.0
+    close_after_hours: float = 36.0
     recent_messages_for_semantic: int = 5
     position_decay_gamma: float = 0.95
     b1_gap: float = 0.4
     b2_low_similarity: float = 0.6
     gap_normalize_minutes: float = 360.0
     embedding_model: str = "intfloat/multilingual-e5-large"
-    recent_embeddings_window: int = 5
+    recent_embeddings_window: int = 20
 
     def to_dict(self) -> dict[str, Any]:
         return {

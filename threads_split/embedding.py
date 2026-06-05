@@ -33,7 +33,7 @@ class Embedder:
 
     def _prepare_text(self, text: str) -> str:
         if "e5" in self.model_name.lower():
-            return f"query: {text}"
+            return f"passage: {text}"
         return text
 
     def encode_messages(self, texts: Sequence[str]) -> list[np.ndarray]:
