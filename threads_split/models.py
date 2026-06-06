@@ -15,6 +15,7 @@ class ThreadConfig:
     w_semantic: float = 0.55
     w_time: float = 0.25
     w_social: float = 0.20
+    w_tfidf: float = 0.35
     attach_threshold: float = 0.45
     margin: float = 0.08
     tau_minutes: float = 90.0
@@ -33,6 +34,7 @@ class ThreadConfig:
             "w_semantic": self.w_semantic,
             "w_time": self.w_time,
             "w_social": self.w_social,
+            "w_tfidf": self.w_tfidf,
             "attach_threshold": self.attach_threshold,
             "margin": self.margin,
             "tau_minutes": self.tau_minutes,

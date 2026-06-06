@@ -1,13 +1,36 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Sequence
+from pathlib import Path
+from typing import Callable, Sequence, TypeVar
 
 import numpy as np
 
 from preprocessing.models import Message
 from threads_split.embedding import cosine_similarity
 from threads_split.models import ScoredCandidate, Thread, ThreadConfig
+from threads_split.tfidf import TfidfCorpus, TokenizedMessages, tfidf_cosine_similarity
+
+DEFAULT_CORPUS_PATH = Path("data/tfidf_corpus.json")
+DEFAULT_TOKENS_PATH = Path("data/tfidf_tokens.json")
+
+T = TypeVar("T")
+
+
+def load_tfidf_resources(
+    corpus_path: Path | str = DEFAULT_CORPUS_PATH,
+    tokens_path: Path | str = DEFAULT_TOKENS_PATH,
+) -> tuple[TfidfCorpus, TokenizedMessages]:
+    corpus_file = Path(corpus_path)
+    tokens_file = Path(tokens_path)
+    if not corpus_file.exists() or not tokens_file.exists():
+        from threads_split.prepare_tfidf import run as prepare_tfidf
+
+        prepare_tfidf(
+            output_path=corpus_file,
+            tokens_output_path=tokens_file,
+        )
+    return TfidfCorpus.load(corpus_file), TokenizedMessages.load(tokens_file)
 
 
 def social_score(message: Message, thread: Thread) -> float:
@@ -24,10 +47,18 @@ class ThreadScorer:
         config: ThreadConfig,
         messages: Sequence[Message],
         message_embeddings: Sequence[np.ndarray],
+        tfidf_corpus: TfidfCorpus | None = None,
+        tokenized_messages: TokenizedMessages | None = None,
+        corpus_path: Path | str = DEFAULT_CORPUS_PATH,
+        tokens_path: Path | str = DEFAULT_TOKENS_PATH,
     ):
         self.config = config
         self.messages = messages
         self.message_embeddings = message_embeddings
+        if tfidf_corpus is None or tokenized_messages is None:
+            tfidf_corpus, tokenized_messages = load_tfidf_resources(corpus_path, tokens_path)
+        self.tfidf_corpus = tfidf_corpus
+        self.tokenized_messages = tokenized_messages
 
     def semantic_similarity(
         self,
@@ -35,19 +66,53 @@ class ThreadScorer:
         message_embedding: np.ndarray,
         thread: Thread,
     ) -> float:
+        embedding_score = self._position_decayed_similarity(
+            message_index,
+            thread,
+            message_embedding,
+            lambda index: self.message_embeddings[index],
+            thread.recent_embeddings_mean,
+            cosine_similarity,
+        )
+        message_tokens = self.tokenized_messages.tokens_for(message_index)
+        recent_ids_for_mean = thread.message_ids[-self.config.recent_embeddings_window :]
+        recent_tokens = [
+            token
+            for thread_message_index in recent_ids_for_mean
+            for token in self.tokenized_messages.tokens_for(thread_message_index)
+        ]
+        tfidf_score = self._position_decayed_similarity(
+            message_index,
+            thread,
+            message_tokens,
+            lambda index: self.tokenized_messages.tokens_for(index),
+            recent_tokens,
+            lambda left, right: tfidf_cosine_similarity(left, right, self.tfidf_corpus),
+        )
+        w_tfidf = self.config.w_tfidf
+        w_embedding = 1.0 - w_tfidf
+        return w_embedding * embedding_score + w_tfidf * tfidf_score
+
+    def _position_decayed_similarity(
+        self,
+        message_index: int,
+        thread: Thread,
+        message_repr: T,
+        thread_repr_for_index: Callable[[int], T],
+        recent_aggregate_repr: T,
+        similarity: Callable[[T, T], float],
+    ) -> float:
         recent_ids = thread.message_ids[-self.config.recent_messages_for_semantic :]
         best_score = 0.0
 
         for thread_message_index in recent_ids:
-            thread_embedding = self.message_embeddings[thread_message_index]
-            cosine = cosine_similarity(message_embedding, thread_embedding)
+            cosine = similarity(message_repr, thread_repr_for_index(thread_message_index))
             delta_n = abs(message_index - thread_message_index)
             position_factor = self.config.position_decay_gamma ** delta_n
-            score = cosine * position_factor
-            best_score = max(best_score, score)
+            best_score = max(best_score, cosine * position_factor)
 
-        recent_embeddings_cosine = cosine_similarity(message_embedding, thread.recent_embeddings_mean)
-        return max(best_score, recent_embeddings_cosine)
+        aggregate_cosine = similarity(message_repr, recent_aggregate_repr)
+        return max(best_score, aggregate_cosine)
 
     def attach_score(
         self,
