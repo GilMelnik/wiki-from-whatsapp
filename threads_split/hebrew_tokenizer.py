@@ -17,16 +17,51 @@ def _flatten_segments(segments: Sequence[str]) -> list[str]:
     return [segment for segment in segments if _is_valid_token(segment)]
 
 
+def _cuda_device_is_supported() -> bool:
+    import torch
+
+    if not torch.cuda.is_available() or torch.cuda.device_count() == 0:
+        return False
+
+    major, minor = torch.cuda.get_device_capability(0)
+    device_arch = f"sm_{major}{minor}"
+    arch_list = torch.cuda.get_arch_list()
+    if device_arch in arch_list:
+        return True
+
+    # e.g. sm_60 wheels also run on sm_61 Pascal hardware.
+    return f"sm_{major}0" in arch_list
+
+
+def _resolve_device(device_arg: str | None):
+    import torch
+
+    if device_arg is not None:
+        return torch.device(device_arg)
+    if _cuda_device_is_supported():
+        return torch.device("cuda")
+    return torch.device("cpu")
+
+
 class HebrewTokenizer:
     def __init__(
         self,
         model_name: str = "dicta-il/dictabert-joint",
         batch_size: int = 32,
+        device: str | None = None,
     ):
         self.model_name = model_name
         self.batch_size = batch_size
+        self._device_arg = device
         self._tokenizer = None
         self._model = None
+        self._device = None
+
+    @property
+    def device(self):
+        if self._device is None:
+            self._device = _resolve_device(self._device_arg)
+        return self._device
 
     @property
     def tokenizer(self):
@@ -46,6 +81,7 @@ class HebrewTokenizer:
                 trust_remote_code=True,
             )
             self._model.eval()
+            self._model.to(self.device)
         return self._model
 
     def tokenize(self, text: str) -> list[str]:

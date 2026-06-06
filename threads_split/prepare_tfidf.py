@@ -125,7 +125,7 @@ def run(
 
 
 if __name__ == "__main__":
-    result = run(max_messages=10)
+    result = run(max_messages=None, batch_size=2)
     metadata = result["metadata"]
     print(
         f"Wrote TF-IDF corpus to {result['output_path']} "
