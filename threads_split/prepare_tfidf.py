@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
@@ -8,6 +7,7 @@ from typing import Any
 from threads_split.hebrew_tokenizer import HebrewTokenizer
 from threads_split.pipeline import load_messages
 from threads_split.tfidf import IDF_FORMULA, compute_idf
+from utils import write_json_file
 
 
 def _aggregate_term_stats(
@@ -63,21 +63,32 @@ def _build_corpus_payload(
     }
 
 
-def write_tfidf_corpus(payload: dict[str, Any], output_path: Path) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
+def _build_tokens_payload(
+    source_path: Path,
+    tokenized_messages: list[list[str]],
+    tokenizer_model: str,
+) -> dict[str, Any]:
+    return {
+        "metadata": {
+            "source": str(source_path),
+            "message_count": len(tokenized_messages),
+            "tokenizer_model": tokenizer_model,
+        },
+        "tokenized_messages": tokenized_messages,
+    }
 
 
 def run(
     input_path: Path | str = Path("data/messages_combined.json"),
     output_path: Path | str = Path("data/tfidf_corpus.json"),
+    tokens_output_path: Path | str = Path("data/tfidf_tokens.json"),
     batch_size: int = 32,
     max_messages: int | None = None,
     tokenizer: HebrewTokenizer | None = None,
 ) -> dict[str, Any]:
     source_path = Path(input_path)
     output = Path(output_path)
+    tokens_output = Path(tokens_output_path)
     tokenizer = tokenizer or HebrewTokenizer(batch_size=batch_size)
 
     messages = load_messages(source_path)
@@ -86,6 +97,13 @@ def run(
 
     contents = [message.content for message in messages]
     tokenized_messages = tokenizer.tokenize_batch(contents)
+    tokens_payload = _build_tokens_payload(
+        source_path=source_path,
+        tokenized_messages=tokenized_messages,
+        tokenizer_model=tokenizer.model_name,
+    )
+    write_json_file(tokens_payload, tokens_output)
+
     document_count, total_tokens, term_tf, term_df = _aggregate_term_stats(tokenized_messages)
     payload = _build_corpus_payload(
         source_path=source_path,
@@ -95,19 +113,27 @@ def run(
         term_df=term_df,
         tokenizer_model=tokenizer.model_name,
     )
-    write_tfidf_corpus(payload, output)
+    payload["metadata"]["tokens_path"] = str(tokens_output)
+    write_json_file(payload, output)
 
     return {
         "metadata": payload["metadata"],
+        "tokens_metadata": tokens_payload["metadata"],
         "output_path": str(output),
+        "tokens_output_path": str(tokens_output),
     }
 
 
 if __name__ == "__main__":
-    result = run()
+    result = run(max_messages=10)
     metadata = result["metadata"]
     print(
         f"Wrote TF-IDF corpus to {result['output_path']} "
         f"({metadata['document_count']} documents, "
         f"{metadata['unique_term_count']} unique terms)"
+    )
+    tokens_metadata = result["tokens_metadata"]
+    print(
+        f"Wrote tokenized messages to {result['tokens_output_path']} "
+        f"({tokens_metadata['message_count']} messages)"
     )

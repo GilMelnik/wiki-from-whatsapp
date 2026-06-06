@@ -8,6 +8,7 @@ from preprocessing.models import Message
 from threads_split.assigner import ThreadAssigner
 from threads_split.embedding import Embedder
 from threads_split.models import Thread, ThreadConfig
+from utils import write_json_file
 
 
 def load_messages(input_path: Path) -> list[Message]:
@@ -49,18 +50,6 @@ def threads_to_output(
     }
 
 
-def write_threads_json(
-    threads: list[Thread],
-    messages: list[Message],
-    output_path: Path,
-    source_path: Path,
-    config: ThreadConfig,
-) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = threads_to_output(threads, messages, source_path, config)
-    with output_path.open("w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
-
 
 def run_pipeline(
     input_path: Path | str,
@@ -72,5 +61,6 @@ def run_pipeline(
     source_path = Path(input_path)
     output = Path(output_path)
     messages, threads = split_into_threads(source_path, config=config, embedder=embedder)
-    write_threads_json(threads, messages, output, source_path, config)
+    payload = threads_to_output(threads, messages, source_path, config)
+    write_json_file(payload, output)
     return threads_to_output(threads, messages, source_path, config)
