@@ -15,7 +15,7 @@ class ThreadConfig:
     w_semantic: float = 0.55
     w_time: float = 0.25
     w_social: float = 0.20
-    w_tfidf: float = 0.35
+    w_tfidf: float = 0.20
     attach_threshold: float = 0.45
     margin: float = 0.08
     tau_minutes: float = 90.0
@@ -129,18 +129,15 @@ class Thread:
 
     def to_dict(self, messages: Sequence[Message]) -> dict[str, Any]:
         thread_messages = []
-        message_refs = []
         for message_index in self.message_ids:
             message = messages[message_index]
             thread_messages.append(message.to_dict())
-            message_refs.append({"message_index": message_index})
         return {
             "thread_id": self.thread_id,
             "start_time": self.start_time.isoformat(),
             "last_time": self.last_time.isoformat(),
             "participants": sorted(self.participants),
             "message_ids": self.message_ids,
-            "message_refs": message_refs,
             "num_messages": self.num_messages,
             "num_unique_senders": self.num_unique_senders,
             "last_sender": self.last_sender,
