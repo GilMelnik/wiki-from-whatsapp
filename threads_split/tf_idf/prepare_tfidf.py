@@ -4,9 +4,9 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-from threads_split.hebrew_tokenizer import HebrewTokenizer
+from threads_split.tf_idf.hebrew_tokenizer import HebrewTokenizer
 from threads_split.pipeline import load_messages
-from threads_split.tfidf import IDF_FORMULA, compute_idf
+from threads_split.tf_idf.tfidf import IDF_FORMULA, compute_idf
 from utils import write_json_file
 
 

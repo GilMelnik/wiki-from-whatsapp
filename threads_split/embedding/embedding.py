@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from typing import Sequence
+import json
+from pathlib import Path
+from typing import Any, Sequence
 
 import numpy as np
+
+DEFAULT_EMBEDDINGS_PATH = Path("data/message_embeddings.json")
 
 
 class Embedder:
@@ -75,6 +79,53 @@ class Embedder:
         for row in batch_vectors:
             vectors.append(row)
         return vectors
+
+
+class MessageEmbeddings:
+    def __init__(
+        self,
+        embeddings: list[np.ndarray],
+        metadata: dict[str, Any] | None = None,
+    ):
+        self.embeddings = embeddings
+        self.metadata = metadata or {}
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> MessageEmbeddings:
+        vectors = [np.asarray(row, dtype=np.float32) for row in payload["embeddings"]]
+        return cls(embeddings=vectors, metadata=payload.get("metadata", {}))
+
+    @classmethod
+    def load(cls, path: Path | str) -> MessageEmbeddings:
+        with Path(path).open(encoding="utf-8") as f:
+            return cls.from_dict(json.load(f))
+
+    def embedding_for(self, message_index: int) -> np.ndarray:
+        return self.embeddings[message_index]
+
+    def as_list(self) -> list[np.ndarray]:
+        return self.embeddings
+
+
+def load_message_embeddings(
+    input_path: Path | str,
+    embeddings_path: Path | str = DEFAULT_EMBEDDINGS_PATH,
+    model_name: str = "intfloat/multilingual-e5-large",
+    batch_size: int = 64,
+    embedder: Embedder | None = None,
+) -> list[np.ndarray]:
+    embeddings_file = Path(embeddings_path)
+    if not embeddings_file.exists():
+        from threads_split.embedding.prepare_embeddings import run as prepare_embeddings
+
+        prepare_embeddings(
+            input_path=input_path,
+            output_path=embeddings_file,
+            model_name=model_name,
+            batch_size=batch_size,
+            embedder=embedder,
+        )
+    return MessageEmbeddings.load(embeddings_file).as_list()
 
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:

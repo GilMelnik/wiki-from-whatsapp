@@ -6,7 +6,7 @@ from typing import Any
 
 from preprocessing.models import Message
 from threads_split.assigner import ThreadAssigner
-from threads_split.embedding import Embedder
+from threads_split.embedding.embedding import Embedder, load_message_embeddings
 from threads_split.models import Thread, ThreadConfig
 from utils import write_json_file
 
@@ -25,9 +25,12 @@ def split_into_threads(
     embedder: Embedder | None = None,
 ) -> tuple[list[Message], list[Thread]]:
     config = config or ThreadConfig()
-    embedder = embedder or Embedder(model_name=config.embedding_model)
     messages = load_messages(input_path)
-    embeddings = embedder.encode_messages([message.content for message in messages])
+    embeddings = load_message_embeddings(
+        input_path=input_path,
+        model_name=config.embedding_model,
+        embedder=embedder,
+    )
     assigner = ThreadAssigner(messages, embeddings, config)
     threads = assigner.process_messages()
     return messages, threads
@@ -64,3 +67,14 @@ def run_pipeline(
     payload = threads_to_output(threads, messages, source_path, config)
     write_json_file(payload, output)
     return threads_to_output(threads, messages, source_path, config)
+
+
+if __name__ == "__main__":
+    result = run_pipeline(
+        input_path=Path("data/messages_combined.json"),
+        output_path=Path("data/threads.json"),
+    )
+    print(
+        f"Wrote {result['metadata']['thread_count']} threads "
+        f"from {result['metadata']['message_count']} messages"
+    )

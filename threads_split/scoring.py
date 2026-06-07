@@ -7,9 +7,9 @@ from typing import Callable, Sequence, TypeVar
 import numpy as np
 
 from preprocessing.models import Message
-from threads_split.embedding import cosine_similarity
+from threads_split.embedding.embedding import cosine_similarity
 from threads_split.models import ScoredCandidate, Thread, ThreadConfig
-from threads_split.tfidf import TfidfCorpus, TokenizedMessages, tfidf_cosine_similarity
+from threads_split.tf_idf.tfidf import TfidfCorpus, TokenizedMessages, tfidf_cosine_similarity
 
 DEFAULT_CORPUS_PATH = Path("data/tfidf_corpus.json")
 DEFAULT_TOKENS_PATH = Path("data/tfidf_tokens.json")
@@ -24,7 +24,7 @@ def load_tfidf_resources(
     corpus_file = Path(corpus_path)
     tokens_file = Path(tokens_path)
     if not corpus_file.exists() or not tokens_file.exists():
-        from threads_split.prepare_tfidf import run as prepare_tfidf
+        from threads_split.tf_idf.prepare_tfidf import run as prepare_tfidf
 
         prepare_tfidf(
             output_path=corpus_file,
