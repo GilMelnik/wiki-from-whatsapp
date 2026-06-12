@@ -14,7 +14,7 @@ from utils import write_json_file
 def load_messages(input_path: Path) -> list[Message]:
     with input_path.open(encoding="utf-8") as f:
         raw_messages = json.load(f)
-    messages = [Message.from_dict(item) for item in raw_messages]
+    messages = [Message.from_android_dict(item) for item in raw_messages]
     messages.sort(key=lambda m: m.datetime)
     return messages
 
@@ -71,7 +71,7 @@ def run_pipeline(
 
 if __name__ == "__main__":
     result = run_pipeline(
-        input_path=Path("data/messages_combined.json"),
+        input_path=Path("data/chats_from_phone/chat_android.json"),
         output_path=Path("data/threads.json"),
     )
     print(

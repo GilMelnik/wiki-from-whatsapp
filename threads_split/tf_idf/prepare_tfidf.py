@@ -79,7 +79,7 @@ def _build_tokens_payload(
 
 
 def run(
-    input_path: Path | str = Path("data/messages_combined.json"),
+    input_path: Path | str = Path("data/chats_from_phone/chat_android.json"),
     output_path: Path | str = Path("data/tfidf_corpus.json"),
     tokens_output_path: Path | str = Path("data/tfidf_tokens.json"),
     batch_size: int = 32,

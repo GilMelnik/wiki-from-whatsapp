@@ -15,10 +15,10 @@ class ThreadConfig:
     w_semantic: float = 0.55
     w_time: float = 0.25
     w_social: float = 0.20
-    w_tfidf: float = 0.20
-    attach_threshold: float = 0.45
-    margin: float = 0.08
-    tau_minutes: float = 90.0
+    w_tfidf: float = 0.40
+    attach_threshold: float = 0.35
+    margin: float = 0.02
+    tau_minutes: float = 2160.0
     max_open_threads: int = 5
     close_after_hours: float = 36.0
     recent_messages_for_semantic: int = 5
@@ -126,6 +126,19 @@ class Thread:
             self.recent_embeddings = self.recent_embeddings[-self.recent_embeddings_window :]
 
         self.recent_embeddings_mean = np.mean(self.recent_embeddings, axis=0)
+
+    def add_participants(self, senders: set[str]) -> None:
+        for sender in senders:
+            if sender not in self.participants:
+                self.participants.add(sender)
+                self.num_unique_senders += 1
+
+    def add_reaction_participants(self, reactions: list[dict]) -> None:
+        reaction_senders: set[str] = set()
+        for reaction in reactions:
+            for sender in reaction.get("senders", []):
+                reaction_senders.add(sender)
+        self.add_participants(reaction_senders)
 
     def to_dict(self, messages: Sequence[Message]) -> dict[str, Any]:
         thread_messages = []

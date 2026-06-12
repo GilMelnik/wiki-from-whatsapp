@@ -1,63 +1,88 @@
+from __future__ import annotations
+
 from datetime import datetime
+from typing import Any
+
+from preprocessing.parse_messages import normalize_content
+
+
+def parse_android_datetime(date_str: str, time_str: str) -> datetime:
+    """Parse DD/MM/YYYY date and HH:MM time from Android phone export."""
+    day, month, year = date_str.split("/")
+    hour, minute = time_str.split(":")
+    return datetime(int(year), int(month), int(day), int(hour), int(minute))
+
+
+def _sender_user_name(sender: dict[str, Any] | str) -> str:
+    if isinstance(sender, dict):
+        return sender["user_name"]
+    return sender
 
 
 class Message:
-    def __init__(self, date_time, sender, content):
+    def __init__(
+        self,
+        date_time: datetime,
+        sender: str,
+        content: str,
+        message_id: str | None = None,
+        quote: dict[str, str] | None = None,
+        reactions: list[dict[str, Any]] | None = None,
+    ):
+        self.id = message_id
         self.datetime = date_time
         self.sender = sender
         self.content = content
+        self.quote = quote
+        self.reactions = reactions or []
 
     @classmethod
-    def from_dict(cls, dict_data):
+    def from_android_dict(cls, dict_data: dict[str, Any]) -> Message:
+        quote = None
+        if dict_data.get("quote"):
+            q = dict_data["quote"]
+            quote = {
+                "sender": _sender_user_name(q["sender"]),
+                "text": q["text"],
+            }
+
+        reactions = []
+        for reaction in dict_data.get("reactions") or []:
+            reactions.append(
+                {
+                    "emoji": reaction["emoji"],
+                    "senders": [
+                        _sender_user_name(s) for s in reaction.get("senders", [])
+                    ],
+                }
+            )
+
         return cls(
-            date_time=datetime.fromisoformat(dict_data['datetime']),
-            sender=dict_data['sender'],
-            content=dict_data['content'],
+            date_time=parse_android_datetime(dict_data["date"], dict_data["time"]),
+            sender=_sender_user_name(dict_data["sender"]),
+            content=dict_data.get("text", ""),
+            message_id=dict_data.get("id"),
+            quote=quote,
+            reactions=reactions,
         )
-        
-    def to_dict(self):
-        return {
+
+    def normalized_content(self) -> str:
+        return normalize_content(self.content)
+
+    def quote_lookup_key(self) -> tuple[str, str] | None:
+        if not self.quote:
+            return None
+        return (self.quote["sender"], normalize_content(self.quote["text"]))
+
+    def to_dict(self) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "id": self.id,
             "datetime": self.datetime.isoformat(),
             "sender": self.sender,
-            "content": self.content
+            "content": self.content,
         }
-
-
-class Conversation:
-    def __init__(self, message=None):
-        self.messages = list()
-        if message:
-            self.add_message(message)
-
-    def add_message(self, message):
-        self.messages.append(message)
-
-    def get_last_messages(self, context_window=10):
-        context = [message for message in self.messages[-context_window:]]
-        return context
-
-    def to_dict(self):
-        output_dict = [message.to_dict() for message in self.messages]
-        return output_dict
-
-
-class IndexList:
-    def __init__(self, max_size):
-        self.max_size = max_size
-        self.items = []
-
-    def add(self, index):
-        if index in self.items:
-            self.items.remove(index)
-        self.items.append(index)
-        if len(self.items) > self.max_size:
-            self.items.pop(0)
-
-    def __iter__(self):
-        # Iterate from last to first
-        for item in reversed(self.items):
-            yield item
-
-    def __repr__(self):
-        return f"IndexList({self.items})"
-
+        if self.quote is not None:
+            result["quote"] = self.quote
+        if self.reactions:
+            result["reactions"] = self.reactions
+        return result

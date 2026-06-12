@@ -26,7 +26,7 @@ def _build_payload(
 
 
 def run(
-    input_path: Path | str = Path("data/messages_combined.json"),
+    input_path: Path | str = Path("data/chats_from_phone/chat_android.json"),
     output_path: Path | str = Path("data/message_embeddings.json"),
     model_name: str = "intfloat/multilingual-e5-large",
     batch_size: int = 64,
