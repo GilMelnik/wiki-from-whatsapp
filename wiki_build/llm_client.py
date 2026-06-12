@@ -32,6 +32,9 @@ lazily so only the providers you use must be installed.
 
 Every call is cached on disk keyed by a hash of (provider, model, system, user).
 The cache lives in ``data/llm_cache/`` (gitignored).
+
+API keys and ``WIKI_LLM_*`` vars can live in a repo-root ``.env`` file; this module
+loads it on import (``python-dotenv``). Variables already set in the shell win.
 """
 
 from __future__ import annotations
@@ -44,7 +47,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CACHE_DIR = Path("data/llm_cache")
+
+load_dotenv(PROJECT_ROOT / ".env", override=False)
+
 
 DEFAULT_MODELS = {
     "anthropic": "claude-3-5-sonnet-latest",
