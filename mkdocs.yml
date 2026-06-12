@@ -1,0 +1,38 @@
+site_name: ויקי פונדקאות לגייז
+site_description: ידע קהילתי אנונימי על תהליכי פונדקאות
+docs_dir: docs
+theme:
+  name: material
+  language: he
+  direction: rtl
+  features:
+  - navigation.sections
+  - navigation.top
+  - navigation.indexes
+  - search.highlight
+  - search.suggest
+  - content.code.copy
+  palette:
+  - scheme: default
+    primary: teal
+    accent: teal
+    toggle:
+      icon: material/weather-night
+      name: עבור למצב כהה
+  - scheme: slate
+    primary: teal
+    accent: teal
+    toggle:
+      icon: material/weather-sunny
+      name: עבור למצב בהיר
+plugins:
+- search
+markdown_extensions:
+- admonition
+- pymdownx.details
+- pymdownx.superfences
+- attr_list
+- tables
+- toc
+nav:
+- בית: index.md

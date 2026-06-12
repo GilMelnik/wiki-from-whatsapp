@@ -2,3 +2,10 @@ sentence-transformers>=2.2.0
 numpy>=1.24.0
 transformers>=4.40.0
 torch>=2.0.0
+
+# Wiki generation pipeline
+mkdocs-material>=9.5.0
+# LLM providers (lazy-imported; install only the one you use)
+anthropic>=0.40.0
+openai>=1.40.0
+google-genai>=0.3.0
