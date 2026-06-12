@@ -2,9 +2,9 @@
 
 For each topic the claims are grouped, near-duplicates merged (via e5
 embeddings when available, otherwise a fuzzy text fallback), distinct
-supporters tallied across threads (using the PRIVATE audit map, but only
-counts are emitted), contradicting stances per entity surfaced, and a
-month-by-month timeline built.
+supporters tallied across threads (message authors and reaction senders,
+each user counted once using the PRIVATE audit map), contradicting stances
+per entity surfaced, and a month-by-month timeline built.
 
 Output: ``data/claims_aggregated.json`` (no sender ids; counts only).
 """
@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from utils import write_json_file
+from wiki_build.support import aggregate_reaction_summary
 from wiki_build.taxonomy import category_title, get_page
 
 DEFAULT_CLAIMS_PATH = Path("data/claims.json")
@@ -29,15 +30,25 @@ def _normalize(text: str) -> str:
     return " ".join(text.split()).strip()
 
 
-def _load_sender_map(audit_path: Path | str) -> dict[str, list[str]]:
-    """claim_id -> supporting sender ids (from the private audit file)."""
+def _load_audit_records(audit_path: Path | str) -> dict[str, dict[str, Any]]:
+    """claim_id -> private audit record (supporters, reactions)."""
 
     path = Path(audit_path)
     if not path.exists():
         return {}
     with path.open(encoding="utf-8") as f:
         audit = json.load(f)
-    return {rec["claim_id"]: rec.get("supporting_senders", []) for rec in audit["audit"]}
+    return {rec["claim_id"]: rec for rec in audit["audit"]}
+
+
+def _supporters_from_audit(record: dict[str, Any]) -> set[str]:
+    """Distinct users supporting a claim (statements + reactions, deduped)."""
+
+    if record.get("all_supporters"):
+        return set(record["all_supporters"])
+    supporters = set(record.get("supporting_senders") or [])
+    supporters.update(record.get("reaction_senders") or [])
+    return supporters
 
 
 class _Embedder:
@@ -64,7 +75,7 @@ class _Embedder:
 
 def _merge_claims(
     claims: list[dict[str, Any]],
-    sender_map: dict[str, list[str]],
+    audit_by_id: dict[str, dict[str, Any]],
     embedder: _Embedder,
     similarity_threshold: float,
 ) -> list[dict[str, Any]]:
@@ -98,13 +109,23 @@ def _merge_claims(
     for cluster in clusters:
         members = cluster["members"]
         member_claims = [claims[m] for m in members]
-        # Distinct supporters across the whole cluster (private map -> count only).
-        senders: set[str] = set()
+        # Distinct supporters across the whole cluster (private audit -> count only).
+        all_supporters: set[str] = set()
+        statement_supporters: set[str] = set()
+        reaction_supporters: set[str] = set()
+        message_reactions: list[dict[str, Any]] = []
         for claim in member_claims:
-            senders.update(sender_map.get(claim["claim_id"], []))
-        support_count = len(senders) if senders else sum(
+            audit = audit_by_id.get(claim["claim_id"], {})
+            all_supporters.update(_supporters_from_audit(audit))
+            statement_supporters.update(audit.get("supporting_senders") or [])
+            reaction_supporters.update(audit.get("reaction_senders") or [])
+            message_reactions.extend(audit.get("message_reactions") or [])
+
+        support_count = len(all_supporters) if all_supporters else sum(
             c.get("support_count", 1) for c in member_claims
         )
+        reaction_only_count = len(reaction_supporters - statement_supporters)
+        endorsement_count = len(member_claims)
 
         stances = Counter(c.get("stance", "neutral") for c in member_claims)
         dates = sorted(c["date"] for c in member_claims if c.get("date"))
@@ -119,6 +140,11 @@ def _merge_claims(
                 "stance": stances.most_common(1)[0][0],
                 "stance_breakdown": dict(stances),
                 "support_count": support_count,
+                "statement_count": len(statement_supporters),
+                "reaction_endorser_count": len(reaction_supporters),
+                "reaction_only_count": reaction_only_count,
+                "reaction_summary": aggregate_reaction_summary(message_reactions),
+                "endorsement_count": endorsement_count,
                 "thread_count": len({c["thread_id"] for c in member_claims}),
                 "date_range": [dates[0], dates[-1]] if dates else [None, None],
                 "entities": entities,
@@ -159,7 +185,7 @@ def run(
     with Path(claims_path).open(encoding="utf-8") as f:
         claims_payload = json.load(f)
     claims = claims_payload["claims"]
-    sender_map = _load_sender_map(audit_path)
+    audit_by_id = _load_audit_records(audit_path)
     embedder = _Embedder(use_embeddings)
 
     by_topic: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -171,7 +197,7 @@ def run(
     for topic_id, topic_claims in by_topic.items():
         page = get_page(topic_id)
         merged = _merge_claims(
-            topic_claims, sender_map, embedder, similarity_threshold
+            topic_claims, audit_by_id, embedder, similarity_threshold
         )
         entity_stances = _entity_stances(merged)
         timeline = Counter(

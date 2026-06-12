@@ -5,6 +5,9 @@ neutral Hebrew claims, each tagged with topics, a stance, the supporting
 message indices and the entities mentioned. We then:
 
 - map the supporting local message indices back to senders and months,
+- count distinct supporters (message authors plus reaction senders, each user
+  once even if they both stated and reacted),
+- attach per-message reaction details to the private audit trace,
 - compute a distinct-supporter count and the claim date (earliest support),
 - run the deterministic PII scrub safety net over the claim text,
 - write the publishable ``data/claims.json`` (no sender ids, no raw text) and
@@ -19,6 +22,7 @@ from typing import Any
 from utils import write_json_file
 from wiki_build.llm_client import LLMClient
 from wiki_build.scrub import DEFAULT_SENDER_MAP_PATH, Denylist, scrub_claims
+from wiki_build.support import compute_support
 from wiki_build.taxonomy import page_ids, taxonomy_prompt_block
 from wiki_build.threads_io import (
     DEFAULT_THREADS_PATH,
@@ -57,6 +61,8 @@ def build_extract_prompt(rendered: str) -> str:
         "    }\n"
         "  ]\n"
         "}\n"
+        "שורות עם [תגובות: ...] מציינות תגובות אימוג'י להודעה — קח אותן בחשבון "
+        "כשאתה מעריך עד כמה הטענה נתמכת.\n"
         "אם אין ידע מועיל, החזר claims ריק.\n\n"
         "השיחה:\n"
         f"{rendered}"
@@ -108,13 +114,15 @@ def extract_thread(thread: dict[str, Any], llm: LLMClient) -> list[dict[str, Any
             for i in (raw.get("supporting_message_ids") or [])
             if isinstance(i, int) and 0 <= i < len(line_meta)
         ]
-        senders = sorted({line_meta[i]["sender"] for i in local_ids})
+        support = compute_support(thread, line_meta, local_ids)
         months = sorted({line_meta[i]["month"] for i in local_ids})
         if not months:
             months = sorted({m["month"] for m in line_meta})
 
         topic_tags = [t for t in (raw.get("topic_tags") or []) if isinstance(t, str)]
-        global_ids = [thread["message_ids"][i] for i in local_ids]
+        global_ids = [
+            thread["message_ids"][line_meta[i]["message_index"]] for i in local_ids
+        ]
 
         claims.append(
             {
@@ -126,8 +134,12 @@ def extract_thread(thread: dict[str, Any], llm: LLMClient) -> list[dict[str, Any
                 "entities": raw.get("entities") or [],
                 "stance": raw.get("stance", "neutral"),
                 "date": months[0],
-                "support_count": max(len(senders), 1),
-                "_supporting_senders": senders,
+                "support_count": support["support_count"],
+                "statement_count": support["statement_count"],
+                "reaction_endorser_count": support["reaction_endorser_count"],
+                "reaction_only_count": support["reaction_only_count"],
+                "reaction_summary": support["reaction_summary"],
+                "_support": support,
                 "_local_message_ids": local_ids,
                 "_global_message_ids": global_ids,
             }
@@ -178,14 +190,18 @@ def run(
         processed += 1
 
         for claim in thread_claims:
+            support = claim.pop("_support")
             audit_records.append(
                 {
                     "claim_id": claim["claim_id"],
                     "thread_id": claim["thread_id"],
                     "raw_claim_text": claim["claim_text"],
-                    "supporting_senders": claim.pop("_supporting_senders"),
+                    "supporting_senders": support["statement_senders"],
+                    "reaction_senders": support["reaction_senders"],
+                    "all_supporters": support["all_supporters"],
                     "local_message_ids": claim.pop("_local_message_ids"),
                     "global_message_ids": claim.pop("_global_message_ids"),
+                    "message_reactions": support["message_reactions"],
                 }
             )
             published_claims.append(claim)

@@ -33,10 +33,42 @@ STANCE_HE = {
 GENERATE_SYSTEM = (
     "אתה כותב ערכי ויקי בעברית על פונדקאות לגייז, על בסיס ידע שחולץ מקבוצת וואטסאפ. "
     "כתוב בעברית רהוטה, ניטרלית וברורה. הצג קודם את ההסכמה הרווחת, ואז דעות מנוגדות "
-    "תוך ציון מספר התומכים (למשל \"לפי 3 משתתפים\"). ציין תאריכים (חודש ושנה) כשרלוונטי. "
+    "תוך ציון מספר התומכים הייחודיים (משתתפים שכתבו או הגיבו בתגובות — כל אחד נספר פעם אחת). "
+    "כשטענה חוזרת במספר שיחות, ציין כמה פעמים היא הופיעה. "
+    "תגובות אימוג'י משקפות תמיכה נוספת — העדף טענות עם יותר תומכים ותגובות. "
+    "ציין תאריכים (חודש ושנה) כשרלוונטי. "
     "השתמש בקישורים שסופקו כדי לקשר לעמודים קשורים. אל תמציא מידע שאינו בטענות. "
     "שמור על אנונימיות מוחלטת - בלי שמות אנשים. החזר Markdown בלבד, ללא כותרת H1."
 )
+
+
+def _format_reaction_summary(reaction_summary: list[dict[str, Any]]) -> str:
+    parts = [
+        f"{item['emoji']}×{item['count']}"
+        for item in (reaction_summary or [])
+        if item.get("emoji")
+    ]
+    return ", ".join(parts)
+
+
+def _format_support_line(claim: dict[str, Any]) -> str:
+    """Human-readable support stats for prompts and deterministic sections."""
+
+    support = claim.get("support_count", 1)
+    parts = [f"{support} תומכים ייחודיים"]
+    reaction_only = claim.get("reaction_only_count", 0)
+    if reaction_only:
+        parts.append(f"{reaction_only} מתוכם רק בתגובות")
+    reaction_summary = _format_reaction_summary(claim.get("reaction_summary"))
+    if reaction_summary:
+        parts.append(f"תגובות: {reaction_summary}")
+    endorsement_count = claim.get("endorsement_count", 1)
+    thread_count = claim.get("thread_count", 1)
+    if endorsement_count > 1:
+        parts.append(f"הופיעה {endorsement_count} פעמים")
+    if thread_count > 1 and thread_count != endorsement_count:
+        parts.append(f"ב-{thread_count} שיחות")
+    return " · ".join(parts)
 
 
 def _related_pages(topic_id: str, topics: dict[str, Any]) -> list[str]:
@@ -85,8 +117,9 @@ def _build_facts_block(topic: dict[str, Any]) -> str:
         else:
             when = date_range[0] or "לא ידוע"
         stance = STANCE_HE.get(claim["stance"], claim["stance"])
+        support_line = _format_support_line(claim)
         lines.append(
-            f"- [{stance}, {claim['support_count']} תומכים, {when}] {claim['claim_text']}"
+            f"- [{stance}, {support_line}, {when}] {claim['claim_text']}"
         )
     if topic["contradictions"]:
         lines.append("\nדעות מנוגדות לפי ישות:")
@@ -127,12 +160,8 @@ def _deterministic_sections(
             else (date_range[0] or "לא ידוע")
         )
         stance = STANCE_HE.get(claim["stance"], claim["stance"])
-        support = (
-            f"נתמך על ידי {claim['support_count']} משתתפים"
-            if claim["support_count"] > 1
-            else "דווח על ידי משתתף יחיד"
-        )
-        parts.append(f"- **[{stance} · {support} · {when}]** {claim['claim_text']}")
+        support_line = _format_support_line(claim)
+        parts.append(f"- **[{stance} · {support_line} · {when}]** {claim['claim_text']}")
 
     if topic["contradictions"]:
         parts.append("\n## דעות מנוגדות\n")

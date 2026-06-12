@@ -4,6 +4,8 @@ The renderer assigns each thread its own anonymous participant labels
 ("משתתף 1", "משתתף 2", ...) so that no pseudonymous sender id ever reaches the
 LLM, and tags every line with a stable local index ``[m{i}]`` that downstream
 stages use to map a claim back to its supporting messages, senders and dates.
+Reaction counts (without sender identities) are appended so the extractor can
+weigh social endorsement when judging claim validity.
 """
 
 from __future__ import annotations
@@ -11,6 +13,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+
+from wiki_build.support import format_reactions_for_llm
 
 DEFAULT_THREADS_PATH = Path("data/threads.json")
 
@@ -36,15 +40,16 @@ def render_thread_for_llm(thread: dict[str, Any]) -> tuple[str, list[dict[str, A
     """Render a thread as anonymized text plus a per-line metadata map.
 
     Returns ``(rendered_text, line_meta)`` where ``line_meta[i]`` holds the
-    ``sender`` and ``month`` for local message index ``i`` (only non-empty
-    messages are rendered/indexed).
+    ``sender``, ``month``, ``message_index`` (into ``thread["messages"]``) and
+    ``reactions`` for local message index ``i`` (only non-empty messages are
+    rendered/indexed).
     """
 
     sender_labels: dict[str, str] = {}
     lines: list[str] = []
     line_meta: list[dict[str, Any]] = []
 
-    for message in thread.get("messages", []):
+    for message_index, message in enumerate(thread.get("messages", [])):
         content = (message.get("content") or "").strip()
         if not content:
             continue
@@ -53,8 +58,18 @@ def render_thread_for_llm(thread: dict[str, Any]) -> tuple[str, list[dict[str, A
             sender_labels[sender] = f"משתתף {len(sender_labels) + 1}"
         label = sender_labels[sender]
         month = month_of(message.get("datetime", ""))
+        reactions = message.get("reactions") or []
         local_index = len(line_meta)
-        lines.append(f"[m{local_index}] ({month}, {label}) {content}")
-        line_meta.append({"sender": sender, "month": month, "label": label})
+        reaction_suffix = format_reactions_for_llm(reactions)
+        lines.append(f"[m{local_index}] ({month}, {label}) {content}{reaction_suffix}")
+        line_meta.append(
+            {
+                "sender": sender,
+                "month": month,
+                "label": label,
+                "message_index": message_index,
+                "reactions": reactions,
+            }
+        )
 
     return "\n".join(lines), line_meta
