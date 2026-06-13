@@ -31,6 +31,7 @@ offline ``mock`` unless you set env vars.
 Usage:
     python -m wiki_build.pipeline                 # full run, hybrid LLMs
     python -m wiki_build.pipeline --mock          # offline mock for all stages
+    python -m wiki_build.pipeline --batch         # batch API (50% cheaper, async)
     python -m wiki_build.pipeline --pilot tamuz   # one-topic pilot through generate
 """
 
@@ -56,6 +57,7 @@ def run(
     use_embeddings: bool = True,
     *,
     use_mock: bool = False,
+    use_batch: bool = False,
 ) -> None:
     use_hybrid = not use_mock and not os.environ.get("WIKI_LLM_PROVIDER")
     clients = _stage_clients(use_hybrid_defaults=use_hybrid)
@@ -65,17 +67,20 @@ def run(
 
     print("LLM configuration:")
     for stage, client in clients.items():
-        print(f"  {stage}: {client.provider} / {client.model}")
+        batch_note = " (batch)" if use_batch and client.supports_batch() else ""
+        print(f"  {stage}: {client.provider} / {client.model}{batch_note}")
 
     print("\n[A] Classifying threads...")
-    c_meta = classify.run(llm=clients["classify"])
+    c_meta = classify.run(llm=clients["classify"], use_batch=use_batch)
     print(
         f"    {c_meta['knowledge_bearing_count']} knowledge-bearing of "
         f"{c_meta['thread_count']} threads"
     )
 
     print("\n[B] Extracting claims...")
-    e_meta = extract.run(llm=clients["extract"], topic_filter=pilot_topic)
+    e_meta = extract.run(
+        llm=clients["extract"], topic_filter=pilot_topic, use_batch=use_batch
+    )
     print(
         f"    {e_meta['claims_count']} claims; "
         f"redactions: {e_meta['scrub']['total_redactions']}, "
@@ -87,7 +92,7 @@ def run(
     print(f"    {a_meta['topic_count']} topics (merge: {a_meta['merge_method']})")
 
     print("\n[D] Generating page drafts...")
-    g_meta = generate.run(llm=clients["generate"])
+    g_meta = generate.run(llm=clients["generate"], use_batch=use_batch)
     print(f"    {g_meta['pages_written']} drafts in {g_meta['drafts_dir']}/")
 
     print("\n[E] Manual review: edit drafts/ and copy approved pages into docs/.")
@@ -100,7 +105,8 @@ def run(
 if __name__ == "__main__":
     pilot = None
     use_mock = "--mock" in sys.argv
+    use_batch = "--batch" in sys.argv
     args = sys.argv[1:]
     if "--pilot" in args:
         pilot = args[args.index("--pilot") + 1]
-    run(pilot_topic=pilot, use_mock=use_mock)
+    run(pilot_topic=pilot, use_mock=use_mock, use_batch=use_batch)

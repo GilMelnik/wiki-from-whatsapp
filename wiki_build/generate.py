@@ -13,11 +13,12 @@ moved to ``docs/`` before publishing.
 from __future__ import annotations
 
 import json
+import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from wiki_build.llm_client import LLMClient
+from wiki_build.llm_client import BatchRequest, LLMClient
 from wiki_build.taxonomy import all_pages, get_page
 
 DEFAULT_AGGREGATED_PATH = Path("data/claims_aggregated.json")
@@ -184,14 +185,28 @@ def _deterministic_sections(
     return "\n".join(parts)
 
 
+def _narrative_from_text(raw: str) -> str:
+    if not raw:
+        return "_שגיאה בייצור תוכן: empty response_"
+    return raw.strip()
+
+
 def generate_page(
-    topic_id: str, topic: dict[str, Any], topics: dict[str, Any], llm: LLMClient
+    topic_id: str,
+    topic: dict[str, Any],
+    topics: dict[str, Any],
+    llm: LLMClient,
+    *,
+    narrative: str | None = None,
 ) -> str:
-    prompt = build_generate_prompt(topic_id, topic, topics)
-    try:
-        narrative = llm.complete_text(GENERATE_SYSTEM, prompt, task="generate").strip()
-    except Exception as exc:  # noqa: BLE001
-        narrative = f"_שגיאה בייצור תוכן: {exc}_"
+    if narrative is None:
+        prompt = build_generate_prompt(topic_id, topic, topics)
+        try:
+            narrative = llm.complete_text(GENERATE_SYSTEM, prompt, task="generate").strip()
+        except Exception as exc:  # noqa: BLE001
+            narrative = f"_שגיאה בייצור תוכן: {exc}_"
+    else:
+        narrative = _narrative_from_text(narrative)
 
     date_range = topic["date_range"]
     range_str = (
@@ -237,6 +252,7 @@ def run(
     drafts_dir: Path | str = DEFAULT_DRAFTS_DIR,
     llm: LLMClient | None = None,
     min_claims: int = 1,
+    use_batch: bool = False,
 ) -> dict[str, Any]:
     llm = llm or LLMClient()
     with Path(aggregated_path).open(encoding="utf-8") as f:
@@ -246,10 +262,42 @@ def run(
     drafts.mkdir(parents=True, exist_ok=True)
 
     written: list[str] = []
+    pending: list[tuple[str, dict[str, Any], str]] = []
     for topic_id, topic in topics.items():
         if topic["claim_count"] < min_claims:
             continue
-        markdown = generate_page(topic_id, topic, topics, llm)
+        pending.append((topic_id, topic, build_generate_prompt(topic_id, topic, topics)))
+
+    narratives: dict[str, str] = {}
+    if pending:
+        if use_batch and llm.supports_batch():
+            print(f"  Generate: submitting {len(pending)} requests via batch API...")
+            narratives = llm.complete_batch(
+                [
+                    BatchRequest(
+                        request_id=topic_id,
+                        system=GENERATE_SYSTEM,
+                        user=prompt,
+                        task="generate",
+                    )
+                    for topic_id, _, prompt in pending
+                ]
+            )
+        else:
+            if use_batch:
+                print("  Generate: batch not supported for this provider; using sync API.")
+            for topic_id, topic, prompt in pending:
+                try:
+                    narratives[topic_id] = llm.complete_text(
+                        GENERATE_SYSTEM, prompt, task="generate"
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    narratives[topic_id] = f"_שגיאה בייצור תוכן: {exc}_"
+
+    for topic_id, topic, _ in pending:
+        markdown = generate_page(
+            topic_id, topic, topics, llm, narrative=narratives.get(topic_id, "")
+        )
         (drafts / f"{topic_id}.md").write_text(markdown, encoding="utf-8")
         written.append(topic_id)
 
@@ -260,9 +308,10 @@ def run(
         "drafts_dir": str(drafts),
         "provider": llm.provider,
         "model": llm.model,
+        "batch_mode": use_batch and llm.supports_batch(),
     }
 
 
 if __name__ == "__main__":
-    meta = run()
+    meta = run(use_batch="--batch" in sys.argv)
     print(f"Wrote {meta['pages_written']} draft pages to {meta['drafts_dir']}/")

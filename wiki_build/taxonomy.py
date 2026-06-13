@@ -160,7 +160,7 @@ TAXONOMY: tuple[TopicPage, ...] = (
         id="legal-citizenship",
         title_he="אזרחות, דרכון ורישום",
         category="legal",
-        keywords=("אזרחות", "דרכון", "קונסוליה", "משרד הפנים", "רישום", "passport"),
+        keywords=("אזרחות", "דרכון", "קונסוליה", "משרד הפנים", "רישום", "passport", "אפוסטיל"),
     ),
     TopicPage(
         id="legal-lawyers",

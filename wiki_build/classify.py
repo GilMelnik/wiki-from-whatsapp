@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from utils import write_json_file
-from wiki_build.llm_client import LLMClient
+from wiki_build.llm_client import BatchRequest, LLMClient, extract_json
 from wiki_build.taxonomy import page_ids, taxonomy_prompt_block
 from wiki_build.threads_io import (
     DEFAULT_THREADS_PATH,
@@ -59,19 +59,7 @@ def heuristic_keep(thread: dict[str, Any], min_messages: int, min_senders: int) 
     )
 
 
-def classify_thread(thread: dict[str, Any], llm: LLMClient) -> dict[str, Any]:
-    rendered, _ = render_thread_for_llm(thread)
-    prompt = build_classify_prompt(rendered)
-    try:
-        result = llm.complete_json(CLASSIFY_SYSTEM, prompt, task="classify")
-    except Exception as exc:  # noqa: BLE001 - keep the batch going
-        return {
-            "is_knowledge_bearing": False,
-            "topic_tags": [],
-            "entities": [],
-            "reason": f"classification_error: {exc}",
-        }
-
+def _parse_classify_result(result: dict[str, Any]) -> dict[str, Any]:
     known = set(page_ids())
     raw_tags = result.get("topic_tags") or []
     topic_tags = [t for t in raw_tags if isinstance(t, str)]
@@ -85,6 +73,35 @@ def classify_thread(thread: dict[str, Any], llm: LLMClient) -> dict[str, Any]:
     }
 
 
+def _classify_error(reason: str) -> dict[str, Any]:
+    return {
+        "is_knowledge_bearing": False,
+        "topic_tags": [],
+        "emergent_tags": [],
+        "entities": [],
+        "reason": reason,
+    }
+
+
+def classify_from_text(raw: str) -> dict[str, Any]:
+    try:
+        if not raw:
+            raise ValueError("empty response")
+        return _parse_classify_result(extract_json(raw))
+    except Exception as exc:  # noqa: BLE001 - keep the batch going
+        return _classify_error(f"classification_error: {exc}")
+
+
+def classify_thread(thread: dict[str, Any], llm: LLMClient) -> dict[str, Any]:
+    rendered, _ = render_thread_for_llm(thread)
+    prompt = build_classify_prompt(rendered)
+    try:
+        result = llm.complete_json(CLASSIFY_SYSTEM, prompt, task="classify")
+        return _parse_classify_result(result)
+    except Exception as exc:  # noqa: BLE001 - keep the batch going
+        return _classify_error(f"classification_error: {exc}")
+
+
 def run(
     input_path: Path | str = DEFAULT_THREADS_PATH,
     output_path: Path | str = DEFAULT_OUTPUT_PATH,
@@ -93,6 +110,7 @@ def run(
     min_senders: int = 2,
     max_threads: int | None = None,
     topic_filter: str | None = None,
+    use_batch: bool = False,
 ) -> dict[str, Any]:
     """Classify all threads and write ``threads_classified.json``.
 
@@ -106,7 +124,10 @@ def run(
     threads = payload["threads"]
 
     classified: list[dict[str, Any]] = []
+    pending_llm: list[tuple[dict[str, Any], str]] = []
+    pending_indices: list[int] = []
     sent_to_llm = 0
+
     for thread in threads:
         kept_heuristic = heuristic_keep(thread, min_messages, min_senders)
         record: dict[str, Any] = {
@@ -119,49 +140,52 @@ def run(
         }
 
         if not kept_heuristic:
-            record.update(
-                {
-                    "is_knowledge_bearing": False,
-                    "topic_tags": [],
-                    "emergent_tags": [],
-                    "entities": [],
-                    "reason": "filtered_by_heuristic",
-                }
-            )
+            record.update(_classify_error("filtered_by_heuristic"))
             classified.append(record)
             continue
 
         if topic_filter and topic_filter.lower() not in "\n".join(
             (m.get("content") or "") for m in thread["messages"]
         ).lower():
-            record.update(
-                {
-                    "is_knowledge_bearing": False,
-                    "topic_tags": [],
-                    "emergent_tags": [],
-                    "entities": [],
-                    "reason": "outside_topic_filter",
-                }
-            )
+            record.update(_classify_error("outside_topic_filter"))
             classified.append(record)
             continue
 
         if max_threads is not None and sent_to_llm >= max_threads:
-            record.update(
-                {
-                    "is_knowledge_bearing": False,
-                    "topic_tags": [],
-                    "emergent_tags": [],
-                    "entities": [],
-                    "reason": "skipped_max_threads",
-                }
-            )
+            record.update(_classify_error("skipped_max_threads"))
             classified.append(record)
             continue
 
-        record.update(classify_thread(thread, llm))
-        sent_to_llm += 1
+        rendered, _ = render_thread_for_llm(thread)
+        prompt = build_classify_prompt(rendered)
+        pending_llm.append((thread, prompt))
+        pending_indices.append(len(classified))
         classified.append(record)
+        sent_to_llm += 1
+
+    if pending_llm:
+        if use_batch and llm.supports_batch():
+            print(f"  Classify: submitting {len(pending_llm)} requests via batch API...")
+            batch_results = llm.complete_batch(
+                [
+                    BatchRequest(
+                        request_id=thread["thread_id"],
+                        system=CLASSIFY_SYSTEM,
+                        user=prompt,
+                        task="classify",
+                    )
+                    for thread, prompt in pending_llm
+                ]
+            )
+            for (thread, _), record_idx in zip(pending_llm, pending_indices):
+                classified[record_idx].update(
+                    classify_from_text(batch_results.get(thread["thread_id"], ""))
+                )
+        else:
+            if use_batch:
+                print("  Classify: batch not supported for this provider; using sync API.")
+            for (thread, _), record_idx in zip(pending_llm, pending_indices):
+                classified[record_idx].update(classify_thread(thread, llm))
 
     kept = [r for r in classified if r["is_knowledge_bearing"]]
     output = {
@@ -173,6 +197,7 @@ def run(
             "knowledge_bearing_count": len(kept),
             "provider": llm.provider,
             "model": llm.model,
+            "batch_mode": use_batch and llm.supports_batch(),
         },
     }
     write_json_file(output, Path(output_path))
@@ -180,7 +205,10 @@ def run(
 
 
 if __name__ == "__main__":
-    meta = run()
+    meta = run(
+        llm=LLMClient.for_stage("classify", use_hybrid_defaults=True),
+        use_batch=True,
+    )
     print(
         f"Classified {meta['thread_count']} threads; "
         f"{meta['knowledge_bearing_count']} knowledge-bearing "

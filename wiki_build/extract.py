@@ -16,11 +16,12 @@ message indices and the entities mentioned. We then:
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
 
 from utils import write_json_file
-from wiki_build.llm_client import LLMClient
+from wiki_build.llm_client import BatchRequest, LLMClient, extract_json
 from wiki_build.scrub import DEFAULT_SENDER_MAP_PATH, Denylist, scrub_claims
 from wiki_build.support import compute_support
 from wiki_build.taxonomy import page_ids, taxonomy_prompt_block
@@ -89,16 +90,9 @@ def _knowledge_bearing_ids(
     return ids
 
 
-def extract_thread(thread: dict[str, Any], llm: LLMClient) -> list[dict[str, Any]]:
-    rendered, line_meta = render_thread_for_llm(thread)
-    if not rendered:
-        return []
-    prompt = build_extract_prompt(rendered)
-    try:
-        result = llm.complete_json(EXTRACT_SYSTEM, prompt, task="extract")
-    except Exception:  # noqa: BLE001 - keep the batch going
-        return []
-
+def _claims_from_result(
+    result: dict[str, Any], thread: dict[str, Any], line_meta: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     raw_claims = result.get("claims") or []
     known = set(page_ids())
     claims: list[dict[str, Any]] = []
@@ -147,6 +141,29 @@ def extract_thread(thread: dict[str, Any], llm: LLMClient) -> list[dict[str, Any
     return claims
 
 
+def extract_from_text(
+    raw: str, thread: dict[str, Any], line_meta: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    try:
+        if not raw:
+            return []
+        return _claims_from_result(extract_json(raw), thread, line_meta)
+    except Exception:  # noqa: BLE001 - keep the batch going
+        return []
+
+
+def extract_thread(thread: dict[str, Any], llm: LLMClient) -> list[dict[str, Any]]:
+    rendered, line_meta = render_thread_for_llm(thread)
+    if not rendered:
+        return []
+    prompt = build_extract_prompt(rendered)
+    try:
+        result = llm.complete_json(EXTRACT_SYSTEM, prompt, task="extract")
+        return _claims_from_result(result, thread, line_meta)
+    except Exception:  # noqa: BLE001 - keep the batch going
+        return []
+
+
 def run(
     input_path: Path | str = DEFAULT_THREADS_PATH,
     classified_path: Path | str = DEFAULT_CLASSIFIED_PATH,
@@ -156,6 +173,7 @@ def run(
     llm: LLMClient | None = None,
     topic_filter: str | None = None,
     max_threads: int | None = None,
+    use_batch: bool = False,
 ) -> dict[str, Any]:
     """Extract claims from knowledge-bearing threads.
 
@@ -177,6 +195,7 @@ def run(
 
     published_claims: list[dict[str, Any]] = []
     audit_records: list[dict[str, Any]] = []
+    pending_llm: list[tuple[dict[str, Any], str, list[dict[str, Any]]]] = []
     processed = 0
 
     for record in classified["threads"]:
@@ -186,9 +205,12 @@ def run(
         if max_threads is not None and processed >= max_threads:
             break
         thread = threads_by_id[thread_id]
-        thread_claims = extract_thread(thread, llm)
+        rendered, line_meta = render_thread_for_llm(thread)
+        if rendered:
+            pending_llm.append((thread, build_extract_prompt(rendered), line_meta))
         processed += 1
 
+    def _publish_claims(thread_claims: list[dict[str, Any]]) -> None:
         for claim in thread_claims:
             support = claim.pop("_support")
             audit_records.append(
@@ -206,6 +228,33 @@ def run(
             )
             published_claims.append(claim)
 
+    if pending_llm:
+        if use_batch and llm.supports_batch():
+            print(f"  Extract: submitting {len(pending_llm)} requests via batch API...")
+            batch_results = llm.complete_batch(
+                [
+                    BatchRequest(
+                        request_id=thread["thread_id"],
+                        system=EXTRACT_SYSTEM,
+                        user=prompt,
+                        task="extract",
+                    )
+                    for thread, prompt, _ in pending_llm
+                ]
+            )
+            for thread, _, line_meta in pending_llm:
+                raw = batch_results.get(thread["thread_id"], "")
+                _publish_claims(extract_from_text(raw, thread, line_meta))
+        else:
+            if use_batch:
+                print("  Extract: batch not supported for this provider; using sync API.")
+            for thread, prompt, line_meta in pending_llm:
+                try:
+                    result = llm.complete_json(EXTRACT_SYSTEM, prompt, task="extract")
+                    _publish_claims(_claims_from_result(result, thread, line_meta))
+                except Exception:  # noqa: BLE001 - keep the batch going
+                    continue
+
     scrub_summary = scrub_claims(published_claims, denylist)
 
     write_json_file(
@@ -219,6 +268,7 @@ def run(
                 "topic_filter": topic_filter,
                 "provider": llm.provider,
                 "model": llm.model,
+                "batch_mode": use_batch and llm.supports_batch(),
             },
         },
         Path(output_path),
@@ -245,7 +295,7 @@ def run(
 
 
 if __name__ == "__main__":
-    meta = run()
+    meta = run(use_batch="--batch" in sys.argv)
     print(
         f"Extracted {meta['claims_count']} claims from {meta['threads_processed']} threads. "
         f"Redactions: {meta['scrub']['total_redactions']}, "

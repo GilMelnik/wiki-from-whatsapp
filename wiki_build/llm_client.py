@@ -1,9 +1,10 @@
 """Provider-agnostic LLM client with on-disk caching.
 
-The client exposes two methods used across the wiki pipeline:
+The client exposes methods used across the wiki pipeline:
 
 - ``complete_json(system, user, task=...)`` -> parsed ``dict``/``list``
 - ``complete_text(system, user, task=...)`` -> ``str``
+- ``complete_batch(requests)`` -> ``dict[request_id, str]`` (anthropic / gemini)
 
 Configuration (most-specific wins):
 
@@ -33,6 +34,10 @@ lazily so only the providers you use must be installed.
 Every call is cached on disk keyed by a hash of (provider, model, system, user).
 The cache lives in ``data/llm_cache/`` (gitignored).
 
+Batch mode (``--batch`` on the pipeline or individual stages) submits uncached
+prompts via the provider batch API at ~50% lower cost. Anthropic and Gemini are
+supported; cached prompts are still served from disk without a batch job.
+
 API keys and ``WIKI_LLM_*`` vars can live in a repo-root ``.env`` file; this module
 loads it on import (``python-dotenv``). Variables already set in the shell win.
 """
@@ -43,9 +48,10 @@ import hashlib
 import json
 import os
 import re
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 from dotenv import load_dotenv
 
@@ -58,18 +64,30 @@ load_dotenv(PROJECT_ROOT / ".env", override=False)
 DEFAULT_MODELS = {
     "anthropic": "claude-3-5-sonnet-latest",
     "openai": "gpt-4o",
-    "gemini": "gemini-2.0-flash",
+    "gemini": "gemini-3.1-flash-lite",
     "mock": "mock",
 }
 
 # Hybrid defaults: cheap classify, strong extract + generate (override via env).
 STAGE_DEFAULTS: dict[str, dict[str, str]] = {
-    "classify": {"provider": "gemini", "model": "gemini-2.0-flash"},
-    "extract": {"provider": "anthropic", "model": "claude-sonnet-4-20250514"},
+    "classify": {"provider": "gemini", "model": "gemini-3.1-flash-lite"},
+    "extract": {"provider": "gemini", "model": "gemini-3.5-flash"},
     "generate": {"provider": "anthropic", "model": "claude-sonnet-4-20250514"},
 }
 
 VALID_STAGES = frozenset(STAGE_DEFAULTS)
+BATCH_PROVIDERS = frozenset({"anthropic", "gemini"})
+DEFAULT_BATCH_POLL_INTERVAL = 30.0
+
+
+@dataclass(frozen=True)
+class BatchRequest:
+    """One prompt submitted as part of a provider batch job."""
+
+    request_id: str
+    system: str
+    user: str
+    task: str = ""
 
 
 @dataclass(frozen=True)
@@ -130,7 +148,7 @@ def _strip_code_fence(text: str) -> str:
     return stripped.strip()
 
 
-def _extract_json(text: str) -> Any:
+def extract_json(text: str) -> Any:
     cleaned = _strip_code_fence(text)
     try:
         return json.loads(cleaned)
@@ -142,6 +160,13 @@ def _extract_json(text: str) -> Any:
         return json.loads(match.group(1))
 
 
+def _sanitize_batch_custom_id(request_id: str) -> str:
+    """Anthropic batch custom_id: 1-64 chars, alphanumeric / hyphen / underscore."""
+
+    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "_", request_id)
+    return sanitized[:64] or "req"
+
+
 class LLMClient:
     def __init__(
         self,
@@ -151,6 +176,7 @@ class LLMClient:
         temperature: float = 0.2,
         max_tokens: int = 4096,
         use_cache: bool = True,
+        batch_poll_interval: float | None = None,
     ):
         self.provider = (provider or os.environ.get("WIKI_LLM_PROVIDER") or "mock").lower()
         self.model = model or os.environ.get("WIKI_LLM_MODEL") or DEFAULT_MODELS.get(
@@ -160,7 +186,16 @@ class LLMClient:
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.use_cache = use_cache
+        env_poll = os.environ.get("WIKI_LLM_BATCH_POLL_INTERVAL")
+        self.batch_poll_interval = (
+            batch_poll_interval
+            if batch_poll_interval is not None
+            else float(env_poll) if env_poll else DEFAULT_BATCH_POLL_INTERVAL
+        )
         self._client: Any = None
+
+    def supports_batch(self) -> bool:
+        return self.provider in BATCH_PROVIDERS
 
     @classmethod
     def for_stage(
@@ -225,7 +260,53 @@ class LLMClient:
 
     def complete_json(self, system: str, user: str, task: str = "") -> Any:
         raw = self.complete_text(system, user, task)
-        return _extract_json(raw)
+        return extract_json(raw)
+
+    def complete_batch(self, requests: Sequence[BatchRequest]) -> dict[str, str]:
+        """Run many prompts via the provider batch API (50% cheaper, async).
+
+        Cached prompts are returned immediately; only uncached items are submitted.
+        Mock provider runs synchronously without an API call.
+        """
+
+        results: dict[str, str] = {}
+        pending: list[BatchRequest] = []
+
+        for req in requests:
+            if self.use_cache:
+                cached = self._read_cache(self._cache_key(req.system, req.user))
+                if cached is not None:
+                    results[req.request_id] = cached
+                    continue
+            pending.append(req)
+
+        if not pending:
+            return results
+
+        if self.provider == "mock":
+            for req in pending:
+                response = _mock_response(req.system, req.user, req.task)
+                results[req.request_id] = response
+                if self.use_cache:
+                    self._write_cache(self._cache_key(req.system, req.user), response)
+            return results
+
+        if self.provider == "anthropic":
+            batch_results = self._anthropic_batch(pending)
+        elif self.provider == "gemini":
+            batch_results = self._gemini_batch(pending)
+        else:
+            raise ValueError(
+                f"Batch API not supported for provider {self.provider!r}; "
+                f"supported: {sorted(BATCH_PROVIDERS)}"
+            )
+
+        for req in pending:
+            response = batch_results.get(req.request_id, "")
+            results[req.request_id] = response
+            if self.use_cache and response:
+                self._write_cache(self._cache_key(req.system, req.user), response)
+        return results
 
     def _dispatch(self, system: str, user: str, task: str) -> str:
         if self.provider == "mock":
@@ -279,6 +360,127 @@ class LLMClient:
             contents=f"{system}\n\n{user}",
         )
         return response.text or ""
+
+    def _anthropic_batch(self, requests: Sequence[BatchRequest]) -> dict[str, str]:
+        import anthropic
+        from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
+        from anthropic.types.messages.batch_create_params import Request
+
+        if self._client is None:
+            self._client = anthropic.Anthropic()
+
+        id_map = {
+            _sanitize_batch_custom_id(req.request_id): req.request_id for req in requests
+        }
+        api_requests = [
+            Request(
+                custom_id=_sanitize_batch_custom_id(req.request_id),
+                params=MessageCreateParamsNonStreaming(
+                    model=self.model,
+                    max_tokens=self.max_tokens,
+                    temperature=self.temperature,
+                    system=req.system,
+                    messages=[{"role": "user", "content": req.user}],
+                ),
+            )
+            for req in requests
+        ]
+
+        batch = self._client.messages.batches.create(requests=api_requests)
+        print(
+            f"  Anthropic batch {batch.id} submitted "
+            f"({len(requests)} requests, ~50% cheaper)..."
+        )
+
+        while True:
+            batch = self._client.messages.batches.retrieve(batch.id)
+            if batch.processing_status == "ended":
+                break
+            counts = batch.request_counts
+            print(
+                f"  Anthropic batch {batch.id}: "
+                f"processing={counts.processing}, succeeded={counts.succeeded}, "
+                f"errored={counts.errored}"
+            )
+            time.sleep(self.batch_poll_interval)
+
+        out: dict[str, str] = {}
+        for result in self._client.messages.batches.results(batch.id):
+            request_id = id_map.get(result.custom_id, result.custom_id)
+            if result.result.type == "succeeded":
+                message = result.result.message
+                out[request_id] = "".join(
+                    block.text for block in message.content if block.type == "text"
+                )
+            else:
+                print(f"  Warning: Anthropic batch item {request_id} -> {result.result.type}")
+                out[request_id] = ""
+        return out
+
+    def _gemini_batch(self, requests: Sequence[BatchRequest]) -> dict[str, str]:
+        from google import genai
+        from google.genai import types as genai_types
+
+        if self._client is None:
+            self._client = genai.Client()
+
+        inline_requests = [
+            {
+                "contents": [
+                    {
+                        "parts": [{"text": f"{req.system}\n\n{req.user}"}],
+                        "role": "user",
+                    }
+                ],
+                "metadata": {"key": req.request_id},
+                "config": {
+                    "temperature": self.temperature,
+                    "max_output_tokens": self.max_tokens,
+                },
+            }
+            for req in requests
+        ]
+
+        batch_job = self._client.batches.create(
+            model=self.model,
+            src=inline_requests,
+            config={"display_name": "wiki-build-batch"},
+        )
+        print(
+            f"  Gemini batch {batch_job.name} submitted "
+            f"({len(requests)} requests, ~50% cheaper)..."
+        )
+
+        job_name = batch_job.name
+        state_name = ""
+        while True:
+            batch_job = self._client.batches.get(name=job_name)
+            state_name = batch_job.state.name if batch_job.state else ""
+            if state_name in genai_types.JOB_STATES_ENDED:
+                break
+            print(f"  Gemini batch {job_name}: {state_name}")
+            time.sleep(self.batch_poll_interval)
+
+        if state_name not in genai_types.JOB_STATES_SUCCEEDED:
+            raise RuntimeError(f"Gemini batch job ended with state {state_name!r}")
+
+        out: dict[str, str] = {}
+        dest = batch_job.dest
+        inlined = dest.inlined_responses if dest else None
+        if not inlined:
+            return out
+
+        for inline_resp in inlined:
+            request_id = None
+            if inline_resp.metadata:
+                request_id = inline_resp.metadata.get("key")
+            if inline_resp.response:
+                out[request_id or ""] = inline_resp.response.text or ""
+            elif inline_resp.error:
+                print(f"  Warning: Gemini batch item {request_id} error: {inline_resp.error}")
+                if request_id:
+                    out[request_id] = ""
+        return out
 
 
 # --------------------------------------------------------------------- mock
