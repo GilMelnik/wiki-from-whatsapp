@@ -313,5 +313,8 @@ def run(
 
 
 if __name__ == "__main__":
-    meta = run(use_batch="--batch" in sys.argv)
+    meta = run(
+        llm=LLMClient.for_stage("generate", use_hybrid_defaults=True),
+        use_batch=True
+    )
     print(f"Wrote {meta['pages_written']} draft pages to {meta['drafts_dir']}/")

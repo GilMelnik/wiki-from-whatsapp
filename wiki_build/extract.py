@@ -16,7 +16,6 @@ message indices and the entities mentioned. We then:
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -295,7 +294,10 @@ def run(
 
 
 if __name__ == "__main__":
-    meta = run(use_batch="--batch" in sys.argv)
+    meta = run(
+        llm=LLMClient.for_stage("extract", use_hybrid_defaults=True),
+        use_batch=True,
+    )
     print(
         f"Extracted {meta['claims_count']} claims from {meta['threads_processed']} threads. "
         f"Redactions: {meta['scrub']['total_redactions']}, "

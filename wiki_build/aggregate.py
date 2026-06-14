@@ -63,9 +63,8 @@ class _Embedder:
         if not self.use_embeddings or self._failed:
             return None
         try:
-            from threads_split.embedding.embedding import Embedder
-
             if self._embedder is None:
+                from threads_split.embedding.embedding import Embedder
                 self._embedder = Embedder()
             return self._embedder.encode_messages(texts)
         except Exception:  # noqa: BLE001 - fall back to fuzzy
