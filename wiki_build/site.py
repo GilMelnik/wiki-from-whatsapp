@@ -1,14 +1,13 @@
 """Stage F: build the MkDocs site config and wire approved pages.
 
 Generates ``mkdocs.yml`` (Material theme, Hebrew, RTL, search) with a ``nav``
-derived from the taxonomy, including only pages that actually exist in the
-docs directory. Approved drafts are expected in ``docs/``; the optional
-``seed_from_drafts`` flag copies ``drafts/`` into ``docs/`` for a quick preview
-(bypassing the human review gate - use only for local previews).
+derived from ``data/wiki_plan.json`` when present, otherwise from the taxonomy
+seed. Only pages that exist in ``docs/`` are included.
 """
 
 from __future__ import annotations
 
+import json
 import shutil
 from collections import defaultdict
 from pathlib import Path
@@ -16,14 +15,34 @@ from typing import Any
 
 import yaml
 
-from wiki_build.taxonomy import CATEGORIES, all_pages
+from wiki_build.taxonomy import CATEGORIES, all_pages, category_title
 
 DEFAULT_DOCS_DIR = Path("docs")
 DEFAULT_DRAFTS_DIR = Path("drafts")
 DEFAULT_CONFIG_PATH = Path("mkdocs.yml")
+DEFAULT_PLAN_PATH = Path("data/wiki_plan.json")
 
 
-def _build_nav(docs_dir: Path) -> list[Any]:
+def _load_plan_pages(plan_path: Path) -> list[dict[str, str]] | None:
+    if not plan_path.exists():
+        return None
+    with plan_path.open(encoding="utf-8") as f:
+        data = json.load(f)
+    pages = data.get("pages")
+    if not isinstance(pages, list) or not pages:
+        return None
+    return [
+        {
+            "id": p["id"],
+            "title": p.get("title", p["id"]),
+            "category": p.get("category", "emergent"),
+        }
+        for p in pages
+        if isinstance(p, dict) and p.get("id")
+    ]
+
+
+def _build_nav(docs_dir: Path, plan_path: Path | str = DEFAULT_PLAN_PATH) -> list[Any]:
     def exists(slug: str) -> bool:
         return (docs_dir / f"{slug}.md").exists()
 
@@ -31,19 +50,44 @@ def _build_nav(docs_dir: Path) -> list[Any]:
     if (docs_dir / "index.md").exists():
         nav.append({"בית": "index.md"})
 
+    plan_pages = _load_plan_pages(Path(plan_path))
     pages_by_category: dict[str, list[dict[str, str]]] = defaultdict(list)
-    for page in all_pages():
-        if exists(page.slug):
-            pages_by_category[page.category].append({page.title_he: f"{page.slug}.md"})
 
-    for category_id, category_title in CATEGORIES.items():
-        entries = pages_by_category.get(category_id)
-        if entries:
-            nav.append({category_title: entries})
+    if plan_pages:
+        for page in plan_pages:
+            if exists(page["id"]):
+                cat_title = category_title(page["category"])
+                pages_by_category[cat_title].append(
+                    {page["title"]: f"{page['id']}.md"}
+                )
+        category_order = list(CATEGORIES.values()) + ["נושאים נוספים"]
+        seen: set[str] = set()
+        for cat_title in category_order:
+            entries = pages_by_category.get(cat_title)
+            if entries:
+                nav.append({cat_title: entries})
+                seen.add(cat_title)
+        for cat_title, entries in pages_by_category.items():
+            if cat_title not in seen and entries:
+                nav.append({cat_title: entries})
+    else:
+        for page in all_pages():
+            if exists(page.slug):
+                pages_by_category[category_title(page.category)].append(
+                    {page.title_he: f"{page.slug}.md"}
+                )
+        for category_id, cat_title in CATEGORIES.items():
+            entries = pages_by_category.get(cat_title)
+            if entries:
+                nav.append({cat_title: entries})
+
     return nav
 
 
-def build_config(docs_dir: Path) -> dict[str, Any]:
+def build_config(
+    docs_dir: Path,
+    plan_path: Path | str = DEFAULT_PLAN_PATH,
+) -> dict[str, Any]:
     return {
         "site_name": "ויקי פונדקאות לגייז",
         "site_description": "ידע קהילתי אנונימי על תהליכי פונדקאות",
@@ -90,7 +134,7 @@ def build_config(docs_dir: Path) -> dict[str, Any]:
             "tables",
             "toc",
         ],
-        "nav": _build_nav(docs_dir),
+        "nav": _build_nav(docs_dir, plan_path),
     }
 
 
@@ -98,6 +142,7 @@ def run(
     docs_dir: Path | str = DEFAULT_DOCS_DIR,
     drafts_dir: Path | str = DEFAULT_DRAFTS_DIR,
     config_path: Path | str = DEFAULT_CONFIG_PATH,
+    plan_path: Path | str = DEFAULT_PLAN_PATH,
     seed_from_drafts: bool = False,
 ) -> dict[str, Any]:
     docs = Path(docs_dir)
@@ -114,7 +159,7 @@ def run(
             encoding="utf-8",
         )
 
-    config = build_config(docs)
+    config = build_config(docs, plan_path)
     with Path(config_path).open("w", encoding="utf-8") as f:
         yaml.safe_dump(config, f, allow_unicode=True, sort_keys=False)
 
@@ -124,6 +169,7 @@ def run(
         "docs_dir": str(docs),
         "page_count": page_count,
         "nav_sections": len(config["nav"]),
+        "plan_nav": _load_plan_pages(Path(plan_path)) is not None,
     }
 
 

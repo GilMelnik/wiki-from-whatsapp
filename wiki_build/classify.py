@@ -15,7 +15,7 @@ from typing import Any
 
 from utils import write_json_file
 from wiki_build.llm_client import BatchRequest, LLMClient, extract_json
-from wiki_build.taxonomy import page_ids, taxonomy_prompt_block
+from wiki_build.taxonomy import page_ids, taxonomy_seed_block
 from wiki_build.threads_io import (
     DEFAULT_THREADS_PATH,
     load_threads,
@@ -36,8 +36,8 @@ CLASSIFY_SYSTEM = (
 
 def build_classify_prompt(rendered: str) -> str:
     return (
-        "להלן רשימת הנושאים האפשריים (מזהה: כותרת):\n"
-        f"{taxonomy_prompt_block()}\n\n"
+        "נושאים מוצעים (נקודת התחלה — ניתן להוסיף מזהים חדשים):\n"
+        f"{taxonomy_seed_block()}\n\n"
         "סווג את השיחה הבאה והחזר JSON במבנה:\n"
         "{\n"
         '  "is_knowledge_bearing": true/false,\n'

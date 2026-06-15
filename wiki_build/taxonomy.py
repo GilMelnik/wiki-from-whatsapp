@@ -266,8 +266,8 @@ def category_title(category_id: str) -> str:
     return CATEGORIES.get(category_id, category_id)
 
 
-def taxonomy_prompt_block() -> str:
-    """A compact, LLM-readable listing of the taxonomy for tagging/extraction."""
+def taxonomy_seed_block() -> str:
+    """Compact seed listing of suggested wiki pages for LLM tagging/planning."""
 
     lines: list[str] = []
     for page in TAXONOMY:

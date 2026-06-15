@@ -4,6 +4,7 @@ The client exposes methods used across the wiki pipeline:
 
 - ``complete_json(system, user, task=...)`` -> parsed ``dict``/``list``
 - ``complete_text(system, user, task=...)`` -> ``str``
+- ``complete_grounded(system, user)`` -> ``GroundedResult`` (Gemini + Google Search)
 - ``complete_batch(requests)`` -> ``dict[request_id, str]`` (anthropic / gemini)
 
 Configuration (most-specific wins):
@@ -16,6 +17,10 @@ Configuration (most-specific wins):
        WIKI_LLM_EXTRACT_MODEL=claude-sonnet-4-20250514
        WIKI_LLM_GENERATE_PROVIDER=anthropic
        WIKI_LLM_GENERATE_MODEL=claude-sonnet-4-20250514
+       WIKI_LLM_PLAN_PROVIDER=gemini
+       WIKI_LLM_PLAN_MODEL=gemini-3.1-flash-lite
+       WIKI_LLM_RESEARCH_PROVIDER=gemini
+       WIKI_LLM_RESEARCH_MODEL=gemini-2.5-flash
 
 2. Global fallback (same model for every stage)::
 
@@ -72,12 +77,27 @@ DEFAULT_MODELS = {
 STAGE_DEFAULTS: dict[str, dict[str, str]] = {
     "classify": {"provider": "gemini", "model": "gemini-3.1-flash-lite"},
     "extract": {"provider": "gemini", "model": "gemini-3.5-flash"},
+    "plan": {"provider": "gemini", "model": "gemini-3.5-flash"},
     "generate": {"provider": "anthropic", "model": "claude-sonnet-4-6"},
+    "research": {"provider": "gemini", "model": "gemini-3.5-flash"},
 }
 
 VALID_STAGES = frozenset(STAGE_DEFAULTS)
 BATCH_PROVIDERS = frozenset({"anthropic", "gemini"})
 DEFAULT_BATCH_POLL_INTERVAL = 30.0
+
+
+@dataclass(frozen=True)
+class GroundedCitation:
+    title: str
+    url: str
+
+
+@dataclass(frozen=True)
+class GroundedResult:
+    text: str
+    citations: tuple[GroundedCitation, ...] = ()
+    search_queries: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -100,6 +120,19 @@ class StageLLMConfig:
 
     def label(self) -> str:
         return f"{self.stage}: {self.provider}/{self.model}"
+
+
+def web_search_enabled(*, explicit: bool | None = None) -> bool:
+    """Return whether Gemini Google Search grounding should run during generate."""
+
+    if explicit is False:
+        return False
+    env = os.environ.get("WIKI_ENABLE_WEB_SEARCH", "").strip().lower()
+    if env in {"0", "false", "no", "off"}:
+        return False
+    if env in {"1", "true", "yes", "on"}:
+        return True
+    return bool(os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
 
 
 def resolve_stage_config(
@@ -244,6 +277,57 @@ class LLMClient:
         with self._cache_path(key).open("w", encoding="utf-8") as f:
             json.dump({"response": response}, f, ensure_ascii=False, indent=2)
 
+    def _grounded_cache_key(self, system: str, user: str) -> str:
+        payload = json.dumps(
+            {
+                "provider": self.provider,
+                "model": self.model,
+                "system": system,
+                "user": user,
+                "temperature": self.temperature,
+                "grounded": True,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def _read_grounded_cache(self, key: str) -> GroundedResult | None:
+        path = self._cache_path(key)
+        if not path.exists():
+            return None
+        with path.open(encoding="utf-8") as f:
+            data = json.load(f)
+        if data.get("grounded") is not True:
+            return None
+        citations = tuple(
+            GroundedCitation(title=c["title"], url=c["url"])
+            for c in data.get("citations", [])
+            if c.get("url")
+        )
+        return GroundedResult(
+            text=data.get("response", ""),
+            citations=citations,
+            search_queries=tuple(data.get("search_queries", [])),
+        )
+
+    def _write_grounded_cache(self, key: str, result: GroundedResult) -> None:
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        with self._cache_path(key).open("w", encoding="utf-8") as f:
+            json.dump(
+                {
+                    "grounded": True,
+                    "response": result.text,
+                    "citations": [
+                        {"title": c.title, "url": c.url} for c in result.citations
+                    ],
+                    "search_queries": list(result.search_queries),
+                },
+                f,
+                ensure_ascii=False,
+                indent=2,
+            )
+
     # --------------------------------------------------------------- complete
     def complete_text(self, system: str, user: str, task: str = "") -> str:
         if self.use_cache:
@@ -261,6 +345,28 @@ class LLMClient:
     def complete_json(self, system: str, user: str, task: str = "") -> Any:
         raw = self.complete_text(system, user, task)
         return extract_json(raw)
+
+    def complete_grounded(self, system: str, user: str) -> GroundedResult:
+        """Run Gemini with Google Search grounding; returns text + citations."""
+
+        if self.use_cache:
+            key = self._grounded_cache_key(system, user)
+            cached = self._read_grounded_cache(key)
+            if cached is not None:
+                return cached
+
+        if self.provider == "mock":
+            result = _mock_grounded(user)
+        elif self.provider == "gemini":
+            result = self._gemini_grounded(system, user)
+        else:
+            raise ValueError(
+                f"Grounded search requires provider 'gemini' or 'mock'; got {self.provider!r}"
+            )
+
+        if self.use_cache:
+            self._write_grounded_cache(self._grounded_cache_key(system, user), result)
+        return result
 
     def complete_batch(self, requests: Sequence[BatchRequest]) -> dict[str, str]:
         """Run many prompts via the provider batch API (50% cheaper, async).
@@ -360,6 +466,33 @@ class LLMClient:
             contents=f"{system}\n\n{user}",
         )
         return response.text or ""
+
+    def _gemini_grounded(self, system: str, user: str) -> GroundedResult:
+        from google import genai
+        from google.genai import types as genai_types
+
+        if self._client is None:
+            self._client = genai.Client()
+
+        config = genai_types.GenerateContentConfig(
+            tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())],
+            temperature=self.temperature,
+            max_output_tokens=self.max_tokens,
+        )
+        response = self._client.models.generate_content(
+            model=self.model,
+            contents=f"{system}\n\n{user}",
+            config=config,
+        )
+        text = response.text or ""
+        citations, search_queries = _parse_grounding_metadata(response)
+        if not citations:
+            citations = _citations_from_urls(text)
+        return GroundedResult(
+            text=text,
+            citations=citations,
+            search_queries=search_queries,
+        )
 
     def _anthropic_batch(self, requests: Sequence[BatchRequest]) -> dict[str, str]:
         import anthropic
@@ -497,6 +630,10 @@ def _mock_response(system: str, user: str, task: str) -> str:
         return _mock_extract(user)
     if task == "generate":
         return _mock_generate(user)
+    if task == "plan":
+        return _mock_plan(user)
+    if task == "community":
+        return _mock_generate(user)
     return ""
 
 
@@ -559,8 +696,103 @@ def _mock_extract(user: str) -> str:
 
 def _mock_generate(user: str) -> str:
     return (
-        "## תקציר\n\n"
-        "_עמוד זה נוצר במצב mock לבדיקת הצנרת בלבד. הפעילו ספק LLM אמיתי "
-        "(`WIKI_LLM_PROVIDER`) כדי לייצר תוכן ערוך בעברית._\n\n"
-        "להלן הטענות שחולצו עבור נושא זה:\n"
+        "רוב המשתתפים בקבוצה (mock) ציינו מידע רלוונטי לנושא זה. "
+        "_עמוד זה נוצר במצב mock — הפעילו ספק LLM אמיתי לתוכן מלא._"
     )
+
+
+def _mock_plan(user: str) -> str:
+    """Build a 1:1 identity plan from topic summaries embedded in the prompt."""
+
+    pages: list[dict[str, Any]] = []
+    for line in user.splitlines():
+        if not line.startswith("- id:"):
+            continue
+        # Format: - id: tamuz | title: ... | claims: 5 | ...
+        parts = line.split("|")
+        page_id = parts[0].split(":", 1)[1].strip()
+        title = page_id
+        claim_count = 0
+        for part in parts[1:]:
+            key_val = part.strip().split(":", 1)
+            if len(key_val) != 2:
+                continue
+            key, val = key_val[0].strip(), key_val[1].strip()
+            if key == "title":
+                title = val
+            elif key == "claims":
+                claim_count = int(val) if val.isdigit() else 0
+        if claim_count > 0:
+            pages.append(
+                {
+                    "id": page_id,
+                    "title": title,
+                    "category": "emergent",
+                    "source_tags": [page_id],
+                    "rationale": "mock identity mapping",
+                    "search_focus": f"{title} surrogacy",
+                }
+            )
+    return json.dumps({"pages": pages, "links": []}, ensure_ascii=False)
+
+
+def _mock_grounded(user: str) -> GroundedResult:
+    return GroundedResult(
+        text="_מצב mock — חיפוש באינטרנט לא בוצע. הפעילו מפתח Gemini לרקע כללי._",
+        citations=(),
+        search_queries=(),
+    )
+
+
+def _parse_grounding_metadata(response: Any) -> tuple[tuple[GroundedCitation, ...], tuple[str, ...]]:
+    citations: list[GroundedCitation] = []
+    search_queries: list[str] = []
+    seen_urls: set[str] = set()
+
+    candidates = getattr(response, "candidates", None) or []
+    for candidate in candidates:
+        metadata = getattr(candidate, "grounding_metadata", None)
+        if metadata is None:
+            continue
+
+        for query in getattr(metadata, "web_search_queries", None) or []:
+            if query and query not in search_queries:
+                search_queries.append(str(query))
+
+        chunks = getattr(metadata, "grounding_chunks", None) or []
+        for chunk in chunks:
+            web = getattr(chunk, "web", None)
+            if web is None:
+                continue
+            url = getattr(web, "uri", None) or getattr(web, "url", None) or ""
+            title = getattr(web, "title", None) or url
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                citations.append(GroundedCitation(title=str(title), url=str(url)))
+
+        supports = getattr(metadata, "grounding_supports", None) or []
+        for support in supports:
+            for idx in getattr(support, "grounding_chunk_indices", None) or []:
+                if 0 <= idx < len(chunks):
+                    web = getattr(chunks[idx], "web", None)
+                    if web is None:
+                        continue
+                    url = getattr(web, "uri", None) or getattr(web, "url", None) or ""
+                    title = getattr(web, "title", None) or url
+                    if url and url not in seen_urls:
+                        seen_urls.add(url)
+                        citations.append(GroundedCitation(title=str(title), url=str(url)))
+
+    return tuple(citations), tuple(search_queries)
+
+
+def _citations_from_urls(text: str) -> tuple[GroundedCitation, ...]:
+    citations: list[GroundedCitation] = []
+    seen: set[str] = set()
+    for url in re.findall(r"https?://[^\s)\]>]+", text):
+        url = url.rstrip(".,;")
+        if url in seen:
+            continue
+        seen.add(url)
+        citations.append(GroundedCitation(title=url, url=url))
+    return tuple(citations)

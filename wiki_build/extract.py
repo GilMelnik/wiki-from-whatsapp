@@ -9,7 +9,7 @@ message indices and the entities mentioned. We then:
   once even if they both stated and reacted),
 - attach per-message reaction details to the private audit trace,
 - compute a distinct-supporter count and the claim date (earliest support),
-- run the deterministic PII scrub safety net over the claim text,
+- run a light PII scrub (phones and emails only) over the claim text,
 - write the publishable ``data/claims.json`` (no sender ids, no raw text) and
   a PRIVATE ``data/audit/`` source map that links each claim back to messages.
 """
@@ -21,9 +21,9 @@ from typing import Any
 
 from utils import write_json_file
 from wiki_build.llm_client import BatchRequest, LLMClient, extract_json
-from wiki_build.scrub import DEFAULT_SENDER_MAP_PATH, Denylist, scrub_claims
+from wiki_build.scrub import scrub_claims
 from wiki_build.support import compute_support
-from wiki_build.taxonomy import page_ids, taxonomy_prompt_block
+from wiki_build.taxonomy import page_ids, taxonomy_seed_block
 from wiki_build.threads_io import (
     DEFAULT_THREADS_PATH,
     load_threads,
@@ -38,8 +38,11 @@ EXTRACT_SYSTEM = (
     "אתה עוזר שמחלץ ידע מקבוצת וואטסאפ על פונדקאות לגייז, לטובת בניית ויקי בעברית. "
     "מכל שיחה חלץ טענות/תובנות ספציפיות ומועילות: המלצות, אזהרות, עובדות, עלויות, "
     "ניסיון אישי, מידע משפטי/רפואי/כספי. "
-    "כללי אנונימיזציה מחמירים: אל תכלול שמות של חברי הקבוצה, מספרי טלפון, אימיילים או "
-    "פרטים מזהים. שמות עסקים/סוכנויות/מדינות מותרים. נסח כל טענה בעברית ניטרלית. "
+    "כללי אנונימיזציה: אל תכלול שמות פרטיים של חברי קבוצה שאינם ספקים מקצועיים, "
+    "מספרי טלפון, אימיילים או פרטים מזהים אחרים. "
+    "שמות עסקים, סוכנויות, עורכי דין, סוכני נסיעות, מרפאות וספקים מקצועיים — לשמור "
+    "בטקסט הטענה ובשדה entities. שמות מדינות ומקומות מותרים. "
+    "נסח כל טענה בעברית ניטרלית. "
     "התעלם מצ'יטצ'אט, לוגיסטיקה מקומית וויכוחים לא רלוונטיים. "
     "החזר אך ורק JSON תקין."
 )
@@ -47,15 +50,15 @@ EXTRACT_SYSTEM = (
 
 def build_extract_prompt(rendered: str) -> str:
     return (
-        "רשימת מזהי הנושאים האפשריים:\n"
-        f"{taxonomy_prompt_block()}\n\n"
+        "נושאים מוצעים (נקודת התחלה — ניתן להוסיף מזהים חדשים):\n"
+        f"{taxonomy_seed_block()}\n\n"
         "חלץ טענות מהשיחה והחזר JSON במבנה:\n"
         "{\n"
         '  "claims": [\n'
         "    {\n"
-        '      "claim_text": "<טענה ניטרלית בעברית, ללא שמות אנשים>",\n'
+        '      "claim_text": "<טענה ניטרלית בעברית; שמות ספקים/מקצוענים מותרים, שמות פרטיים של חברים — לא>",\n'
         '      "topic_tags": ["<מזהה נושא>", ...],\n'
-        '      "entities": ["<ספק/מדינה/מקום>", ...],\n'
+        '      "entities": ["<ספק/עו״ד/סוכנות/מדינה/מקום>", ...],\n'
         '      "stance": "positive|negative|neutral|factual",\n'
         '      "supporting_message_ids": [<מספרי [m..] התומכים בטענה>]\n'
         "    }\n"
@@ -67,13 +70,6 @@ def build_extract_prompt(rendered: str) -> str:
         "השיחה:\n"
         f"{rendered}"
     )
-
-
-def _load_denylist(sender_map_path: Path | str) -> Denylist:
-    try:
-        return Denylist.load(sender_map_path)
-    except FileNotFoundError:
-        return Denylist.from_mapping({})
 
 
 def _knowledge_bearing_ids(
@@ -168,7 +164,6 @@ def run(
     classified_path: Path | str = DEFAULT_CLASSIFIED_PATH,
     output_path: Path | str = DEFAULT_OUTPUT_PATH,
     audit_dir: Path | str = DEFAULT_AUDIT_DIR,
-    sender_map_path: Path | str = DEFAULT_SENDER_MAP_PATH,
     llm: LLMClient | None = None,
     topic_filter: str | None = None,
     max_threads: int | None = None,
@@ -189,8 +184,6 @@ def run(
     with Path(classified_path).open(encoding="utf-8") as f:
         classified = json.load(f)
     keep_ids = _knowledge_bearing_ids(classified, topic_filter)
-
-    denylist = _load_denylist(sender_map_path)
 
     published_claims: list[dict[str, Any]] = []
     audit_records: list[dict[str, Any]] = []
@@ -254,7 +247,7 @@ def run(
                 except Exception:  # noqa: BLE001 - keep the batch going
                     continue
 
-    scrub_summary = scrub_claims(published_claims, denylist)
+    scrub_summary = scrub_claims(published_claims)
 
     write_json_file(
         {
@@ -301,5 +294,5 @@ if __name__ == "__main__":
     print(
         f"Extracted {meta['claims_count']} claims from {meta['threads_processed']} threads. "
         f"Redactions: {meta['scrub']['total_redactions']}, "
-        f"flagged claims: {meta['scrub']['flagged_claims']}."
+        f"PII review claims: {meta['scrub']['pii_review_claims']}."
     )

@@ -129,27 +129,33 @@ def _merge_claims(
         stances = Counter(c.get("stance", "neutral") for c in member_claims)
         dates = sorted(c["date"] for c in member_claims if c.get("date"))
         entities = sorted({e for c in member_claims for e in c.get("entities", [])})
+        pii_redactions: list[dict[str, str]] = []
+        for claim in member_claims:
+            pii_redactions.extend(claim.get("_redactions") or [])
+        pii_needs_review = bool(pii_redactions)
         # Representative = the longest claim text (usually most informative).
         representative = max(member_claims, key=lambda c: len(c["claim_text"]))
 
-        merged.append(
-            {
-                "claim_text": representative["claim_text"],
-                "variants": [c["claim_text"] for c in member_claims],
-                "stance": stances.most_common(1)[0][0],
-                "stance_breakdown": dict(stances),
-                "support_count": support_count,
-                "statement_count": len(statement_supporters),
-                "reaction_endorser_count": len(reaction_supporters),
-                "reaction_only_count": reaction_only_count,
-                "reaction_summary": aggregate_reaction_summary(message_reactions),
-                "endorsement_count": endorsement_count,
-                "thread_count": len({c["thread_id"] for c in member_claims}),
-                "date_range": [dates[0], dates[-1]] if dates else [None, None],
-                "entities": entities,
-                "source_claim_ids": [c["claim_id"] for c in member_claims],
-            }
-        )
+        merged_claim: dict[str, Any] = {
+            "claim_text": representative["claim_text"],
+            "variants": [c["claim_text"] for c in member_claims],
+            "stance": stances.most_common(1)[0][0],
+            "stance_breakdown": dict(stances),
+            "support_count": support_count,
+            "statement_count": len(statement_supporters),
+            "reaction_endorser_count": len(reaction_supporters),
+            "reaction_only_count": reaction_only_count,
+            "reaction_summary": aggregate_reaction_summary(message_reactions),
+            "endorsement_count": endorsement_count,
+            "thread_count": len({c["thread_id"] for c in member_claims}),
+            "date_range": [dates[0], dates[-1]] if dates else [None, None],
+            "entities": entities,
+            "source_claim_ids": [c["claim_id"] for c in member_claims],
+        }
+        if pii_needs_review:
+            merged_claim["pii_redactions"] = pii_redactions
+            merged_claim["pii_needs_review"] = True
+        merged.append(merged_claim)
 
     merged.sort(key=lambda m: m["support_count"], reverse=True)
     return merged
