@@ -34,6 +34,7 @@ from wiki_build.plan import (
     pages_by_category,
 )
 from wiki_build.scrub import summarize_redactions
+from wiki_build.rtl import wrap_rtl_markdown
 from wiki_build.taxonomy import all_pages, get_page
 
 DEFAULT_AGGREGATED_PATH = Path("data/claims_aggregated.json")
@@ -393,7 +394,7 @@ def generate_page(
         _format_links_section(page_id, plan, topics, titles, source_tags),
         _footer_disclaimer(merged),
     ]
-    return "".join(p for p in parts if p)
+    return wrap_rtl_markdown("".join(p for p in parts if p))
 
 
 def _generate_index(plan: dict[str, Any]) -> str:
@@ -408,7 +409,7 @@ def _generate_index(plan: dict[str, Any]) -> str:
         parts.append(f"\n## {category}\n")
         for page_id, title in sorted(pages, key=lambda p: p[1]):
             parts.append(f"- [{title}]({page_id}.md)")
-    return "\n".join(parts) + "\n"
+    return wrap_rtl_markdown("\n".join(parts))
 
 
 def run(

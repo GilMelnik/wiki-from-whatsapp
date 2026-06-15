@@ -15,6 +15,7 @@ from typing import Any
 
 import yaml
 
+from wiki_build.rtl import HEBREW_CSS, wrap_rtl_markdown
 from wiki_build.taxonomy import CATEGORIES, all_pages, category_title
 
 DEFAULT_DOCS_DIR = Path("docs")
@@ -125,15 +126,17 @@ def build_config(
                 },
             ],
         },
-        "plugins": ["search"],
+        "plugins": [{"search": {"lang": "he"}}],
         "markdown_extensions": [
             "admonition",
+            "md_in_html",
             "pymdownx.details",
             "pymdownx.superfences",
             "attr_list",
             "tables",
             "toc",
         ],
+        "extra_css": [HEBREW_CSS],
         "nav": _build_nav(docs_dir, plan_path),
     }
 
@@ -155,7 +158,9 @@ def run(
 
     if not (docs / "index.md").exists():
         (docs / "index.md").write_text(
-            "# ויקי פונדקאות לגייז\n\nברוכים הבאים. בחרו נושא מהתפריט.\n",
+            wrap_rtl_markdown(
+                "# ויקי פונדקאות לגייז\n\nברוכים הבאים. בחרו נושא מהתפריט."
+            ),
             encoding="utf-8",
         )
 

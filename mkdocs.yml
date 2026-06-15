@@ -26,13 +26,17 @@ theme:
       icon: material/weather-sunny
       name: עבור למצב בהיר
 plugins:
-- search
+- search:
+    lang: he
 markdown_extensions:
 - admonition
+- md_in_html
 - pymdownx.details
 - pymdownx.superfences
 - attr_list
 - tables
 - toc
+extra_css:
+- stylesheets/hebrew.css
 nav:
 - בית: index.md

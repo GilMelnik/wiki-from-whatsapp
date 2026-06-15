@@ -56,7 +56,7 @@ def build_extract_prompt(rendered: str) -> str:
         "{\n"
         '  "claims": [\n'
         "    {\n"
-        '      "claim_text": "<טענה ניטרלית בעברית; שמות ספקים/מקצוענים מותרים, שמות פרטיים של חברים — לא>",\n'
+        '      "claim_text": "<טענה ניטרלית בעברית; שמות ספקים/מקצוענים מותרים>",\n'
         '      "topic_tags": ["<מזהה נושא>", ...],\n'
         '      "entities": ["<ספק/עו״ד/סוכנות/מדינה/מקום>", ...],\n'
         '      "stance": "positive|negative|neutral|factual",\n'
