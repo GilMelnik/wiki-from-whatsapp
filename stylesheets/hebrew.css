@@ -1,0 +1,60 @@
+/* Hebrew RTL typography for Material for MkDocs (GitHub Pages). */
+
+html[dir="rtl"],
+html[dir="rtl"] body {
+  direction: rtl;
+}
+
+[dir="rtl"] .md-typeset {
+  direction: rtl;
+  text-align: right;
+}
+
+[dir="rtl"] .md-typeset p,
+[dir="rtl"] .md-typeset li,
+[dir="rtl"] .md-typeset dd,
+[dir="rtl"] .md-typeset dt,
+[dir="rtl"] .md-typeset blockquote,
+[dir="rtl"] .md-typeset .admonition,
+[dir="rtl"] .md-typeset h1,
+[dir="rtl"] .md-typeset h2,
+[dir="rtl"] .md-typeset h3,
+[dir="rtl"] .md-typeset h4,
+[dir="rtl"] .md-typeset h5,
+[dir="rtl"] .md-typeset h6 {
+  unicode-bidi: plaintext;
+}
+
+[dir="rtl"] .md-typeset ul,
+[dir="rtl"] .md-typeset ol {
+  padding-inline-start: 0;
+  padding-inline-end: 1.6em;
+}
+
+[dir="rtl"] .md-typeset blockquote {
+  border-inline-start: 0;
+  border-inline-end: 0.1rem solid var(--md-default-fg-color--lighter);
+  padding-inline-start: 0;
+  padding-inline-end: 1.2rem;
+}
+
+[dir="rtl"] .md-typeset .admonition-title {
+  text-align: right;
+}
+
+[dir="rtl"] .md-typeset table:not([class]) {
+  direction: rtl;
+}
+
+[dir="rtl"] .md-typeset pre,
+[dir="rtl"] .md-typeset code {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: embed;
+}
+
+[dir="rtl"] .md-nav__link,
+[dir="rtl"] .md-header__title,
+[dir="rtl"] .md-footer__inner {
+  text-align: right;
+}
