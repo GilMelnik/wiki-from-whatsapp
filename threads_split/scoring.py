@@ -141,6 +141,122 @@ class ThreadScorer:
         gap_minutes = max(0.0, (message_time - thread_last_time).total_seconds() / 60.0)
         return float(np.exp(-gap_minutes / self.config.tau_minutes))
 
+    def gap_minutes(self, later: datetime, earlier: datetime) -> float:
+        return max(0.0, (later - earlier).total_seconds() / 60.0)
+
+    def has_short_gap(self, message_time: datetime, reference_time: datetime) -> bool:
+        return self.gap_minutes(message_time, reference_time) <= self.config.short_gap_exempt_minutes
+
+    def find_quoted_index_in_thread(
+        self,
+        message_index: int,
+        thread_message_ids: Sequence[int],
+    ) -> int | None:
+        message = self.messages[message_index]
+        key = message.quote_lookup_key()
+        if key is None:
+            return None
+        for candidate_index in reversed(thread_message_ids):
+            if candidate_index >= message_index:
+                continue
+            quoted = self.messages[candidate_index]
+            if (quoted.sender, quoted.normalized_content()) == key:
+                return candidate_index
+        return None
+
+    def thread_quote_components(self, thread: Thread) -> dict[int, int]:
+        parent = {message_index: message_index for message_index in thread.message_ids}
+
+        def find(message_index: int) -> int:
+            while parent[message_index] != message_index:
+                parent[message_index] = parent[parent[message_index]]
+                message_index = parent[message_index]
+            return message_index
+
+        def union(left: int, right: int) -> None:
+            left_root = find(left)
+            right_root = find(right)
+            if left_root != right_root:
+                parent[right_root] = left_root
+
+        for message_index in thread.message_ids:
+            quoted_index = self.find_quoted_index_in_thread(message_index, thread.message_ids)
+            if quoted_index is not None:
+                union(message_index, quoted_index)
+
+        return {message_index: find(message_index) for message_index in thread.message_ids}
+
+    def boundary_splits_quote_component(
+        self,
+        thread: Thread,
+        split_after_pos: int,
+        quote_components: dict[int, int] | None = None,
+    ) -> bool:
+        if quote_components is None:
+            quote_components = self.thread_quote_components(thread)
+
+        head_ids = set(thread.message_ids[: split_after_pos + 1])
+        head_roots = {quote_components[message_index] for message_index in head_ids}
+        for message_index in thread.message_ids[split_after_pos + 1 :]:
+            if quote_components[message_index] in head_roots:
+                return True
+        return False
+
+    def score_split_boundary(
+        self,
+        thread: Thread,
+        split_after_pos: int,
+        quote_components: dict[int, int] | None = None,
+    ) -> float:
+        message_ids = thread.message_ids
+        if split_after_pos < 0 or split_after_pos >= len(message_ids) - 1:
+            return float("-inf")
+
+        if self.boundary_splits_quote_component(thread, split_after_pos, quote_components):
+            return float("-inf")
+
+        idx_before = message_ids[split_after_pos]
+        idx_after = message_ids[split_after_pos + 1]
+        msg_before = self.messages[idx_before]
+        msg_after = self.messages[idx_after]
+
+        gap = self.gap_minutes(msg_after.datetime, msg_before.datetime)
+        time_score = min(1.0, gap / self.config.gap_normalize_minutes)
+        semantic_gap = 1.0 - cosine_similarity(
+            self.message_embeddings[idx_before],
+            self.message_embeddings[idx_after],
+        )
+        score = (
+            self.config.split_time_weight * time_score
+            + self.config.split_semantic_weight * semantic_gap
+        )
+
+        if self.has_short_gap(msg_after.datetime, msg_before.datetime):
+            score -= self.config.split_short_gap_penalty
+        return score
+
+    def find_best_split_point(self, thread: Thread) -> int | None:
+        message_ids = thread.message_ids
+        if len(message_ids) <= self.config.long_thread_message_limit:
+            return None
+
+        min_part = self.config.long_thread_min_part_size
+        if len(message_ids) < 2 * min_part:
+            return None
+
+        quote_components = self.thread_quote_components(thread)
+        best_pos: int | None = None
+        best_score = float("-inf")
+        for pos in range(min_part - 1, len(message_ids) - min_part):
+            score = self.score_split_boundary(thread, pos, quote_components)
+            if score > best_score:
+                best_score = score
+                best_pos = pos
+
+        if best_pos is None or best_score < self.config.split_boundary_threshold:
+            return None
+        return best_pos
+
     def new_thread_score(
         self,
         message: Message,

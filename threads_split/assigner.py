@@ -58,6 +58,8 @@ class ThreadAssigner:
             thread.add_reaction_participants(message.reactions)
             self.message_thread[message_index] = thread
             self._update_quote_index(message_index, message)
+            thread = self._split_thread_if_too_long(thread)
+            self.message_thread[message_index] = thread
             return
 
         candidates = [
@@ -82,7 +84,28 @@ class ThreadAssigner:
         thread.add_reaction_participants(message.reactions)
         self.message_thread[message_index] = thread
         self._update_quote_index(message_index, message)
+        thread = self._split_thread_if_too_long(thread)
+        self.message_thread[message_index] = thread
         self._enforce_open_thread_cap()
+
+    def _split_thread_if_too_long(self, thread: Thread) -> Thread:
+        current = thread
+        while current.num_messages > self.config.long_thread_message_limit:
+            split_pos = self.scorer.find_best_split_point(current)
+            if split_pos is None:
+                break
+
+            tail = current.split_after(split_pos, self.messages, self.message_embeddings)
+            for message_index in tail.message_ids:
+                self.message_thread[message_index] = tail
+
+            if current in self.open_threads:
+                self.open_threads.append(tail)
+            elif current in self.closed_threads:
+                self.closed_threads.append(tail)
+
+            current = tail
+        return current
 
     def _resolve_quote_index(self, message_index: int, message: Message) -> int | None:
         key = message.quote_lookup_key()

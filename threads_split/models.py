@@ -26,6 +26,13 @@ class ThreadConfig:
     b1_gap: float = 0.4
     b2_low_similarity: float = 0.6
     gap_normalize_minutes: float = 360.0
+    long_thread_message_limit: int = 50
+    long_thread_min_part_size: int = 10
+    short_gap_exempt_minutes: float = 5.0
+    split_time_weight: float = 0.5
+    split_semantic_weight: float = 0.5
+    split_short_gap_penalty: float = 0.5
+    split_boundary_threshold: float = 0.4
     embedding_model: str = "intfloat/multilingual-e5-large"
     recent_embeddings_window: int = 20
 
@@ -45,6 +52,13 @@ class ThreadConfig:
             "b1_gap": self.b1_gap,
             "b2_low_similarity": self.b2_low_similarity,
             "gap_normalize_minutes": self.gap_normalize_minutes,
+            "long_thread_message_limit": self.long_thread_message_limit,
+            "long_thread_min_part_size": self.long_thread_min_part_size,
+            "short_gap_exempt_minutes": self.short_gap_exempt_minutes,
+            "split_time_weight": self.split_time_weight,
+            "split_semantic_weight": self.split_semantic_weight,
+            "split_short_gap_penalty": self.split_short_gap_penalty,
+            "split_boundary_threshold": self.split_boundary_threshold,
             "embedding_model": self.embedding_model,
             "recent_embeddings_window": self.recent_embeddings_window,
         }
@@ -139,6 +153,74 @@ class Thread:
             for sender in reaction.get("senders", []):
                 reaction_senders.add(sender)
         self.add_participants(reaction_senders)
+
+    def rebuild_metadata(
+        self,
+        messages: Sequence[Message],
+        embeddings: Sequence[np.ndarray],
+    ) -> None:
+        self.num_messages = len(self.message_ids)
+        first = messages[self.message_ids[0]]
+        last = messages[self.message_ids[-1]]
+        self.start_time = first.datetime
+        self.last_time = last.datetime
+        self.last_sender = last.sender
+        participants: set[str] = set()
+        for message_index in self.message_ids:
+            participants.add(messages[message_index].sender)
+        self.participants = participants
+        self.num_unique_senders = len(participants)
+
+        self.recent_embeddings = [
+            embeddings[message_index].copy()
+            for message_index in self.message_ids[-self.recent_embeddings_window :]
+        ]
+        self.recent_embeddings_mean = np.mean(self.recent_embeddings, axis=0)
+
+    @classmethod
+    def from_message_indices(
+        cls,
+        message_indices: list[int],
+        messages: Sequence[Message],
+        embeddings: Sequence[np.ndarray],
+        recent_embeddings_window: int,
+    ) -> Thread:
+        cls._counter += 1
+        thread_id = f"thread-{cls._counter:04d}"
+        thread = cls(
+            thread_id=thread_id,
+            start_time=messages[message_indices[0]].datetime,
+            last_time=messages[message_indices[-1]].datetime,
+            participants=set(),
+            message_ids=message_indices.copy(),
+            last_sender=messages[message_indices[-1]].sender,
+            num_messages=len(message_indices),
+            num_unique_senders=0,
+            recent_embeddings_mean=embeddings[message_indices[0]].copy(),
+            recent_embeddings_window=recent_embeddings_window,
+            is_open=True,
+            recent_embeddings=[],
+        )
+        thread.rebuild_metadata(messages, embeddings)
+        return thread
+
+    def split_after(
+        self,
+        split_after_pos: int,
+        messages: Sequence[Message],
+        embeddings: Sequence[np.ndarray],
+    ) -> Thread:
+        tail_ids = self.message_ids[split_after_pos + 1 :]
+        self.message_ids = self.message_ids[: split_after_pos + 1]
+        self.rebuild_metadata(messages, embeddings)
+        tail = Thread.from_message_indices(
+            tail_ids,
+            messages,
+            embeddings,
+            self.recent_embeddings_window,
+        )
+        tail.is_open = self.is_open
+        return tail
 
     def to_dict(self, messages: Sequence[Message]) -> dict[str, Any]:
         thread_messages = []
