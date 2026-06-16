@@ -14,7 +14,7 @@ from utils import write_json_file
 def load_messages(input_path: Path) -> list[Message]:
     with input_path.open(encoding="utf-8") as f:
         raw_messages = json.load(f)
-    messages = [Message.from_android_dict(item) for item in raw_messages]
+    messages = [Message.from_android_dict(item) for item in raw_messages if item['text']]
     messages.sort(key=lambda m: m.datetime)
     return messages
 
@@ -26,12 +26,20 @@ def split_into_threads(
 ) -> tuple[list[Message], list[Thread]]:
     config = config or ThreadConfig()
     messages = load_messages(input_path)
-    embeddings = load_message_embeddings(
+    if embedder is None:
+        embedder = Embedder(model_name=config.embedding_model)
+    passage_embeddings, query_embeddings = load_message_embeddings(
         input_path=input_path,
         model_name=config.embedding_model,
         embedder=embedder,
     )
-    assigner = ThreadAssigner(messages, embeddings, config)
+    assigner = ThreadAssigner(
+        messages,
+        passage_embeddings,
+        query_embeddings=query_embeddings,
+        config=config,
+        input_path=input_path,
+    )
     threads = assigner.process_messages()
     return messages, threads
 

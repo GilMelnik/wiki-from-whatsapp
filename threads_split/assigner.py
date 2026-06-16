@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import json
 from datetime import timedelta
-from typing import Sequence
+from pathlib import Path
+from typing import Any, Sequence
 
 import numpy as np
 
 from preprocessing.models import Message
-from threads_split.models import Thread, ThreadConfig
+from threads_split.models import ScoredCandidate, Thread, ThreadConfig
 from threads_split.scoring import ThreadScorer
 
 
@@ -15,29 +17,48 @@ class ThreadAssigner:
         self,
         messages: Sequence[Message],
         message_embeddings: Sequence[np.ndarray],
+        query_embeddings: Sequence[np.ndarray] | None = None,
         config: ThreadConfig | None = None,
+        input_path: Path | str | None = None,
     ):
         self.config = config or ThreadConfig()
         self.open_threads: list[Thread] = []
         self.closed_threads: list[Thread] = []
         self.messages: Sequence[Message] = messages
         self.message_embeddings: Sequence[np.ndarray] = message_embeddings
+        self.query_embeddings = (
+            query_embeddings if query_embeddings is not None else message_embeddings
+        )
         self.scorer: ThreadScorer = ThreadScorer(
-            self.config, self.messages, self.message_embeddings
+            self.config,
+            self.messages,
+            self.message_embeddings,
+            query_embeddings=self.query_embeddings,
+            input_path=input_path,
         )
         self.message_thread: dict[int, Thread] = {}
         self.quote_index: dict[tuple[str, str], list[int]] = {}
+        self._assignment_debug: list[dict[str, Any]] = []
 
     def process_messages(self) -> list[Thread]:
         for message_index in range(len(self.messages)):
             message = self.messages[message_index]
+            previous_message_index = message_index - 1 if message_index > 0 else None
             previous_message_time = (
-                self.messages[message_index - 1].datetime if message_index > 0 else None
+                self.messages[previous_message_index].datetime
+                if previous_message_index is not None
+                else None
             )
             self._close_stale_threads(message.datetime)
-            self._assign_message(message_index, message, previous_message_time)
+            self._assign_message(
+                message_index,
+                message,
+                previous_message_index,
+                previous_message_time,
+            )
 
         self._flush_open_threads()
+        self._write_assignment_debug()
         all_threads = self.closed_threads.copy()
         all_threads.sort(key=lambda t: t.start_time)
         return all_threads
@@ -46,6 +67,7 @@ class ThreadAssigner:
         self,
         message_index: int,
         message: Message,
+        previous_message_index: int | None,
         previous_message_time,
     ) -> None:
         message_embedding = self.message_embeddings[message_index]
@@ -60,14 +82,47 @@ class ThreadAssigner:
             self._update_quote_index(message_index, message)
             thread = self._split_thread_if_too_long(thread)
             self.message_thread[message_index] = thread
+            self._record_assignment(
+                message_index,
+                decision="quote",
+                thread_id=thread.thread_id,
+            )
+            return
+
+        monologue_thread = self._try_monologue_attach(
+            message_index,
+            message,
+            previous_message_index,
+            message_embedding,
+        )
+        if monologue_thread is not None:
+            self._finish_assignment(message_index, message, message_embedding, monologue_thread, "monologue")
             return
 
         candidates = [
-            self.scorer.attach_score(message, message_index, message_embedding, thread)
+            self.scorer.attach_score(
+                message,
+                message_index,
+                message_embedding,
+                thread,
+                previous_message_index=previous_message_index,
+            )
             for thread in self.open_threads
         ]
         new_score = self.scorer.new_thread_score(message, previous_message_time, candidates)
         chosen_thread = self.scorer.decide_assignment(candidates, new_score)
+        decision = "attach_open"
+
+        if chosen_thread is None:
+            chosen_thread = self.scorer.find_closed_thread_match(
+                message_index,
+                message.datetime,
+                self.closed_threads,
+            )
+            if chosen_thread is not None:
+                decision = "reopen_closed"
+            else:
+                decision = "new_thread"
 
         if chosen_thread is None:
             thread = Thread.create(
@@ -79,14 +134,119 @@ class ThreadAssigner:
             self.open_threads.append(thread)
         else:
             thread = chosen_thread
+            if decision == "reopen_closed":
+                self._reopen_thread(thread)
             thread.add_message(message_index, message, message_embedding)
 
+        self._finish_assignment(
+            message_index,
+            message,
+            message_embedding,
+            thread,
+            decision,
+            candidates=candidates,
+            new_thread_score=new_score,
+        )
+
+    def _try_monologue_attach(
+        self,
+        message_index: int,
+        message: Message,
+        previous_message_index: int | None,
+        message_embedding: np.ndarray,
+    ) -> Thread | None:
+        if previous_message_index is None:
+            return None
+
+        previous_message = self.messages[previous_message_index]
+        if previous_message.sender != message.sender:
+            return None
+
+        gap = self.scorer.gap_minutes(message.datetime, previous_message.datetime)
+        if gap > self.config.monologue_gap_minutes:
+            return None
+
+        previous_thread = self.message_thread.get(previous_message_index)
+        if previous_thread is None:
+            return None
+
+        semantic = self.scorer.embedding_semantic_similarity(message_index, previous_thread)
+        if semantic < self.config.monologue_semantic_floor:
+            return None
+
+        previous_thread.add_message(message_index, message, message_embedding)
+        return previous_thread
+
+    def _finish_assignment(
+        self,
+        message_index: int,
+        message: Message,
+        message_embedding: np.ndarray,
+        thread: Thread,
+        decision: str,
+        *,
+        candidates: Sequence[ScoredCandidate] | None = None,
+        new_thread_score: float | None = None,
+    ) -> None:
         thread.add_reaction_participants(message.reactions)
         self.message_thread[message_index] = thread
         self._update_quote_index(message_index, message)
         thread = self._split_thread_if_too_long(thread)
         self.message_thread[message_index] = thread
         self._enforce_open_thread_cap()
+        self._record_assignment(
+            message_index,
+            decision=decision,
+            thread_id=thread.thread_id,
+            candidates=candidates,
+            new_thread_score=new_thread_score,
+        )
+
+    def _record_assignment(
+        self,
+        message_index: int,
+        *,
+        decision: str,
+        thread_id: str,
+        candidates: Sequence[ScoredCandidate] | None = None,
+        new_thread_score: float | None = None,
+    ) -> None:
+        if self.config.assignment_debug_path is None:
+            return
+
+        entry: dict[str, Any] = {
+            "message_index": message_index,
+            "message_id": self.messages[message_index].id,
+            "datetime": self.messages[message_index].datetime.isoformat(),
+            "sender": self.messages[message_index].sender,
+            "decision": decision,
+            "thread_id": thread_id,
+        }
+        if candidates is not None:
+            entry["candidates"] = [
+                {
+                    "thread_id": candidate.thread.thread_id,
+                    "attach_score": candidate.attach_score,
+                    "semantic_score": candidate.semantic_score,
+                    "time_score": candidate.time_score,
+                    "social_score": candidate.social_score,
+                }
+                for candidate in sorted(candidates, key=lambda c: c.attach_score, reverse=True)
+            ]
+        if new_thread_score is not None:
+            entry["new_thread_score"] = new_thread_score
+        self._assignment_debug.append(entry)
+
+    def _write_assignment_debug(self) -> None:
+        debug_path = self.config.assignment_debug_path
+        if debug_path is None or not self._assignment_debug:
+            return
+
+        path = Path(debug_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as f:
+            for entry in self._assignment_debug:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
     def _split_thread_if_too_long(self, thread: Thread) -> Thread:
         current = thread

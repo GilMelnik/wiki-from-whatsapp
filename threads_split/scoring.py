@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable, Sequence, TypeVar
 
@@ -17,28 +17,71 @@ DEFAULT_TOKENS_PATH = Path("data/tfidf_tokens.json")
 T = TypeVar("T")
 
 
-def load_tfidf_resources(
-    corpus_path: Path | str = DEFAULT_CORPUS_PATH,
-    tokens_path: Path | str = DEFAULT_TOKENS_PATH,
-) -> tuple[TfidfCorpus, TokenizedMessages]:
-    corpus_file = Path(corpus_path)
-    tokens_file = Path(tokens_path)
-    if not corpus_file.exists() or not tokens_file.exists():
-        from threads_split.tf_idf.prepare_tfidf import run as prepare_tfidf
+def _source_matches(metadata: dict, input_path: Path | str) -> bool:
+    stored = metadata.get("source")
+    if stored is None:
+        return False
+    return Path(stored).resolve() == Path(input_path).resolve()
 
-        prepare_tfidf(
-            output_path=corpus_file,
-            tokens_output_path=tokens_file,
-        )
+
+def load_tfidf_resources(
+    input_path: Path | str | None = None,
+    corpus_path: Path | str | None = None,
+    tokens_path: Path | str | None = None,
+) -> tuple[TfidfCorpus, TokenizedMessages]:
+    corpus_file = Path(corpus_path or DEFAULT_CORPUS_PATH)
+    tokens_file = Path(tokens_path or DEFAULT_TOKENS_PATH)
+
+    needs_build = not corpus_file.exists() or not tokens_file.exists()
+    if not needs_build and input_path is not None:
+        corpus = TfidfCorpus.load(corpus_file)
+        tokens = TokenizedMessages.load(tokens_file)
+        if not _source_matches(corpus.metadata, input_path) or not _source_matches(
+            tokens.metadata, input_path
+        ):
+            needs_build = True
+        else:
+            return corpus, tokens
+
+    if not needs_build:
+        return TfidfCorpus.load(corpus_file), TokenizedMessages.load(tokens_file)
+
+    from threads_split.tf_idf.prepare_tfidf import run as prepare_tfidf
+
+    prepare_kwargs: dict = {
+        "output_path": corpus_file,
+        "tokens_output_path": tokens_file,
+    }
+    if input_path is not None:
+        prepare_kwargs["input_path"] = input_path
+    prepare_tfidf(**prepare_kwargs)
     return TfidfCorpus.load(corpus_file), TokenizedMessages.load(tokens_file)
 
 
-def social_score(message: Message, thread: Thread) -> float:
-    if message.sender == thread.last_sender:
-        return 1.0
-    if message.sender in thread.participants:
-        return 0.75
-    return 0.0
+def social_score(
+    message: Message,
+    thread: Thread,
+    *,
+    previous_message_index: int | None = None,
+    previous_message_in_thread: bool = False,
+) -> float:
+    participants = thread.participants
+    sender = message.sender
+    union_size = len(participants | {sender})
+    jaccard = len(participants & {sender}) / union_size if union_size else 0.0
+
+    continuity = 0.0
+    if sender == thread.last_sender:
+        continuity = 1.0
+    elif sender in participants:
+        continuity = 0.75
+
+    score = 0.6 * continuity + 0.4 * jaccard
+
+    if previous_message_in_thread and previous_message_index is not None:
+        score = min(1.0, score + 0.25)
+
+    return score
 
 
 class ThreadScorer:
@@ -47,18 +90,45 @@ class ThreadScorer:
         config: ThreadConfig,
         messages: Sequence[Message],
         message_embeddings: Sequence[np.ndarray],
+        query_embeddings: Sequence[np.ndarray] | None = None,
         tfidf_corpus: TfidfCorpus | None = None,
         tokenized_messages: TokenizedMessages | None = None,
+        input_path: Path | str | None = None,
         corpus_path: Path | str = DEFAULT_CORPUS_PATH,
         tokens_path: Path | str = DEFAULT_TOKENS_PATH,
     ):
         self.config = config
         self.messages = messages
         self.message_embeddings = message_embeddings
+        self.query_embeddings = (
+            query_embeddings if query_embeddings is not None else message_embeddings
+        )
         if tfidf_corpus is None or tokenized_messages is None:
-            tfidf_corpus, tokenized_messages = load_tfidf_resources(corpus_path, tokens_path)
+            tfidf_corpus, tokenized_messages = load_tfidf_resources(
+                input_path=input_path,
+                corpus_path=corpus_path,
+                tokens_path=tokens_path,
+            )
         self.tfidf_corpus = tfidf_corpus
         self.tokenized_messages = tokenized_messages
+
+    def query_embedding_for(self, message_index: int) -> np.ndarray:
+        return self.query_embeddings[message_index]
+
+    def embedding_semantic_similarity(
+        self,
+        message_index: int,
+        thread: Thread,
+    ) -> float:
+        query_embedding = self.query_embedding_for(message_index)
+        return self._position_decayed_similarity(
+            message_index,
+            thread,
+            query_embedding,
+            lambda index: self.message_embeddings[index],
+            thread.recent_embeddings_mean,
+            cosine_similarity,
+        )
 
     def semantic_similarity(
         self,
@@ -66,14 +136,7 @@ class ThreadScorer:
         message_embedding: np.ndarray,
         thread: Thread,
     ) -> float:
-        embedding_score = self._position_decayed_similarity(
-            message_index,
-            thread,
-            message_embedding,
-            lambda index: self.message_embeddings[index],
-            thread.recent_embeddings_mean,
-            cosine_similarity,
-        )
+        embedding_score = self.embedding_semantic_similarity(message_index, thread)
         message_tokens = self.tokenized_messages.tokens_for(message_index)
         recent_ids_for_mean = thread.message_ids[-self.config.recent_embeddings_window :]
         recent_tokens = [
@@ -120,10 +183,21 @@ class ThreadScorer:
         message_index: int,
         message_embedding: np.ndarray,
         thread: Thread,
+        *,
+        previous_message_index: int | None = None,
     ) -> ScoredCandidate:
         semantic = self.semantic_similarity(message_index, message_embedding, thread)
         temporal = self.time_proximity(message.datetime, thread.last_time)
-        social = social_score(message, thread)
+        previous_in_thread = (
+            previous_message_index is not None
+            and previous_message_index in thread.message_ids
+        )
+        social = social_score(
+            message,
+            thread,
+            previous_message_index=previous_message_index,
+            previous_message_in_thread=previous_in_thread,
+        )
         total = (
             self.config.w_semantic * semantic
             + self.config.w_time * temporal
@@ -264,8 +338,8 @@ class ThreadScorer:
         candidates: Sequence[ScoredCandidate],
     ) -> float:
         gap_component = self.normalized_gap_from_previous(message.datetime, previous_message_time)
-        max_candidate = max(candidates.attach_score for candidates in candidates) if candidates else 0.0
-        low_similarity_component = 1.0 - max_candidate
+        max_semantic = max(c.semantic_score for c in candidates) if candidates else 0.0
+        low_similarity_component = 1.0 - max_semantic
         return self.config.b1_gap * gap_component + self.config.b2_low_similarity * low_similarity_component
 
     def normalized_gap_from_previous(self, current_time: datetime, previous_time: datetime | None) -> float:
@@ -292,4 +366,34 @@ class ThreadScorer:
             and best.attach_score > new_thread_score_value
         ):
             return best.thread
+        return None
+
+    def find_closed_thread_match(
+        self,
+        message_index: int,
+        message_time: datetime,
+        closed_threads: Sequence[Thread],
+    ) -> Thread | None:
+        lookback = timedelta(hours=self.config.closed_thread_lookback_hours)
+        eligible = [
+            thread
+            for thread in closed_threads
+            if message_time - thread.last_time <= lookback
+        ]
+        if not eligible:
+            return None
+
+        best_thread: Thread | None = None
+        best_semantic = 0.0
+        for thread in eligible:
+            semantic = self.embedding_semantic_similarity(message_index, thread)
+            if semantic > best_semantic:
+                best_semantic = semantic
+                best_thread = thread
+
+        if (
+            best_thread is not None
+            and best_semantic >= self.config.closed_thread_reopen_semantic_threshold
+        ):
+            return best_thread
         return None

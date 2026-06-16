@@ -86,7 +86,7 @@ def run(
     max_messages: int | None = None,
     tokenizer: HebrewTokenizer | None = None,
 ) -> dict[str, Any]:
-    source_path = Path(input_path)
+    source_path = Path(input_path).resolve()
     output = Path(output_path)
     tokens_output = Path(tokens_output_path)
     tokenizer = tokenizer or HebrewTokenizer(batch_size=batch_size)

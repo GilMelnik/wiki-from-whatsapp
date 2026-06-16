@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Sequence
 
 import numpy as np
@@ -12,16 +13,16 @@ if TYPE_CHECKING:
 
 @dataclass
 class ThreadConfig:
-    w_semantic: float = 0.55
-    w_time: float = 0.25
+    w_semantic: float = 0.60
+    w_time: float = 0.20
     w_social: float = 0.20
-    w_tfidf: float = 0.40
-    attach_threshold: float = 0.35
+    w_tfidf: float = 0.45
+    attach_threshold: float = 0.45
     margin: float = 0.02
-    tau_minutes: float = 2160.0
+    tau_minutes: float = 180.0
     max_open_threads: int = 5
-    close_after_hours: float = 36.0
-    recent_messages_for_semantic: int = 5
+    close_after_hours: float = 12.0
+    recent_messages_for_semantic: int = 20
     position_decay_gamma: float = 0.95
     b1_gap: float = 0.4
     b2_low_similarity: float = 0.6
@@ -29,12 +30,17 @@ class ThreadConfig:
     long_thread_message_limit: int = 50
     long_thread_min_part_size: int = 10
     short_gap_exempt_minutes: float = 5.0
+    monologue_gap_minutes: float = 10.0
+    monologue_semantic_floor: float = 0.15
+    closed_thread_lookback_hours: float = 168.0
+    closed_thread_reopen_semantic_threshold: float = 0.45
     split_time_weight: float = 0.5
     split_semantic_weight: float = 0.5
     split_short_gap_penalty: float = 0.5
     split_boundary_threshold: float = 0.4
     embedding_model: str = "intfloat/multilingual-e5-large"
     recent_embeddings_window: int = 20
+    assignment_debug_path: Path | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -55,12 +61,19 @@ class ThreadConfig:
             "long_thread_message_limit": self.long_thread_message_limit,
             "long_thread_min_part_size": self.long_thread_min_part_size,
             "short_gap_exempt_minutes": self.short_gap_exempt_minutes,
+            "monologue_gap_minutes": self.monologue_gap_minutes,
+            "monologue_semantic_floor": self.monologue_semantic_floor,
+            "closed_thread_lookback_hours": self.closed_thread_lookback_hours,
+            "closed_thread_reopen_semantic_threshold": self.closed_thread_reopen_semantic_threshold,
             "split_time_weight": self.split_time_weight,
             "split_semantic_weight": self.split_semantic_weight,
             "split_short_gap_penalty": self.split_short_gap_penalty,
             "split_boundary_threshold": self.split_boundary_threshold,
             "embedding_model": self.embedding_model,
             "recent_embeddings_window": self.recent_embeddings_window,
+            "assignment_debug_path": (
+                str(self.assignment_debug_path) if self.assignment_debug_path else None
+            ),
         }
 
 
