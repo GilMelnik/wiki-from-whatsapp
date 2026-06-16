@@ -12,3 +12,7 @@ openai>=1.40.0
 google-genai>=0.3.0
 
 pyyaml
+
+# Thread tagger web tool
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0

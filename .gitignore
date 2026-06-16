@@ -232,3 +232,8 @@ data/llm_cache/
 .cursor
 .idea
 drafts/
+
+# Thread tagger built frontend (keep .gitkeep)
+thread_tagger/static/*
+!thread_tagger/static/.gitkeep
+web/thread-tagger/node_modules/
