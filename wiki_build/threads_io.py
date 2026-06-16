@@ -14,9 +14,11 @@ import json
 from pathlib import Path
 from typing import Any
 
+from thread_tagger.paths import resolve_threads_path
+
 from wiki_build.support import format_reactions_for_llm
 
-DEFAULT_THREADS_PATH = Path("data/threads.json")
+DEFAULT_THREADS_PATH = resolve_threads_path()
 
 
 def load_threads(path: Path | str = DEFAULT_THREADS_PATH) -> dict[str, Any]:

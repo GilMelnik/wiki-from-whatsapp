@@ -15,14 +15,20 @@ from typing import Any
 
 from utils import write_json_file
 from wiki_build.llm_client import BatchRequest, LLMClient, extract_json
+from thread_tagger.paths import (
+    EDITED_THREADS_PATH,
+    edited_output_classified_path,
+    resolve_classified_path,
+    resolve_threads_path,
+)
 from wiki_build.taxonomy import page_ids, taxonomy_seed_block
 from wiki_build.threads_io import (
-    DEFAULT_THREADS_PATH,
     load_threads,
     render_thread_for_llm,
 )
 
-DEFAULT_OUTPUT_PATH = Path("data/threads_classified.json")
+DEFAULT_THREADS_PATH = resolve_threads_path()
+DEFAULT_OUTPUT_PATH = resolve_classified_path()
 
 CLASSIFY_SYSTEM = (
     "אתה עוזר שממיין שיחות מקבוצת וואטסאפ על פונדקאות לגייז. "
@@ -120,6 +126,9 @@ def run(
     """
 
     llm = llm or LLMClient()
+    input_path = Path(input_path)
+    if output_path == DEFAULT_OUTPUT_PATH and input_path == EDITED_THREADS_PATH:
+        output_path = edited_output_classified_path()
     payload = load_threads(input_path)
     threads = payload["threads"]
 

@@ -30,8 +30,9 @@
 - [בחירת פונדקאית והתנהלות מולה](surrogate.md)
 - [הפריה והחזרת עוברים (IVF)](ivf.md)
 - [הריון ומעקב](pregnancy.md)
-- [חזרה ארצה עם התינוק](bringing-baby-home.md)
 - [לידה והשבועות הראשונים](birth.md)
+- [חזרה ארצה עם התינוק](bringing-baby-home.md)
+- [טיסות ולוגיסטיקת נסיעות עם תינוק](travel-with-baby.md)
 - [תרומת ביציות ובחירת תורמת](egg-donor.md)
 
 ## היבטים משפטיים
@@ -60,21 +61,24 @@
 
 - [גיור](conversion.md)
 
+## הורות ותינוקות
+
+- [ספרים ותכנים לילדים](books-and-media.md)
+- [הסבר לילדים על פונדקאות](explaining-to-children.md)
+- [תמ"ל ואכילת תינוק](baby-formula.md)
+- [ציוד לתינוקות](baby-gear.md)
+- [baby-development](baby-development.md)
+- [parenting](parenting.md)
+
 ## נושאים נוספים
 
 - [albania](albania.md)
 - [argentina](argentina.md)
 - [armenia](armenia.md)
-- [baby-development](baby-development.md)
-- [baby-gear](baby-gear.md)
-- [books-and-media](books-and-media.md)
 - [canada](canada.md)
-- [children-books](children-books.md)
-- [explaining-to-children](explaining-to-children.md)
 - [hungary](hungary.md)
 - [kenya](kenya.md)
 - [legal-marriage](legal-marriage.md)
 - [mexico](mexico.md)
 - [netherlands](netherlands.md)
-- [parenting](parenting.md)
 - [romania](romania.md)

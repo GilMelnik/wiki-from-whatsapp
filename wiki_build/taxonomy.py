@@ -237,6 +237,33 @@ TAXONOMY: tuple[TopicPage, ...] = (
         category="process",
         keywords=("טיסה", "חזרה ארצה", "להביא הביתה", "דרכון לתינוק", "flight home"),
     ),
+    TopicPage(
+        id="travel-with-baby",
+        title_he="טיסות ולוגיסטיקת נסיעות עם תינוק",
+        category="process",
+        keywords=("טיסה", "טיסות", "flight", "airbnb", "עריסה", "el al", "travel"),
+        parent="bringing-baby-home",
+    ),
+    TopicPage(
+        id="baby-formula",
+        title_he='תמ"ל ואכילת תינוק',
+        category="process",
+        keywords=("תמ\"ל", "פורמולה", "formula", "האכלה", "בקבוק"),
+        parent="birth",
+    ),
+    TopicPage(
+        id="baby-gear",
+        title_he="ציוד לתינוקות",
+        category="process",
+        keywords=("ציוד", "עגלה", "סלקל", "מנשא", "baby gear", "registry"),
+        parent="birth",
+    ),
+    TopicPage(
+        id="books-and-media",
+        title_he="ספרים ותכנים לילדים",
+        category="emergent",
+        keywords=("ספר", "book", "ילדים", "media", "קוקומלון"),
+    ),
     # --- Medical ---
     TopicPage(
         id="clinics",

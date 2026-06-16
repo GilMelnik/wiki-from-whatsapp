@@ -198,7 +198,7 @@ def _related_pages_fallback(
             if entities & other_entities:
                 add(other_id)
 
-    return related[:8]
+    return related
 
 
 def _build_community_facts_block(merged: dict[str, Any]) -> str:
@@ -226,7 +226,8 @@ def build_community_prompt(page_title: str, merged: dict[str, Any]) -> str:
     return (
         f"כתוב את סעיף 'מידע מהקהילה' לעמוד: {page_title}.\n\n"
         f"{_build_community_facts_block(merged)}\n\n"
-        "כתוב בפרוזה בעברית. אל תכלול כותרת."
+        "כתוב בפרוזה בעברית. אל תכלול כותרת. "
+        "הוסף קישורי markdown [טקסט](page-id.md) בתוך הטקסט לעמודים קשורים כשמוזכר נושא שיש לו עמוד ייעודי."
     )
 
 
