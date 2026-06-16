@@ -17,18 +17,15 @@ from utils import write_json_file
 from wiki_build.llm_client import BatchRequest, LLMClient, extract_json
 from thread_tagger.paths import (
     EDITED_THREADS_PATH,
-    edited_output_classified_path,
-    resolve_classified_path,
-    resolve_threads_path,
+    ORIGINAL_CLASSIFIED_PATH,
+    ORIGINAL_THREADS_PATH,
+    ensure_edited_workspace,
 )
 from wiki_build.taxonomy import page_ids, taxonomy_seed_block
 from wiki_build.threads_io import (
     load_threads,
     render_thread_for_llm,
 )
-
-DEFAULT_THREADS_PATH = resolve_threads_path()
-DEFAULT_OUTPUT_PATH = resolve_classified_path()
 
 CLASSIFY_SYSTEM = (
     "אתה עוזר שממיין שיחות מקבוצת וואטסאפ על פונדקאות לגייז. "
@@ -109,8 +106,8 @@ def classify_thread(thread: dict[str, Any], llm: LLMClient) -> dict[str, Any]:
 
 
 def run(
-    input_path: Path | str = DEFAULT_THREADS_PATH,
-    output_path: Path | str = DEFAULT_OUTPUT_PATH,
+    input_path: Path | str = ORIGINAL_THREADS_PATH,
+    output_path: Path | str = ORIGINAL_CLASSIFIED_PATH,
     llm: LLMClient | None = None,
     min_messages: int = 3,
     min_senders: int = 2,
@@ -126,9 +123,13 @@ def run(
     """
 
     llm = llm or LLMClient()
+    ensure_edited_workspace()
+
     input_path = Path(input_path)
-    if output_path == DEFAULT_OUTPUT_PATH and input_path == EDITED_THREADS_PATH:
-        output_path = edited_output_classified_path()
+    output_path = Path(output_path)
+    if input_path == ORIGINAL_THREADS_PATH and EDITED_THREADS_PATH.exists():
+        input_path = EDITED_THREADS_PATH
+
     payload = load_threads(input_path)
     threads = payload["threads"]
 
@@ -209,7 +210,11 @@ def run(
             "batch_mode": use_batch and llm.supports_batch(),
         },
     }
-    write_json_file(output, Path(output_path))
+    write_json_file(output, output_path)
+    actions = ensure_edited_workspace(classified_output=output_path)
+    if actions:
+        summary = ", ".join(f"{name} {action}" for name, action in actions.items())
+        print(f"  Review workspace: {summary}")
     return output["metadata"]
 
 

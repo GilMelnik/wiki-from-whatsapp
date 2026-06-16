@@ -21,12 +21,7 @@ from typing import Any
 
 from utils import write_json_file
 from wiki_build.llm_client import BatchRequest, LLMClient, extract_json
-from thread_tagger.paths import (
-    EDITED_THREADS_PATH,
-    edited_output_classified_path,
-    resolve_classified_path,
-    resolve_threads_path,
-)
+from thread_tagger.paths import resolve_classified_path
 from wiki_build.scrub import scrub_claims
 from wiki_build.support import compute_support
 from wiki_build.taxonomy import page_ids, taxonomy_seed_block

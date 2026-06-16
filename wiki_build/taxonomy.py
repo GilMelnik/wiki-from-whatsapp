@@ -49,12 +49,6 @@ TAXONOMY: tuple[TopicPage, ...] = (
         category="start",
         keywords=("התחלה", "מאיפה מתחילים", "סקירה", "כללי", "פונדקאות", "תהליך"),
     ),
-    TopicPage(
-        id="glossary",
-        title_he="מונחון",
-        category="start",
-        keywords=("מושג", "מונח", "פירוש", "ראשי תיבות"),
-    ),
     # --- Geography ---
     TopicPage(
         id="usa",
@@ -138,12 +132,6 @@ TAXONOMY: tuple[TopicPage, ...] = (
         keywords=("ivy"),
     ),
     TopicPage(
-        id="providers-other",
-        title_he="סוכנויות נוספות",
-        category="providers",
-        keywords=("סוכנות", "agency", "ספק", "וקיל", "מתאם"),
-    ),
-    TopicPage(
         id="choosing-agency",
         title_he="איך בוחרים סוכנות",
         category="providers",
@@ -166,7 +154,7 @@ TAXONOMY: tuple[TopicPage, ...] = (
         id="legal-lawyers",
         title_he="עורכי דין",
         category="legal",
-        keywords=("עורך דין", "עו\"ד", "עוד", "lawyer", "attorney", "ייצוג משפטי"),
+        keywords=("עורך דין", "עו\"ד", "עוד", "lawyer", "attorney", "ייצוג משפטי", "איילת טרסר", "ויקטוריה גלפנד", "ויקטוריה", "הראל", "הראל ברק"),
     ),
     TopicPage(
         id="legal-contracts",
@@ -183,22 +171,22 @@ TAXONOMY: tuple[TopicPage, ...] = (
     ),
     # --- Money ---
     TopicPage(
-        id="money-costs",
-        title_he="עלויות התהליך",
+        id="money-transfers",
+        title_he="העברה והמרת כספים",
         category="money",
-        keywords=("עלות", "מחיר", "כמה עולה", "תקציב", "cost", "budget", "דולר"),
+        keywords=("העברה", "swift", "המרת מטבע", "דולר", "דולרים", "בנק"),
     ),
     TopicPage(
-        id="money-transfers",
-        title_he="העברות כספים ואסקרו",
+        id="escrow",
+        title_he="חשבון נאמנות Escrow",
         category="money",
-        keywords=("העברה", "אסקרו", "escrow", "חשבון נאמנות", "swift", "המרת מטבע"),
+        keywords=("אסקרו", "escrow", "חשבון נאמנות"),
     ),
     TopicPage(
         id="money-tax-insurance",
-        title_he="מסים, ביטוח והחזרים",
+        title_he="ביטוח והחזרים",
         category="money",
-        keywords=("מס", "ביטוח", "החזר", "insurance", "tax", "ביטוח לאומי"),
+        keywords=("ביטוח", "החזר", "insurance", "ביטוח לאומי"),
     ),
     # --- Process stages ---
     TopicPage(
@@ -217,7 +205,7 @@ TAXONOMY: tuple[TopicPage, ...] = (
         id="ivf",
         title_he="הפריה והחזרת עוברים (IVF)",
         category="process",
-        keywords=("הפריה", "עובר", "ivf", "embryo", "החזרה", "מעבדה"),
+        keywords=("הפריה", "עובר", "ivf", "embryo", "החזרה", "מעבדה", "עוברים"),
     ),
     TopicPage(
         id="pregnancy",
@@ -234,14 +222,20 @@ TAXONOMY: tuple[TopicPage, ...] = (
     TopicPage(
         id="bringing-baby-home",
         title_he="חזרה ארצה עם התינוק",
-        category="process",
-        keywords=("טיסה", "חזרה ארצה", "להביא הביתה", "דרכון לתינוק", "flight home"),
+        category="legal",
+        keywords=("חזרה ארצה", "להביא הביתה", "דרכון לתינוק", "מספר תעודת זהות", "ת.ז. זמני"),
+    ),
+    TopicPage(
+        id="rights",
+        title_he="מיצוי זכויות",
+        category="legal",
+        keywords=("חופשת לידה", "מענק לידה", "דמי לידה", "ביטוח לאומי"),
     ),
     TopicPage(
         id="travel-with-baby",
         title_he="טיסות ולוגיסטיקת נסיעות עם תינוק",
         category="process",
-        keywords=("טיסה", "טיסות", "flight", "airbnb", "עריסה", "el al", "travel"),
+        keywords=("טיסה", "טיסות", "flight", "airbnb", "עריסה", "el al", "travel", "אל על", "delta", "דלתא", "ארקיע", "united", "יונייטד"),
         parent="bringing-baby-home",
     ),
     TopicPage(
@@ -255,7 +249,7 @@ TAXONOMY: tuple[TopicPage, ...] = (
         id="baby-gear",
         title_he="ציוד לתינוקות",
         category="process",
-        keywords=("ציוד", "עגלה", "סלקל", "מנשא", "baby gear", "registry"),
+        keywords=("ציוד", "עגלה", "סלקל", "מנשא", "baby gear", "registry", "עגלות"),
         parent="birth",
     ),
     TopicPage(
