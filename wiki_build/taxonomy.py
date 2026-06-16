@@ -37,6 +37,7 @@ CATEGORIES: dict[str, str] = {
     "money": "כסף תשלומים, המרות והעברות",
     "process": "שלבי התהליך",
     "medical": "רפואה ומרפאות",
+    "parenting": "הורות ותינוקות",
     "emergent": "נושאים נוספים",
 }
 
@@ -83,6 +84,24 @@ TAXONOMY: tuple[TopicPage, ...] = (
         keywords=("קולומביה", "colombia", "בוגוטה", "מדיין"),
     ),
     TopicPage(
+        id="argentina",
+        title_he="ארגנטינה",
+        category="geography",
+        keywords=("ארגנטינה", "argentina", "בואנוס איירס", "buenos aires"),
+    ),
+    TopicPage(
+        id="armenia",
+        title_he="ארמניה",
+        category="geography",
+        keywords=("ארמניה", "armenia", "ירוан", "yerevan", "נטע"),
+    ),
+    TopicPage(
+        id="mexico",
+        title_he="מקסיקו",
+        category="geography",
+        keywords=("מקסיקו", "mexico", "מקסיקו סיטי"),
+    ),
+    TopicPage(
         id="georgia",
         title_he="גאורגיה",
         category="geography",
@@ -93,6 +112,22 @@ TAXONOMY: tuple[TopicPage, ...] = (
         title_he="קפריסין",
         category="geography",
         keywords=("קפריסין", "cyprus", "ניקוסיה"),
+    ),
+    TopicPage(
+        id="surrogacy-warnings",
+        title_he="אזהרות משרד המשפטים — יעדים בעייתיים",
+        category="geography",
+        keywords=(
+            "אזהרה",
+            "אזהרת מסע",
+            "משרד המשפטים",
+            "אלבניה",
+            "albania",
+            "קניה",
+            "kenya",
+            "צפון קפריסין",
+            "north cyprus",
+        ),
     ),
     # --- Providers / agencies ---
     TopicPage(
@@ -123,19 +158,42 @@ TAXONOMY: tuple[TopicPage, ...] = (
         id="surmom",
         title_he="סורמום (Surmom)",
         category="providers",
-        keywords=("סורמום", "surmom"),
+        keywords=("סורמום", "surmom", "סורמאם"),
     ),
     TopicPage(
         id="ivy",
         title_he="Ivy Fertility Israel (Ivy)",
         category="providers",
-        keywords=("ivy"),
+        keywords=("ivy", "ארז ויניב"),
     ),
     TopicPage(
         id="choosing-agency",
         title_he="איך בוחרים סוכנות",
         category="providers",
-        keywords=("לבחור סוכנות", "השוואה", "המלצה על סוכנות", "חוזה עם סוכנות"),
+        keywords=("לבחור סוכנות", "השוואה", "המלצה על סוכנות", "חוזה עם סוכנות", "תהליך עצמאי", "סוכנות"),
+    ),
+    TopicPage(
+        id="providers-other",
+        title_he="סוכנויות וספקים נוספים",
+        category="providers",
+        keywords=(
+            "עמית פלס",
+            "מיכל",
+            "מיכל קרן דוד",
+            "US Surrogacy Consultant",
+            "The Fertility Agency",
+            "Blossom",
+            "Surrogate Steps",
+            "Dream Surrogacy",
+            "SurroConnections",
+            "IARC",
+            "Arkcryo",
+            "Life Parcel",
+            "MHB",
+            "Men Having Babies",
+            "GPAP",
+            "אבישי זאבי",
+        ),
     ),
     # --- Legal ---
     TopicPage(
@@ -143,6 +201,13 @@ TAXONOMY: tuple[TopicPage, ...] = (
         title_he="הורות, צו הורות ותעודת לידה",
         category="legal",
         keywords=("צו הורות", "תעודת לידה", "הורות", "parentage", "birth certificate", "ניתוק זיקה"),
+    ),
+    TopicPage(
+        id="europe-post-birth-bureaucracy",
+        title_he="רישום הורות באירופה",
+        category="legal",
+        parent="legal-parentage",
+        keywords=("רומניה", "romania", "הונגריה", "hungary", "שני אבות", "תעודת לידה", "ביורוקרטיה", "פורטוגל"),
     ),
     TopicPage(
         id="legal-citizenship",
@@ -162,6 +227,12 @@ TAXONOMY: tuple[TopicPage, ...] = (
         category="legal",
         keywords=("חוזה", "הסכם", "contract", "סעיף"),
     ),
+    TopicPage(
+        id="legal-marriage",
+        title_he="נישואין",
+        category="legal",
+        keywords=("נישואין", "נישואי יוטה", "יוטה", "utah", "zoom wedding", "Marry From Home"),
+    ),
     # --- Religion ---
     TopicPage(
         id="conversion",
@@ -180,13 +251,19 @@ TAXONOMY: tuple[TopicPage, ...] = (
         id="escrow",
         title_he="חשבון נאמנות Escrow",
         category="money",
-        keywords=("אסקרו", "escrow", "חשבון נאמנות"),
+        keywords=("אסקרו", "escrow", "חשבון נאמנות", "seedtrust", "seed trust"),
     ),
     TopicPage(
-        id="money-tax-insurance",
+        id="money-insurance",
         title_he="ביטוח והחזרים",
         category="money",
-        keywords=("ביטוח", "החזר", "insurance", "ביטוח לאומי"),
+        keywords=("ביטוח", "החזר", "insurance", "ביטוח לאומי", "מענק לידה", "דמי לידה", "חופשת לידה", "מיצוי זכויות"),
+    ),
+    TopicPage(
+        id="money-costs",
+        title_he="עלויות התהליך",
+        category="money",
+        keywords=("עלות", "עלויות", "מחיר", "כמה עולה", "תקציב", "חיסכון", "cost", "תשלום לפונדקאית"),
     ),
     # --- Process stages ---
     TopicPage(
@@ -217,7 +294,7 @@ TAXONOMY: tuple[TopicPage, ...] = (
         id="birth",
         title_he="לידה והשבועות הראשונים",
         category="process",
-        keywords=("לידה", "יולדת", "בית חולים", "birth", "delivery", "תינוק"),
+        keywords=("לידה", "יולדת", "בית חולים", "birth", "delivery", "תינוק", "צהבת", "חיסון"),
     ),
     TopicPage(
         id="bringing-baby-home",
@@ -235,28 +312,36 @@ TAXONOMY: tuple[TopicPage, ...] = (
         id="travel-with-baby",
         title_he="טיסות ולוגיסטיקת נסיעות עם תינוק",
         category="process",
-        keywords=("טיסה", "טיסות", "flight", "airbnb", "עריסה", "el al", "travel", "אל על", "delta", "דלתא", "ארקיע", "united", "יונייטד"),
+        keywords=("טיסה", "טיסות", "flight", "airbnb", "עריסה", "el al", "travel", "אל על", "אלעל", "delta", "דלתא", "ארקיע", "united", "יונייטד"),
         parent="bringing-baby-home",
+    ),
+    # --- Parenting & baby care ---
+    TopicPage(
+        id="books-and-media",
+        title_he="ספרים ותכנים לילדים",
+        category="parenting",
+        keywords=("ספר", "book", "ילדים", "media", "הסבר לילד", "סיפור", "שאלות"),
     ),
     TopicPage(
         id="baby-formula",
         title_he='תמ"ל ואכילת תינוק',
-        category="process",
+        category="parenting",
         keywords=("תמ\"ל", "פורמולה", "formula", "האכלה", "בקבוק"),
         parent="birth",
     ),
     TopicPage(
         id="baby-gear",
         title_he="ציוד לתינוקות",
-        category="process",
-        keywords=("ציוד", "עגלה", "סלקל", "מנשא", "baby gear", "registry", "עגלות"),
+        category="parenting",
+        keywords=("ציוד", "עגלה", "סלקל", "מנשא", "baby gear", "registry", "עגלות", "כסא לאוטו"),
         parent="birth",
     ),
     TopicPage(
-        id="books-and-media",
-        title_he="ספרים ותכנים לילדים",
-        category="emergent",
-        keywords=("ספר", "book", "ילדים", "media", "קוקומלון"),
+        id="baby-development",
+        title_he="התפתחות התינוק וקורסי הכנה",
+        category="parenting",
+        keywords=("התפתחות", "עיסוי תינוקות", "קורס הכנה ללידה", "כללית", "דיגיטל", "דיגיטף"),
+        parent="birth",
     ),
     # --- Medical ---
     TopicPage(
