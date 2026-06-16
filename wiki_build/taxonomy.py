@@ -167,7 +167,7 @@ TAXONOMY: tuple[TopicPage, ...] = (
         id="conversion",
         title_he="גיור",
         category="religion",
-        keywords=("גיור", "להתגייר", "רבנות", "יהדות", "conversion", "בית דין", "רפורמי", "קונסרבטיבי", "ברית", "ברית מילה"),
+        keywords=("גיור", "להתגייר", "רבנות", "יהדות", "conversion", "בית דין", "רפורמי", "קונסרבטיבי", "ברית", "ברית מילה", "הלכה"),
     ),
     # --- Money ---
     TopicPage(
