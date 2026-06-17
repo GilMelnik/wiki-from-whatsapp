@@ -75,7 +75,7 @@ TAXONOMY: tuple[TopicPage, ...] = (
         id="israel",
         title_he="ישראל",
         category="geography",
-        keywords=("ישראל", "בארץ", "ועדת אישורים", "פונדקאות בישראל"),
+        keywords=("ישראל", "בארץ", "ועדת אישורים", "פונדקאות בישראל", "הטסת עוברים"),
     ),
     TopicPage(
         id="colombia",
@@ -93,7 +93,7 @@ TAXONOMY: tuple[TopicPage, ...] = (
         id="armenia",
         title_he="ארמניה",
         category="geography",
-        keywords=("ארמניה", "armenia", "ירוан", "yerevan", "נטע"),
+        keywords=("ארמניה", "armenia"),
     ),
     TopicPage(
         id="mexico",
@@ -213,7 +213,7 @@ TAXONOMY: tuple[TopicPage, ...] = (
         id="legal-citizenship",
         title_he="אזרחות, דרכון ורישום",
         category="legal",
-        keywords=("אזרחות", "דרכון", "קונסוליה", "משרד הפנים", "רישום", "passport", "אפוסטיל"),
+        keywords=("אזרחות", "דרכון", "קונסוליה", "משרד הפנים", "רישום", "passport", "אפוסטיל", "ssn"),
     ),
     TopicPage(
         id="legal-lawyers",
@@ -270,7 +270,7 @@ TAXONOMY: tuple[TopicPage, ...] = (
         id="egg-donor",
         title_he="תרומת ביציות ובחירת תורמת",
         category="process",
-        keywords=("תורמת", "ביצית", "תרומת ביציות", "egg donor", "donor"),
+        keywords=("תורמת", "ביצית", "תרומת ביציות", "egg donor", "donor", "בדיקות גנטיות", "משטח גנטי"),
     ),
     TopicPage(
         id="surrogate",
