@@ -215,10 +215,10 @@ TAXONOMY: tuple[TopicPage, ...] = (
     ),
     TopicPage(
         id="europe-post-birth-bureaucracy",
-        title_he="רישום הורות באירופה",
+        title_he="רישום ואזרוח באירופה",
         category="legal",
         parent="legal-parentage",
-        keywords=("רומניה", "romania", "הונגריה", "hungary", "שני אבות", "תעודת לידה", "ביורוקרטיה", "פורטוגל"),
+        keywords=("רומניה", "romania", "הונגריה", "hungary", "שני אבות", "תעודת לידה", "ביורוקרטיה", "פורטוגל", "אזרחות"),
     ),
     TopicPage(
         id="legal-citizenship",
@@ -385,13 +385,15 @@ TAXONOMY: tuple[TopicPage, ...] = (
             "PGS",
             "Igenomix",
             "פאנל אתני",
+            "פאנל",
+            "פאנל גנטי",
         ),
     ),
     TopicPage(
         id="surrogate",
         title_he="בחירת פונדקאית והתנהלות מולה",
         category="process",
-        keywords=("פונדקאית", "נושאת", "surrogate", "carrier", "התאמה", "relationship"),
+        keywords=("פונדקאית", "נושאת", "surrogate", "carrier", "התאמה", "relationship", "מאצ'", "match"),
     ),
     TopicPage(
         id="surrogate-gifts",
@@ -441,9 +443,9 @@ TAXONOMY: tuple[TopicPage, ...] = (
     ),
     TopicPage(
         id="travel-with-baby",
-        title_he="טיסות ולוגיסטיקת נסיעות עם תינוק",
+        title_he="טיסות, לוגיסטיקת נסיעות עם תינוק",
         category="process",
-        keywords=("טיסה", "טיסות", "flight", "airbnb", "עריסה", "el al", "travel", "אל על", "אלעל", "delta", "דלתא", "ארקיע", "united", "יונייטד"),
+        keywords=("טיסה", "טיסות", "flight", "airbnb", "עריסה", "el al", "travel", "אל על", "אלעל", "delta", "דלתא", "ארקיע", "united", "יונייטד", "השכרת רכב"),
         parent="bringing-baby-home",
     ),
     # --- Parenting & baby care ---

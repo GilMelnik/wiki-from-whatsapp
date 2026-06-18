@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -11,12 +12,64 @@ from threads_split.models import Thread, ThreadConfig
 from utils import write_json_file
 
 
+def sort_messages_quote_aware(messages: list[Message]) -> list[Message]:
+    """Sort by datetime, then ensure every quoting message follows the message it quotes.
+
+    Timestamps have only minute precision, so a quoting message and its quoted message
+    can share a timestamp and be ordered arbitrarily by a plain sort. This stable
+    topological pass keeps datetime order while moving a quoting message after its quoted
+    message whenever it would otherwise precede it.
+    """
+    ordered = sorted(messages, key=lambda m: m.datetime)
+
+    occurrences: dict[tuple[str, str], list[tuple[datetime, int]]] = {}
+    for position, message in enumerate(ordered):
+        key = (message.sender, message.normalized_content())
+        occurrences.setdefault(key, []).append((message.datetime, position))
+
+    quoted_by: dict[int, int] = {}
+    for position, message in enumerate(ordered):
+        key = message.quote_lookup_key()
+        if key is None:
+            continue
+        candidates = [
+            (occurred_at, candidate_pos)
+            for occurred_at, candidate_pos in occurrences.get(key, [])
+            if candidate_pos != position and occurred_at <= message.datetime
+        ]
+        if candidates:
+            quoted_by[position] = max(candidates, key=lambda item: (item[0], item[1]))[1]
+
+    state = [0] * len(ordered)  # 0=unvisited, 1=on stack, 2=emitted
+    result: list[Message] = []
+    for start in range(len(ordered)):
+        if state[start] == 2:
+            continue
+        stack = [start]
+        while stack:
+            node = stack[-1]
+            if state[node] == 2:
+                stack.pop()
+                continue
+            if state[node] == 0:
+                state[node] = 1
+                quoted_pos = quoted_by.get(node)
+                if quoted_pos is not None and state[quoted_pos] == 0:
+                    stack.append(quoted_pos)
+                    continue
+            state[node] = 2
+            result.append(ordered[node])
+            stack.pop()
+
+    return result
+
+
 def load_messages(input_path: Path) -> list[Message]:
     with input_path.open(encoding="utf-8") as f:
         raw_messages = json.load(f)
-    messages = [Message.from_android_dict(item) for item in raw_messages if item['text']]
-    messages.sort(key=lambda m: m.datetime)
-    return messages
+    messages = [Message.from_android_dict(item) for item in raw_messages]
+    messages = [message for message in messages if message.normalized_content()]
+    return sort_messages_quote_aware(messages)
 
 
 def split_into_threads(
