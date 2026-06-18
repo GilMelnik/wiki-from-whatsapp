@@ -115,7 +115,7 @@ TAXONOMY: tuple[TopicPage, ...] = (
     ),
     TopicPage(
         id="canada",
-        title_he="קנדה – פונדקאות",
+        title_he="קנדה",
         category="geography",
         keywords=("קנדה", "Canada", "AHRA", "altruistic", "פונדקאות בקנדה", "parentage קנדה"),
     ),
@@ -316,7 +316,7 @@ TAXONOMY: tuple[TopicPage, ...] = (
     ),
     TopicPage(
         id="insurance-bituach-leumi",
-        title_he='ביטוח לאומי – זכויות כשהלידה בחו"ל',
+        title_he='ביטוח לאומי',
         category="money",
         keywords=(
             "ביטוח לאומי",
@@ -329,7 +329,7 @@ TAXONOMY: tuple[TopicPage, ...] = (
     ),
     TopicPage(
         id="insurance-israeli-private",
-        title_he="ביטוח פרטי בישראל להחזרי פוריות",
+        title_he="ביטוח פרטי בישראל",
         category="money",
         keywords=(
             "הראל",
@@ -406,6 +406,7 @@ TAXONOMY: tuple[TopicPage, ...] = (
             "יום הולדת פונדקאית",
             "אננס",
             "החזרת עוברים מתנה",
+            "קריסמס",
         ),
     ),
     TopicPage(
@@ -430,7 +431,7 @@ TAXONOMY: tuple[TopicPage, ...] = (
         id="bringing-baby-home",
         title_he="חזרה ארצה עם התינוק",
         category="legal",
-        keywords=("חזרה ארצה", "להביא הביתה", "דרכון לתינוק", "מספר תעודת זהות", "ת.ז. זמני"),
+        keywords=("חזרה ארצה", "להביא הביתה", "דרכון לתינוק", "מספר תעודת זהות", "ת.ז. זמני", "טיפת חלב"),
     ),
     TopicPage(
         id="rights",

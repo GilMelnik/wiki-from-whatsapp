@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -276,7 +277,50 @@ class TestStats:
         assert enriched["is_useless"] is False
 
 
-class TestPort:
+class TestStoreMetadata:
+    def test_save_updates_thread_count_after_split(self, tmp_path: Path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        data = tmp_path / "data"
+        data.mkdir()
+        messages = [_msg(i, f"2022-01-01T{10+i}:00:00") for i in range(4)]
+        t = _thread("thread-0001", messages)
+        (data / "threads.json").write_text(
+            json.dumps(
+                {
+                    "threads": [t],
+                    "metadata": {"thread_count": 1, "message_count": 4},
+                }
+            )
+        )
+        (data / "threads_classified.json").write_text(
+            json.dumps(
+                {
+                    "threads": [_class("thread-0001", True)],
+                    "metadata": {
+                        "thread_count": 1,
+                        "knowledge_bearing_count": 1,
+                    },
+                }
+            )
+        )
+
+        store = ThreadStore()
+        store.load()
+        store.split("thread-0001", "range", [2, 3])
+        store.save()
+
+        with EDITED_THREADS_PATH.open(encoding="utf-8") as f:
+            threads_payload = json.load(f)
+        with EDITED_CLASSIFIED_PATH.open(encoding="utf-8") as f:
+            classified_payload = json.load(f)
+
+        assert len(threads_payload["threads"]) == 2
+        assert threads_payload["metadata"]["thread_count"] == 2
+        assert len(classified_payload["threads"]) == 2
+        assert classified_payload["metadata"]["thread_count"] == 2
+        assert classified_payload["metadata"]["knowledge_bearing_count"] == 2
+
+
     def test_free_port_skips_current_pid(self, monkeypatch):
         import thread_tagger.port as port_mod
 

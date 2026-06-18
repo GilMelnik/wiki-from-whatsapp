@@ -351,6 +351,21 @@ class ThreadStore:
                 if t["thread_id"] in classifications
             ]
 
+    def _sync_metadata(self) -> None:
+        assert self._threads_payload is not None
+        assert self._classified_payload is not None
+
+        threads_meta = self._threads_payload.setdefault("metadata", {})
+        threads_meta["thread_count"] = len(self._threads_payload["threads"])
+
+        if self._has_classification:
+            classified = self._classified_payload["threads"]
+            cls_meta = self._classified_payload.setdefault("metadata", {})
+            cls_meta["thread_count"] = len(classified)
+            cls_meta["knowledge_bearing_count"] = sum(
+                1 for r in classified if r.get("is_knowledge_bearing")
+            )
+
     def _ensure_backup(self) -> None:
         if self._backup_done:
             return
@@ -369,6 +384,7 @@ class ThreadStore:
         assert self._threads_payload is not None
         assert self._classified_payload is not None
         self._ensure_backup()
+        self._sync_metadata()
 
         if self._threads_path_override is not None:
             write_json_file(self._threads_payload, self._source_threads_path)
