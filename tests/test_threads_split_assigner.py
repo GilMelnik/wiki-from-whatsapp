@@ -21,12 +21,14 @@ def _message(
     minutes: int = 0,
     sender: str = "alice",
     content: str = "hello",
+    quote: dict[str, str] | None = None,
 ) -> Message:
     return Message(
         date_time=datetime(2024, 1, 1, 12, 0) + timedelta(minutes=minutes),
         sender=sender,
         content=content,
         message_id=f"m{index}",
+        quote=quote,
     )
 
 
@@ -155,6 +157,47 @@ class AssignerAccuracyTests(unittest.TestCase):
         self.assertEqual(len(threads), 2)
         topic_a = next(t for t in threads if 0 in t.message_ids)
         self.assertIn(2, topic_a.message_ids)
+
+    def test_large_gap_without_quote_starts_new_thread(self) -> None:
+        messages = [
+            _message(0, minutes=0, content="topic A"),
+            _message(1, minutes=7 * 60, content="topic A"),
+        ]
+        embeddings = [
+            np.array([1.0, 0.0], dtype=np.float32),
+            np.array([1.0, 0.0], dtype=np.float32),
+        ]
+        config = ThreadConfig()
+        assigner = ThreadAssigner(messages, embeddings, config=config)
+        assigner.scorer = _scorer(messages, embeddings, config)
+
+        threads = assigner.process_messages()
+
+        self.assertEqual(len(threads), 2)
+
+    def test_large_gap_with_quote_reattaches(self) -> None:
+        messages = [
+            _message(0, minutes=0, content="topic A"),
+            _message(
+                1,
+                minutes=7 * 60,
+                sender="bob",
+                content="reply",
+                quote={"sender": "alice", "text": "topic A"},
+            ),
+        ]
+        embeddings = [
+            np.array([1.0, 0.0], dtype=np.float32),
+            np.array([0.0, 1.0], dtype=np.float32),
+        ]
+        config = ThreadConfig()
+        assigner = ThreadAssigner(messages, embeddings, config=config)
+        assigner.scorer = _scorer(messages, embeddings, config)
+
+        threads = assigner.process_messages()
+
+        self.assertEqual(len(threads), 1)
+        self.assertEqual(threads[0].num_messages, 2)
 
     def test_query_passage_asymmetry_improves_match(self) -> None:
         messages = [

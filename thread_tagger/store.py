@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from copy import deepcopy
 from datetime import datetime
@@ -29,6 +30,8 @@ from thread_tagger.paths import (
     resolve_threads_path,
 )
 from thread_tagger.stats import enrich_thread, filter_threads, sort_threads
+
+_SPLIT_ID = re.compile(r"^(.+)-split-(\d+)$")
 
 
 class ThreadStore:
@@ -228,6 +231,52 @@ class ThreadStore:
         return {
             "prev_id": order[idx - 1] if idx > 0 else None,
             "next_id": order[idx + 1] if idx < len(order) - 1 else None,
+        }
+
+    def split_family_ids(self, thread_id: str) -> list[str]:
+        """Thread ids from the same manual split family, in chronological order."""
+        match = _SPLIT_ID.match(thread_id)
+        base = match.group(1) if match else thread_id
+        prefix = f"{base}-split-"
+        ids = [base]
+        for tid in self._threads_by_id:
+            if tid.startswith(prefix):
+                ids.append(tid)
+        if len(ids) == 1:
+            return ids
+        return sorted(
+            ids,
+            key=lambda tid: (
+                self._threads_by_id[tid]["start_time"],
+                self._threads_by_id[tid].get("last_time", ""),
+                tid,
+            ),
+        )
+
+    def message_context(self, thread_id: str) -> dict[str, Any]:
+        """Chronological neighbors plus all parts of a split family."""
+        neighbors = self.neighbors(thread_id)
+        family_ids = set(self.split_family_ids(thread_id))
+
+        prev_thread = None
+        prev_id = neighbors.get("prev_id")
+        if prev_id and prev_id not in family_ids:
+            prev_thread = self.get_thread(prev_id)
+
+        next_thread = None
+        next_id = neighbors.get("next_id")
+        if next_id and next_id not in family_ids:
+            next_thread = self.get_thread(next_id)
+
+        family = [
+            self.get_thread(tid)
+            for tid in self.split_family_ids(thread_id)
+            if self.get_thread(tid) is not None
+        ]
+        return {
+            "prev": prev_thread,
+            "next": next_thread,
+            "family": family,
         }
 
     def queue_neighbors(

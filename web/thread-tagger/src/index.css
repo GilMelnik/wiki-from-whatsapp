@@ -10,3 +10,70 @@ body {
 .message-selected {
   @apply bg-amber-100 border-amber-400;
 }
+
+body.panel-resize-active {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.panel-resize-handle {
+  width: 6px;
+  cursor: col-resize;
+  background: #cbd5e1;
+  transition: background-color 0.15s ease;
+  position: relative;
+  z-index: 20;
+}
+
+.panel-resize-handle:hover,
+body.panel-resize-active .panel-resize-handle {
+  background: #3b82f6;
+}
+
+.thread-section-current {
+  @apply rounded-lg border-2 border-blue-400 bg-blue-50/40 p-2;
+}
+
+.thread-section-prev {
+  @apply rounded-lg border-2 border-amber-500 bg-amber-50/70 p-2;
+}
+
+.thread-section-next {
+  @apply rounded-lg border-2 border-emerald-500 bg-emerald-50/70 p-2;
+}
+
+.thread-section-split {
+  @apply rounded-lg border-2 border-violet-500 bg-violet-50/70 p-2;
+}
+
+.thread-header-current {
+  @apply bg-blue-200 border-blue-600 text-blue-950 font-semibold;
+}
+
+.thread-header-prev {
+  @apply bg-amber-200 border-amber-600 text-amber-950 font-semibold;
+}
+
+.thread-header-next {
+  @apply bg-emerald-200 border-emerald-600 text-emerald-950 font-semibold;
+}
+
+.thread-header-split {
+  @apply bg-violet-200 border-violet-600 text-violet-950 font-semibold;
+}
+
+.thread-msg-current {
+  @apply bg-white border-blue-300 border-r-[5px] border-r-blue-600 hover:bg-blue-50/40;
+}
+
+.thread-msg-prev {
+  @apply bg-amber-50 border-amber-400 border-r-[5px] border-r-amber-600 text-amber-950 hover:bg-amber-100 cursor-pointer;
+}
+
+.thread-msg-next {
+  @apply bg-emerald-50 border-emerald-400 border-r-[5px] border-r-emerald-600 text-emerald-950 hover:bg-emerald-100 cursor-pointer;
+}
+
+.thread-msg-split {
+  @apply bg-violet-50 border-violet-400 border-r-[5px] border-r-violet-600 text-violet-950 hover:bg-violet-100 cursor-pointer;
+}

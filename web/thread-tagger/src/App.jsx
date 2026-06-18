@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchMeta,
   fetchStats,
@@ -18,7 +18,14 @@ import RecentChangesPanel from "./components/RecentChangesPanel";
 import SplitDialog from "./components/SplitDialog";
 import SplitResultBanner from "./components/SplitResultBanner";
 import StatsPanel from "./components/StatsPanel";
+import ResizeHandle from "./components/ResizeHandle";
 import ThreadList from "./components/ThreadList";
+import {
+  clampListWidth,
+  clampSideWidth,
+  loadPanelLayout,
+  savePanelLayout,
+} from "./panelLayout";
 import {
   addRecent,
   addRecentBatch,
@@ -120,6 +127,30 @@ export default function App() {
   const [mergeOpen, setMergeOpen] = useState(false);
   const [splitOpen, setSplitOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
+
+  const layoutRef = useRef(null);
+  const [listWidth, setListWidth] = useState(() => loadPanelLayout().listWidth);
+  const [sideWidth, setSideWidth] = useState(() => loadPanelLayout().sideWidth);
+
+  const persistPanelLayout = useCallback(() => {
+    savePanelLayout({ listWidth, sideWidth });
+  }, [listWidth, sideWidth]);
+
+  const resizeListPanel = useCallback((event) => {
+    const rect = layoutRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const rtl = document.documentElement.dir === "rtl";
+    const width = rtl ? rect.right - event.clientX : event.clientX - rect.left;
+    setListWidth(clampListWidth(width));
+  }, []);
+
+  const resizeSidePanel = useCallback((event) => {
+    const rect = layoutRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const rtl = document.documentElement.dir === "rtl";
+    const width = rtl ? event.clientX - rect.left : rect.right - event.clientX;
+    setSideWidth(clampSideWidth(width));
+  }, []);
 
   const queueParams = { filter, sort, order };
 
@@ -460,8 +491,11 @@ export default function App() {
         )}
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        <aside className="w-72 shrink-0 border-l bg-slate-50 flex flex-col overflow-hidden">
+      <div ref={layoutRef} className="flex-1 flex overflow-hidden min-h-0">
+        <aside
+          style={{ width: listWidth }}
+          className="shrink-0 bg-slate-50 flex flex-col overflow-hidden min-w-0"
+        >
           <RecentChangesPanel
             recent={recent}
             selectedId={selectedId}
@@ -483,7 +517,13 @@ export default function App() {
           />
         </aside>
 
-        <main className="flex-1 flex flex-col min-w-0 min-h-0 border-l overflow-hidden">
+        <ResizeHandle
+          label="שנה רוחב רשימת השיחות"
+          onResize={resizeListPanel}
+          onResizeEnd={persistPanelLayout}
+        />
+
+        <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
           <SplitResultBanner
             splitResult={splitResult}
             selectedId={selectedId}
@@ -529,15 +569,26 @@ export default function App() {
           </div>
           <MessageViewer
             thread={threadData?.thread}
+            context={threadData?.context}
             selectedIndices={selectedIndices}
             onToggle={handleToggle}
             onRangeSelect={handleRangeSelect}
+            onNavigateToThread={handleSelect}
             isSplitPart={isSplitPart}
           />
         </main>
 
+        <ResizeHandle
+          label="שנה רוחב פאנל התגיות"
+          onResize={resizeSidePanel}
+          onResizeEnd={persistPanelLayout}
+        />
+
         {hasClassification ? (
-          <aside className="w-80 shrink-0 border-r bg-slate-50 flex flex-col">
+          <aside
+            style={{ width: sideWidth }}
+            className="shrink-0 bg-slate-50 flex flex-col min-h-0 min-w-0"
+          >
             <ClassificationPanel
               classification={threadData?.classification}
               taxonomy={taxonomy}
@@ -550,13 +601,19 @@ export default function App() {
             />
           </aside>
         ) : (
-          <aside className="w-80 shrink-0 border-r bg-slate-50 flex flex-col p-4 text-sm text-slate-600">
-            <h2 className="font-semibold mb-2">פעולות על שיחות</h2>
-            <p className="mb-4 text-xs">
-              אין קובץ סיווג — ניתן לצפות, לפצל, למזג ולהעביר הודעות.
-              להוספת תגיות הרץ classify ופתח ללא --inspect.
-            </p>
-            <div className="space-y-2 mt-auto">
+          <aside
+            style={{ width: sideWidth }}
+            className="shrink-0 bg-slate-50 flex flex-col min-h-0 overflow-hidden min-w-0"
+          >
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 text-sm text-slate-600">
+              <h2 className="font-semibold mb-2">פעולות על שיחות</h2>
+              <p className="mb-4 text-xs">
+                אין קובץ סיווג — ניתן לצפות, לפצל, למזג ולהעביר הודעות.
+                גלילה בתצוגת ההודעות מציגה שיחות סמוכות וחלקי פיצול בצבע שונה.
+                להוספת תגיות הרץ classify ופתח ללא --inspect.
+              </p>
+            </div>
+            <div className="shrink-0 border-t p-4 space-y-2 bg-white">
               <button
                 type="button"
                 onClick={() => setMergeOpen(true)}

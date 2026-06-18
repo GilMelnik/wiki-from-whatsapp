@@ -155,12 +155,14 @@ def get_thread(
         raise HTTPException(status_code=404, detail="thread not found")
     classification = store.get_classification(thread_id)
     enriched = store._enrich(thread)
+    neighbors = store.neighbors(thread_id)
     return {
         "thread": thread,
         "classification": classification,
         "enriched": enriched,
-        "neighbors": store.neighbors(thread_id),
+        "neighbors": neighbors,
         "queue": store.queue_neighbors(thread_id, filter, sort, order),
+        "context": store.message_context(thread_id),
     }
 
 

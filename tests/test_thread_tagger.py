@@ -134,6 +134,53 @@ class TestInspectMode:
         enriched = store._enrich(store.threads[0])
         assert enriched["has_classification"] is False
 
+    def test_message_context_in_inspect_mode(self, tmp_path: Path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        data = tmp_path / "data"
+        data.mkdir()
+        (data / "threads.json").write_text(
+            json.dumps(
+                {
+                    "threads": [
+                        _thread("before", [_msg(0, "2022-01-01T09:00:00")]),
+                        _thread(
+                            "main",
+                            [_msg(1, "2022-01-01T10:00:00"), _msg(2, "2022-01-01T10:05:00")],
+                        ),
+                        _thread(
+                            "main-split-1",
+                            [_msg(3, "2022-01-01T10:10:00")],
+                        ),
+                        _thread("after", [_msg(4, "2022-01-01T11:00:00")]),
+                    ]
+                }
+            )
+        )
+        store = ThreadStore(inspect_only=True)
+        store.load()
+
+        ctx = store.message_context("main-split-1")
+        assert ctx["prev"] is None
+        assert ctx["next"]["thread_id"] == "after"
+        assert [t["thread_id"] for t in ctx["family"]] == ["main", "main-split-1"]
+
+        ctx_main = store.message_context("main")
+        assert ctx_main["prev"]["thread_id"] == "before"
+        assert ctx_main["next"] is None
+        assert [t["thread_id"] for t in ctx_main["family"]] == ["main", "main-split-1"]
+
+        from fastapi.testclient import TestClient
+
+        from thread_tagger.server import app, configure_store
+
+        configure_store(inspect_only=True)
+        client = TestClient(app)
+        response = client.get("/api/threads/main-split-1?filter=all")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["context"]["family"][0]["thread_id"] == "main"
+        assert payload["context"]["prev"] is None
+
 
 class TestOperations:
     def test_recompute_stats(self):
