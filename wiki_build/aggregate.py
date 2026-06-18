@@ -1,6 +1,6 @@
 """Stage C: aggregate per-thread claims into per-topic knowledge.
 
-For each topic the claims are grouped, near-duplicates merged (via e5
+For each topic the claims are grouped, near-duplicates merged (via E5 query/passage
 embeddings when available, otherwise a fuzzy text fallback), distinct
 supporters tallied across threads (message authors and reaction senders,
 each user counted once using the PRIVATE audit map), contradicting stances
@@ -61,13 +61,17 @@ class _Embedder:
         self._failed = False
 
     def embed(self, texts: list[str]):
+        """Return (query_vectors, passage_vectors) for E5-style cross similarity."""
         if not self.use_embeddings or self._failed:
             return None
         try:
             if self._embedder is None:
                 from threads_split.embedding.embedding import Embedder
                 self._embedder = Embedder()
-            return self._embedder.encode_messages(texts)
+            return (
+                self._embedder.encode_queries(texts),
+                self._embedder.encode_messages(texts),
+            )
         except Exception:  # noqa: BLE001 - fall back to fuzzy
             self._failed = True
             return None
@@ -82,15 +86,20 @@ def _merge_claims(
     """Greedily cluster near-duplicate claims and aggregate their support."""
 
     texts = [_normalize(c["claim_text"]) for c in claims]
-    vectors = embedder.embed(texts)
+    embeddings = embedder.embed(texts)
+    query_vectors = passage_vectors = None
+    if embeddings is not None:
+        query_vectors, passage_vectors = embeddings
 
     clusters: list[dict[str, Any]] = []  # each: representative idx + member idxs
 
     def similar(i: int, j: int) -> bool:
-        if vectors is not None:
+        if query_vectors is not None and passage_vectors is not None:
             from threads_split.embedding.embedding import cosine_similarity
 
-            return cosine_similarity(vectors[i], vectors[j]) >= similarity_threshold
+            sim_ij = cosine_similarity(query_vectors[i], passage_vectors[j])
+            sim_ji = cosine_similarity(query_vectors[j], passage_vectors[i])
+            return max(sim_ij, sim_ji) >= similarity_threshold
         return SequenceMatcher(None, texts[i], texts[j]).ratio() >= similarity_threshold
 
     assigned = [False] * len(claims)
@@ -229,7 +238,7 @@ def run(
     output = {
         "topics": topics_out,
         "metadata": {
-            "source": str(Path(claims_path)),
+            "source": str(resolved_claims),
             "topic_count": len(topics_out),
             "total_claims": len(claims),
             "merge_method": "embeddings" if (use_embeddings and not embedder._failed) else "fuzzy",
