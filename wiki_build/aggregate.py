@@ -18,10 +18,11 @@ from pathlib import Path
 from typing import Any
 
 from utils import write_json_file
+from wiki_build.claims_paths import resolve_claims_path
 from wiki_build.support import aggregate_reaction_summary
 from wiki_build.taxonomy import category_title, get_page
 
-DEFAULT_CLAIMS_PATH = Path("data/claims.json")
+DEFAULT_CLAIMS_PATH: Path | None = None
 DEFAULT_AUDIT_PATH = Path("data/audit/claims_audit.json")
 DEFAULT_OUTPUT_PATH = Path("data/claims_aggregated.json")
 
@@ -181,13 +182,14 @@ def _contradictions(entity_stances: dict[str, dict[str, int]]) -> list[dict[str,
 
 
 def run(
-    claims_path: Path | str = DEFAULT_CLAIMS_PATH,
+    claims_path: Path | str | None = DEFAULT_CLAIMS_PATH,
     audit_path: Path | str = DEFAULT_AUDIT_PATH,
     output_path: Path | str = DEFAULT_OUTPUT_PATH,
     use_embeddings: bool = True,
     similarity_threshold: float = 0.86,
 ) -> dict[str, Any]:
-    with Path(claims_path).open(encoding="utf-8") as f:
+    resolved_claims = Path(claims_path) if claims_path is not None else resolve_claims_path()
+    with resolved_claims.open(encoding="utf-8") as f:
         claims_payload = json.load(f)
     claims = claims_payload["claims"]
     audit_by_id = _load_audit_records(audit_path)

@@ -77,3 +77,12 @@ def summarize_redactions(redactions: list[dict[str, str]]) -> str:
 
     counts = Counter(item["type"] for item in redactions)
     return ", ".join(f"{kind} ×{count}" for kind, count in sorted(counts.items()))
+
+
+def restore_scrubbed_text(text: str, redactions: list[dict[str, str]]) -> str:
+    """Replace redaction marks with the original values, in scrub order."""
+
+    restored = text
+    for item in redactions:
+        restored = restored.replace(REDACTION_MARK, item["value"], 1)
+    return restored

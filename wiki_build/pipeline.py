@@ -97,6 +97,7 @@ def run(
         f"redactions: {e_meta['scrub']['total_redactions']}, "
         f"PII review: {e_meta['scrub']['pii_review_claims']}"
     )
+    print("    → Run `python -m pii_reviewer` to review scrubbed claims before aggregate.")
 
     print("\n[C] Aggregating claims...")
     a_meta = aggregate.run(use_embeddings=use_embeddings)

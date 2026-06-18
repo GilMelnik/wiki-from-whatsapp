@@ -56,3 +56,15 @@ def test_scrub_claims_attaches_metadata() -> None:
     assert summary["pii_review_claims"] == 1
     assert "_redactions" in claims[0]
     assert "_redactions" not in claims[1]
+
+
+def test_restore_scrubbed_text() -> None:
+    from wiki_build.scrub import restore_scrubbed_text
+
+    scrubbed = f"התקשרו ל-{REDACTION_MARK} או {REDACTION_MARK}."
+    redactions = [
+        {"type": "phone", "value": "050-1234567"},
+        {"type": "email", "value": "a@b.com"},
+    ]
+    restored = restore_scrubbed_text(scrubbed, redactions)
+    assert restored == "התקשרו ל-050-1234567 או a@b.com."
