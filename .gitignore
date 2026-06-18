@@ -237,3 +237,5 @@ drafts/
 thread_tagger/static/*
 !thread_tagger/static/.gitkeep
 web/thread-tagger/node_modules/
+web/pii-reviewer/node_modules/
+web/plan-reviewer/node_modules/

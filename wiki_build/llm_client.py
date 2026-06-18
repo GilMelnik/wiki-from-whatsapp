@@ -695,10 +695,23 @@ def _mock_extract(user: str) -> str:
 
 
 def _mock_generate(user: str) -> str:
-    return (
-        "רוב המשתתפים בקבוצה (mock) ציינו מידע רלוונטי לנושא זה. "
+    """Return a schema-valid community JSON stub.
+
+    If the prompt lists other wiki pages, link the first one inline so the
+    link-validation path is exercised offline.
+    """
+
+    catalog_ids = re.findall(r"^- (\S+)\.md —", user, re.MULTILINE)
+    related = catalog_ids[:2]
+    if related:
+        link = f"(ראו [{related[0]}]({related[0]}.md)) "
+    else:
+        link = ""
+    body = (
+        f"רוב המשתתפים בקבוצה (mock) ציינו מידע רלוונטי לנושא זה. {link}"
         "_עמוד זה נוצר במצב mock — הפעילו ספק LLM אמיתי לתוכן מלא._"
     )
+    return json.dumps({"body": body, "related_pages": related}, ensure_ascii=False)
 
 
 def _mock_plan(user: str) -> str:

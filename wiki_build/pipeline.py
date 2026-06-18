@@ -113,6 +113,7 @@ def run(
         f"    {p_meta['page_count']} pages, {p_meta['link_count']} links "
         f"-> {p_meta['output_path']} ({p_meta['mode']})"
     )
+    print("    → Run `python -m plan_reviewer` to edit the plan before generate.")
 
     print("\n[D] Generating page drafts...")
     g_meta = generate.run(

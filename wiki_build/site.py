@@ -15,6 +15,7 @@ from typing import Any
 
 import yaml
 
+from wiki_build.plan_paths import resolve_plan_path
 from wiki_build.rtl import HEBREW_CSS, wrap_rtl_markdown
 from wiki_build.taxonomy import CATEGORIES, all_pages, category_title
 
@@ -22,6 +23,15 @@ DEFAULT_DOCS_DIR = Path("docs")
 DEFAULT_DRAFTS_DIR = Path("drafts")
 DEFAULT_CONFIG_PATH = Path("mkdocs.yml")
 DEFAULT_PLAN_PATH = Path("data/wiki_plan.json")
+
+
+def effective_plan_path(plan_path: Path | str | None = None) -> Path:
+    if plan_path is None:
+        return resolve_plan_path()
+    resolved = Path(plan_path)
+    if resolved == DEFAULT_PLAN_PATH:
+        return resolve_plan_path()
+    return resolved
 
 
 def _load_plan_pages(plan_path: Path) -> list[dict[str, str]] | None:
@@ -51,7 +61,7 @@ def _build_nav(docs_dir: Path, plan_path: Path | str = DEFAULT_PLAN_PATH) -> lis
     if (docs_dir / "index.md").exists():
         nav.append({"בית": "index.md"})
 
-    plan_pages = _load_plan_pages(Path(plan_path))
+    plan_pages = _load_plan_pages(effective_plan_path(plan_path))
     pages_by_category: dict[str, list[dict[str, str]]] = defaultdict(list)
 
     if plan_pages:
@@ -164,7 +174,8 @@ def run(
             encoding="utf-8",
         )
 
-    config = build_config(docs, plan_path)
+    resolved_plan = effective_plan_path(plan_path)
+    config = build_config(docs, resolved_plan)
     with Path(config_path).open("w", encoding="utf-8") as f:
         yaml.safe_dump(config, f, allow_unicode=True, sort_keys=False)
 
@@ -174,7 +185,7 @@ def run(
         "docs_dir": str(docs),
         "page_count": page_count,
         "nav_sections": len(config["nav"]),
-        "plan_nav": _load_plan_pages(Path(plan_path)) is not None,
+        "plan_nav": _load_plan_pages(resolved_plan) is not None,
     }
 
 

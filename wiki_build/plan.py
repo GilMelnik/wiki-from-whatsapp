@@ -14,19 +14,24 @@ from typing import Any
 
 from utils import write_json_file
 from wiki_build.llm_client import BatchRequest, LLMClient
+from wiki_build.scrub import FORBIDDEN_TERM_INSTRUCTION
 from wiki_build.taxonomy import CATEGORIES, category_title, taxonomy_seed_block
 
+from wiki_build.plan_paths import resolve_aggregated_path
 DEFAULT_AGGREGATED_PATH = Path("data/claims_aggregated.json")
 DEFAULT_OUTPUT_PATH = Path("data/wiki_plan.json")
 
 PLAN_SYSTEM = (
-    "אתה מתכנן מבנה ויקי בעברית על פונדקאות לגייז, על בסיס טענות שחולצו מקבוצת וואטסאפ. "
-    "רשימת הנושאים המוצעים היא נקודת התחלה בלבד — אתה רשאי למזג, לפצל וליצור עמודים חדשים. "
-    "כל עמוד חייב לכלול לפחות טענה אחת (source_tags שמצביעים על מזהי הנושאים המקוריים). "
-    "הצע קישורים סמנטיים בין עמודים (ללא הגבלת מספר). "
-    "הוסף קישורי markdown בתוך הטקסט לעמודים קשורים כשמוזכר נושא שיש לו עמוד ייעודי. "
-    "עבור כל עמוד, הצע search_focus — שאילתת חיפוש באנגלית לרקע ציבורי כללי (לא דעות הקבוצה). "
-    "החזר אך ורק JSON תקין."
+    "אתה מתכנן את מבנה הויקי בעברית על פונדקאות לגייז, על בסיס טענות שחולצו מקבוצת וואטסאפ.\n"
+    "כללים:\n"
+    "1. רשימת הנושאים המוצעים היא נקודת התחלה בלבד — אתה רשאי למזג נושאים קרובים, "
+    "לפצל נושאים רחבים וליצור עמודים חדשים.\n"
+    "2. כל עמוד חייב לכלול לפחות טענה אחת, באמצעות source_tags המצביעים על מזהי הנושאים המקוריים.\n"
+    "3. הצע גרף קישורים סמנטי בין עמודים (ללא הגבלת מספר): קשר כל עמוד לעמודים "
+    "המשלימים או הקרובים לו מבחינת תוכן. קישורים אלה מזינים את סעיף 'עמודים קשורים'.\n"
+    "4. עבור כל עמוד, הצע search_focus — שאילתת חיפוש באנגלית לרקע ציבורי כללי (לא דעות הקבוצה).\n"
+    f"5. {FORBIDDEN_TERM_INSTRUCTION}\n"
+    "החזר אך ורק אובייקט JSON תקין, ללא טקסט נוסף."
 )
 
 
@@ -198,7 +203,8 @@ def run(
     *,
     skip_agent: bool = False,
 ) -> dict[str, Any]:
-    with Path(aggregated_path).open(encoding="utf-8") as f:
+    agg_path = Path(aggregated_path) if aggregated_path is not None else resolve_aggregated_path()
+    with agg_path.open(encoding="utf-8") as f:
         topics = json.load(f)["topics"]
 
     if skip_agent:

@@ -18,6 +18,66 @@ _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 # A run that contains 9-15 digits once separators are stripped (phone-like).
 _PHONE_RE = re.compile(r"(?<![\w])\+?[\d][\d\s().\-]{7,}\d(?![\w])")
 
+# Forbidden, offensive framing of the surrogate as the child's "mother". The
+# surrogate is never the mother of the child; collapse the phrase to the correct
+# term, keeping the definite article / plural of the surrogate word itself.
+#
+# Two patterns, deliberately conservative to avoid corrupting the very common
+# Hebrew word "אם" meaning *if* (e.g. "אם הפונדקאית חתמה" = "if the surrogate
+# signed"):
+#   1. Unambiguous mother nouns (אמא / אימא / אמהות / אימהות), with an optional
+#      proclitic and definite article: e.g. "אמא פונדקאית", "האמא הפונדקאית",
+#      "לאמא הפונדקאית", "אמהות פונדקאיות".
+#   2. "אם" ONLY when it carries a preposition (ל/מ/כ) that the conjunction
+#      "if" can never take: e.g. "לאם הפונדקאית". Bare "אם", "האם", "ואם",
+#      "באם" are left untouched (handled by the prompt + human review).
+_MOTHER_NOUN_RE = re.compile(
+    r"(?P<pre>[למכבוש]?)ה?(?:אמא|אימא|אמהות|אימהות)[\s\u05be\-]+"
+    r"(?P<sur>ה?פונדקאי(?:ות|ת))"
+)
+_MOTHER_EM_RE = re.compile(
+    r"(?P<pre>[למכ])אם[\s\u05be\-]+(?P<sur>ה?פונדקאי(?:ות|ת))"
+)
+
+# Shared prompt directive so every LLM stage avoids producing the term at all.
+FORBIDDEN_TERM_INSTRUCTION = (
+    'אסור בתכלית האיסור להשתמש בצירוף "אמא פונדקאית" / "אם פונדקאית" / '
+    '"האמא הפונדקאית" / "אמהות פונדקאיות" או כל הטיה אחרת המתארת את הפונדקאית '
+    'כ"אם" או כ"אמא" — זהו מונח שגוי ופוגעני. השתמש אך ורק ב"פונדקאית" '
+    '(או "נושאת").'
+)
+
+
+def _collapse_to_surrogate(match: re.Match[str]) -> str:
+    """Drop the "mother" word, keeping the proclitic and the surrogate word.
+
+    Re-attaches a leading preposition, contracting ל/ב/כ + ה (e.g.
+    "לאם הפונדקאית" -> "לפונדקאית", "מהאמא הפונדקאיות" -> "מהפונדקאיות").
+    """
+
+    pre = match.group("pre")
+    sur = match.group("sur")
+    if pre in ("ל", "ב", "כ") and sur.startswith("ה"):
+        sur = sur[1:]
+    return f"{pre}{sur}"
+
+
+def correct_surrogate_terminology(text: str) -> str:
+    """Strip the offensive "surrogate mother" phrasing from text.
+
+    Replaces variants such as "אמא פונדקאית", "האמא הפונדקאית",
+    "אמהות פונדקאיות" and "לאם הפונדקאית" with the correct term, preserving the
+    surrogate word's definite article and number. Acts as a deterministic safety
+    net behind the prompt instruction above. Intentionally does not touch bare
+    "אם"/"האם" to avoid mangling the conjunction "if".
+    """
+
+    if not text:
+        return text
+    text = _MOTHER_NOUN_RE.sub(_collapse_to_surrogate, text)
+    text = _MOTHER_EM_RE.sub(_collapse_to_surrogate, text)
+    return text
+
 
 @dataclass
 class ScrubResult:
@@ -60,7 +120,7 @@ def scrub_claims(claims: list[dict[str, Any]]) -> dict[str, Any]:
     for claim in claims:
         original = claim.get("claim_text", "")
         scrubbed = scrub_text(original)
-        claim["claim_text"] = scrubbed.text
+        claim["claim_text"] = correct_surrogate_terminology(scrubbed.text)
         if scrubbed.redactions:
             claim["_redactions"] = scrubbed.redactions
             total_redactions += len(scrubbed.redactions)

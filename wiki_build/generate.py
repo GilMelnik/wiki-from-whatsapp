@@ -7,13 +7,21 @@ Each page has four sections:
 3. מקורות — external citation list
 4. עמודים קשורים — links from the planning agent
 
+The community section is produced from a structured JSON response
+(``body`` + ``related_pages``) so we can validate inline cross-links against the
+real page catalog before writing them. The LLM is given a catalog of every
+*other* wiki page (id, title, gist) so it can link accurately when a topic with
+its own page is mentioned.
+
 Drafts are written to ``drafts/<slug>.md`` for human review.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter, defaultdict
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -23,21 +31,25 @@ from wiki_build.llm_client import (
     GroundedCitation,
     GroundedResult,
     LLMClient,
+    extract_json,
     web_search_enabled,
 )
 from wiki_build.plan import (
-    DEFAULT_OUTPUT_PATH as DEFAULT_PLAN_PATH,
     identity_plan,
     links_from_plan,
     load_plan,
     page_titles,
     pages_by_category,
 )
-from wiki_build.scrub import summarize_redactions
+from wiki_build.plan_paths import resolve_aggregated_path, resolve_plan_path
+from wiki_build.scrub import (
+    FORBIDDEN_TERM_INSTRUCTION,
+    correct_surrogate_terminology,
+    summarize_redactions,
+)
 from wiki_build.rtl import wrap_rtl_markdown
 from wiki_build.taxonomy import all_pages, get_page
 
-DEFAULT_AGGREGATED_PATH = Path("data/claims_aggregated.json")
 DEFAULT_DRAFTS_DIR = Path("drafts")
 
 STANCE_HE = {
@@ -48,23 +60,125 @@ STANCE_HE = {
 }
 
 GENERATE_BACKGROUND_SYSTEM = (
-    "אתה כותב רקע כללי בעברית לערך ויקי על פונדקאות לגייז. "
-    "חפש מידע ציבורי עדכני באינטרנט. כתוב בניסוח ניטרלי ועובדתי. "
-    "אל תכלול דעות או חוויות של קבוצות וואטסאפ. "
-    "אל תמציא עובדות — הסתמך על תוצאות החיפוש. "
-    "החזר Markdown בלבד (ללא כותרת H1/H2)."
+    "אתה עורך ויקי הכותב סעיף 'רקע כללי' בעברית לערך על פונדקאות לגייז. "
+    "משימתך: לסכם מידע ציבורי עובדתי בלבד, על סמך תוצאות חיפוש עדכניות באינטרנט.\n"
+    "כללים:\n"
+    "1. הסתמך אך ורק על תוצאות החיפוש; אל תמציא עובדות, מספרים, שמות או מקורות.\n"
+    "2. כתוב בניסוח ניטרלי ועובדתי, בלשון אחידה, ללא פנייה לקורא.\n"
+    "3. אורך: שתי פסקאות קצרות לכל היותר.\n"
+    "4. החזר Markdown בלבד, ללא כותרות (ללא H1/H2) וללא רשימת מקורות.\n"
+    f"5. {FORBIDDEN_TERM_INSTRUCTION}"
 )
 
 GENERATE_COMMUNITY_SYSTEM = (
-    "אתה כותב את סעיף 'מידע מהקהילה' לערך ויקי בעברית על פונדקאות לגייז. "
-    "המידע מגיע אך ורק מטענות שחולצו מקבוצת וואטסאפ — אל תוסיף ידע חיצוני. "
-    "כתוב בצורת רשימה bullets. "
-    "הצג קודם את ההסכמה הרווחת, ואז דעות מנוגדות בפורמט: "
-    "**בעד:** N תומכים · **נגד:** M תומכים. "
-    "ציין מספר תומכים ייחודיים לכל נקודה משמעותית. "
-    "כלול תאריכים (חודש ושנה) כשזמינים. שמור על אנונימיות מוחלטת של חברי הקבוצה אך שתף בפרטי קשר של ספקים או בעלי מקצוע. "
-    "החזר Markdown בלבד (ללא כותרת H1/H2)."
+    "אתה עורך ויקי הכותב את סעיף 'מידע מהקהילה' בעברית לערך על פונדקאות לגייז. "
+    "המקור היחיד שלך הוא הטענות שחולצו מקבוצת וואטסאפ ושסופקו לך.\n"
+    "כללים מחייבים:\n"
+    "1. הסתמך אך ורק על הטענות שסופקו. אל תוסיף ידע חיצוני, השערות, המלצות או עצות משלך.\n"
+    "2. כתוב פרוזה רהוטה ומחוברת בפסקאות.\n"
+    "3. פתח בהסכמה הרווחת, ולאחריה הצג דעות מנוגדות בפורמט '**בעד:** N · **נגד:** M'.\n"
+    "4. ציין מספר תומכים ייחודיים לכל נקודה משמעותית, ותאריכים (חודש ושנה) כשהם זמינים.\n"
+    "5. שמור על אנונימיות מוחלטת של חברי הקבוצה (ללא שמות פרטיים), אך כן שמר פרטי קשר "
+    "של ספקים ובעלי מקצוע שהוזכרו.\n"
+    "6. קישורים פנימיים: בפעם הראשונה שמוזכר נושא שיש לו עמוד ייעודי ברשימת העמודים "
+    "שסופקה, עטוף את אזכורו בקישור Markdown בצורה [טקסט](page-id.md). השתמש אך ורק "
+    "במזהי העמודים מהרשימה, אל תמציא מזהים, ואל תקשר את העמוד הנוכחי לעצמו.\n"
+    "7. אל תכלול כותרות (ללא H1/H2).\n"
+    f"8. {FORBIDDEN_TERM_INSTRUCTION}\n"
+    "החזר אך ורק אובייקט JSON תקין במבנה המבוקש, ללא טקסט נוסף וללא code fence."
 )
+
+
+_INLINE_LINK_RE = re.compile(r"\[([^\]]+)\]\(\s*([^)\s]+?)(\.md)?\s*\)")
+
+
+@dataclass(frozen=True)
+class CommunityContent:
+    """Parsed community section: prose body plus validated related page ids."""
+
+    body: str
+    related_pages: tuple[str, ...] = field(default_factory=tuple)
+
+
+def _page_gist(page: dict[str, Any], topics: dict[str, Any]) -> str:
+    """One-line hint describing what a page covers, for the link catalog."""
+
+    merged = merge_topic_from_tags(page.get("source_tags") or [page["id"]], topics)
+    claims = merged.get("merged_claims") or []
+    if claims:
+        gist = claims[0].get("claim_text", "").strip()
+        if gist:
+            return gist[:90]
+    rationale = (page.get("rationale") or "").strip()
+    return rationale or page.get("title") or page["id"]
+
+
+def build_page_catalog(plan: dict[str, Any], topics: dict[str, Any], current_id: str) -> str:
+    """Format every *other* wiki page so the LLM can link to it accurately.
+
+    Each line is ``- page-id.md — <title> — <gist>`` so the model sees the exact
+    link target it must use.
+    """
+
+    lines: list[str] = []
+    for page in plan.get("pages", []):
+        page_id = page.get("id")
+        if not page_id or page_id == current_id:
+            continue
+        title = page.get("title") or page_id
+        lines.append(f"- {page_id}.md — {title} — {_page_gist(page, topics)}")
+    return "\n".join(lines) if lines else "(אין עמודים נוספים לקישור)"
+
+
+def _sanitize_inline_links(text: str, valid_ids: set[str], current_id: str) -> str:
+    """Keep only Markdown links that point to a real *other* page id.
+
+    Invalid or hallucinated targets are unwrapped to their anchor text. External
+    links (http/https) and path-like targets are left untouched.
+    """
+
+    def repl(match: re.Match[str]) -> str:
+        anchor, target, suffix = match.group(1), match.group(2), match.group(3)
+        if target.startswith(("http://", "https://", "#", "mailto:")) or "/" in target:
+            return match.group(0)
+        if target in valid_ids and target != current_id:
+            return f"[{anchor}]({target}.md)"
+        return anchor
+
+    return _INLINE_LINK_RE.sub(repl, text)
+
+
+def parse_community_content(
+    raw: str, valid_ids: set[str], current_id: str
+) -> CommunityContent:
+    """Parse the structured community response into validated body + links.
+
+    Accepts the JSON schema ``{"body": ..., "related_pages": [...]}``; falls back
+    to treating the whole response as Markdown if it is not valid JSON.
+    """
+
+    body = ""
+    related: list[str] = []
+    raw = (raw or "").strip()
+    if raw:
+        data: Any = None
+        try:
+            data = extract_json(raw)
+        except (json.JSONDecodeError, ValueError):
+            data = None
+        if isinstance(data, dict) and "body" in data:
+            body = str(data.get("body") or "")
+            related = [
+                str(item).strip()
+                for item in (data.get("related_pages") or [])
+                if isinstance(item, str) and str(item).strip()
+            ]
+        else:
+            body = raw
+
+    body = _sanitize_inline_links(body, valid_ids, current_id).strip()
+    related = [r for r in related if r in valid_ids and r != current_id]
+    return CommunityContent(body=body, related_pages=tuple(dict.fromkeys(related)))
 
 
 def _format_reaction_summary(reaction_summary: list[dict[str, Any]]) -> str:
@@ -222,21 +336,33 @@ def _build_community_facts_block(merged: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def build_community_prompt(page_title: str, merged: dict[str, Any]) -> str:
+def build_community_prompt(
+    page_title: str, merged: dict[str, Any], catalog_block: str
+) -> str:
     return (
-        f"כתוב את סעיף 'מידע מהקהילה' לעמוד: {page_title}.\n\n"
+        f'כתוב את סעיף "מידע מהקהילה" עבור העמוד: "{page_title}".\n\n'
+        f"## טענות שחולצו מהשיחות\n"
         f"{_build_community_facts_block(merged)}\n\n"
-        "כתוב בפרוזה בעברית. אל תכלול כותרת. "
-        "הוסף קישורי markdown [טקסט](page-id.md) בתוך הטקסט לעמודים קשורים כשמוזכר נושא שיש לו עמוד ייעודי."
+        f"## עמודים אחרים בוויקי (לקישור פנימי)\n"
+        f"השתמש במזהים הבאים כיעד לקישורים פנימיים בלבד:\n"
+        f"{catalog_block}\n\n"
+        "## פלט\n"
+        "החזר אובייקט JSON יחיד במבנה הבא (ללא טקסט נוסף וללא code fence):\n"
+        "{\n"
+        '  "body": "<טקסט Markdown בעברית, פרוזה, עם קישורים פנימיים [טקסט](page-id.md)>",\n'
+        '  "related_pages": ["<page-id>", "..."]\n'
+        "}\n"
+        'בשדה "related_pages" כלול את מזהי העמודים הרלוונטיים לנושא (גם אם לא קושרו '
+        "בגוף הטקסט), מתוך הרשימה שלמעלה בלבד. אם אין עמודים רלוונטיים, החזר רשימה ריקה."
     )
 
 
 def build_background_prompt(page_title: str, search_focus: str) -> str:
     return (
-        f"כתוב רקע כללי קצר (2 פסקאות) בעברית על: {page_title}.\n"
-        f"השתמש בחיפוש באינטרנט כדי לאסוף מידע ציבורי עדכני.\n"
+        f'כתוב רקע כללי עובדתי וקצר (שתי פסקאות לכל היותר) בעברית על: "{page_title}".\n'
+        f"בצע חיפוש באינטרנט כדי לאסוף מידע ציבורי עדכני, והסתמך אך ורק עליו.\n"
         f"מיקוד החיפוש: {search_focus}\n"
-        "אל תכלול דעות קהילתיות. אל תכלול כותרת."
+        "אל תכלול דעות או חוויות קהילתיות, ואל תכלול כותרת או רשימת מקורות."
     )
 
 
@@ -304,9 +430,13 @@ def _format_links_section(
     topics: dict[str, Any],
     titles: dict[str, str],
     source_tags: list[str],
+    extra_related: tuple[str, ...] = (),
 ) -> str:
     all_page_ids = {p["id"] for p in plan.get("pages", [])}
     related = links_from_plan(plan, page_id)
+    for target in extra_related:
+        if target in all_page_ids and target != page_id and target not in related:
+            related.append(target)
     if not related:
         related = _related_pages_fallback(page_id, source_tags, topics, all_page_ids)
     if not related:
@@ -349,6 +479,7 @@ def generate_page(
     source_tags = page.get("source_tags") or [page_id]
     merged = merge_topic_from_tags(source_tags, topics)
     titles = page_titles(plan)
+    valid_ids = {p["id"] for p in plan.get("pages", [])}
 
     # Background (section 1)
     background_md = ""
@@ -372,13 +503,19 @@ def generate_page(
     # Community (section 2)
     if community_text is None:
         try:
+            catalog_block = build_page_catalog(plan, topics, page_id)
             community_text = llm.complete_text(
                 GENERATE_COMMUNITY_SYSTEM,
-                build_community_prompt(page_title, merged),
+                build_community_prompt(page_title, merged, catalog_block),
                 task="community",
             ).strip()
         except Exception as exc:  # noqa: BLE001
-            community_text = f"_שגיאה בייצור תוכן קהילתי: {exc}_"
+            community_text = json.dumps(
+                {"body": f"_שגיאה בייצור תוכן קהילתי: {exc}_", "related_pages": []},
+                ensure_ascii=False,
+            )
+
+    community = parse_community_content(community_text or "", valid_ids, page_id)
 
     header = (
         f"# {page_title}\n\n"
@@ -390,12 +527,15 @@ def generate_page(
         header,
         _format_pii_review_section(merged),
         background_md,
-        _format_community_section(community_text or ""),
+        _format_community_section(community.body),
         _format_sources_section(citations),
-        _format_links_section(page_id, plan, topics, titles, source_tags),
+        _format_links_section(
+            page_id, plan, topics, titles, source_tags, community.related_pages
+        ),
         _footer_disclaimer(merged),
     ]
-    return wrap_rtl_markdown("".join(p for p in parts if p))
+    content = correct_surrogate_terminology("".join(p for p in parts if p))
+    return wrap_rtl_markdown(content)
 
 
 def _generate_index(plan: dict[str, Any]) -> str:
@@ -410,12 +550,12 @@ def _generate_index(plan: dict[str, Any]) -> str:
         parts.append(f"\n## {category}\n")
         for page_id, title in sorted(pages, key=lambda p: p[1]):
             parts.append(f"- [{title}]({page_id}.md)")
-    return wrap_rtl_markdown("\n".join(parts))
+    return wrap_rtl_markdown(correct_surrogate_terminology("\n".join(parts)))
 
 
 def run(
-    aggregated_path: Path | str = DEFAULT_AGGREGATED_PATH,
-    plan_path: Path | str = DEFAULT_PLAN_PATH,
+    aggregated_path: Path | str | None = None,
+    plan_path: Path | str | None = None,
     drafts_dir: Path | str = DEFAULT_DRAFTS_DIR,
     llm: LLMClient | None = None,
     research_llm: LLMClient | None = None,
@@ -430,13 +570,16 @@ def run(
     if search_on:
         research_llm = research_llm or LLMClient.for_stage("research")
 
-    with Path(aggregated_path).open(encoding="utf-8") as f:
+    agg_path = Path(aggregated_path) if aggregated_path is not None else resolve_aggregated_path()
+    plan_file = Path(plan_path) if plan_path is not None else resolve_plan_path()
+
+    with agg_path.open(encoding="utf-8") as f:
         topics = json.load(f)["topics"]
 
-    if skip_plan or not Path(plan_path).exists():
+    if skip_plan or not plan_file.exists():
         plan = identity_plan(topics, min_claims=min_claims)
     else:
-        plan = load_plan(plan_path, topics, min_claims=min_claims)
+        plan = load_plan(plan_file, topics, min_claims=min_claims)
 
     drafts = Path(drafts_dir)
     drafts.mkdir(parents=True, exist_ok=True)
@@ -452,8 +595,13 @@ def run(
     pending_community: list[tuple[str, dict[str, Any], str]] = []
     for page in pages:
         merged = merge_topic_from_tags(page.get("source_tags") or [page["id"]], topics)
+        catalog_block = build_page_catalog(plan, topics, page["id"])
         pending_community.append(
-            (page["id"], page, build_community_prompt(page.get("title", page["id"]), merged))
+            (
+                page["id"],
+                page,
+                build_community_prompt(page.get("title", page["id"]), merged, catalog_block),
+            )
         )
 
     if pending_community:

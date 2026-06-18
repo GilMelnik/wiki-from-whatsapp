@@ -22,7 +22,7 @@ from typing import Any
 from utils import write_json_file
 from wiki_build.llm_client import BatchRequest, LLMClient, extract_json
 from thread_tagger.paths import resolve_classified_path
-from wiki_build.scrub import scrub_claims
+from wiki_build.scrub import FORBIDDEN_TERM_INSTRUCTION, scrub_claims
 from wiki_build.support import compute_support
 from wiki_build.taxonomy import page_ids, taxonomy_seed_block
 from wiki_build.threads_io import (
@@ -45,6 +45,7 @@ EXTRACT_SYSTEM = (
     "בטקסט הטענה ובשדה entities. שמות מדינות ומקומות מותרים. "
     "נסח כל טענה בעברית ניטרלית. "
     "התעלם מצ'יטצ'אט, מסירות ציוד וויכוחים לא רלוונטיים. "
+    f"{FORBIDDEN_TERM_INSTRUCTION} "
     "החזר אך ורק JSON תקין."
 )
 
