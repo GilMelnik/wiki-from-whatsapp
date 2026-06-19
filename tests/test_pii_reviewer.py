@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from pii_reviewer.store import ClaimStore
-from wiki_build.scrub import REDACTION_MARK, scrub_claims
+from step_4_extract.reviewer.store import ClaimStore
+from step_4_extract.scrub import REDACTION_MARK, scrub_claims
 
 
 @pytest.fixture

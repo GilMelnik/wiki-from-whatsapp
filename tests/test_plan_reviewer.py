@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from plan_reviewer.store import PlanStore
+from step_6_plan.reviewer.store import PlanStore
 
 
 @pytest.fixture

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from wiki_build.scrub import REDACTION_MARK, scrub_claims, scrub_text
+from step_4_extract.scrub import REDACTION_MARK, scrub_claims, scrub_text
 
 
 def test_hebrew_legal_phrases_unchanged() -> None:
@@ -59,7 +59,7 @@ def test_scrub_claims_attaches_metadata() -> None:
 
 
 def test_restore_scrubbed_text() -> None:
-    from wiki_build.scrub import restore_scrubbed_text
+    from step_4_extract.scrub import restore_scrubbed_text
 
     scrubbed = f"התקשרו ל-{REDACTION_MARK} או {REDACTION_MARK}."
     redactions = [

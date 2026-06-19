@@ -8,11 +8,11 @@ from pathlib import Path
 
 import numpy as np
 
-from preprocessing.models import Message
-from threads_split.assigner import ThreadAssigner
-from threads_split.models import ScoredCandidate, Thread, ThreadConfig
-from threads_split.scoring import ThreadScorer, social_score
-from threads_split.tf_idf.tfidf import TokenizedMessages, TfidfCorpus
+from step_0_preprocessing.models import Message
+from step_1_threads_split.assigner import ThreadAssigner
+from step_1_threads_split.models import ScoredCandidate, Thread, ThreadConfig
+from step_1_threads_split.scoring import ThreadScorer, social_score
+from step_1_threads_split.tf_idf.tfidf import TokenizedMessages, TfidfCorpus
 
 
 def _message(

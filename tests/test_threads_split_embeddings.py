@@ -8,10 +8,10 @@ from pathlib import Path
 
 import numpy as np
 
-from preprocessing.models import Message
-from threads_split.embedding.embedding import load_message_embeddings
-from threads_split.embedding.prepare_embeddings import ensure_embeddings
-from utils import write_json_file
+from step_0_preprocessing.models import Message
+from step_1_threads_split.embedding.embedding import load_message_embeddings
+from step_1_threads_split.embedding.prepare_embeddings import ensure_embeddings
+from utils.json_io import write_json_file
 
 
 class MockEmbedder:

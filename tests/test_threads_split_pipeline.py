@@ -6,8 +6,8 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from preprocessing.models import Message
-from threads_split.pipeline import load_messages, sort_messages_quote_aware
+from step_0_preprocessing.models import Message
+from step_1_threads_split.run import load_messages, sort_messages_quote_aware
 
 
 def _message(

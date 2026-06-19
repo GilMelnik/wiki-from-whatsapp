@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from wiki_build.llm_client import LLMClient
-from wiki_build.reclassify_edited import run
+from utils.llm_client import LLMClient
+from step_3_classify.reclassify import run
 
 
 def _thread(tid: str, content: str = "פונדקאות בישראל") -> dict:

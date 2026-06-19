@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   base: "/",
   build: {
-    outDir: "../../thread_tagger/static",
+    outDir: "../../step_2_thread_review/static",
     emptyOutDir: true,
   },
   server: {

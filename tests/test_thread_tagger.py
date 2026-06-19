@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from thread_tagger.models import duration_sec
-from thread_tagger.operations import (
+from step_2_thread_review.models import duration_sec
+from step_2_thread_review.operations import (
     extract_messages_to_new_thread,
     indices_for_split_mode,
     merge_threads,
@@ -18,8 +18,8 @@ from thread_tagger.operations import (
     split_by_mode,
     split_thread,
 )
-from thread_tagger.store import ThreadStore
-from thread_tagger.paths import (
+from step_2_thread_review.store import ThreadStore
+from utils.paths import (
     init_edited_files,
     ORIGINAL_CLASSIFIED_PATH,
     ORIGINAL_THREADS_PATH,
@@ -28,7 +28,7 @@ from thread_tagger.paths import (
     resolve_classified_path,
     resolve_threads_path,
 )
-from thread_tagger.stats import compute_stats, enrich_thread, filter_threads, sort_threads
+from step_2_thread_review.stats import compute_stats, enrich_thread, filter_threads, sort_threads
 
 
 def _msg(i: int, dt: str, sender: str = "a", content: str = "hi") -> dict:
@@ -171,7 +171,7 @@ class TestInspectMode:
 
         from fastapi.testclient import TestClient
 
-        from thread_tagger.server import app, configure_store
+        from step_2_thread_review.server import app, configure_store
 
         configure_store(inspect_only=True)
         client = TestClient(app)
@@ -369,7 +369,7 @@ class TestStoreMetadata:
 
 
     def test_free_port_skips_current_pid(self, monkeypatch):
-        import thread_tagger.port as port_mod
+        import utils.port as port_mod
 
         monkeypatch.setattr(port_mod, "find_listening_pids", lambda p: {99999, 88888})
         monkeypatch.setattr(port_mod.os, "getpid", lambda: 99999)
