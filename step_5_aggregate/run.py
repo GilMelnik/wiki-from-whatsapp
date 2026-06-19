@@ -1,10 +1,10 @@
 """Step 5: aggregate per-thread claims into per-topic knowledge.
 
-For each topic the claims are grouped, near-duplicates merged (via E5 query/passage
-embeddings when available, otherwise a fuzzy text fallback), distinct
-supporters tallied across threads (message authors and reaction senders,
-each user counted once using the PRIVATE audit map), contradicting stances
-per entity surfaced, and a month-by-month timeline built.
+For each topic the claims are grouped, near-duplicates merged with DBSCAN
+(via E5 query/passage embeddings when available, otherwise a fuzzy text
+fallback), distinct supporters tallied across threads (message authors and
+reaction senders with positive reactions, each user counted once using the PRIVATE audit map),
+contradicting stances per entity surfaced, and a month-by-month timeline built.
 
 Output: ``data/claims_aggregated.json`` (no sender ids; counts only).
 """
@@ -17,9 +17,11 @@ from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from utils.json_io import write_json_file
 from utils.paths import resolve_claims_path
-from utils.support import aggregate_reaction_summary
+from utils.support import aggregate_reaction_summary, positive_reaction_senders_from_messages
 from utils.taxonomy import category_title, get_page
 
 DEFAULT_CLAIMS_PATH: Path | None = None
@@ -43,11 +45,17 @@ def _load_audit_records(audit_path: Path | str) -> dict[str, dict[str, Any]]:
 
 
 def _supporters_from_audit(record: dict[str, Any]) -> set[str]:
-    """Distinct users supporting a claim (statements + reactions, deduped)."""
+    """Distinct users supporting a claim (statements + positive reactions, deduped)."""
 
+    statement_supporters = set(record.get("supporting_senders") or [])
+    message_reactions = record.get("message_reactions")
+    if message_reactions is not None:
+        return statement_supporters | positive_reaction_senders_from_messages(
+            message_reactions
+        )
     if record.get("all_supporters"):
         return set(record["all_supporters"])
-    supporters = set(record.get("supporting_senders") or [])
+    supporters = set(statement_supporters)
     supporters.update(record.get("reaction_senders") or [])
     return supporters
 
@@ -77,13 +85,82 @@ class _Embedder:
             return None
 
 
+def _claim_similarity(
+    i: int,
+    j: int,
+    *,
+    texts: list[str],
+    query_vectors: list[np.ndarray] | None,
+    passage_vectors: list[np.ndarray] | None,
+) -> float:
+    if query_vectors is not None and passage_vectors is not None:
+        from step_1_threads_split.embedding.embedding import cosine_similarity
+
+        sim_ij = cosine_similarity(query_vectors[i], passage_vectors[j])
+        sim_ji = cosine_similarity(query_vectors[j], passage_vectors[i])
+        return max(sim_ij, sim_ji)
+    return SequenceMatcher(None, texts[i], texts[j]).ratio()
+
+
+def _claim_distance_matrix(
+    texts: list[str],
+    query_vectors: list[np.ndarray] | None,
+    passage_vectors: list[np.ndarray] | None,
+) -> np.ndarray:
+    n = len(texts)
+    dist = np.zeros((n, n), dtype=np.float32)
+    for i in range(n):
+        for j in range(i + 1, n):
+            d = 1.0 - _claim_similarity(
+                i, j, texts=texts, query_vectors=query_vectors, passage_vectors=passage_vectors
+            )
+            dist[i, j] = dist[j, i] = d
+    return dist
+
+
+def _dbscan(dist: np.ndarray, *, eps: float, min_samples: int) -> list[int]:
+    """Cluster with sklearn DBSCAN; noise points each get their own label."""
+
+    from sklearn.cluster import DBSCAN
+
+    n = dist.shape[0]
+    if n == 0:
+        return []
+    if n == 1:
+        return [0]
+
+    raw = DBSCAN(eps=eps, min_samples=min_samples, metric="precomputed").fit_predict(dist)
+    labels = raw.tolist()
+    next_id = max(labels) + 1
+    for i, label in enumerate(labels):
+        if label == -1:
+            labels[i] = next_id
+            next_id += 1
+    return labels
+
+
+def _medoid_index(members: list[int], dist: np.ndarray) -> int:
+    """Index of the member with the smallest total distance to all others."""
+
+    if len(members) == 1:
+        return members[0]
+    best = members[0]
+    best_sum = float("inf")
+    for i in members:
+        total = sum(dist[i, j] for j in members if j != i)
+        if total < best_sum:
+            best_sum = total
+            best = i
+    return best
+
+
 def _merge_claims(
     claims: list[dict[str, Any]],
     audit_by_id: dict[str, dict[str, Any]],
     embedder: _Embedder,
     similarity_threshold: float,
 ) -> list[dict[str, Any]]:
-    """Greedily cluster near-duplicate claims and aggregate their support."""
+    """DBSCAN-cluster near-duplicate claims and aggregate their support."""
 
     texts = [_normalize(c["claim_text"]) for c in claims]
     embeddings = embedder.embed(texts)
@@ -91,32 +168,18 @@ def _merge_claims(
     if embeddings is not None:
         query_vectors, passage_vectors = embeddings
 
-    clusters: list[dict[str, Any]] = []  # each: representative idx + member idxs
-
-    def similar(i: int, j: int) -> bool:
-        if query_vectors is not None and passage_vectors is not None:
-            from step_1_threads_split.embedding.embedding import cosine_similarity
-
-            sim_ij = cosine_similarity(query_vectors[i], passage_vectors[j])
-            sim_ji = cosine_similarity(query_vectors[j], passage_vectors[i])
-            return max(sim_ij, sim_ji) >= similarity_threshold
-        return SequenceMatcher(None, texts[i], texts[j]).ratio() >= similarity_threshold
-
-    assigned = [False] * len(claims)
-    for i in range(len(claims)):
-        if assigned[i]:
-            continue
-        members = [i]
-        assigned[i] = True
-        for j in range(i + 1, len(claims)):
-            if not assigned[j] and similar(i, j):
-                members.append(j)
-                assigned[j] = True
-        clusters.append({"members": members})
+    dist = _claim_distance_matrix(texts, query_vectors, passage_vectors)
+    labels = _dbscan(
+        dist,
+        eps=1.0 - similarity_threshold,
+        min_samples=2,
+    )
+    clusters: dict[int, list[int]] = defaultdict(list)
+    for idx, label in enumerate(labels):
+        clusters[label].append(idx)
 
     merged: list[dict[str, Any]] = []
-    for cluster in clusters:
-        members = cluster["members"]
+    for members in clusters.values():
         member_claims = [claims[m] for m in members]
         # Distinct supporters across the whole cluster (private audit -> count only).
         all_supporters: set[str] = set()
@@ -127,7 +190,13 @@ def _merge_claims(
             audit = audit_by_id.get(claim["claim_id"], {})
             all_supporters.update(_supporters_from_audit(audit))
             statement_supporters.update(audit.get("supporting_senders") or [])
-            reaction_supporters.update(audit.get("reaction_senders") or [])
+            message_rx = audit.get("message_reactions")
+            if message_rx is not None:
+                reaction_supporters.update(
+                    positive_reaction_senders_from_messages(message_rx)
+                )
+            else:
+                reaction_supporters.update(audit.get("reaction_senders") or [])
             message_reactions.extend(audit.get("message_reactions") or [])
 
         support_count = len(all_supporters) if all_supporters else sum(
@@ -143,8 +212,8 @@ def _merge_claims(
         for claim in member_claims:
             pii_redactions.extend(claim.get("_redactions") or [])
         pii_needs_review = bool(pii_redactions)
-        # Representative = the longest claim text (usually most informative).
-        representative = max(member_claims, key=lambda c: len(c["claim_text"]))
+        medoid_idx = _medoid_index(members, dist)
+        representative = claims[medoid_idx]
 
         merged_claim: dict[str, Any] = {
             "claim_text": representative["claim_text"],
@@ -241,9 +310,17 @@ def run(
             "source": str(resolved_claims),
             "topic_count": len(topics_out),
             "total_claims": len(claims),
-            "merge_method": "embeddings" if (use_embeddings and not embedder._failed) else "fuzzy",
+            "merge_method": (
+                "dbscan_embeddings"
+                if (use_embeddings and not embedder._failed)
+                else "dbscan_fuzzy"
+            ),
             "similarity_threshold": similarity_threshold,
         },
     }
     write_json_file(output, Path(output_path))
     return output["metadata"]
+
+
+if __name__ == "__main__":
+    run()
