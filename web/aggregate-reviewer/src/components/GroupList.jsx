@@ -7,6 +7,7 @@ export default function GroupList({
   order,
   onSortChange,
   onOrderChange,
+  sizeFilter,
 }) {
   return (
     <div className="flex flex-col h-full">
@@ -30,6 +31,9 @@ export default function GroupList({
       </div>
       <div className="px-3 py-2 text-xs text-slate-500 border-b border-slate-100">
         {total} קבוצות
+        {sizeFilter && (
+          <span className="text-teal-700"> · {sizeFilter.description}</span>
+        )}
       </div>
       <div className="flex-1 overflow-y-auto">
         {items.length === 0 && (

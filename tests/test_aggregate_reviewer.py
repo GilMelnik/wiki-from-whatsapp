@@ -142,6 +142,39 @@ def test_stats_histogram_large_cluster(review_files: tuple[Path, Path, Path]) ->
     assert sizes == {1: 1, 2: 1, 12: 1}
 
 
+def test_list_topics_size_filter(review_files: tuple[Path, Path, Path]) -> None:
+    agg_path, claims_path, audit_path = review_files
+    store = AggregateStore(
+        aggregated_path=agg_path, claims_path=claims_path, audit_path=audit_path
+    )
+    store.load()
+    all_topics = store.list_topics()
+    assert len(all_topics) == 1
+
+    singleton_topics = store.list_topics(size_min=1, size_max=1)
+    assert len(singleton_topics) == 1
+    assert singleton_topics[0]["group_count"] == 1
+
+    pair_topics = store.list_topics(size_min=2, size_max=2)
+    assert len(pair_topics) == 1
+    assert pair_topics[0]["group_count"] == 1
+
+    large_topics = store.list_topics(size_min=5, size_max=5)
+    assert large_topics == []
+
+
+def test_get_group_rejects_size_filter_mismatch(
+    review_files: tuple[Path, Path, Path],
+) -> None:
+    agg_path, claims_path, audit_path = review_files
+    store = AggregateStore(
+        aggregated_path=agg_path, claims_path=claims_path, audit_path=audit_path
+    )
+    store.load()
+    with pytest.raises(KeyError):
+        store.get_group("money-costs", "t1-c0", size_min=1, size_max=1)
+
+
 def test_set_representative(review_files: tuple[Path, Path, Path]) -> None:
     agg_path, claims_path, audit_path = review_files
     store = AggregateStore(

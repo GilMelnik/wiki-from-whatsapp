@@ -222,10 +222,39 @@ class AggregateStore:
             items.sort(key=lambda i: i["support_count"] or 0, reverse=reverse)
         return items
 
-    def list_topics(self) -> list[dict[str, Any]]:
+    def _group_matches_size(
+        self,
+        merged: dict[str, Any],
+        *,
+        size_min: int | None,
+        size_max: int | None,
+    ) -> bool:
+        size = merged.get("endorsement_count") or 1
+        if size_min is not None and size < size_min:
+            return False
+        if size_max is not None and size > size_max:
+            return False
+        return True
+
+    def list_topics(
+        self,
+        *,
+        size_min: int | None = None,
+        size_max: int | None = None,
+    ) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
+        filtered = size_min is not None or size_max is not None
         for topic_id, topic in sorted(self.topics.items()):
-            merged = topic.get("merged_claims") or []
+            if filtered:
+                group_count = len(
+                    self._sorted_groups(
+                        topic_id, size_min=size_min, size_max=size_max
+                    )
+                )
+                if group_count == 0:
+                    continue
+            else:
+                group_count = len(topic.get("merged_claims") or [])
             out.append(
                 {
                     "id": topic_id,
@@ -234,7 +263,7 @@ class AggregateStore:
                     "category_title": topic.get("category_title")
                     or category_title(topic.get("category", "emergent")),
                     "claim_count": topic.get("claim_count", 0),
-                    "group_count": len(merged),
+                    "group_count": group_count,
                 }
             )
         return out
@@ -271,6 +300,13 @@ class AggregateStore:
         order: SortOrder = "desc",
     ) -> dict[str, Any]:
         _, merged, _ = self._find_group(topic_id, group_key_val)
+        if not self._group_matches_size(
+            merged, size_min=size_min, size_max=size_max
+        ):
+            raise KeyError(
+                f"group {group_key_val} does not match size filter "
+                f"({size_min}-{size_max})"
+            )
         items = self._sorted_groups(
             topic_id,
             size_min=size_min,

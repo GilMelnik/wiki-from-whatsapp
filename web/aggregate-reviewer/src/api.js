@@ -20,8 +20,10 @@ export function fetchStats() {
   return request("/api/stats");
 }
 
-export function fetchTopics() {
-  return request("/api/topics");
+export function fetchTopics(params = {}) {
+  const q = new URLSearchParams(params);
+  const suffix = q.toString() ? `?${q}` : "";
+  return request(`/api/topics${suffix}`);
 }
 
 export function fetchGroups(topicId, params) {

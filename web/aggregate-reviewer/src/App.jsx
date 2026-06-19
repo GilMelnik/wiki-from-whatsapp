@@ -22,18 +22,22 @@ import {
   savePanelLayout,
 } from "./panelLayout";
 
+function filterParams(sizeFilter) {
+  if (!sizeFilter) return {};
+  return {
+    size_min: String(sizeFilter.size),
+    size_max: String(sizeFilter.size),
+  };
+}
+
 function listParams(state) {
   const params = {
     sort: state.sort,
     order: state.order,
     limit: "200",
     offset: "0",
+    ...filterParams(state.sizeFilter),
   };
-  if (state.sizeFilter) {
-    const size = state.sizeFilter.size;
-    params.size_min = String(size);
-    params.size_max = String(size);
-  }
   return params;
 }
 
@@ -80,15 +84,21 @@ export default function App() {
   }, []);
 
   const refreshMeta = useCallback(async () => {
-    const [m, s, t] = await Promise.all([fetchMeta(), fetchStats(), fetchTopics()]);
+    const [m, s] = await Promise.all([fetchMeta(), fetchStats()]);
     setMeta(m);
     setStats(s);
-    setTopics(t.items || []);
-    setTopicId((current) => {
-      if (current && t.items.some((item) => item.id === current)) return current;
-      return t.items[0]?.id || "";
-    });
   }, []);
+
+  const refreshTopics = useCallback(async () => {
+    const data = await fetchTopics(filterParams(sizeFilter));
+    const items = data.items || [];
+    setTopics(items);
+    setTopicId((current) => {
+      if (current && items.some((item) => item.id === current)) return current;
+      return items[0]?.id || "";
+    });
+    return items;
+  }, [sizeFilter]);
 
   const refreshList = useCallback(async () => {
     if (!topicId) {
@@ -110,9 +120,14 @@ export default function App() {
         return;
       }
       const params = listParams({ sort, order, sizeFilter });
-      const data = await fetchGroup(topicId, groupKey, params);
-      setGroupData(data);
-      setSelectedMembers(new Set());
+      try {
+        const data = await fetchGroup(topicId, groupKey, params);
+        setGroupData(data);
+        setSelectedMembers(new Set());
+      } catch (err) {
+        setGroupData(null);
+        throw err;
+      }
     },
     [topicId, sort, order, sizeFilter]
   );
@@ -120,6 +135,10 @@ export default function App() {
   useEffect(() => {
     refreshMeta().catch((err) => setToast(err.message));
   }, [refreshMeta]);
+
+  useEffect(() => {
+    refreshTopics().catch((err) => setToast(err.message));
+  }, [refreshTopics]);
 
   useEffect(() => {
     refreshList()
@@ -150,7 +169,7 @@ export default function App() {
   }, [toast]);
 
   const afterMutation = async (nextKey) => {
-    await Promise.all([refreshMeta(), refreshList()]);
+    await Promise.all([refreshMeta(), refreshTopics(), refreshList()]);
     const key = nextKey || selectedKey;
     if (key) {
       setSelectedKey(key);
@@ -241,7 +260,12 @@ export default function App() {
           className="shrink-0 flex flex-col border-l border-slate-200 bg-white"
           style={{ width: listWidth }}
         >
-          <TopicSelect topics={topics} value={topicId} onChange={setTopicId} />
+          <TopicSelect
+            topics={topics}
+            value={topicId}
+            onChange={setTopicId}
+            sizeFilter={sizeFilter}
+          />
           <GroupList
             items={listItems}
             total={listTotal}
@@ -251,6 +275,7 @@ export default function App() {
             order={order}
             onSortChange={setSort}
             onOrderChange={setOrder}
+            sizeFilter={sizeFilter}
           />
         </aside>
 

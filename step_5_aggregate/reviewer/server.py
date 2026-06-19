@@ -66,8 +66,13 @@ def stats() -> dict[str, Any]:
 
 
 @app.get("/api/topics")
-def list_topics() -> dict[str, Any]:
-    return {"items": get_store().list_topics()}
+def list_topics(
+    size_min: int | None = Query(None, ge=1),
+    size_max: int | None = Query(None, ge=1),
+) -> dict[str, Any]:
+    return {
+        "items": get_store().list_topics(size_min=size_min, size_max=size_max)
+    }
 
 
 @app.get("/api/topics/{topic_id}/groups")

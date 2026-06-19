@@ -477,7 +477,7 @@ def run(
     audit_path: Path | str = DEFAULT_AUDIT_PATH,
     output_path: Path | str = DEFAULT_OUTPUT_PATH,
     use_embeddings: bool = True,
-    similarity_threshold: float = 0.87,
+    similarity_threshold: float = 0.86,
 ) -> dict[str, Any]:
     resolved_claims = Path(claims_path) if claims_path is not None else resolve_claims_path()
     with resolved_claims.open(encoding="utf-8") as f:
@@ -554,4 +554,4 @@ def run(
 
 
 if __name__ == "__main__":
-    run()
+    run(similarity_threshold=0.90)
