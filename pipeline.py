@@ -12,6 +12,7 @@ Runs steps in order:
 Human gates (web UIs, no CLI):
     step 2 — thread review: ``python -m step_2_thread_review``
     step 4 — PII review: ``uvicorn step_4_extract.reviewer.server:app``
+    step 5 — aggregate review: ``python -m step_5_aggregate.reviewer``
     step 6 — plan review: ``uvicorn step_6_plan.reviewer.server:app``
 """
 

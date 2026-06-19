@@ -1,10 +1,13 @@
 """Step 5: aggregate per-thread claims into per-topic knowledge.
 
 For each topic the claims are grouped, near-duplicates merged with DBSCAN
-(via E5 query/passage embeddings when available, otherwise a fuzzy text
+(via cached E5 query/passage embeddings when available, otherwise a fuzzy text
 fallback), distinct supporters tallied across threads (message authors and
 reaction senders with positive reactions, each user counted once using the PRIVATE audit map),
 contradicting stances per entity surfaced, and a month-by-month timeline built.
+
+Claim embeddings and the all-claims distance matrix are cached under ``data/``
+and rebuilt only when the claims source changes.
 
 Output: ``data/claims_aggregated.json`` (no sender ids; counts only).
 """
@@ -27,6 +30,11 @@ from utils.taxonomy import category_title, get_page
 DEFAULT_CLAIMS_PATH: Path | None = None
 DEFAULT_AUDIT_PATH = Path("data/audit/claims_audit.json")
 DEFAULT_OUTPUT_PATH = Path("data/claims_aggregated.json")
+DEFAULT_CLAIM_QUERY_EMBEDDINGS_PATH = Path("data/claim_query_embeddings.json")
+DEFAULT_CLAIM_PASSAGE_EMBEDDINGS_PATH = Path("data/claim_passage_embeddings.json")
+DEFAULT_DISTANCE_MATRIX_PATH = Path("data/claim_distance_matrix.npy")
+DEFAULT_DISTANCE_META_PATH = Path("data/claim_distance_matrix.json")
+DEFAULT_EMBEDDING_MODEL = "intfloat/multilingual-e5-large"
 
 
 def _normalize(text: str) -> str:
@@ -60,26 +68,221 @@ def _supporters_from_audit(record: dict[str, Any]) -> set[str]:
     return supporters
 
 
+def _claim_ids(claims: list[dict[str, Any]]) -> list[str]:
+    return [c["claim_id"] for c in claims]
+
+
+def _claim_texts(claims: list[dict[str, Any]]) -> list[str]:
+    return [_normalize(c["claim_text"]) for c in claims]
+
+
+def _claim_embeddings_need_rebuild(
+    path: Path,
+    *,
+    source_path: Path,
+    model_name: str,
+    claims: list[dict[str, Any]],
+    embedding_kind: str,
+) -> bool:
+    from step_1_threads_split.embedding.embedding import (
+        MessageEmbeddings,
+        _embedding_kind,
+        _source_matches,
+    )
+
+    if not path.exists():
+        return True
+    meta = MessageEmbeddings.load(path).metadata
+    if _embedding_kind(meta, default=embedding_kind) != embedding_kind:
+        return True
+    if meta.get("embedding_model") != model_name:
+        return True
+    if meta.get("claim_count") != len(claims):
+        return True
+    if meta.get("claim_ids") != _claim_ids(claims):
+        return True
+    return not _source_matches(meta, source_path)
+
+
+def _write_claim_embeddings(
+    output_path: Path,
+    vectors: list[np.ndarray],
+    *,
+    source_path: Path,
+    model_name: str,
+    embedding_dim: int,
+    embedding_kind: str,
+    claims: list[dict[str, Any]],
+    companion_path: Path | None = None,
+) -> None:
+    metadata: dict[str, Any] = {
+        "source": str(source_path.resolve()),
+        "claim_count": len(claims),
+        "claim_ids": _claim_ids(claims),
+        "embedding_model": model_name,
+        "embedding_dim": embedding_dim,
+        "embedding_kind": embedding_kind,
+    }
+    if companion_path is not None:
+        metadata["companion_path"] = str(companion_path)
+    write_json_file(
+        {"metadata": metadata, "embeddings": [v.tolist() for v in vectors]},
+        output_path,
+    )
+
+
+def ensure_claim_embeddings(
+    claims: list[dict[str, Any]],
+    texts: list[str],
+    source_path: Path | str,
+    *,
+    query_path: Path | str = DEFAULT_CLAIM_QUERY_EMBEDDINGS_PATH,
+    passage_path: Path | str = DEFAULT_CLAIM_PASSAGE_EMBEDDINGS_PATH,
+    model_name: str = DEFAULT_EMBEDDING_MODEL,
+) -> tuple[list[np.ndarray], list[np.ndarray]]:
+    """Build or load cached query/passage embeddings for all claims."""
+
+    from step_1_threads_split.embedding.embedding import MessageEmbeddings
+
+    source = Path(source_path).resolve()
+    query_output = Path(query_path)
+    passage_output = Path(passage_path)
+
+    rebuild_passage = _claim_embeddings_need_rebuild(
+        passage_output,
+        source_path=source,
+        model_name=model_name,
+        claims=claims,
+        embedding_kind="passage",
+    )
+    rebuild_query = _claim_embeddings_need_rebuild(
+        query_output,
+        source_path=source,
+        model_name=model_name,
+        claims=claims,
+        embedding_kind="query",
+    )
+
+    embedder = None
+    if rebuild_passage or rebuild_query:
+        from step_1_threads_split.embedding.embedding import Embedder
+
+        embedder = Embedder(model_name=model_name)
+
+    if rebuild_passage:
+        assert embedder is not None
+        passage_vectors = embedder.encode_messages(texts)
+        _write_claim_embeddings(
+            passage_output,
+            passage_vectors,
+            source_path=source,
+            model_name=embedder.model_name,
+            embedding_dim=embedder.embedding_dim,
+            embedding_kind="passage",
+            claims=claims,
+            companion_path=query_output,
+        )
+    else:
+        passage_vectors = MessageEmbeddings.load(passage_output).as_list()
+
+    if rebuild_query:
+        assert embedder is not None
+        query_vectors = embedder.encode_queries(texts)
+        _write_claim_embeddings(
+            query_output,
+            query_vectors,
+            source_path=source,
+            model_name=embedder.model_name,
+            embedding_dim=embedder.embedding_dim,
+            embedding_kind="query",
+            claims=claims,
+            companion_path=passage_output,
+        )
+    else:
+        query_vectors = MessageEmbeddings.load(query_output).as_list()
+
+    claim_count = len(claims)
+    if len(passage_vectors) != claim_count or len(query_vectors) != claim_count:
+        raise ValueError(
+            f"Embedding count mismatch for {source}: "
+            f"claims={claim_count}, passage={len(passage_vectors)}, query={len(query_vectors)}"
+        )
+    return query_vectors, passage_vectors
+
+
+def _distance_matrix_metadata(
+    source_path: Path,
+    claims: list[dict[str, Any]],
+    *,
+    distance_method: str,
+) -> dict[str, Any]:
+    return {
+        "source": str(source_path.resolve()),
+        "claim_count": len(claims),
+        "claim_ids": _claim_ids(claims),
+        "distance_method": distance_method,
+    }
+
+
+def _distance_matrix_need_rebuild(
+    meta_path: Path,
+    matrix_path: Path,
+    expected: dict[str, Any],
+) -> bool:
+    if not meta_path.exists() or not matrix_path.exists():
+        return True
+    with meta_path.open(encoding="utf-8") as f:
+        stored = json.load(f).get("metadata", {})
+    return stored != expected
+
+
+def ensure_distance_matrix(
+    claims: list[dict[str, Any]],
+    texts: list[str],
+    source_path: Path | str,
+    query_vectors: list[np.ndarray] | None,
+    passage_vectors: list[np.ndarray] | None,
+    *,
+    matrix_path: Path | str = DEFAULT_DISTANCE_MATRIX_PATH,
+    meta_path: Path | str = DEFAULT_DISTANCE_META_PATH,
+) -> np.ndarray:
+    """Build or load the cached all-claims distance matrix."""
+
+    source = Path(source_path).resolve()
+    matrix_output = Path(matrix_path)
+    meta_output = Path(meta_path)
+    distance_method = "embeddings" if query_vectors is not None else "fuzzy"
+    expected_meta = _distance_matrix_metadata(
+        source, claims, distance_method=distance_method
+    )
+
+    if not _distance_matrix_need_rebuild(meta_output, matrix_output, expected_meta):
+        return np.load(matrix_output)
+
+    dist = _claim_distance_matrix(texts, query_vectors, passage_vectors)
+    matrix_output.parent.mkdir(parents=True, exist_ok=True)
+    np.save(matrix_output, dist)
+    write_json_file({"metadata": expected_meta}, meta_output)
+    return dist
+
+
 class _Embedder:
-    """Lazy wrapper that embeds claim texts, falling back to fuzzy matching."""
+    """Tracks whether embedding-based merge is available."""
 
     def __init__(self, use_embeddings: bool):
         self.use_embeddings = use_embeddings
-        self._embedder = None
         self._failed = False
 
-    def embed(self, texts: list[str]):
-        """Return (query_vectors, passage_vectors) for E5-style cross similarity."""
+    def load(
+        self,
+        claims: list[dict[str, Any]],
+        texts: list[str],
+        source_path: Path,
+    ) -> tuple[list[np.ndarray], list[np.ndarray]] | None:
         if not self.use_embeddings or self._failed:
             return None
         try:
-            if self._embedder is None:
-                from step_1_threads_split.embedding.embedding import Embedder
-                self._embedder = Embedder()
-            return (
-                self._embedder.encode_queries(texts),
-                self._embedder.encode_messages(texts),
-            )
+            return ensure_claim_embeddings(claims, texts, source_path)
         except Exception:  # noqa: BLE001 - fall back to fuzzy
             self._failed = True
             return None
@@ -154,21 +357,76 @@ def _medoid_index(members: list[int], dist: np.ndarray) -> int:
     return best
 
 
+def build_merged_claim(
+    member_claims: list[dict[str, Any]],
+    audit_by_id: dict[str, dict[str, Any]],
+    *,
+    claim_text: str | None = None,
+) -> dict[str, Any]:
+    """Aggregate source claims into one merged cluster entry."""
+
+    all_supporters: set[str] = set()
+    statement_supporters: set[str] = set()
+    reaction_supporters: set[str] = set()
+    message_reactions: list[dict[str, Any]] = []
+    for claim in member_claims:
+        audit = audit_by_id.get(claim["claim_id"], {})
+        all_supporters.update(_supporters_from_audit(audit))
+        statement_supporters.update(audit.get("supporting_senders") or [])
+        message_rx = audit.get("message_reactions")
+        if message_rx is not None:
+            reaction_supporters.update(
+                positive_reaction_senders_from_messages(message_rx)
+            )
+        else:
+            reaction_supporters.update(audit.get("reaction_senders") or [])
+        message_reactions.extend(audit.get("message_reactions") or [])
+
+    support_count = len(all_supporters) if all_supporters else sum(
+        c.get("support_count", 1) for c in member_claims
+    )
+    reaction_only_count = len(reaction_supporters - statement_supporters)
+
+    stances = Counter(c.get("stance", "neutral") for c in member_claims)
+    dates = sorted(c["date"] for c in member_claims if c.get("date"))
+    entities = sorted({e for c in member_claims for e in c.get("entities", [])})
+    pii_redactions: list[dict[str, str]] = []
+    for claim in member_claims:
+        pii_redactions.extend(claim.get("_redactions") or [])
+
+    if claim_text is None:
+        claim_text = member_claims[0]["claim_text"]
+
+    merged_claim: dict[str, Any] = {
+        "claim_text": claim_text,
+        "variants": [c["claim_text"] for c in member_claims],
+        "stance": stances.most_common(1)[0][0],
+        "stance_breakdown": dict(stances),
+        "support_count": support_count,
+        "statement_count": len(statement_supporters),
+        "reaction_endorser_count": len(reaction_supporters),
+        "reaction_only_count": reaction_only_count,
+        "reaction_summary": aggregate_reaction_summary(message_reactions),
+        "endorsement_count": len(member_claims),
+        "thread_count": len({c["thread_id"] for c in member_claims}),
+        "date_range": [dates[0], dates[-1]] if dates else [None, None],
+        "entities": entities,
+        "source_claim_ids": [c["claim_id"] for c in member_claims],
+    }
+    if pii_redactions:
+        merged_claim["pii_redactions"] = pii_redactions
+        merged_claim["pii_needs_review"] = True
+    return merged_claim
+
+
 def _merge_claims(
     claims: list[dict[str, Any]],
     audit_by_id: dict[str, dict[str, Any]],
-    embedder: _Embedder,
+    dist: np.ndarray,
     similarity_threshold: float,
 ) -> list[dict[str, Any]]:
     """DBSCAN-cluster near-duplicate claims and aggregate their support."""
 
-    texts = [_normalize(c["claim_text"]) for c in claims]
-    embeddings = embedder.embed(texts)
-    query_vectors = passage_vectors = None
-    if embeddings is not None:
-        query_vectors, passage_vectors = embeddings
-
-    dist = _claim_distance_matrix(texts, query_vectors, passage_vectors)
     labels = _dbscan(
         dist,
         eps=1.0 - similarity_threshold,
@@ -181,60 +439,15 @@ def _merge_claims(
     merged: list[dict[str, Any]] = []
     for members in clusters.values():
         member_claims = [claims[m] for m in members]
-        # Distinct supporters across the whole cluster (private audit -> count only).
-        all_supporters: set[str] = set()
-        statement_supporters: set[str] = set()
-        reaction_supporters: set[str] = set()
-        message_reactions: list[dict[str, Any]] = []
-        for claim in member_claims:
-            audit = audit_by_id.get(claim["claim_id"], {})
-            all_supporters.update(_supporters_from_audit(audit))
-            statement_supporters.update(audit.get("supporting_senders") or [])
-            message_rx = audit.get("message_reactions")
-            if message_rx is not None:
-                reaction_supporters.update(
-                    positive_reaction_senders_from_messages(message_rx)
-                )
-            else:
-                reaction_supporters.update(audit.get("reaction_senders") or [])
-            message_reactions.extend(audit.get("message_reactions") or [])
-
-        support_count = len(all_supporters) if all_supporters else sum(
-            c.get("support_count", 1) for c in member_claims
-        )
-        reaction_only_count = len(reaction_supporters - statement_supporters)
-        endorsement_count = len(member_claims)
-
-        stances = Counter(c.get("stance", "neutral") for c in member_claims)
-        dates = sorted(c["date"] for c in member_claims if c.get("date"))
-        entities = sorted({e for c in member_claims for e in c.get("entities", [])})
-        pii_redactions: list[dict[str, str]] = []
-        for claim in member_claims:
-            pii_redactions.extend(claim.get("_redactions") or [])
-        pii_needs_review = bool(pii_redactions)
         medoid_idx = _medoid_index(members, dist)
         representative = claims[medoid_idx]
-
-        merged_claim: dict[str, Any] = {
-            "claim_text": representative["claim_text"],
-            "variants": [c["claim_text"] for c in member_claims],
-            "stance": stances.most_common(1)[0][0],
-            "stance_breakdown": dict(stances),
-            "support_count": support_count,
-            "statement_count": len(statement_supporters),
-            "reaction_endorser_count": len(reaction_supporters),
-            "reaction_only_count": reaction_only_count,
-            "reaction_summary": aggregate_reaction_summary(message_reactions),
-            "endorsement_count": endorsement_count,
-            "thread_count": len({c["thread_id"] for c in member_claims}),
-            "date_range": [dates[0], dates[-1]] if dates else [None, None],
-            "entities": entities,
-            "source_claim_ids": [c["claim_id"] for c in member_claims],
-        }
-        if pii_needs_review:
-            merged_claim["pii_redactions"] = pii_redactions
-            merged_claim["pii_needs_review"] = True
-        merged.append(merged_claim)
+        merged.append(
+            build_merged_claim(
+                member_claims,
+                audit_by_id,
+                claim_text=representative["claim_text"],
+            )
+        )
 
     merged.sort(key=lambda m: m["support_count"], reverse=True)
     return merged
@@ -264,7 +477,7 @@ def run(
     audit_path: Path | str = DEFAULT_AUDIT_PATH,
     output_path: Path | str = DEFAULT_OUTPUT_PATH,
     use_embeddings: bool = True,
-    similarity_threshold: float = 0.86,
+    similarity_threshold: float = 0.87,
 ) -> dict[str, Any]:
     resolved_claims = Path(claims_path) if claims_path is not None else resolve_claims_path()
     with resolved_claims.open(encoding="utf-8") as f:
@@ -272,6 +485,21 @@ def run(
     claims = claims_payload["claims"]
     audit_by_id = _load_audit_records(audit_path)
     embedder = _Embedder(use_embeddings)
+    texts = _claim_texts(claims)
+    claim_index = {c["claim_id"]: i for i, c in enumerate(claims)}
+
+    embeddings = embedder.load(claims, texts, resolved_claims)
+    query_vectors = passage_vectors = None
+    if embeddings is not None:
+        query_vectors, passage_vectors = embeddings
+
+    dist = ensure_distance_matrix(
+        claims,
+        texts,
+        resolved_claims,
+        query_vectors,
+        passage_vectors,
+    )
 
     by_topic: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for claim in claims:
@@ -281,8 +509,11 @@ def run(
     topics_out: dict[str, Any] = {}
     for topic_id, topic_claims in by_topic.items():
         page = get_page(topic_id)
+        indices = [claim_index[c["claim_id"]] for c in topic_claims]
+        idx = np.array(indices, dtype=int)
+        topic_dist = dist[np.ix_(idx, idx)]
         merged = _merge_claims(
-            topic_claims, audit_by_id, embedder, similarity_threshold
+            topic_claims, audit_by_id, topic_dist, similarity_threshold
         )
         entity_stances = _entity_stances(merged)
         timeline = Counter(
