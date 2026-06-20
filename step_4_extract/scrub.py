@@ -89,6 +89,14 @@ class ScrubResult:
         return bool(self.redactions)
 
 
+def find_emails(text: str) -> list[str]:
+    return _EMAIL_RE.findall(text or "")
+
+
+def find_phones(text: str) -> list[str]:
+    return _PHONE_RE.findall(text or "")
+
+
 def scrub_text(text: str) -> ScrubResult:
     if not text:
         return ScrubResult(text="")

@@ -14,6 +14,10 @@ Output: `step_5_aggregate/reviewer/static/`.
 
 ## Run
 
+Step 5 first maps each claim's raw entity strings to canonical entities using
+`data/entities_edited.json` (or `data/entities.json`) from step 4b, so review
+entity merges with `python -m step_4b_entities.reviewer` before this step.
+
 Requires `data/claims_aggregated.json` from step 5 aggregate.
 
 ```bash

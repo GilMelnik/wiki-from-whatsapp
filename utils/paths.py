@@ -21,6 +21,10 @@ CLASSIFIED = Artifact(
     Path("data/threads_classified_edited.json"),
 )
 CLAIMS = Artifact(Path("data/claims.json"), Path("data/claims_edited.json"))
+ENTITIES = Artifact(
+    Path("data/entities.json"),
+    Path("data/entities_edited.json"),
+)
 AGGREGATED = Artifact(
     Path("data/claims_aggregated.json"),
     Path("data/claims_aggregated_edited.json"),
@@ -34,6 +38,8 @@ ORIGINAL_CLASSIFIED_PATH = CLASSIFIED.original
 EDITED_CLASSIFIED_PATH = CLASSIFIED.edited
 ORIGINAL_CLAIMS_PATH = CLAIMS.original
 EDITED_CLAIMS_PATH = CLAIMS.edited
+ORIGINAL_ENTITIES_PATH = ENTITIES.original
+EDITED_ENTITIES_PATH = ENTITIES.edited
 ORIGINAL_AGGREGATED_PATH = AGGREGATED.original
 EDITED_AGGREGATED_PATH = AGGREGATED.edited
 ORIGINAL_PLAN_PATH = PLAN.original
@@ -54,6 +60,10 @@ def resolve_classified_path() -> Path:
 
 def resolve_claims_path() -> Path:
     return resolve(CLAIMS)
+
+
+def resolve_entities_path() -> Path:
+    return resolve(ENTITIES)
 
 
 def resolve_aggregated_path() -> Path:
@@ -119,6 +129,16 @@ def init_claims_edited() -> Path | None:
 
 def init_plan_edited() -> Path | None:
     return init_edited(PLAN, required=False)
+
+
+def init_entities_edited() -> Path | None:
+    try:
+        return init_edited(ENTITIES, required=True)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"Cannot create {EDITED_ENTITIES_PATH}: "
+            f"{ORIGINAL_ENTITIES_PATH} not found. Run entities first."
+        ) from exc
 
 
 def init_aggregated_edited() -> Path | None:

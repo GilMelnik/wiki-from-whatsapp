@@ -1,8 +1,9 @@
-"""Step 5 aggregate: DBSCAN clustering, medoid selection, and caches."""
+"""Step 5 aggregate: agglomerative clustering, soft size cap, stance split, caches."""
 
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
@@ -10,7 +11,7 @@ import numpy as np
 from step_5_aggregate.run import (
     _claim_distance_matrix,
     _claim_texts,
-    _dbscan,
+    _cluster,
     _medoid_index,
     _merge_claims,
     ensure_claim_embeddings,
@@ -18,8 +19,9 @@ from step_5_aggregate.run import (
 )
 
 
-def test_dbscan_groups_density_connected_points():
-    # 0-1 and 1-2 are close; 0-2 is not — DBSCAN chains through 1.
+def test_cluster_bounds_diameter():
+    # 0-1 and 1-2 are close; 0-2 is far. Complete linkage refuses to chain
+    # them into one cluster (unlike DBSCAN's density connectivity).
     dist = np.array(
         [
             [0.0, 0.1, 0.5],
@@ -28,11 +30,11 @@ def test_dbscan_groups_density_connected_points():
         ],
         dtype=np.float32,
     )
-    labels = _dbscan(dist, eps=0.15, min_samples=2)
-    assert labels[0] == labels[1] == labels[2]
+    labels = _cluster(dist, distance_threshold=0.15, max_size=8, keep_together_distance=0.0)
+    assert labels[0] != labels[2]
 
 
-def test_dbscan_noise_becomes_singleton_cluster():
+def test_cluster_keeps_dissimilar_points_separate():
     dist = np.array(
         [
             [0.0, 0.9],
@@ -40,8 +42,29 @@ def test_dbscan_noise_becomes_singleton_cluster():
         ],
         dtype=np.float32,
     )
-    labels = _dbscan(dist, eps=0.15, min_samples=2)
+    labels = _cluster(dist, distance_threshold=0.15, max_size=8, keep_together_distance=0.0)
     assert labels[0] != labels[1]
+
+
+def test_cluster_caps_size():
+    # 10 points all within the merge threshold but spread out enough that the
+    # cluster diameter exceeds keep_together_distance, so the cap applies.
+    n = 10
+    dist = np.full((n, n), 0.1, dtype=np.float32)
+    np.fill_diagonal(dist, 0.0)
+    labels = _cluster(dist, distance_threshold=0.5, max_size=8, keep_together_distance=0.05)
+    sizes = Counter(labels)
+    assert all(size <= 8 for size in sizes.values())
+    assert sum(sizes.values()) == n
+
+
+def test_cluster_soft_cap_keeps_tight_cluster():
+    # 10 identical points (distance 0): below keep_together_distance, so the
+    # oversized cluster stays whole despite max_size=8.
+    n = 10
+    dist = np.zeros((n, n), dtype=np.float32)
+    labels = _cluster(dist, distance_threshold=0.5, max_size=8, keep_together_distance=0.05)
+    assert len(set(labels)) == 1
 
 
 def test_medoid_picks_central_point():
@@ -113,6 +136,40 @@ def test_merge_claims_uses_dbscan_and_medoid():
         "agency X is costly in Israel",
     }
     assert trio["claim_text"] == "agency X is expensive in Israel"
+
+
+def test_merge_keeps_stances_separate():
+    # Near-identical text, opposite stance: must not merge.
+    claims = [
+        {
+            "claim_id": "a",
+            "claim_text": "agency X is great",
+            "stance": "positive",
+            "date": "2024-01",
+            "entities": ["agency X"],
+            "thread_id": "t1",
+            "topic_tags": ["overview"],
+            "support_count": 1,
+        },
+        {
+            "claim_id": "b",
+            "claim_text": "agency X is great",
+            "stance": "negative",
+            "date": "2024-02",
+            "entities": ["agency X"],
+            "thread_id": "t2",
+            "topic_tags": ["overview"],
+            "support_count": 1,
+        },
+    ]
+    merged = _merge_claims(
+        claims,
+        {},
+        _claim_distance_matrix(_claim_texts(claims), None, None),
+        similarity_threshold=0.5,
+    )
+    assert len(merged) == 2
+    assert {m["stance"] for m in merged} == {"positive", "negative"}
 
 
 def test_claim_embeddings_cache_reuses_file(tmp_path: Path):

@@ -151,9 +151,13 @@ class AggregateStore:
         )
         with claims_path.open(encoding="utf-8") as f:
             claims_payload = json.load(f)
-        self._claims_by_id = {
-            c["claim_id"]: c for c in claims_payload.get("claims") or []
-        }
+        claims = claims_payload.get("claims") or []
+
+        from step_4b_entities.run import apply_entity_resolution, load_entity_resolver
+
+        apply_entity_resolution(claims, load_entity_resolver())
+
+        self._claims_by_id = {c["claim_id"]: c for c in claims}
         self._audit_by_id = _load_audit_records(self._audit_path)
         self._loaded = True
 

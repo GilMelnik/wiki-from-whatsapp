@@ -4,6 +4,7 @@ Runs steps in order:
 
     3. classify  -> data/threads_classified.json
     4. extract   -> data/claims.json + data/audit/ (private)
+    4b. entities -> data/entities.json
     5. aggregate -> data/claims_aggregated.json
     6. plan      -> data/wiki_plan.json
     7. generate  -> drafts/*.md
@@ -12,6 +13,7 @@ Runs steps in order:
 Human gates (web UIs, no CLI):
     step 2 — thread review: ``python -m step_2_thread_review``
     step 4 — PII review: ``uvicorn step_4_extract.reviewer.server:app``
+    step 4b — entity review: ``python -m step_4b_entities.reviewer``
     step 5 — aggregate review: ``python -m step_5_aggregate.reviewer``
     step 6 — plan review: ``uvicorn step_6_plan.reviewer.server:app``
 """
@@ -22,6 +24,7 @@ import os
 
 from step_3_classify.run import run as classify
 from step_4_extract.run import run as extract
+from step_4b_entities.run import run as resolve_entities
 from step_5_aggregate.run import run as aggregate
 from step_6_plan.run import run as plan
 from step_7_generate.run import run as generate
@@ -78,6 +81,18 @@ def run(
     print(
         "    → Review claims via "
         "`uvicorn step_4_extract.reviewer.server:app` before aggregate."
+    )
+
+    print("\n[4b] Resolving entities...")
+    en_meta = resolve_entities()
+    print(
+        f"    {en_meta['entity_count']} entities "
+        f"({en_meta['multi_member_count']} multi-member) "
+        f"from {en_meta['distinct_entity_count']} distinct strings"
+    )
+    print(
+        "    → Review entity merges via "
+        "`python -m step_4b_entities.reviewer` before aggregate."
     )
 
     print("\n[5] Aggregating claims...")
