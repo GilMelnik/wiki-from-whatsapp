@@ -17,6 +17,15 @@ REDACTION_MARK = "[הוסר]"
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 # A run that contains 9-15 digits once separators are stripped (phone-like).
 _PHONE_RE = re.compile(r"(?<![\w])\+?[\d][\d\s().\-]{7,}\d(?![\w])")
+# Short service hotlines: *5400, 5400*, (5400*).
+_SHORT_PHONE_RE = re.compile(
+    r"(?<![\w])"
+    r"(?:"
+    r"\*\d{3,5}\b"
+    r"|\(\d{3,5}\*\)"
+    r"|\b\d{3,5}\*(?![\w])"
+    r")"
+)
 
 # Forbidden, offensive framing of the surrogate as the child's "mother". The
 # surrogate is never the mother of the child; collapse the phrase to the correct
@@ -94,7 +103,15 @@ def find_emails(text: str) -> list[str]:
 
 
 def find_phones(text: str) -> list[str]:
-    return _PHONE_RE.findall(text or "")
+    seen: set[str] = set()
+    out: list[str] = []
+    for pattern in (_PHONE_RE, _SHORT_PHONE_RE):
+        for match in pattern.finditer(text or ""):
+            value = match.group(0)
+            if value not in seen:
+                seen.add(value)
+                out.append(value)
+    return out
 
 
 def scrub_text(text: str) -> ScrubResult:
@@ -116,6 +133,7 @@ def scrub_text(text: str) -> ScrubResult:
 
     _redact(_EMAIL_RE, "email")
     _redact(_PHONE_RE, "phone")
+    _redact(_SHORT_PHONE_RE, "phone")
 
     return ScrubResult(text=result, redactions=redactions)
 

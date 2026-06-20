@@ -10,6 +10,10 @@ const PALETTE = [
   { bg: "#fdf2f8", border: "#fbcfe8", dot: "#ec4899" }, // pink
 ];
 
+export function entityColor(index) {
+  return PALETTE[((index % PALETTE.length) + PALETTE.length) % PALETTE.length];
+}
+
 export function memberColor(index) {
   return PALETTE[((index % PALETTE.length) + PALETTE.length) % PALETTE.length];
 }

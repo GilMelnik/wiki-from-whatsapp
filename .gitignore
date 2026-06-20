@@ -239,3 +239,4 @@ thread_tagger/static/*
 web/thread-tagger/node_modules/
 web/pii-reviewer/node_modules/
 web/plan-reviewer/node_modules/
+web/entity-reviewer/node_modules/

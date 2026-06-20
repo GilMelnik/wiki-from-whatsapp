@@ -65,6 +65,17 @@ class MoveClaimsRequest(BaseModel):
     target_entity_id: str | None = None
 
 
+class CopyClaimsRequest(BaseModel):
+    name: str
+    claim_ids: list[str]
+    target_entity_id: str | None = None
+
+
+class ExcludeClaimsRequest(BaseModel):
+    name: str
+    claim_ids: list[str]
+
+
 class MergeRequest(BaseModel):
     target_entity_id: str
 
@@ -186,6 +197,27 @@ def move_claims(entity_id: str, body: MoveClaimsRequest) -> dict[str, Any]:
         body.name,
         body.claim_ids,
         target_entity_id=body.target_entity_id,
+    )
+
+
+@app.post("/api/entities/{entity_id}/copy-claims")
+def copy_claims(entity_id: str, body: CopyClaimsRequest) -> dict[str, Any]:
+    return _store_call(
+        EntityStore.copy_claims,
+        entity_id,
+        body.name,
+        body.claim_ids,
+        target_entity_id=body.target_entity_id,
+    )
+
+
+@app.post("/api/entities/{entity_id}/exclude-claims")
+def exclude_claims(entity_id: str, body: ExcludeClaimsRequest) -> dict[str, Any]:
+    return _store_call(
+        EntityStore.exclude_claims,
+        entity_id,
+        body.name,
+        body.claim_ids,
     )
 
 

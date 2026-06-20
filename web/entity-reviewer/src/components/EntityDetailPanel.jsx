@@ -1,4 +1,4 @@
-import { memberColor } from "../colors";
+import { memberColor, entityColor } from "../colors";
 
 const STANCE_LABELS = {
   positive: "חיובי",
@@ -7,20 +7,95 @@ const STANCE_LABELS = {
   factual: "עובדתי",
 };
 
-function renderHighlighted(text, spans) {
-  if (!spans || spans.length === 0) return text;
-  const sorted = [...spans].sort((a, b) => a[0] - b[0]);
+function EntityLink({ entity, saving, onOpenEntity, implicit = false }) {
+  const label = entity.canonical_name || entity.name;
+  const color = entity.color_index != null ? entityColor(entity.color_index) : null;
+  const className = implicit
+    ? "border border-dashed rounded px-1 hover:bg-slate-100 disabled:opacity-40"
+    : "underline hover:text-slate-700 disabled:opacity-40";
+
+  if (!entity.entity_id) {
+    return (
+      <span
+        className={`${className} text-slate-500`}
+        title={implicit ? "מסומן בטענה, לא מוזכר בטקסט" : undefined}
+      >
+        {label}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={saving}
+      onClick={() => onOpenEntity(entity.entity_id)}
+      className={className}
+      style={color ? { color: color.dot } : undefined}
+      title={implicit ? "מסומן בטענה, לא מוזכר בטקסט" : label}
+    >
+      {label}
+    </button>
+  );
+}
+
+function EntityChipList({ entities, label, saving, onOpenEntity, implicit = false }) {
+  if (!entities?.length) return null;
+  return (
+    <span className="text-slate-500">
+      {label}{" "}
+      {entities.map((entity, idx) => (
+        <span key={entity.entity_id || entity.name}>
+          {idx > 0 && " · "}
+          <EntityLink
+            entity={entity}
+            saving={saving}
+            onOpenEntity={onOpenEntity}
+            implicit={implicit}
+          />
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function renderClaimText(text, highlights, { selfColor, onEntityClick }) {
+  if (!highlights || highlights.length === 0) return text;
   const out = [];
   let cursor = 0;
-  sorted.forEach(([start, end], i) => {
-    if (start < cursor) return;
-    if (start > cursor) out.push(text.slice(cursor, start));
-    out.push(
-      <mark key={i} className="alias">
-        {text.slice(start, end)}
-      </mark>
-    );
-    cursor = end;
+  highlights.forEach((seg, i) => {
+    if (seg.start > cursor) out.push(text.slice(cursor, seg.start));
+    const slice = text.slice(seg.start, seg.end);
+    if (seg.kind === "self") {
+      out.push(
+        <mark
+          key={i}
+          className="rounded px-0.5 font-semibold"
+          style={{ background: selfColor.bg, color: selfColor.dot }}
+        >
+          {slice}
+        </mark>
+      );
+    } else {
+      const color = entityColor(seg.color_index ?? 0);
+      out.push(
+        <button
+          key={i}
+          type="button"
+          title={seg.canonical_name || seg.name}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onEntityClick?.(seg.entity_id);
+          }}
+          className="rounded px-0.5 font-semibold underline underline-offset-2 hover:opacity-80"
+          style={{ background: color.bg, color: color.dot }}
+        >
+          {slice}
+        </button>
+      );
+    }
+    cursor = seg.end;
   });
   if (cursor < text.length) out.push(text.slice(cursor));
   return out;
@@ -34,10 +109,13 @@ export default function EntityDetailPanel({
   onSetCanonical,
   onMoveMember,
   onMoveClaims,
+  onCopyClaims,
+  onExcludeClaim,
   onMerge,
   onSetStatus,
   onPrev,
   onNext,
+  onOpenEntity,
   saving,
 }) {
   if (!entity) {
@@ -187,6 +265,14 @@ export default function EntityDetailPanel({
                   <button
                     type="button"
                     disabled={saving || selectedIds.length === 0}
+                    onClick={() => onCopyClaims(member.name, selectedIds)}
+                    className="text-[11px] px-2 py-1 rounded border border-slate-300 bg-white/70 hover:bg-white disabled:opacity-40"
+                  >
+                    העתק טענות ({selectedIds.length})
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving || selectedIds.length === 0}
                     onClick={() => onMoveClaims(member.name, selectedIds)}
                     className="text-[11px] px-2 py-1 rounded border border-slate-300 bg-white/70 hover:bg-white disabled:opacity-40"
                   >
@@ -200,9 +286,9 @@ export default function EntityDetailPanel({
                   const key = `${member.name}\u0001${claim.claim_id}`;
                   const checked = selectedClaims.has(key);
                   return (
-                    <label
+                    <div
                       key={claim.claim_id}
-                      className="flex items-start gap-2 bg-white/70 rounded p-2 cursor-pointer"
+                      className="flex items-start gap-2 bg-white/70 rounded p-2"
                     >
                       <input
                         type="checkbox"
@@ -210,18 +296,47 @@ export default function EntityDetailPanel({
                         onChange={() => onToggleClaim(member.name, claim.claim_id)}
                         className="mt-1 shrink-0"
                       />
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="text-sm leading-relaxed">
-                          {renderHighlighted(claim.claim_text, claim.spans)}
+                          {renderClaimText(claim.claim_text, claim.highlights, {
+                            selfColor: color,
+                            onEntityClick: onOpenEntity,
+                          })}
                         </p>
-                        <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-slate-400">
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
                           <code>{claim.claim_id}</code>
                           {claim.stance && (
                             <span>{STANCE_LABELS[claim.stance] || claim.stance}</span>
                           )}
+                          {(claim.other_entities || []).length > 0 && (
+                            <EntityChipList
+                              entities={claim.other_entities}
+                              label="ישויות נוספות:"
+                              saving={saving}
+                              onOpenEntity={onOpenEntity}
+                            />
+                          )}
+                          {(claim.related_entities || []).length > 0 && (
+                            <EntityChipList
+                              entities={claim.related_entities}
+                              label="קשור ללא אזכור:"
+                              saving={saving}
+                              onOpenEntity={onOpenEntity}
+                              implicit
+                            />
+                          )}
                         </div>
                       </div>
-                    </label>
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => onExcludeClaim(member.name, claim.claim_id)}
+                        className="shrink-0 text-[10px] px-2 py-1 rounded border border-rose-200 text-rose-700 hover:bg-rose-50 disabled:opacity-40"
+                        title="הטענה לא קשורה לישות זו"
+                      >
+                        לא קשור
+                      </button>
+                    </div>
                   );
                 })}
                 {member.sample_claims.length === 0 && (

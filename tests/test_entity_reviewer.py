@@ -117,3 +117,110 @@ def test_rename_set_contacts_delete(store_files: tuple[Path, Path]) -> None:
     assert deleted["deleted_id"] == "e0001"
     assert deleted["next_id"] == "e0000"
     assert store.stats()["entity_count"] == 1
+
+
+def test_copy_claims_keeps_source(store_files: tuple[Path, Path]) -> None:
+    entities_path, claims_path = store_files
+    claims = json.loads(claims_path.read_text(encoding="utf-8"))
+    claims["claims"].append(
+        {
+            "claim_id": "t2-c0",
+            "thread_id": "t2",
+            "claim_text": "David Shield contact",
+            "topic_tags": ["overview"],
+            "entities": ["David Shield"],
+        }
+    )
+    claims_path.write_text(json.dumps(claims), encoding="utf-8")
+
+    store = EntityStore(entities_path=entities_path, claims_path=claims_path)
+    store.load()
+    store.copy_claims("e0000", "David Shield", ["t1-c0"], target_entity_id="e0001")
+
+    source = store.get_entity("e0000")["entity"]
+    target = store.get_entity("e0001")["entity"]
+    source_ids = {
+        c["claim_id"]
+        for m in source["members"]
+        for c in m["sample_claims"]
+    }
+    target_ids = {
+        c["claim_id"]
+        for m in target["members"]
+        for c in m["sample_claims"]
+    }
+    assert "t1-c0" in source_ids
+    assert "t1-c0" in target_ids
+
+
+def test_exclude_claims(store_files: tuple[Path, Path]) -> None:
+    entities_path, claims_path = store_files
+    claims = json.loads(claims_path.read_text(encoding="utf-8"))
+    claims["claims"].append(
+        {
+            "claim_id": "t2-c0",
+            "thread_id": "t2",
+            "claim_text": "David Shield and ORM",
+            "topic_tags": ["overview"],
+            "entities": ["David Shield", "ORM"],
+        }
+    )
+    claims_path.write_text(json.dumps(claims), encoding="utf-8")
+
+    store = EntityStore(entities_path=entities_path, claims_path=claims_path)
+    store.load()
+    store.exclude_claims("e0000", "David Shield", ["t2-c0"])
+
+    detail = store.get_entity("e0000")["entity"]
+    member = next(m for m in detail["members"] if m["name"] == "David Shield")
+    claim_ids = {c["claim_id"] for c in member["sample_claims"]}
+    assert "t2-c0" not in claim_ids
+    assert "t2-c0" in (member.get("excluded_claim_ids") or [])
+
+
+def test_claim_highlights_other_entities(store_files: tuple[Path, Path]) -> None:
+    entities_path, claims_path = store_files
+    claims = json.loads(claims_path.read_text(encoding="utf-8"))
+    claims["claims"] = [
+        {
+            "claim_id": "t1-c0",
+            "thread_id": "t1",
+            "claim_text": "David Shield works with ORM",
+            "topic_tags": ["overview"],
+            "entities": ["David Shield", "ORM"],
+        }
+    ]
+    claims_path.write_text(json.dumps(claims), encoding="utf-8")
+
+    store = EntityStore(entities_path=entities_path, claims_path=claims_path)
+    store.load()
+    detail = store.get_entity("e0000")["entity"]
+    sample = detail["members"][0]["sample_claims"][0]
+    kinds = {h["kind"] for h in sample["highlights"]}
+    assert "self" in kinds
+    assert "other" in kinds
+    other = next(h for h in sample["highlights"] if h["kind"] == "other")
+    assert other["entity_id"] == "e0001"
+
+
+def test_related_entities_tagged_not_in_text(store_files: tuple[Path, Path]) -> None:
+    entities_path, claims_path = store_files
+    claims = json.loads(claims_path.read_text(encoding="utf-8"))
+    claims["claims"] = [
+        {
+            "claim_id": "t1-c0",
+            "thread_id": "t1",
+            "claim_text": 'מומלץ לשלב בין ביטוח "גרייט מורנינג" לבין ביטוח "דיוויד שילד".',
+            "topic_tags": ["overview"],
+            "entities": ["Great Morning", "David Shield"],
+        }
+    ]
+    claims_path.write_text(json.dumps(claims), encoding="utf-8")
+
+    store = EntityStore(entities_path=entities_path, claims_path=claims_path)
+    store.load()
+    detail = store.get_entity("e0000")["entity"]
+    sample = detail["members"][0]["sample_claims"][0]
+    related = sample.get("related_entities") or []
+    assert any(r["name"] == "Great Morning" for r in related)
+    assert all(r.get("tagged_only") for r in related)

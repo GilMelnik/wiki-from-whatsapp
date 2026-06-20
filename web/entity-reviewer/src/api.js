@@ -72,6 +72,24 @@ export function moveClaims(entityId, name, claimIds, targetEntityId) {
   });
 }
 
+export function copyClaims(entityId, name, claimIds, targetEntityId) {
+  return request(`/api/entities/${encodeURIComponent(entityId)}/copy-claims`, {
+    method: "POST",
+    body: JSON.stringify({
+      name,
+      claim_ids: claimIds,
+      target_entity_id: targetEntityId ?? null,
+    }),
+  });
+}
+
+export function excludeClaims(entityId, name, claimIds) {
+  return request(`/api/entities/${encodeURIComponent(entityId)}/exclude-claims`, {
+    method: "POST",
+    body: JSON.stringify({ name, claim_ids: claimIds }),
+  });
+}
+
 export function mergeEntity(entityId, targetEntityId) {
   return request(`/api/entities/${encodeURIComponent(entityId)}/merge`, {
     method: "POST",

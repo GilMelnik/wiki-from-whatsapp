@@ -121,6 +121,38 @@ def test_contacts_from_claim_text_without_redactions():
     assert "davidshield.com" in sites
 
 
+def test_collect_entities_includes_text_mentions():
+    claims = [
+        {
+            "claim_id": "t1-c0",
+            "thread_id": "t1",
+            "claim_text": "לטיפת חלב יש תור",
+            "topic_tags": ["bringing-baby-home"],
+            "entities": ["טיפת חלב"],
+        },
+        {
+            "claim_id": "t2-c0",
+            "thread_id": "t2",
+            "claim_text": "בטיפת חלב מקבלים חיסון",
+            "topic_tags": ["israel"],
+            "entities": ["כללית"],
+        },
+    ]
+    entities = collect_entities(claims)
+    tipat = next(e for e in entities if e["name"] == "טיפת חלב")
+    assert tipat["count"] == 2
+    assert set(tipat["claim_ids"]) == {"t1-c0", "t2-c0"}
+    assert "israel" in tipat["topics"]
+
+
+def test_short_hotline_phones_detected():
+    from step_4_extract.scrub import find_phones
+
+    text = 'מוקד משרד הבריאות (5400*), גם *5400'
+    assert "(5400*)" in find_phones(text)
+    assert "*5400" in find_phones(text)
+
+
 def test_resolver_maps_name_and_claim_overrides():
     registry_entities = [
         {

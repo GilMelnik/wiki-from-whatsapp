@@ -83,6 +83,15 @@ def normalize_name(name: str) -> str:
     return _WS_RE.sub(" ", cleaned).strip()
 
 
+def claim_mentions_name(claim: dict[str, Any], name: str) -> bool:
+    """True when ``name`` appears in ``claim_text`` (case-insensitive)."""
+
+    if not name.strip():
+        return False
+    text = claim.get("claim_text") or ""
+    return name.casefold() in text.casefold()
+
+
 def _extract_websites(text: str) -> list[str]:
     return [m.group(0).rstrip(".") for m in _URL_RE.finditer(text or "")]
 
@@ -139,36 +148,52 @@ def collect_entities(
 ) -> list[dict[str, Any]]:
     """Distinct entity strings with counts, sample claims, topics, contacts."""
 
-    counts: Counter[str] = Counter()
+    tag_counts: Counter[str] = Counter()
+    claim_ids: dict[str, set[str]] = defaultdict(set)
     sample_ids: dict[str, list[str]] = defaultdict(list)
     topics: dict[str, set[str]] = defaultdict(set)
     emails: dict[str, set[str]] = defaultdict(set)
     phones: dict[str, set[str]] = defaultdict(set)
     websites: dict[str, set[str]] = defaultdict(set)
 
+    def _absorb_claim(name: str, claim: dict[str, Any], original: dict[str, Any] | None) -> None:
+        claim_id = claim.get("claim_id")
+        if not claim_id or claim_id in claim_ids[name]:
+            return
+        claim_ids[name].add(claim_id)
+        if len(sample_ids[name]) < SAMPLE_CLAIMS_PER_MEMBER:
+            sample_ids[name].append(claim_id)
+        topics[name].update(claim.get("topic_tags") or [])
+        claim_emails, claim_phones, claim_sites = _claim_contacts(claim, original)
+        emails[name].update(claim_emails)
+        phones[name].update(claim_phones)
+        websites[name].update(claim_sites)
+
     for claim in claims:
         claim_id = claim.get("claim_id")
-        claim_topics = claim.get("topic_tags") or []
         original = (original_by_id or {}).get(claim_id) if claim_id else None
-        claim_emails, claim_phones, claim_sites = _claim_contacts(claim, original)
         for name in claim.get("entities") or []:
             if not isinstance(name, str) or not name.strip():
                 continue
-            counts[name] += 1
-            if len(sample_ids[name]) < SAMPLE_CLAIMS_PER_MEMBER and claim_id:
-                sample_ids[name].append(claim_id)
-            topics[name].update(claim_topics)
-            emails[name].update(claim_emails)
-            phones[name].update(claim_phones)
-            websites[name].update(claim_sites)
+            tag_counts[name] += 1
+            _absorb_claim(name, claim, original)
+
+    for name in tag_counts:
+        for claim in claims:
+            claim_id = claim.get("claim_id")
+            original = (original_by_id or {}).get(claim_id) if claim_id else None
+            if claim_mentions_name(claim, name):
+                _absorb_claim(name, claim, original)
 
     entities: list[dict[str, Any]] = []
-    for name in counts:
+    for name in tag_counts:
+        ids = sorted(claim_ids[name])
         entities.append(
             {
                 "name": name,
                 "normalized": normalize_name(name),
-                "count": counts[name],
+                "count": len(ids),
+                "claim_ids": ids,
                 "sample_claim_ids": sample_ids[name],
                 "topics": sorted(topics[name]),
                 "contacts": {
@@ -344,7 +369,7 @@ def build_entity(entity_id: str, member_entities: list[dict[str, Any]]) -> dict[
         "members": [
             {
                 "name": m["name"],
-                "claim_ids": None,
+                "claim_ids": m.get("claim_ids"),
                 "count": m["count"],
                 "sample_claim_ids": m["sample_claim_ids"],
                 "topics": m["topics"],

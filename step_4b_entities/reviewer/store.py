@@ -18,7 +18,7 @@ from utils.paths import (
     init_entities_edited,
     resolve_claims_path,
 )
-from step_4b_entities.run import _claim_contacts, load_claims_for_entities
+from step_4b_entities.run import _claim_contacts, claim_mentions_name, load_claims_for_entities
 
 SortKind = Literal["count", "size", "score"]
 SortOrder = Literal["asc", "desc"]
@@ -83,6 +83,31 @@ def _find_spans(text: str, needle: str) -> list[list[int]]:
     return spans
 
 
+def _merge_highlights(
+    segments: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Drop overlaps; ``self`` beats ``other``, then longer span wins."""
+
+    priority = {"self": 0, "other": 1}
+    ranked = sorted(
+        segments,
+        key=lambda s: (
+            s["start"],
+            priority.get(s["kind"], 2),
+            -(s["end"] - s["start"]),
+        ),
+    )
+    out: list[dict[str, Any]] = []
+    cursor = -1
+    for seg in ranked:
+        if seg["start"] < cursor:
+            continue
+        out.append(seg)
+        cursor = seg["end"]
+    out.sort(key=lambda s: s["start"])
+    return out
+
+
 class EntityStore:
     def __init__(
         self,
@@ -98,6 +123,8 @@ class EntityStore:
         self._claims_by_id: dict[str, dict[str, Any]] = {}
         self._original_by_id: dict[str, dict[str, Any]] = {}
         self._claim_ids_by_name: dict[str, list[str]] = {}
+        self._alias_to_entity: dict[str, str] = {}
+        self._entity_color_index: dict[str, int] = {}
         self._entities_source = ORIGINAL_ENTITIES_PATH
         self._backup_done = False
         self._loaded = False
@@ -130,7 +157,20 @@ class EntityStore:
         for claim in claims:
             for name in claim.get("entities") or []:
                 self._claim_ids_by_name.setdefault(name, []).append(claim["claim_id"])
+        self._rebuild_alias_index()
         self._loaded = True
+
+    def _rebuild_alias_index(self) -> None:
+        self._alias_to_entity = {}
+        self._entity_color_index = {}
+        for idx, entity in enumerate(self.entities):
+            entity_id = entity["entity_id"]
+            self._entity_color_index[entity_id] = idx
+            for alias in entity.get("aliases") or []:
+                self._alias_to_entity.setdefault(alias, entity_id)
+            canonical = entity.get("canonical_name")
+            if canonical:
+                self._alias_to_entity.setdefault(canonical, entity_id)
 
     @property
     def loaded(self) -> bool:
@@ -157,12 +197,27 @@ class EntityStore:
 
     # --- member helpers -------------------------------------------------
 
-    def _claim_ids_for_member(self, member: dict[str, Any]) -> list[str]:
+    def _raw_claim_ids_for_member(self, member: dict[str, Any]) -> set[str]:
         if member.get("claim_ids"):
-            return list(member["claim_ids"])
-        return list(self._claim_ids_by_name.get(member["name"], []))
+            return set(member["claim_ids"])
+        name = member["name"]
+        ids: set[str] = set(self._claim_ids_by_name.get(name, []))
+        for claim_id, claim in self._claims_by_id.items():
+            if claim_mentions_name(claim, name):
+                ids.add(claim_id)
+        return ids
 
-    def _member_from_claims(self, name: str, claim_ids: list[str]) -> dict[str, Any]:
+    def _claim_ids_for_member(self, member: dict[str, Any]) -> list[str]:
+        excluded = set(member.get("excluded_claim_ids") or [])
+        return sorted(self._raw_claim_ids_for_member(member) - excluded)
+
+    def _member_from_claims(
+        self,
+        name: str,
+        claim_ids: list[str],
+        *,
+        excluded_claim_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
         emails: set[str] = set()
         phones: set[str] = set()
         websites: set[str] = set()
@@ -186,7 +241,118 @@ class EntityStore:
                 "phone": sorted(phones),
                 "website": sorted(websites),
             },
+            "excluded_claim_ids": list(excluded_claim_ids or []),
         }
+
+    def _other_entities_in_claim(
+        self,
+        claim: dict[str, Any],
+        *,
+        current_entity_id: str,
+        current_names: set[str],
+    ) -> list[dict[str, Any]]:
+        text = claim.get("claim_text") or ""
+        found: dict[str, dict[str, Any]] = {}
+        names = sorted(self._alias_to_entity.keys(), key=len, reverse=True)
+        tagged = set(claim.get("entities") or [])
+        for name in names:
+            if name in current_names:
+                continue
+            entity_id = self._alias_to_entity[name]
+            if entity_id == current_entity_id:
+                continue
+            if name not in tagged and not claim_mentions_name(claim, name):
+                continue
+            spans = _find_spans(text, name)
+            if not spans:
+                continue
+            existing = found.get(entity_id)
+            if existing is None or len(name) > len(existing["name"]):
+                entity = next(
+                    e for e in self.entities if e["entity_id"] == entity_id
+                )
+                found[entity_id] = {
+                    "entity_id": entity_id,
+                    "name": name,
+                    "canonical_name": entity.get("canonical_name") or name,
+                    "color_index": self._entity_color_index.get(entity_id, 0),
+                    "spans": spans,
+                }
+        return list(found.values())
+
+    def _related_entities_in_claim(
+        self,
+        claim: dict[str, Any],
+        *,
+        current_entity_id: str,
+        current_names: set[str],
+        mentioned_entity_ids: set[str],
+    ) -> list[dict[str, Any]]:
+        """Entity tags on the claim whose name does not appear in ``claim_text``."""
+
+        out: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for name in claim.get("entities") or []:
+            if not isinstance(name, str) or not name.strip():
+                continue
+            if name in current_names:
+                continue
+            if claim_mentions_name(claim, name):
+                continue
+            entity_id = self._alias_to_entity.get(name)
+            if entity_id == current_entity_id:
+                continue
+            if entity_id and entity_id in mentioned_entity_ids:
+                continue
+            key = entity_id or name
+            if key in seen:
+                continue
+            seen.add(key)
+            entry: dict[str, Any] = {"name": name, "tagged_only": True}
+            if entity_id:
+                entity = next(
+                    e for e in self.entities if e["entity_id"] == entity_id
+                )
+                entry["entity_id"] = entity_id
+                entry["canonical_name"] = entity.get("canonical_name") or name
+                entry["color_index"] = self._entity_color_index.get(entity_id, 0)
+            else:
+                entry["entity_id"] = None
+                entry["canonical_name"] = name
+                entry["color_index"] = None
+            out.append(entry)
+        return out
+
+    def _claim_highlights(
+        self,
+        claim: dict[str, Any],
+        member_name: str,
+        *,
+        current_entity_id: str,
+        current_names: set[str],
+    ) -> list[dict[str, Any]]:
+        text = claim.get("claim_text") or ""
+        segments: list[dict[str, Any]] = []
+        for start, end in _find_spans(text, member_name):
+            segments.append({"start": start, "end": end, "kind": "self"})
+        for other in self._other_entities_in_claim(
+            claim,
+            current_entity_id=current_entity_id,
+            current_names=current_names,
+        ):
+            for start, end in other["spans"]:
+                segments.append(
+                    {
+                        "start": start,
+                        "end": end,
+                        "kind": "other",
+                        "entity_id": other["entity_id"],
+                        "name": other["name"],
+                        "canonical_name": other["canonical_name"],
+                        "color_index": other["color_index"],
+                    }
+                )
+        return _merge_highlights(segments)
 
     # --- read views -----------------------------------------------------
 
@@ -252,32 +418,56 @@ class EntityStore:
         return items[offset : offset + limit], len(items)
 
     def _member_view(
-        self, member: dict[str, Any], member_index: int
+        self,
+        member: dict[str, Any],
+        member_index: int,
+        *,
+        entity_id: str,
+        entity_names: set[str],
     ) -> dict[str, Any]:
         name = member["name"]
-        sample_ids = member.get("sample_claim_ids") or self._claim_ids_for_member(
-            member
-        )[:12]
+        claim_ids = self._claim_ids_for_member(member)
+        sample_ids = claim_ids[:12]
         samples: list[dict[str, Any]] = []
         for claim_id in sample_ids:
             claim = self._claims_by_id.get(claim_id)
             if claim is None:
                 continue
             text = claim.get("claim_text", "")
+            other_entities = self._other_entities_in_claim(
+                claim,
+                current_entity_id=entity_id,
+                current_names=entity_names,
+            )
             samples.append(
                 {
                     "claim_id": claim_id,
                     "claim_text": text,
                     "stance": claim.get("stance"),
                     "thread_id": claim.get("thread_id"),
-                    "spans": _find_spans(text, name),
+                    "highlights": self._claim_highlights(
+                        claim,
+                        name,
+                        current_entity_id=entity_id,
+                        current_names=entity_names,
+                    ),
+                    "other_entities": other_entities,
+                    "related_entities": self._related_entities_in_claim(
+                        claim,
+                        current_entity_id=entity_id,
+                        current_names=entity_names,
+                        mentioned_entity_ids={
+                            o["entity_id"] for o in other_entities
+                        },
+                    ),
                 }
             )
         return {
             "name": name,
             "member_index": member_index,
-            "count": member.get("count"),
+            "count": len(claim_ids),
             "claim_ids": member.get("claim_ids"),
+            "excluded_claim_ids": member.get("excluded_claim_ids") or [],
             "topics": member.get("topics") or [],
             "contacts": member.get("contacts") or {},
             "sample_claims": samples,
@@ -295,8 +485,14 @@ class EntityStore:
     ) -> dict[str, Any]:
         entity, _ = self._find_entity(entity_id)
         detail = self._enrich(entity)
+        entity_names = set(entity.get("aliases") or [])
+        canonical = entity.get("canonical_name")
+        if canonical:
+            entity_names.add(canonical)
         detail["members"] = [
-            self._member_view(m, idx)
+            self._member_view(
+                m, idx, entity_id=entity_id, entity_names=entity_names
+            )
             for idx, m in enumerate(entity.get("members") or [])
         ]
         items = self._sorted_entities(
@@ -397,6 +593,34 @@ class EntityStore:
         self.entities.append(new_entity)
         return new_entity
 
+    def _add_claims_to_member(
+        self,
+        target: dict[str, Any],
+        name: str,
+        claim_ids: list[str],
+    ) -> None:
+        existing = next(
+            (m for m in target.get("members") or [] if m["name"] == name), None
+        )
+        if existing is not None:
+            merged = list(
+                dict.fromkeys(self._claim_ids_for_member(existing) + claim_ids)
+            )
+            target["members"] = [
+                self._member_from_claims(
+                    name,
+                    merged,
+                    excluded_claim_ids=existing.get("excluded_claim_ids"),
+                )
+                if m is existing
+                else m
+                for m in target["members"]
+            ]
+        else:
+            target.setdefault("members", []).append(
+                self._member_from_claims(name, claim_ids)
+            )
+
     def move_member(
         self,
         entity_id: str,
@@ -486,6 +710,67 @@ class EntityStore:
         self.save()
         return self.get_entity(target["entity_id"])["entity"]
 
+    def copy_claims(
+        self,
+        entity_id: str,
+        name: str,
+        claim_ids: list[str],
+        *,
+        target_entity_id: str | None = None,
+    ) -> dict[str, Any]:
+        if not claim_ids:
+            raise ValueError("claim_ids must not be empty")
+        source, _ = self._find_entity(entity_id)
+        members = source.get("members") or []
+        member = next((m for m in members if m["name"] == name), None)
+        if member is None:
+            raise ValueError(f"name not a member of this entity: {name}")
+        owned = set(self._claim_ids_for_member(member))
+        copying = [c for c in claim_ids if c in owned]
+        if not copying:
+            raise ValueError("none of the claim_ids belong to this member")
+        if target_entity_id == entity_id:
+            raise ValueError("source and target entity are the same")
+
+        target = self._target_entity(target_entity_id)
+        self._add_claims_to_member(target, name, copying)
+        _recompute_entity(target)
+        self.save()
+        return self.get_entity(target["entity_id"])["entity"]
+
+    def exclude_claims(
+        self,
+        entity_id: str,
+        name: str,
+        claim_ids: list[str],
+    ) -> dict[str, Any]:
+        if not claim_ids:
+            raise ValueError("claim_ids must not be empty")
+        entity, _ = self._find_entity(entity_id)
+        members = entity.get("members") or []
+        member = next((m for m in members if m["name"] == name), None)
+        if member is None:
+            raise ValueError(f"name not a member of this entity: {name}")
+        active = set(self._claim_ids_for_member(member))
+        excluding = [c for c in claim_ids if c in active]
+        if not excluding:
+            raise ValueError("none of the claim_ids belong to this member")
+        excluded = list(
+            dict.fromkeys((member.get("excluded_claim_ids") or []) + excluding)
+        )
+        member["excluded_claim_ids"] = excluded
+        active = self._claim_ids_for_member(member)
+        preserved_claim_ids = member.get("claim_ids")
+        refreshed = self._member_from_claims(
+            name, active, excluded_claim_ids=excluded
+        )
+        member.update(refreshed)
+        if preserved_claim_ids is None:
+            member["claim_ids"] = None
+        _recompute_entity(entity)
+        self.save()
+        return self.get_entity(entity_id)["entity"]
+
     def merge(self, entity_id: str, target_entity_id: str) -> dict[str, Any]:
         if entity_id == target_entity_id:
             raise ValueError("source and target entity are the same")
@@ -515,6 +800,7 @@ class EntityStore:
     def save(self) -> None:
         assert self._data is not None
         self._ensure_backup()
+        self._rebuild_alias_index()
         meta = self._data.setdefault("metadata", {})
         meta["edited_by"] = "entity_reviewer"
         meta["edited_at"] = datetime.now().isoformat(timespec="seconds")

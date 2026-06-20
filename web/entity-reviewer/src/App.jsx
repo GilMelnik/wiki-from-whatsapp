@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  copyClaims,
   deleteEntity,
+  excludeClaims,
   fetchEntities,
   fetchEntity,
   fetchMeta,
@@ -188,6 +190,12 @@ export default function App() {
         "הטענות הועברו",
         selectedId
       );
+    } else if (dialog.kind === "copy") {
+      await guard(
+        () => copyClaims(selectedId, dialog.name, dialog.claimIds, targetId),
+        "הטענות הועתקו",
+        targetId ?? selectedId
+      );
     } else if (dialog.kind === "merge") {
       await guard(() => mergeEntity(selectedId, targetId), "הישות מוזגה", targetId);
     }
@@ -267,6 +275,17 @@ export default function App() {
             onMoveClaims={(name, claimIds) =>
               setDialog({ kind: "claims", name, claimIds })
             }
+            onCopyClaims={(name, claimIds) =>
+              setDialog({ kind: "copy", name, claimIds })
+            }
+            onExcludeClaim={(name, claimId) =>
+              guard(
+                () => excludeClaims(selectedId, name, [claimId]),
+                "הטענה הוסרה מהישות",
+                selectedId
+              )
+            }
+            onOpenEntity={setSelectedId}
             onMerge={() => setDialog({ kind: "merge" })}
             onSetStatus={(value) =>
               guard(() => setStatus(selectedId, value), "הסטטוס עודכן", selectedId)
@@ -320,14 +339,18 @@ export default function App() {
         title={
           dialog?.kind === "merge"
             ? "מזג ישות זו לתוך ישות אחרת"
-            : dialog?.kind === "claims"
-              ? `הזז ${dialog?.claimIds?.length || 0} טענות של "${dialog?.name}"`
-              : `הזז את השם "${dialog?.name}"`
+            : dialog?.kind === "copy"
+              ? `העתק ${dialog?.claimIds?.length || 0} טענות של "${dialog?.name}"`
+              : dialog?.kind === "claims"
+                ? `הזז ${dialog?.claimIds?.length || 0} טענות של "${dialog?.name}"`
+                : `הזז את השם "${dialog?.name}"`
         }
         subtitle={
           dialog?.kind === "merge"
             ? "כל השמות של הישות הנוכחית יעברו לישות היעד"
-            : "בחר ישות יעד קיימת או צור חדשה"
+            : dialog?.kind === "copy"
+              ? "הטענות יישארו גם בישות הנוכחית"
+              : "בחר ישות יעד קיימת או צור חדשה"
         }
         allowNew={dialog?.kind !== "merge"}
         currentEntityId={selectedId}
