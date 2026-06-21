@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
+from step_4b_entities.collect import claim_mentions_name, _claim_contacts
 from utils.json_io import write_json_file
 from utils.paths import (
     BACKUPS_DIR,
@@ -18,7 +19,7 @@ from utils.paths import (
     init_entities_edited,
     resolve_claims_path,
 )
-from step_4b_entities.run import _claim_contacts, claim_mentions_name, load_claims_for_entities
+from step_4b_entities.run import load_claims_for_entities
 
 SortKind = Literal["count", "size", "score"]
 SortOrder = Literal["asc", "desc"]

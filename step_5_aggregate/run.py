@@ -22,6 +22,7 @@ from typing import Any
 
 import numpy as np
 
+from step_5_aggregate.resolver import load_entity_resolver, apply_entity_resolution
 from utils.json_io import write_json_file
 from utils.paths import resolve_claims_path
 from utils.support import aggregate_reaction_summary, positive_reaction_senders_from_messages
@@ -575,8 +576,6 @@ def run(
     with resolved_claims.open(encoding="utf-8") as f:
         claims_payload = json.load(f)
     claims = claims_payload["claims"]
-
-    from step_4b_entities.run import apply_entity_resolution, load_entity_resolver
 
     entity_resolver = load_entity_resolver()
     apply_entity_resolution(claims, entity_resolver)

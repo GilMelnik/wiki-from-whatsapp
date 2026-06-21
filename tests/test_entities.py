@@ -5,13 +5,17 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from step_4b_entities.cluster import cluster_entities, ensure_entity_distance_matrix, _entity_distance_matrix_metadata, \
-    _signal_signature, _entity_distance_matrix_need_rebuild
+from step_4b_entities.cluster import (
+    cluster_entities,
+    ensure_entity_distance_matrix,
+    _entity_distance_matrix_metadata,
+    _entity_distance_matrix_need_rebuild,
+)
 from step_4b_entities.collect import collect_entities, _claim_contacts
 from step_4b_entities.constants import DISTANCE_METHOD
-from step_4b_entities.normalize import normalize_name
-from step_4b_entities.pair_index import transliteration_skeleton
-from step_4b_entities.resolver import EntityResolver, load_entity_resolver, apply_entity_resolution
+from step_4b_entities.normalize import normalize_name, transliteration_skeleton
+from step_4b_entities.pair_index import EntityPairIndex
+from step_5_aggregate.resolver import EntityResolver, load_entity_resolver, apply_entity_resolution
 
 
 def _claim(claim_id: str, entities: list[str], topics: list[str] | None = None) -> dict:
@@ -418,7 +422,7 @@ def test_entity_distance_matrix_cache(tmp_path: Path):
     expected = _entity_distance_matrix_metadata(
         source,
         [e["name"] for e in entities],
-        signature=_signal_signature(entities, [None] * len(entities)),
+        signature=EntityPairIndex(entities, [None] * len(entities)).signal_signature(),
     )
     assert not _entity_distance_matrix_need_rebuild(
         meta_path, matrix_path, expected

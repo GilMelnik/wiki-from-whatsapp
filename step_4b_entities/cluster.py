@@ -22,26 +22,20 @@ from step_4b_entities.pair_index import EntityPairIndex
 from utils.json_io import write_json_file
 
 
-def load_seed_entries(seed_path: Path | str = DEFAULT_SEED_PATH) -> list[dict[str, Any]]:
-    """Curated must-link anchors; empty when no seed file is present."""
+def _load_seed_index(
+    seed_path: Path | str = DEFAULT_SEED_PATH,
+) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
+    """Load seed file and return ``normalized name -> seed_id``, ``seed_id -> entry``."""
 
     path = Path(seed_path)
     if not path.is_file():
-        return []
+        return {}, {}
     data = json.loads(path.read_text(encoding="utf-8"))
-    if isinstance(data, dict):
-        return data.get("entities") or []
-    return data or []
-
-
-def _seed_index(
-    seed_entries: list[dict[str, Any]],
-) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
-    """``normalized name -> seed_id`` and ``seed_id -> entry`` lookups."""
+    entries = (data.get("entities") or []) if isinstance(data, dict) else (data or [])
 
     norm_to_seed: dict[str, str] = {}
     seed_by_id: dict[str, dict[str, Any]] = {}
-    for idx, entry in enumerate(seed_entries):
+    for idx, entry in enumerate(entries):
         seed_id = entry.get("id") or f"seed{idx:03d}"
         seed_by_id[seed_id] = entry
         names = [entry.get("canonical", ""), *(entry.get("aliases") or [])]
@@ -224,7 +218,7 @@ def cluster_entities(
 ) -> list[dict[str, Any]]:
     """Group distinct entity records into suggested canonical entities."""
 
-    norm_to_seed, seed_by_id = _seed_index(load_seed_entries(seed_path))
+    norm_to_seed, seed_by_id = _load_seed_index(seed_path)
     seed_groups = [norm_to_seed.get(e["normalized"]) for e in entities]
     index = EntityPairIndex(entities, seed_groups)
 
