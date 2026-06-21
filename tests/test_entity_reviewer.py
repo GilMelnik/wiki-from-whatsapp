@@ -203,6 +203,109 @@ def test_claim_highlights_other_entities(store_files: tuple[Path, Path]) -> None
     assert other["entity_id"] == "e0001"
 
 
+def _uncertain_store_files(tmp_path: Path) -> tuple[Path, Path]:
+    claims = {
+        "claims": [
+            {
+                "claim_id": "t1-c0",
+                "thread_id": "t1",
+                "claim_text": "David Shield and ORM, mail maybe@shared.com",
+                "topic_tags": ["overview"],
+                "entities": ["David Shield", "ORM"],
+            }
+        ]
+    }
+    entities = {
+        "entities": [
+            {
+                "entity_id": "e0000",
+                "canonical_name": "David Shield",
+                "status": "suggested",
+                "aliases": ["David Shield"],
+                "members": [
+                    {
+                        "name": "David Shield",
+                        "claim_ids": None,
+                        "count": 1,
+                        "sample_claim_ids": ["t1-c0"],
+                        "topics": ["overview"],
+                        "contacts": {"email": [], "phone": [], "website": []},
+                        "contacts_uncertain": {
+                            "email": ["maybe@shared.com"],
+                            "phone": [],
+                            "website": [],
+                        },
+                    }
+                ],
+                "contacts": {"email": [], "phone": [], "website": []},
+                "contacts_uncertain": {
+                    "email": ["maybe@shared.com"],
+                    "phone": [],
+                    "website": [],
+                },
+                "topics": ["overview"],
+                "score": 1.0,
+            }
+        ],
+        "metadata": {},
+    }
+    claims_path = tmp_path / "claims.json"
+    entities_path = tmp_path / "entities.json"
+    claims_path.write_text(json.dumps(claims), encoding="utf-8")
+    entities_path.write_text(json.dumps(entities), encoding="utf-8")
+    return entities_path, claims_path
+
+
+def test_accept_uncertain_contact_with_edit(tmp_path: Path) -> None:
+    entities_path, claims_path = _uncertain_store_files(tmp_path)
+    store = EntityStore(entities_path=entities_path, claims_path=claims_path)
+    store.load()
+
+    updated = store.resolve_uncertain_contact(
+        "e0000",
+        kind="email",
+        value="maybe@shared.com",
+        action="accept",
+        new_value="confirmed@davidshield.com",
+    )
+    assert updated["contacts"]["email"] == ["confirmed@davidshield.com"]
+    assert updated["contacts_uncertain"]["email"] == []
+    assert updated["contacts_manual"] is True
+
+
+def test_reject_uncertain_contact_does_not_resurrect(tmp_path: Path) -> None:
+    entities_path, claims_path = _uncertain_store_files(tmp_path)
+    store = EntityStore(entities_path=entities_path, claims_path=claims_path)
+    store.load()
+
+    rejected = store.resolve_uncertain_contact(
+        "e0000", kind="email", value="maybe@shared.com", action="reject"
+    )
+    assert rejected["contacts_uncertain"]["email"] == []
+    assert rejected["contacts"]["email"] == []
+
+    # A later recompute (rename triggers no recompute; set_canonical does) must not
+    # bring the rejected value back from the member bucket.
+    store.set_canonical("e0000", "David Shield")
+    again = store.get_entity("e0000")["entity"]
+    assert again["contacts_uncertain"]["email"] == []
+
+
+def test_resolve_uncertain_contact_validates(tmp_path: Path) -> None:
+    entities_path, claims_path = _uncertain_store_files(tmp_path)
+    store = EntityStore(entities_path=entities_path, claims_path=claims_path)
+    store.load()
+
+    with pytest.raises(ValueError):
+        store.resolve_uncertain_contact(
+            "e0000", kind="email", value="absent@x.com", action="accept"
+        )
+    with pytest.raises(ValueError):
+        store.resolve_uncertain_contact(
+            "e0000", kind="email", value="maybe@shared.com", action="bogus"
+        )
+
+
 def test_related_entities_tagged_not_in_text(store_files: tuple[Path, Path]) -> None:
     entities_path, claims_path = store_files
     claims = json.loads(claims_path.read_text(encoding="utf-8"))

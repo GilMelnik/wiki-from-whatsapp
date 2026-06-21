@@ -5,19 +5,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from step_4b_entities.run import (
-    DISTANCE_METHOD,
-    EntityResolver,
-    _claim_contacts,
-    _entity_distance_matrix_metadata,
-    _entity_distance_matrix_need_rebuild,
-    apply_entity_resolution,
-    cluster_entities,
-    collect_entities,
-    ensure_entity_distance_matrix,
-    load_entity_resolver,
-    transliteration_skeleton,
-)
+from step_4b_entities.cluster import cluster_entities, ensure_entity_distance_matrix, _entity_distance_matrix_metadata, \
+    _signal_signature, _entity_distance_matrix_need_rebuild
+from step_4b_entities.collect import collect_entities, _claim_contacts
+from step_4b_entities.constants import DISTANCE_METHOD
+from step_4b_entities.normalize import normalize_name
+from step_4b_entities.pair_index import transliteration_skeleton
+from step_4b_entities.resolver import EntityResolver, load_entity_resolver, apply_entity_resolution
 
 
 def _claim(claim_id: str, entities: list[str], topics: list[str] | None = None) -> dict:
@@ -37,10 +31,26 @@ def _cluster_of(entities: list[dict], name: str) -> str:
     raise AssertionError(f"{name} not found in any cluster")
 
 
-def _cluster(claims: list[dict], tmp_path: Path) -> list[dict]:
+def _cluster(
+    claims: list[dict], tmp_path: Path, *, seed_path: Path | None = None
+) -> list[dict]:
     source = tmp_path / "claims.json"
     source.write_text(json.dumps({"claims": claims}), encoding="utf-8")
-    return cluster_entities(collect_entities(claims), source)
+    return cluster_entities(
+        collect_entities(claims),
+        source,
+        matrix_path=tmp_path / "dist.npy",
+        meta_path=tmp_path / "dist.json",
+        # Isolate from the shipped data/entities_seed.json unless a test opts in.
+        seed_path=seed_path or (tmp_path / "no_seed.json"),
+    )
+
+
+def _entity_with(entities: list[dict], name: str) -> dict:
+    for entity in entities:
+        if any(m["name"] == name for m in entity["members"]):
+            return entity
+    raise AssertionError(f"{name} not found in any cluster")
 
 
 def test_clustering_merges_variants_keeps_distinct_separate(tmp_path: Path):
@@ -66,6 +76,166 @@ def test_clustering_merges_variants_keeps_distinct_separate(tmp_path: Path):
     # Distinct same-type entities must NOT merge (the embedding failure mode).
     assert _cluster_of(entities, "תל אביב") != _cluster_of(entities, "ירושלים")
     assert _cluster_of(entities, "מכבי") != _cluster_of(entities, "כללית")
+
+
+def test_prefix_and_cooccurrence_merge(tmp_path: Path):
+    # "עו"ד הראל" normalizes to "הראל", a whole-word prefix of "הראל ברק", and the
+    # two co-occur on one claim -> a must-link alias (not two entities).
+    claims = [
+        _claim("t1-c0", ['עו"ד הראל', "הראל ברק"], ["legal-lawyers"]),
+        _claim("t1-c1", ["הראל ברק"], ["legal-lawyers"]),
+    ]
+    entities = _cluster(claims, tmp_path)
+    assert _cluster_of(entities, 'עו"ד הראל') == _cluster_of(entities, "הראל ברק")
+    ent = _entity_with(entities, "הראל ברק")
+    assert ent["canonical_name"] == "הראל ברק"
+    assert "prefix" in ent["merge_signals"]
+    assert "co_occur" in ent["merge_signals"]
+
+
+def test_topic_guard_holds_near_identical_short_names_apart(tmp_path: Path):
+    # Same normalized short name, disjoint topics -> held apart and flagged for
+    # review instead of silently merged.
+    claims = [
+        {
+            "claim_id": "t1-c0",
+            "thread_id": "t1",
+            "claim_text": "lawyer note",
+            "topic_tags": ["legal-lawyers"],
+            "entities": ["הראל"],
+        },
+        {
+            "claim_id": "t2-c0",
+            "thread_id": "t2",
+            "claim_text": "cost note",
+            "topic_tags": ["money-costs"],
+            "entities": ["הראל׳"],
+        },
+    ]
+    entities = _cluster(claims, tmp_path)
+    assert _cluster_of(entities, "הראל") != _cluster_of(entities, "הראל׳")
+    ent = _entity_with(entities, "הראל")
+    assert ent["status"] == "ambiguous"
+    assert ent["conflict_with"]
+
+
+def test_confident_contact_merges_distinct_spellings(tmp_path: Path):
+    # Each name appears alone with the same email -> confident contact must-link.
+    claims = [
+        {
+            "claim_id": "t1-c0",
+            "thread_id": "t1",
+            "claim_text": "Foo Clinic",
+            "topic_tags": ["clinics"],
+            "entities": ["Foo Clinic"],
+            "_redactions": [{"type": "email", "value": "info@fooclinic.com"}],
+        },
+        {
+            "claim_id": "t2-c0",
+            "thread_id": "t2",
+            "claim_text": "Foo Klinik",
+            "topic_tags": ["clinics"],
+            "entities": ["Foo Klinik"],
+            "_redactions": [{"type": "email", "value": "info@fooclinic.com"}],
+        },
+    ]
+    entities = _cluster(claims, tmp_path)
+    assert _cluster_of(entities, "Foo Clinic") == _cluster_of(entities, "Foo Klinik")
+    ent = _entity_with(entities, "Foo Clinic")
+    assert "confident_contact" in ent["merge_signals"]
+
+
+def test_multi_entity_contact_is_uncertain_and_no_merge(tmp_path: Path):
+    # One email, two entities in the claim: unattributable -> uncertain, no merge.
+    claims = [
+        {
+            "claim_id": "t1-c0",
+            "thread_id": "t1",
+            "claim_text": "Alpha Beta",
+            "topic_tags": ["overview"],
+            "entities": ["Alpha", "Beta"],
+            "_redactions": [{"type": "email", "value": "shared@x.com"}],
+        }
+    ]
+    entities = _cluster(claims, tmp_path)
+    assert _cluster_of(entities, "Alpha") != _cluster_of(entities, "Beta")
+    alpha = _entity_with(entities, "Alpha")
+    assert alpha["contacts"]["email"] == []
+    assert "shared@x.com" in alpha["contacts_uncertain"]["email"]
+
+
+def test_resolver_topic_disambiguation():
+    registry = [
+        {
+            "entity_id": "e0",
+            "canonical_name": "הראל ברק",
+            "aliases": ["הראל"],
+            "members": [{"name": "הראל", "claim_ids": None}],
+            "contacts": {},
+            "topics": ["legal-lawyers"],
+        },
+        {
+            "entity_id": "e1",
+            "canonical_name": "הראל ביטוח",
+            "aliases": ["הראל ביטוח"],
+            "members": [
+                {"name": "הראל", "claim_ids": None},
+                {"name": "הראל ביטוח", "claim_ids": None},
+            ],
+            "contacts": {},
+            "topics": ["insurance-newborn"],
+        },
+    ]
+    resolver = EntityResolver(registry)
+    assert resolver.canonical("הראל", topic_tags=["legal-lawyers"]) == "הראל ברק"
+    assert resolver.canonical("הראל", topic_tags=["insurance-newborn"]) == "הראל ביטוח"
+
+
+def test_normalize_strips_titles_and_phones():
+
+    assert normalize_name('עו"ד הראל') == normalize_name("הראל")
+    assert normalize_name("Dr. Cohen") == normalize_name("cohen")
+    assert normalize_name("+1 (555) 010-2030") == "15550102030"
+
+
+def test_seed_must_links_aliases(tmp_path: Path):
+    seed_path = tmp_path / "seed.json"
+    seed_path.write_text(
+        json.dumps(
+            {
+                "entities": [
+                    {
+                        "id": "acme",
+                        "canonical": "Acme Agency",
+                        "aliases": ["Acme Agency", "Acme", "אקמי"],
+                        "topics": ["choosing-agency"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    claims = [
+        {
+            "claim_id": "t1-c0",
+            "thread_id": "t1",
+            "claim_text": "a",
+            "topic_tags": ["choosing-agency"],
+            "entities": ["Acme Agency"],
+        },
+        {
+            "claim_id": "t2-c0",
+            "thread_id": "t2",
+            "claim_text": "b",
+            "topic_tags": ["choosing-agency"],
+            "entities": ["אקמי"],
+        },
+    ]
+    entities = _cluster(claims, tmp_path, seed_path=seed_path)
+    ent = _entity_with(entities, "Acme Agency")
+    assert _cluster_of(entities, "אקמי") == ent["entity_id"]
+    assert ent["canonical_name"] == "Acme Agency"
+    assert "seed" in ent["merge_signals"]
 
 
 def test_transliteration_skeleton_aligns_across_scripts():
@@ -246,7 +416,9 @@ def test_entity_distance_matrix_cache(tmp_path: Path):
     assert meta["metadata"]["distance_method"] == DISTANCE_METHOD
 
     expected = _entity_distance_matrix_metadata(
-        source, [e["name"] for e in entities]
+        source,
+        [e["name"] for e in entities],
+        signature=_signal_signature(entities, [None] * len(entities)),
     )
     assert not _entity_distance_matrix_need_rebuild(
         meta_path, matrix_path, expected

@@ -6,6 +6,47 @@ const CONTACT_KINDS = [
   { key: "website", label: "אתר" },
 ];
 
+function UncertainContactRow({ kind, value, saving, onResolve }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const edited = draft.trim() !== value;
+  return (
+    <div className="flex items-center gap-1.5 mb-1">
+      <input
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        className="flex-1 min-w-0 border border-amber-300 rounded px-2 py-1 text-xs font-mono bg-white"
+      />
+      <button
+        type="button"
+        disabled={saving || !draft.trim()}
+        onClick={() =>
+          onResolve({
+            kind,
+            value,
+            action: "accept",
+            newValue: edited ? draft.trim() : undefined,
+          })
+        }
+        className="shrink-0 text-[11px] px-2 py-1 rounded border border-teal-300 text-teal-700 hover:bg-teal-50 disabled:opacity-40"
+        title="שייך ערך זה לישות"
+      >
+        אשר
+      </button>
+      <button
+        type="button"
+        disabled={saving}
+        onClick={() => onResolve({ kind, value, action: "reject" })}
+        className="shrink-0 text-[11px] px-2 py-1 rounded border border-rose-300 text-rose-700 hover:bg-rose-50 disabled:opacity-40"
+        title="הסר ערך זה"
+      >
+        דחה
+      </button>
+    </div>
+  );
+}
+
 function linesToList(text) {
   return text
     .split("\n")
@@ -22,6 +63,7 @@ export default function EntityEditPanel({
   saving,
   onRename,
   onSaveContacts,
+  onResolveUncertainContact,
   onDelete,
 }) {
   const [name, setName] = useState("");
@@ -48,6 +90,10 @@ export default function EntityEditPanel({
     listToLines(entity.contacts?.email) !== contacts.email ||
     listToLines(entity.contacts?.phone) !== contacts.phone ||
     listToLines(entity.contacts?.website) !== contacts.website;
+  const uncertain = entity.contacts_uncertain || {};
+  const hasUncertain = CONTACT_KINDS.some(
+    ({ key }) => (uncertain[key] || []).length > 0
+  );
 
   return (
     <div className="p-4 text-xs text-slate-600 space-y-4">
@@ -110,6 +156,34 @@ export default function EntityEditPanel({
           שמור פרטי קשר
         </button>
       </div>
+
+      {hasUncertain && (
+        <div className="rounded border border-amber-300 bg-amber-50 p-2">
+          <div className="text-amber-800 font-medium mb-1">פרטי קשר לא ודאיים</div>
+          <p className="text-[11px] text-amber-700 mb-2">
+            ערכים שהופיעו בטענות עם כמה ישויות — לא ברור למי הם שייכים. אשרו כדי
+            לשייך לישות זו, או דחו.
+          </p>
+          {CONTACT_KINDS.map(({ key, label }) => {
+            const values = entity.contacts_uncertain?.[key] || [];
+            if (values.length === 0) return null;
+            return (
+              <div key={key} className="mb-2">
+                <label className="text-amber-700 block mb-0.5">{label}</label>
+                {values.map((value) => (
+                  <UncertainContactRow
+                    key={value}
+                    kind={key}
+                    value={value}
+                    saving={saving}
+                    onResolve={onResolveUncertainContact}
+                  />
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <div>
         <span className="text-slate-400">כינויים: </span>

@@ -7,6 +7,15 @@ const STANCE_LABELS = {
   factual: "עובדתי",
 };
 
+const SIGNAL_LABELS = {
+  co_occur: "אזכור משותף",
+  confident_contact: "פרטי קשר",
+  string: "דמיון כתיב",
+  prefix: "תחילית",
+  seed: "רשימת זרע",
+  transliteration: "תעתיק",
+};
+
 function EntityLink({ entity, saving, onOpenEntity, implicit = false }) {
   const label = entity.canonical_name || entity.name;
   const color = entity.color_index != null ? entityColor(entity.color_index) : null;
@@ -153,8 +162,28 @@ export default function EntityDetailPanel({
                 ? "אושר"
                 : entity.status === "rejected"
                   ? "נדחה"
-                  : "מוצע"}
+                  : entity.status === "ambiguous"
+                    ? "דו-משמעי"
+                    : "מוצע"}
             </p>
+            {entity.merge_signals?.length > 0 && (
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                <span className="text-[10px] text-slate-400">מקור איחוד:</span>
+                {entity.merge_signals.map((sig) => (
+                  <span
+                    key={sig}
+                    className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200"
+                  >
+                    {SIGNAL_LABELS[sig] || sig}
+                  </span>
+                ))}
+              </div>
+            )}
+            {entity.conflict_with?.length > 0 && (
+              <p className="mt-1 text-[10px] text-amber-700">
+                ייתכן בלבול עם: {entity.conflict_with.join(" · ")}
+              </p>
+            )}
           </div>
           {queue && (
             <div className="flex items-center gap-2 text-xs text-slate-500 shrink-0">

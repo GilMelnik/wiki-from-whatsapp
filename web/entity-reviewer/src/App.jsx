@@ -11,6 +11,7 @@ import {
   moveClaims,
   moveMember,
   renameEntity,
+  resolveUncertainContact,
   setCanonical,
   setContacts,
   setStatus,
@@ -326,6 +327,13 @@ export default function App() {
               guard(
                 () => setContacts(selectedId, payload),
                 "פרטי הקשר עודכנו",
+                selectedId
+              )
+            }
+            onResolveUncertainContact={(payload) =>
+              guard(
+                () => resolveUncertainContact(selectedId, payload),
+                payload.action === "accept" ? "הערך שויך לישות" : "הערך נדחה",
                 selectedId
               )
             }

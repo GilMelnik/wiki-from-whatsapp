@@ -111,6 +111,13 @@ export function setContacts(entityId, contacts) {
   });
 }
 
+export function resolveUncertainContact(entityId, { kind, value, action, newValue }) {
+  return request(`/api/entities/${encodeURIComponent(entityId)}/uncertain-contact`, {
+    method: "POST",
+    body: JSON.stringify({ kind, value, action, new_value: newValue ?? null }),
+  });
+}
+
 export function deleteEntity(entityId) {
   return request(`/api/entities/${encodeURIComponent(entityId)}`, {
     method: "DELETE",
