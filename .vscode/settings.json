@@ -1,0 +1,6 @@
+{
+  // Minified Tailwind/Vite output: preflight uses empty --tw-* vars and vendor-only properties.
+  "files.associations": {
+    "**/reviewer/static/assets/*.css": "plaintext"
+  }
+}

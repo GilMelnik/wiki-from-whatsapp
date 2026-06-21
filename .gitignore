@@ -233,7 +233,11 @@ data/llm_cache/
 .idea
 drafts/
 
-# Thread tagger built frontend (keep .gitkeep)
+# Reviewer / thread-tagger Vite build output (keep .gitkeep)
+**/reviewer/static/*
+!**/reviewer/static/.gitkeep
+step_2_thread_review/static/*
+!step_2_thread_review/static/.gitkeep
 thread_tagger/static/*
 !thread_tagger/static/.gitkeep
 web/thread-tagger/node_modules/

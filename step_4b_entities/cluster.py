@@ -52,12 +52,6 @@ def _seed_index(
     return norm_to_seed, seed_by_id
 
 
-def _signal_signature(
-    entities: list[dict[str, Any]], seed_groups: list[str | None]
-) -> str:
-    return EntityPairIndex.build(entities, seed_groups).signal_signature()
-
-
 def _entity_distance_matrix_metadata(
     source_path: Path,
     names: list[str],
@@ -99,7 +93,7 @@ def ensure_entity_distance_matrix(
     if isinstance(entities_or_index, EntityPairIndex):
         index = entities_or_index
     else:
-        index = EntityPairIndex.build(entities_or_index, seed_groups)
+        index = EntityPairIndex(entities_or_index, seed_groups)
 
     source = Path(source_path).resolve()
     matrix_output = Path(matrix_path)
@@ -232,7 +226,7 @@ def cluster_entities(
 
     norm_to_seed, seed_by_id = _seed_index(load_seed_entries(seed_path))
     seed_groups = [norm_to_seed.get(e["normalized"]) for e in entities]
-    index = EntityPairIndex.build(entities, seed_groups)
+    index = EntityPairIndex(entities, seed_groups)
 
     dist = ensure_entity_distance_matrix(
         index,

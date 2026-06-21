@@ -54,6 +54,13 @@ class ContactsRequest(BaseModel):
     website: list[str] = []
 
 
+class UncertainContactRequest(BaseModel):
+    kind: str
+    value: str
+    action: str
+    new_value: str | None = None
+
+
 class MoveMemberRequest(BaseModel):
     name: str
     target_entity_id: str | None = None
@@ -166,6 +173,20 @@ def set_contacts(entity_id: str, body: ContactsRequest) -> dict[str, Any]:
         EntityStore.set_contacts,
         entity_id,
         {"email": body.email, "phone": body.phone, "website": body.website},
+    )
+
+
+@app.post("/api/entities/{entity_id}/uncertain-contact")
+def resolve_uncertain_contact(
+    entity_id: str, body: UncertainContactRequest
+) -> dict[str, Any]:
+    return _store_call(
+        EntityStore.resolve_uncertain_contact,
+        entity_id,
+        kind=body.kind,
+        value=body.value,
+        action=body.action,
+        new_value=body.new_value,
     )
 
 

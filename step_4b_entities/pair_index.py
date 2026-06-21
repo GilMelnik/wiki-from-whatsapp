@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 from typing import Any
 
@@ -35,33 +35,24 @@ class EntityPairIndex:
     """Precomputed per-entity fields for pairwise similarity and clustering."""
 
     entities: list[dict[str, Any]]
-    seed_groups: list[str | None]
-    norms: list[str]
-    raw: list[str]
-    skeletons: list[str]
-    claim_ids: list[set[str]]
-    contacts: list[set[str]]
-    topics: list[set[str]]
+    seed_groups: list[str | None] | None = None
+    norms: list[str] = field(init=False)
+    raw: list[str] = field(init=False)
+    skeletons: list[str] = field(init=False)
+    claim_ids: list[set[str]] = field(init=False)
+    contacts: list[set[str]] = field(init=False)
+    topics: list[set[str]] = field(init=False)
 
-    @classmethod
-    def build(
-        cls,
-        entities: list[dict[str, Any]],
-        seed_groups: list[str | None] | None = None,
-    ) -> EntityPairIndex:
-        if seed_groups is None:
-            seed_groups = [None] * len(entities)
-        names = [e["name"] for e in entities]
-        return cls(
-            entities=entities,
-            seed_groups=seed_groups,
-            norms=[e["normalized"] for e in entities],
-            raw=names,
-            skeletons=[transliteration_skeleton(name) for name in names],
-            claim_ids=[set(e.get("claim_ids") or []) for e in entities],
-            contacts=[_confident_contact_keys(e) for e in entities],
-            topics=[set(e.get("topics") or []) for e in entities],
-        )
+    def __post_init__(self) -> None:
+        if self.seed_groups is None:
+            self.seed_groups = [None] * len(self.entities)
+        names = [e["name"] for e in self.entities]
+        self.raw = names
+        self.norms = [e["normalized"] for e in self.entities]
+        self.skeletons = [transliteration_skeleton(name) for name in names]
+        self.claim_ids = [set(e.get("claim_ids") or []) for e in self.entities]
+        self.contacts = [_confident_contact_keys(e) for e in self.entities]
+        self.topics = [set(e.get("topics") or []) for e in self.entities]
 
     def names(self) -> list[str]:
         return self.raw

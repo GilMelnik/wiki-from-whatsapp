@@ -29,22 +29,32 @@ def _member_total(entity: dict[str, Any]) -> int:
     return sum(m.get("count") or 0 for m in entity.get("members") or [])
 
 
-def _union_contacts(members: list[dict[str, Any]]) -> dict[str, list[str]]:
+def _union_contacts(
+    members: list[dict[str, Any]], key: str = "contacts"
+) -> dict[str, list[str]]:
     out: dict[str, set[str]] = {"email": set(), "phone": set(), "website": set()}
     for member in members:
-        for kind, values in (member.get("contacts") or {}).items():
+        for kind, values in (member.get(key) or {}).items():
             out.setdefault(kind, set()).update(values)
     return {kind: sorted(values) for kind, values in out.items()}
 
 
 def _recompute_entity(entity: dict[str, Any]) -> None:
-    """Refresh aliases/topics/canonical from the member list."""
+    """Refresh aliases/topics/canonical/contacts from the member list."""
 
     members = entity.get("members") or []
     members.sort(key=lambda m: m.get("count") or 0, reverse=True)
     entity["aliases"] = [m["name"] for m in members]
     if not entity.get("contacts_manual"):
         entity["contacts"] = _union_contacts(members)
+    # Uncertain contacts (multi-entity claims) drop anything already promoted to
+    # the confident set, so an accepted value never shows up twice.
+    uncertain = _union_contacts(members, "contacts_uncertain")
+    confident = entity.get("contacts") or {}
+    entity["contacts_uncertain"] = {
+        kind: sorted(set(uncertain.get(kind, [])) - set(confident.get(kind, [])))
+        for kind in ("email", "phone", "website")
+    }
     topics: set[str] = set()
     for member in members:
         topics.update(member.get("topics") or [])
@@ -366,7 +376,10 @@ class EntityStore:
             "aliases": entity.get("aliases") or [],
             "topics": entity.get("topics") or [],
             "contacts": entity.get("contacts") or {},
+            "contacts_uncertain": entity.get("contacts_uncertain") or {},
             "contacts_manual": bool(entity.get("contacts_manual")),
+            "merge_signals": entity.get("merge_signals") or [],
+            "conflict_with": entity.get("conflict_with") or [],
             "score": entity.get("score"),
         }
 
@@ -561,6 +574,54 @@ class EntityStore:
         entity, _ = self._find_entity(entity_id)
         entity["contacts"] = _normalize_contacts(contacts)
         entity["contacts_manual"] = True
+        self.save()
+        return self.get_entity(entity_id)["entity"]
+
+    def resolve_uncertain_contact(
+        self,
+        entity_id: str,
+        *,
+        kind: str,
+        value: str,
+        action: str,
+        new_value: str | None = None,
+    ) -> dict[str, Any]:
+        """Accept (promote to confident, optionally edited) or reject an uncertain
+        contact value seen only in multi-entity claims."""
+
+        if kind not in ("email", "phone", "website"):
+            raise ValueError(f"unknown contact kind: {kind}")
+        if action not in ("accept", "reject"):
+            raise ValueError(f"unknown action: {action}")
+
+        entity, _ = self._find_entity(entity_id)
+        uncertain = entity.setdefault(
+            "contacts_uncertain", {"email": [], "phone": [], "website": []}
+        )
+        bucket = uncertain.get(kind) or []
+        if value not in bucket:
+            raise ValueError(f"value not an uncertain {kind}: {value}")
+        uncertain[kind] = [v for v in bucket if v != value]
+        # Resolve at the member level too, so a later _recompute_entity (triggered
+        # by any other edit) does not resurrect this value into the uncertain set.
+        for member in entity.get("members") or []:
+            member_unc = member.get("contacts_uncertain")
+            if member_unc and value in (member_unc.get(kind) or []):
+                member_unc[kind] = [v for v in member_unc[kind] if v != value]
+
+        if action == "accept":
+            resolved = (new_value or value).strip()
+            if not resolved:
+                raise ValueError("accepted contact must not be empty")
+            confident = entity.setdefault(
+                "contacts", {"email": [], "phone": [], "website": []}
+            )
+            values = list(confident.get(kind) or [])
+            if resolved not in values:
+                values.append(resolved)
+            confident[kind] = values
+            entity["contacts_manual"] = True
+
         self.save()
         return self.get_entity(entity_id)["entity"]
 
