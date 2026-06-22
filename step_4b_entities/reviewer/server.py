@@ -8,6 +8,8 @@ from typing import Any
 from fastapi import HTTPException, Query
 from pydantic import BaseModel
 
+from step_4b_entities.constants import DEFAULT_ENTITY_ANALYSIS_PATH
+from step_4b_entities.mentions import DictaAnalyzer
 from step_4b_entities.reviewer.store import EntityStore, SortKind, SortOrder, Status
 from utils.reviewer_server import (
     StoreRegistry,
@@ -20,7 +22,14 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 app = make_reviewer_app("Entity Resolution Reviewer")
 _registry = StoreRegistry(
     EntityStore,
-    {"entities_path": None, "claims_path": None},
+    {
+        "entities_path": None,
+        "claims_path": None,
+        # Reuse the pipeline's dictabert analysis cache so highlighting/attribution
+        # match exactly; the model only loads on a cache miss (e.g. edited claims).
+        "analyzer": DictaAnalyzer(),
+        "analysis_cache_path": DEFAULT_ENTITY_ANALYSIS_PATH,
+    },
 )
 
 

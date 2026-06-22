@@ -10,6 +10,13 @@ from typing import Any
 
 from step_4_extract.scrub import find_emails, find_phones
 from step_4b_entities.constants import SAMPLE_CLAIMS_PER_MEMBER
+from step_4b_entities.mentions import (
+    Analyzer,
+    SimpleAnalyzer,
+    Word,
+    analyze_claims,
+    mentions_name,
+)
 from step_4b_entities.normalize import normalize_name
 from utils.paths import ORIGINAL_CLAIMS_PATH, resolve_claims_path
 
@@ -19,13 +26,14 @@ _URL_RE = re.compile(
 )
 
 
-def claim_mentions_name(claim: dict[str, Any], name: str) -> bool:
-    """True when ``name`` appears in ``claim_text`` (case-insensitive)."""
+def claim_mentions_name(
+    claim: dict[str, Any], name: str, words: list[Word] | None
+) -> bool:
+    """True when ``name`` appears as a whole word in the claim's analyzed text."""
 
     if not name.strip():
         return False
-    text = claim.get("claim_text") or ""
-    return name.casefold() in text.casefold()
+    return mentions_name(words or [], name)
 
 
 def _extract_websites(text: str) -> list[str]:
@@ -81,8 +89,19 @@ def collect_entities(
     claims: list[dict[str, Any]],
     *,
     original_by_id: dict[str, dict[str, Any]] | None = None,
+    analysis: dict[str, list[Word]] | None = None,
+    analyzer: Analyzer | None = None,
 ) -> list[dict[str, Any]]:
-    """Distinct entity strings with counts, sample claims, topics, contacts."""
+    """Distinct entity strings with counts, sample claims, topics, contacts.
+
+    ``analysis`` is a precomputed ``{claim_id: words}`` morphology map used for
+    word-aware text-mention matching. When absent it is built with ``analyzer``
+    (default: the model-free ``SimpleAnalyzer``); the real pipeline passes the
+    cached dictabert analysis from ``run.py``.
+    """
+
+    if analysis is None:
+        analysis = analyze_claims(claims, analyzer or SimpleAnalyzer())
 
     tag_counts: Counter[str] = Counter()
     claim_ids: dict[str, set[str]] = defaultdict(set)
@@ -128,7 +147,7 @@ def collect_entities(
         for claim in claims:
             claim_id = claim.get("claim_id")
             original = (original_by_id or {}).get(claim_id) if claim_id else None
-            if claim_mentions_name(claim, name):
+            if claim_mentions_name(claim, name, analysis.get(claim_id)):
                 _absorb_claim(name, claim, original)
 
     entities: list[dict[str, Any]] = []

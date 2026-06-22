@@ -286,6 +286,13 @@ export default function App() {
                 selectedId
               )
             }
+            onExcludeClaims={(name, claimIds) =>
+              guard(
+                () => excludeClaims(selectedId, name, claimIds),
+                claimIds.length === 1 ? "הטענה הוסרה מהישות" : "הטענות הוסרו מהישות",
+                selectedId
+              )
+            }
             onOpenEntity={setSelectedId}
             onMerge={() => setDialog({ kind: "merge" })}
             onSetStatus={(value) =>

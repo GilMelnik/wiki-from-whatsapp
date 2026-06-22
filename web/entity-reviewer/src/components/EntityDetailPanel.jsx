@@ -120,6 +120,7 @@ export default function EntityDetailPanel({
   onMoveClaims,
   onCopyClaims,
   onExcludeClaim,
+  onExcludeClaims,
   onMerge,
   onSetStatus,
   onPrev,
@@ -306,6 +307,14 @@ export default function EntityDetailPanel({
                     className="text-[11px] px-2 py-1 rounded border border-slate-300 bg-white/70 hover:bg-white disabled:opacity-40"
                   >
                     הזז טענות ({selectedIds.length})
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving || selectedIds.length === 0}
+                    onClick={() => onExcludeClaims(member.name, selectedIds)}
+                    className="text-[11px] px-2 py-1 rounded border border-rose-200 text-rose-700 bg-white/70 hover:bg-rose-50 disabled:opacity-40"
+                  >
+                    לא קשור ({selectedIds.length})
                   </button>
                 </div>
               </header>

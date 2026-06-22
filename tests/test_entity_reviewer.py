@@ -156,26 +156,38 @@ def test_copy_claims_keeps_source(store_files: tuple[Path, Path]) -> None:
 def test_exclude_claims(store_files: tuple[Path, Path]) -> None:
     entities_path, claims_path = store_files
     claims = json.loads(claims_path.read_text(encoding="utf-8"))
-    claims["claims"].append(
-        {
-            "claim_id": "t2-c0",
-            "thread_id": "t2",
-            "claim_text": "David Shield and ORM",
-            "topic_tags": ["overview"],
-            "entities": ["David Shield", "ORM"],
-        }
+    claims["claims"].extend(
+        [
+            {
+                "claim_id": "t2-c0",
+                "thread_id": "t2",
+                "claim_text": "David Shield and ORM",
+                "topic_tags": ["overview"],
+                "entities": ["David Shield", "ORM"],
+            },
+            {
+                "claim_id": "t3-c0",
+                "thread_id": "t3",
+                "claim_text": "David Shield unrelated mention",
+                "topic_tags": ["overview"],
+                "entities": ["David Shield"],
+            },
+        ]
     )
     claims_path.write_text(json.dumps(claims), encoding="utf-8")
 
     store = EntityStore(entities_path=entities_path, claims_path=claims_path)
     store.load()
-    store.exclude_claims("e0000", "David Shield", ["t2-c0"])
+    store.exclude_claims("e0000", "David Shield", ["t2-c0", "t3-c0"])
 
     detail = store.get_entity("e0000")["entity"]
     member = next(m for m in detail["members"] if m["name"] == "David Shield")
     claim_ids = {c["claim_id"] for c in member["sample_claims"]}
     assert "t2-c0" not in claim_ids
-    assert "t2-c0" in (member.get("excluded_claim_ids") or [])
+    assert "t3-c0" not in claim_ids
+    excluded = member.get("excluded_claim_ids") or []
+    assert "t2-c0" in excluded
+    assert "t3-c0" in excluded
 
 
 def test_claim_highlights_other_entities(store_files: tuple[Path, Path]) -> None:

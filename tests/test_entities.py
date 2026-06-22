@@ -13,9 +13,57 @@ from step_4b_entities.cluster import (
 )
 from step_4b_entities.collect import collect_entities, _claim_contacts
 from step_4b_entities.constants import DISTANCE_METHOD
+from step_4b_entities.mentions import (
+    SimpleAnalyzer,
+    analyze_claims,
+    find_mentions,
+    mentions_name,
+)
 from step_4b_entities.normalize import normalize_name, transliteration_skeleton
 from step_4b_entities.pair_index import EntityPairIndex
 from step_5_aggregate.resolver import EntityResolver, load_entity_resolver, apply_entity_resolution
+
+
+class FakeAnalyzer:
+    """Deterministic, model-free analyzer for tests.
+
+    Whitespace tokens with caller-supplied per-token ``core`` (mimicking dictabert
+    prefix segmentation) and ``pos`` overrides. Lets us exercise proclitic stripping
+    and the POS gate without loading the model.
+    """
+
+    model_name = "fake"
+
+    def __init__(
+        self,
+        cores: dict[str, str] | None = None,
+        pos: dict[str, str] | None = None,
+        ner: set[str] | None = None,
+    ) -> None:
+        self._cores = cores or {}
+        self._pos = pos or {}
+        self._ner = ner or set()
+
+    def analyze_batch(self, texts):
+        return [
+            [
+                {
+                    "token": tok,
+                    "core": self._cores.get(tok, tok),
+                    "prefixes": [],
+                    "pos": self._pos.get(tok),
+                    "lemma": None,
+                    "ner": "ORG" if tok in self._ner else None,
+                }
+                for tok in (text or "").split()
+            ]
+            for text in texts
+        ]
+
+
+def _words(text: str, analyzer=None):
+    analyzer = analyzer or SimpleAnalyzer()
+    return analyze_claims([{"claim_id": "c", "claim_text": text}], analyzer)["c"]
 
 
 def _claim(claim_id: str, entities: list[str], topics: list[str] | None = None) -> dict:
@@ -312,11 +360,57 @@ def test_collect_entities_includes_text_mentions():
             "entities": ["כללית"],
         },
     ]
-    entities = collect_entities(claims)
+    # dictabert segments the proclitic (לטיפת -> ל+טיפת); emulate that offline.
+    analyzer = FakeAnalyzer(cores={"לטיפת": "טיפת", "בטיפת": "טיפת"})
+    entities = collect_entities(claims, analyzer=analyzer)
     tipat = next(e for e in entities if e["name"] == "טיפת חלב")
     assert tipat["count"] == 2
     assert set(tipat["claim_ids"]) == {"t1-c0", "t2-c0"}
     assert "israel" in tipat["topics"]
+
+
+def test_word_level_matching_rejects_inner_substrings():
+    # The reported bug: a short name must not match inside a longer word.
+    assert not mentions_name(_words("כללית מרפאה"), "כלל")
+    assert not mentions_name(_words("באופן כללי מאוד"), "כלל")
+    assert not mentions_name(_words("שנתיים חלפו מאז"), "נתי")
+    # ...but the whole word, and multi-word phrases, still match.
+    assert mentions_name(_words("כלל חברת ביטוח"), "כלל")
+    assert mentions_name(_words("שירותי טיפת חלב בעיר"), "טיפת חלב")
+
+
+def test_proclitic_prefix_matches_via_segmentation():
+    # With segmentation, an attached Hebrew proclitic still matches, and the span
+    # covers only the entity word (not the proclitic).
+    analyzer = FakeAnalyzer(cores={"בטיפת": "טיפת"})
+    words = _words("בטיפת חלב מחר", analyzer)
+    spans = find_mentions(words, "טיפת חלב")
+    assert spans
+    start, end = spans[0]
+    assert "בטיפת חלב מחר"[start:end] == "טיפת חלב"
+
+
+def test_single_word_requires_name_like_evidence():
+    # The reported "בדרך כלל" case: a single common Hebrew word matches only with
+    # name-like evidence (PROPN or NER), not as a bare common noun / function word.
+    idiom = FakeAnalyzer(pos={"כלל": "NOUN"})
+    assert not mentions_name(_words("בדרך כלל זה בסדר", idiom), "כלל")
+    adverb = FakeAnalyzer(pos={"כלל": "ADV"})
+    assert not mentions_name(_words("זה לא כלל ברור", adverb), "כלל")
+    # Proper-noun or NER context is accepted (the insurance company "כלל").
+    propn = FakeAnalyzer(pos={"כלל": "PROPN"})
+    assert mentions_name(_words("חברת כלל גדולה", propn), "כלל")
+    # NER rescues an entity the model tags as ADJ (e.g. "כללית").
+    ner = FakeAnalyzer(
+        cores={"בכללית": "כללית"}, pos={"בכללית": "ADJ"}, ner={"בכללית"}
+    )
+    assert mentions_name(_words("רשומה בכללית היום", ner), "כללית")
+
+
+def test_multi_word_match_is_not_gated_by_name_likeness():
+    # Distinctive multi-word phrases (NOUN NOUN, no NER) stay matchable.
+    plain = FakeAnalyzer(pos={"טיפת": "NOUN", "חלב": "NOUN"})
+    assert mentions_name(_words("שירותי טיפת חלב בעיר", plain), "טיפת חלב")
 
 
 def test_short_hotline_phones_detected():

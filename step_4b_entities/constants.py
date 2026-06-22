@@ -5,6 +5,17 @@ from pathlib import Path
 DEFAULT_OUTPUT_PATH = Path("data/entities.json")
 DEFAULT_ENTITY_DISTANCE_MATRIX_PATH = Path("data/entity_distance_matrix.npy")
 DEFAULT_ENTITY_DISTANCE_META_PATH = Path("data/entity_distance_matrix.json")
+# Per-claim morphological analysis cache (dictabert-joint seg/pos), built once and
+# reused by collection and the reviewer for word-aware mention matching.
+DEFAULT_ENTITY_ANALYSIS_PATH = Path("data/entity_claim_analysis.json")
+ENTITY_ANALYSIS_MODEL = "dicta-il/dictabert-joint"
+
+# A surface match is rejected only when every matched word is one of these clearly
+# non-entity parts of speech. NOUN/PROPN/NUM/ADJ/X pass (org names are often
+# adjectival in form, e.g. "כללית", so ADJ is intentionally allowed).
+DISALLOWED_ENTITY_POS = frozenset(
+    {"VERB", "ADV", "ADP", "AUX", "CCONJ", "SCONJ", "DET", "PRON", "PART", "INTJ", "PUNCT"}
+)
 # Bump when ``EntityPairIndex`` / ``transliteration_skeleton`` / ``normalize_name``
 # logic changes (invalidates the cached distance matrix).
 DISTANCE_METHOD = "string_plus_transliteration_v2"

@@ -10,7 +10,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from step_4b_entities.collect import claim_mentions_name, _claim_contacts
+from step_4b_entities.collect import _claim_contacts
+from step_4b_entities.constants import DEFAULT_ENTITY_ANALYSIS_PATH
+from step_4b_entities.mentions import (
+    Analyzer,
+    SimpleAnalyzer,
+    Word,
+    analyze_claims,
+    build_or_load_analysis,
+    find_mentions,
+)
 from utils.json_io import write_json_file
 from utils.paths import (
     BACKUPS_DIR,
@@ -83,17 +92,6 @@ def _normalize_contacts(contacts: dict[str, Any]) -> dict[str, list[str]]:
     return out
 
 
-def _find_spans(text: str, needle: str) -> list[list[int]]:
-    """Case-insensitive offsets of ``needle`` within ``text`` (for highlighting)."""
-
-    if not text or not needle:
-        return []
-    spans: list[list[int]] = []
-    for match in re.finditer(re.escape(needle), text, flags=re.IGNORECASE):
-        spans.append([match.start(), match.end()])
-    return spans
-
-
 def _merge_highlights(
     segments: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -125,11 +123,18 @@ class EntityStore:
         *,
         entities_path: Path | str | None = None,
         claims_path: Path | str | None = None,
+        analyzer: Analyzer | None = None,
+        analysis_cache_path: Path | str | None = None,
     ) -> None:
         self._entities_override = (
             Path(entities_path) if entities_path is not None else None
         )
         self._claims_override = Path(claims_path) if claims_path is not None else None
+        # Model-free default keeps direct/test instantiation offline; the web server
+        # injects a DictaAnalyzer + shared cache so highlighting matches the pipeline.
+        self._analyzer: Analyzer = analyzer or SimpleAnalyzer()
+        self._analysis_cache_path = analysis_cache_path
+        self._analysis: dict[str, list[Word]] = {}
         self._data: dict[str, Any] | None = None
         self._claims_by_id: dict[str, dict[str, Any]] = {}
         self._original_by_id: dict[str, dict[str, Any]] = {}
@@ -162,12 +167,21 @@ class EntityStore:
             if self._claims_override is not None
             else resolve_claims_path()
         )
-        claims, _, original_by_id = load_claims_for_entities(claims_path)
+        claims, resolved_claims, original_by_id = load_claims_for_entities(claims_path)
         self._claims_by_id = {c["claim_id"]: c for c in claims}
         self._original_by_id = original_by_id or {}
         for claim in claims:
             for name in claim.get("entities") or []:
                 self._claim_ids_by_name.setdefault(name, []).append(claim["claim_id"])
+        if self._analysis_cache_path is not None:
+            self._analysis = build_or_load_analysis(
+                claims,
+                self._analyzer,
+                cache_path=self._analysis_cache_path,
+                source_path=resolved_claims,
+            )
+        else:
+            self._analysis = analyze_claims(claims, self._analyzer)
         self._rebuild_alias_index()
         self._loaded = True
 
@@ -208,13 +222,30 @@ class EntityStore:
 
     # --- member helpers -------------------------------------------------
 
+    def _words_for(self, claim: dict[str, Any]) -> list[Word]:
+        """Analyzed words for a claim, analyzing on demand for cache misses."""
+
+        claim_id = claim.get("claim_id")
+        if claim_id and claim_id in self._analysis:
+            return self._analysis[claim_id]
+        words = analyze_claims([claim], self._analyzer).get(claim_id, [])
+        if claim_id:
+            self._analysis[claim_id] = words
+        return words
+
+    def _mention_spans(self, claim: dict[str, Any], name: str) -> list[list[int]]:
+        return find_mentions(self._words_for(claim), name)
+
+    def _claim_mentions(self, claim: dict[str, Any], name: str) -> bool:
+        return bool(self._mention_spans(claim, name))
+
     def _raw_claim_ids_for_member(self, member: dict[str, Any]) -> set[str]:
         if member.get("claim_ids"):
             return set(member["claim_ids"])
         name = member["name"]
         ids: set[str] = set(self._claim_ids_by_name.get(name, []))
         for claim_id, claim in self._claims_by_id.items():
-            if claim_mentions_name(claim, name):
+            if self._claim_mentions(claim, name):
                 ids.add(claim_id)
         return ids
 
@@ -262,19 +293,15 @@ class EntityStore:
         current_entity_id: str,
         current_names: set[str],
     ) -> list[dict[str, Any]]:
-        text = claim.get("claim_text") or ""
         found: dict[str, dict[str, Any]] = {}
         names = sorted(self._alias_to_entity.keys(), key=len, reverse=True)
-        tagged = set(claim.get("entities") or [])
         for name in names:
             if name in current_names:
                 continue
             entity_id = self._alias_to_entity[name]
             if entity_id == current_entity_id:
                 continue
-            if name not in tagged and not claim_mentions_name(claim, name):
-                continue
-            spans = _find_spans(text, name)
+            spans = self._mention_spans(claim, name)
             if not spans:
                 continue
             existing = found.get(entity_id)
@@ -308,7 +335,7 @@ class EntityStore:
                 continue
             if name in current_names:
                 continue
-            if claim_mentions_name(claim, name):
+            if self._claim_mentions(claim, name):
                 continue
             entity_id = self._alias_to_entity.get(name)
             if entity_id == current_entity_id:
@@ -342,9 +369,8 @@ class EntityStore:
         current_entity_id: str,
         current_names: set[str],
     ) -> list[dict[str, Any]]:
-        text = claim.get("claim_text") or ""
         segments: list[dict[str, Any]] = []
-        for start, end in _find_spans(text, member_name):
+        for start, end in self._mention_spans(claim, member_name):
             segments.append({"start": start, "end": end, "kind": "self"})
         for other in self._other_entities_in_claim(
             claim,

@@ -35,6 +35,7 @@ from utils.json_io import write_json_file
 from step_4b_entities.cluster import cluster_entities
 from step_4b_entities.collect import collect_entities, load_claims_for_entities
 from step_4b_entities.constants import DEFAULT_OUTPUT_PATH, SIMILARITY_THRESHOLD
+from step_4b_entities.mentions import DictaAnalyzer, build_or_load_analysis
 
 
 def run(
@@ -44,7 +45,12 @@ def run(
 ) -> dict[str, Any]:
     claims, resolved_claims, original_by_id = load_claims_for_entities(claims_path)
 
-    entities = collect_entities(claims, original_by_id=original_by_id)
+    analysis = build_or_load_analysis(
+        claims, DictaAnalyzer(), source_path=resolved_claims
+    )
+    entities = collect_entities(
+        claims, original_by_id=original_by_id, analysis=analysis
+    )
     out_entities = cluster_entities(
         entities,
         resolved_claims,

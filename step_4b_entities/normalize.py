@@ -47,6 +47,20 @@ def normalize_name(name: str) -> str:
     return stripped or cleaned
 
 
+def normalize_token(token: str) -> str:
+    """One comparison token: casefold + drop niqqud + Hebrew finals + drop punctuation.
+
+    Unlike ``normalize_name`` this neither strips titles nor splits on whitespace, so
+    a multi-word name tokenizes predictably (``עו"ד`` -> ``עוד``, not ``עו ד``) for
+    word-level mention matching.
+    """
+
+    decomposed = unicodedata.normalize("NFKD", token)
+    no_marks = "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    lowered = no_marks.casefold().translate(_HEB_FINALS)
+    return _PUNCT_RE.sub("", lowered).strip()
+
+
 def _is_hebrew(text: str) -> bool:
     letters = [c for c in text if c.isalpha()]
     if not letters:
