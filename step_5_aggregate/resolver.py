@@ -86,6 +86,16 @@ def load_entity_resolver(path: Path | str | None = None) -> EntityResolver | Non
         return EntityResolver(json.load(f).get("entities") or [])
 
 
+def load_deleted_claims(path: Path | str | None = None) -> set[str]:
+    """Claim ids the reviewer hard-deleted (stored on the entities payload)."""
+
+    resolved = Path(path) if path is not None else resolve_entities_path()
+    if not resolved.is_file():
+        return set()
+    with resolved.open(encoding="utf-8") as f:
+        return set(json.load(f).get("deleted_claims") or [])
+
+
 def apply_entity_resolution(
     claims: list[dict[str, Any]], resolver: EntityResolver | None
 ) -> None:

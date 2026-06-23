@@ -1,4 +1,7 @@
+import { useEffect, useState } from "react";
 import { memberColor, entityColor } from "../colors";
+
+const PAGE_SIZE = 12;
 
 const STANCE_LABELS = {
   positive: "חיובי",
@@ -121,13 +124,30 @@ export default function EntityDetailPanel({
   onCopyClaims,
   onExcludeClaim,
   onExcludeClaims,
+  onDeleteClaim,
   onMerge,
   onSetStatus,
+  onFetchMemberClaims,
+  onCreateAggregation,
+  onSetRepresentative,
+  onDecoupleClaim,
   onPrev,
   onNext,
   onOpenEntity,
   saving,
 }) {
+  // Per-member claim page (offset/claims/count), keyed by member name. Reset
+  // whenever a fresh entity payload arrives so paging never leaks across edits.
+  const [pages, setPages] = useState({});
+  const [aggDialog, setAggDialog] = useState(null);
+  const [aggPopup, setAggPopup] = useState(null);
+
+  useEffect(() => {
+    setPages({});
+    setAggDialog(null);
+    setAggPopup(null);
+  }, [entity]);
+
   if (!entity) {
     return (
       <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">
@@ -136,11 +156,50 @@ export default function EntityDetailPanel({
     );
   }
 
+  const memberClaims = (member) =>
+    pages[member.name]?.claims ?? member.sample_claims;
+  const memberOffset = (member) => pages[member.name]?.offset ?? 0;
+  const memberCount = (member) => pages[member.name]?.count ?? member.count;
+
+  const changePage = async (member, offset) => {
+    const data = await onFetchMemberClaims(member.name, offset, PAGE_SIZE);
+    setPages((prev) => ({
+      ...prev,
+      [member.name]: {
+        offset: data.offset,
+        claims: data.claims,
+        count: data.count,
+      },
+    }));
+  };
+
   const memberSelectedIds = (name) =>
-    (entity.members || [])
-      .find((m) => m.name === name)
-      ?.sample_claims.filter((c) => selectedClaims.has(`${name}\u0001${c.claim_id}`))
+    memberClaims((entity.members || []).find((m) => m.name === name) || {})
+      ?.filter((c) => selectedClaims.has(`${name}\u0001${c.claim_id}`))
       .map((c) => c.claim_id) || [];
+
+  const claimTextById = {};
+  (entity.members || []).forEach((m) => {
+    (memberClaims(m) || []).forEach((c) => {
+      claimTextById[c.claim_id] = c.claim_text;
+    });
+  });
+
+  const selectedClaimIds = Array.from(
+    new Set(Array.from(selectedClaims).map((k) => k.split("\u0001")[1]))
+  );
+
+  const openAggDialog = () =>
+    setAggDialog({
+      claimIds: selectedClaimIds,
+      representative: selectedClaimIds[0],
+    });
+
+  const confirmAggregation = () => {
+    if (!aggDialog || aggDialog.claimIds.length < 2) return;
+    onCreateAggregation(aggDialog.claimIds, aggDialog.representative);
+    setAggDialog(null);
+  };
 
   const contacts = entity.contacts || {};
   const contactLines = [
@@ -236,6 +295,15 @@ export default function EntityDetailPanel({
           >
             מזג ישות זו לתוך אחרת...
           </button>
+          <button
+            type="button"
+            disabled={saving || selectedClaimIds.length < 2}
+            onClick={openAggDialog}
+            className="text-xs px-3 py-1.5 rounded border border-indigo-300 text-indigo-700 hover:bg-indigo-50 disabled:opacity-40"
+            title="אחד טענות נבחרות לכדי טענה מייצגת אחת"
+          >
+            אחד טענות נבחרות ({selectedClaimIds.length})
+          </button>
         </div>
 
         {contactLines.length > 0 && (
@@ -320,7 +388,7 @@ export default function EntityDetailPanel({
               </header>
 
               <div className="p-2 space-y-1.5">
-                {member.sample_claims.map((claim) => {
+                {memberClaims(member).map((claim) => {
                   const key = `${member.name}\u0001${claim.claim_id}`;
                   const checked = selectedClaims.has(key);
                   return (
@@ -346,6 +414,16 @@ export default function EntityDetailPanel({
                           {claim.stance && (
                             <span>{STANCE_LABELS[claim.stance] || claim.stance}</span>
                           )}
+                          {claim.aggregation && (
+                            <button
+                              type="button"
+                              onClick={() => setAggPopup(claim.aggregation)}
+                              className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 border border-indigo-200 hover:bg-indigo-200"
+                              title="אוחד מטענות נוספות - לחץ לצפייה"
+                            >
+                              אוחד מ-{claim.aggregation.count} טענות
+                            </button>
+                          )}
                           {(claim.other_entities || []).length > 0 && (
                             <EntityChipList
                               entities={claim.other_entities}
@@ -365,26 +443,190 @@ export default function EntityDetailPanel({
                           )}
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        disabled={saving}
-                        onClick={() => onExcludeClaim(member.name, claim.claim_id)}
-                        className="shrink-0 text-[10px] px-2 py-1 rounded border border-rose-200 text-rose-700 hover:bg-rose-50 disabled:opacity-40"
-                        title="הטענה לא קשורה לישות זו"
-                      >
-                        לא קשור
-                      </button>
+                      <div className="shrink-0 flex flex-col gap-1">
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => onExcludeClaim(member.name, claim.claim_id)}
+                          className="text-[10px] px-2 py-1 rounded border border-rose-200 text-rose-700 hover:bg-rose-50 disabled:opacity-40"
+                          title="הטענה לא קשורה לישות זו"
+                        >
+                          לא קשור
+                        </button>
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => onDeleteClaim(claim.claim_id)}
+                          className="text-[10px] px-2 py-1 rounded bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-40"
+                          title="מחק את הטענה לחלוטין מכל הצנרת"
+                        >
+                          מחק
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
-                {member.sample_claims.length === 0 && (
+                {memberClaims(member).length === 0 && (
                   <p className="text-xs text-slate-400 p-2">אין טענות לדוגמה.</p>
+                )}
+                {memberCount(member) > PAGE_SIZE && (
+                  <div className="flex items-center justify-center gap-3 pt-1 text-[11px] text-slate-500">
+                    <button
+                      type="button"
+                      disabled={saving || memberOffset(member) === 0}
+                      onClick={() =>
+                        changePage(member, memberOffset(member) - PAGE_SIZE)
+                      }
+                      className="px-2 py-1 border rounded disabled:opacity-30"
+                    >
+                      הקודם
+                    </button>
+                    <span>
+                      {memberOffset(member) + 1}–
+                      {Math.min(memberOffset(member) + PAGE_SIZE, memberCount(member))}{" "}
+                      מתוך {memberCount(member)}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={
+                        saving ||
+                        memberOffset(member) + PAGE_SIZE >= memberCount(member)
+                      }
+                      onClick={() =>
+                        changePage(member, memberOffset(member) + PAGE_SIZE)
+                      }
+                      className="px-2 py-1 border rounded disabled:opacity-30"
+                    >
+                      הבא
+                    </button>
+                  </div>
                 )}
               </div>
             </section>
           );
         })}
       </div>
+
+      {aggDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+            <div className="px-4 py-3 border-b">
+              <h3 className="text-sm font-semibold">
+                אחד {aggDialog.claimIds.length} טענות
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                בחר את הטענה שתישאר כנציג. השאר יוסתרו ויאוחדו בשלב הבא.
+              </p>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+              {aggDialog.claimIds.map((claimId) => (
+                <label
+                  key={claimId}
+                  className="flex items-start gap-2 bg-slate-50 rounded p-2 cursor-pointer"
+                >
+                  <input
+                    type="radio"
+                    name="agg-representative"
+                    checked={aggDialog.representative === claimId}
+                    onChange={() =>
+                      setAggDialog((prev) => ({ ...prev, representative: claimId }))
+                    }
+                    className="mt-1 shrink-0"
+                  />
+                  <span className="min-w-0 flex-1 text-sm">
+                    {claimTextById[claimId] || claimId}
+                    <code className="block text-[11px] text-slate-400">
+                      {claimId}
+                    </code>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="px-4 py-3 border-t flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setAggDialog(null)}
+                className="text-xs px-3 py-1.5 rounded border border-slate-300 hover:bg-slate-50"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={confirmAggregation}
+                className="text-xs px-3 py-1.5 rounded bg-indigo-600 text-white disabled:opacity-40"
+              >
+                אחד
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {aggPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+            <div className="px-4 py-3 border-b flex items-center justify-between">
+              <h3 className="text-sm font-semibold">
+                טענות מאוחדות ({aggPopup.count})
+              </h3>
+              <button
+                type="button"
+                onClick={() => setAggPopup(null)}
+                className="text-xs text-slate-500 hover:text-slate-800"
+              >
+                סגור
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+              {aggPopup.members.map((m) => {
+                const isRep = m.claim_id === aggPopup.representative;
+                return (
+                  <div
+                    key={m.claim_id}
+                    className="flex items-start gap-2 bg-slate-50 rounded p-2"
+                  >
+                    <div className="min-w-0 flex-1 text-sm">
+                      {m.claim_text || m.claim_id}
+                      <code className="block text-[11px] text-slate-400">
+                        {m.claim_id}
+                      </code>
+                    </div>
+                    {isRep ? (
+                      <span className="shrink-0 text-[10px] px-2 py-1 rounded bg-indigo-100 text-indigo-700 font-medium">
+                        נציג
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => {
+                          onSetRepresentative(aggPopup.id, m.claim_id);
+                          setAggPopup(null);
+                        }}
+                        className="shrink-0 text-[10px] px-2 py-1 rounded border border-indigo-200 text-indigo-700 hover:bg-indigo-50 disabled:opacity-40"
+                      >
+                        קבע כנציג
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => {
+                        onDecoupleClaim(aggPopup.id, m.claim_id);
+                        setAggPopup(null);
+                      }}
+                      className="shrink-0 text-[10px] px-2 py-1 rounded border border-rose-200 text-rose-700 hover:bg-rose-50 disabled:opacity-40"
+                    >
+                      נתק
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -318,6 +318,201 @@ def test_resolve_uncertain_contact_validates(tmp_path: Path) -> None:
         )
 
 
+def test_reject_splits_and_trims_to_llm_claims(
+    store_files: tuple[Path, Path], tmp_path: Path
+) -> None:
+    entities_path, claims_path = store_files
+    claims = json.loads(claims_path.read_text(encoding="utf-8"))
+    # Mentions "David Shield" in text but the LLM tagged it to ORM only; reject
+    # must drop this mention-matched claim from the David Shield entity (Req 3).
+    claims["claims"].append(
+        {
+            "claim_id": "t2-c0",
+            "thread_id": "t2",
+            "claim_text": "David Shield is great",
+            "topic_tags": ["overview"],
+            "entities": ["ORM"],
+        }
+    )
+    claims_path.write_text(json.dumps(claims), encoding="utf-8")
+
+    store = EntityStore(
+        entities_path=entities_path,
+        claims_path=claims_path,
+        aggregations_path=tmp_path / "agg.json",
+    )
+    store.load()
+
+    store.reject("e0000")
+
+    by_name = {e["canonical_name"]: e for e in store.entities}
+    # The two-member cluster split into one standalone entity per member (Req 2).
+    assert "David Shield" in by_name
+    assert "DavidShield" in by_name
+    assert by_name["David Shield"]["entity_id"] != by_name["DavidShield"]["entity_id"]
+    assert by_name["David Shield"]["status"] == "suggested"
+
+    ds = store.get_entity(by_name["David Shield"]["entity_id"])["entity"]
+    member = ds["members"][0]
+    ids = {c["claim_id"] for c in member["sample_claims"]}
+    assert ids == {"t1-c0"}  # only the LLM-tagged claim, not the mention match
+
+    dsj = store.get_entity(by_name["DavidShield"]["entity_id"])["entity"]
+    assert dsj["members"][0]["sample_claims"] == []  # no LLM tag for this alias
+
+
+def test_member_claims_pagination(
+    store_files: tuple[Path, Path], tmp_path: Path
+) -> None:
+    entities_path, claims_path = store_files
+    claims = json.loads(claims_path.read_text(encoding="utf-8"))
+    for i in range(1, 15):
+        claims["claims"].append(
+            {
+                "claim_id": f"t1-c{i}",
+                "thread_id": "t1",
+                "claim_text": f"David Shield note {i}",
+                "topic_tags": ["overview"],
+                "entities": ["David Shield"],
+            }
+        )
+    claims_path.write_text(json.dumps(claims), encoding="utf-8")
+
+    store = EntityStore(
+        entities_path=entities_path,
+        claims_path=claims_path,
+        aggregations_path=tmp_path / "agg.json",
+    )
+    store.load()
+
+    page = store.member_claims("e0000", "David Shield", offset=0, limit=5)
+    assert page["count"] == 15
+    assert len(page["claims"]) == 5
+    page2 = store.member_claims("e0000", "David Shield", offset=5, limit=5)
+    first = {c["claim_id"] for c in page["claims"]}
+    second = {c["claim_id"] for c in page2["claims"]}
+    assert len(second) == 5
+    assert first.isdisjoint(second)
+
+
+def test_manual_aggregation_hides_members_and_edits(
+    store_files: tuple[Path, Path], tmp_path: Path
+) -> None:
+    entities_path, claims_path = store_files
+    claims = json.loads(claims_path.read_text(encoding="utf-8"))
+    claims["claims"].extend(
+        [
+            {
+                "claim_id": "t2-c0",
+                "thread_id": "t2",
+                "claim_text": "David Shield duplicate two",
+                "topic_tags": ["overview"],
+                "entities": ["David Shield"],
+            },
+            {
+                "claim_id": "t3-c0",
+                "thread_id": "t3",
+                "claim_text": "David Shield duplicate three",
+                "topic_tags": ["overview"],
+                "entities": ["David Shield"],
+            },
+        ]
+    )
+    claims_path.write_text(json.dumps(claims), encoding="utf-8")
+
+    store = EntityStore(
+        entities_path=entities_path,
+        claims_path=claims_path,
+        aggregations_path=tmp_path / "agg.json",
+    )
+    store.load()
+
+    with pytest.raises(ValueError):
+        store.create_aggregation(["t1-c0"], representative="t1-c0")
+    with pytest.raises(ValueError):
+        store.create_aggregation(["t1-c0", "t2-c0"], representative="t3-c0")
+
+    group = store.create_aggregation(
+        ["t1-c0", "t2-c0", "t3-c0"], representative="t2-c0"
+    )
+
+    def member_ids() -> set[str]:
+        detail = store.get_entity("e0000")["entity"]
+        member = next(m for m in detail["members"] if m["name"] == "David Shield")
+        return {c["claim_id"] for c in member["sample_claims"]}, member
+
+    ids, member = member_ids()
+    assert "t2-c0" in ids  # representative stays visible
+    assert "t1-c0" not in ids and "t3-c0" not in ids  # folded away
+    rep = next(c for c in member["sample_claims"] if c["claim_id"] == "t2-c0")
+    assert rep["aggregation"]["count"] == 3
+
+    # Re-aggregating a claim already in a group is rejected.
+    with pytest.raises(ValueError):
+        store.create_aggregation(["t1-c0", "t2-c0"], representative="t1-c0")
+
+    store.decouple_claim(group["id"], "t3-c0")
+    ids, _ = member_ids()
+    assert "t3-c0" in ids and "t1-c0" not in ids
+
+    store.set_representative(group["id"], "t1-c0")
+    ids, _ = member_ids()
+    assert "t1-c0" in ids and "t2-c0" not in ids
+
+    # Decoupling down to a single member dissolves the group entirely.
+    result = store.decouple_claim(group["id"], "t2-c0")
+    assert result.get("dissolved") is True
+    ids, _ = member_ids()
+    assert {"t1-c0", "t2-c0"} <= ids
+
+
+def test_delete_claim_removes_everywhere(
+    store_files: tuple[Path, Path], tmp_path: Path
+) -> None:
+    entities_path, claims_path = store_files
+    claims = json.loads(claims_path.read_text(encoding="utf-8"))
+    claims["claims"].append(
+        {
+            "claim_id": "t2-c0",
+            "thread_id": "t2",
+            "claim_text": "David Shield extra claim",
+            "topic_tags": ["overview"],
+            "entities": ["David Shield"],
+        }
+    )
+    claims_path.write_text(json.dumps(claims), encoding="utf-8")
+
+    store = EntityStore(
+        entities_path=entities_path,
+        claims_path=claims_path,
+        aggregations_path=tmp_path / "agg.json",
+    )
+    store.load()
+
+    # An aggregation referencing the doomed claim must dissolve on delete.
+    store.create_aggregation(["t1-c0", "t2-c0"], representative="t1-c0")
+
+    store.delete_claim("t2-c0")
+
+    detail = store.get_entity("e0000")["entity"]
+    member = next(m for m in detail["members"] if m["name"] == "David Shield")
+    ids = {c["claim_id"] for c in member["sample_claims"]}
+    assert "t2-c0" not in ids
+    assert "t1-c0" in ids
+    assert store.aggregations() == []
+
+    # The deleted id is persisted on the entities payload for downstream steps.
+    persisted = json.loads(entities_path.read_text(encoding="utf-8"))
+    assert "t2-c0" in (persisted.get("deleted_claims") or [])
+
+    from step_5_aggregate.resolver import load_deleted_claims
+
+    assert "t2-c0" in load_deleted_claims(entities_path)
+
+    with pytest.raises(KeyError):
+        store.delete_claim("does-not-exist")
+
+
 def test_related_entities_tagged_not_in_text(store_files: tuple[Path, Path]) -> None:
     entities_path, claims_path = store_files
     claims = json.loads(claims_path.read_text(encoding="utf-8"))

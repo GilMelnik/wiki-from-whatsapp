@@ -45,6 +45,10 @@ EDITED_AGGREGATED_PATH = AGGREGATED.edited
 ORIGINAL_PLAN_PATH = PLAN.original
 EDITED_PLAN_PATH = PLAN.edited
 
+# Manual claim aggregations created in the entity reviewer (no pipeline original);
+# consumed by step 5 to force-merge the grouped claims.
+MANUAL_AGGREGATIONS_PATH = Path("data/claim_aggregations.json")
+
 
 def resolve(artifact: Artifact) -> Path:
     return artifact.edited if artifact.edited.exists() else artifact.original

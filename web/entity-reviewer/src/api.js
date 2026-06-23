@@ -123,3 +123,50 @@ export function deleteEntity(entityId) {
     method: "DELETE",
   });
 }
+
+export function deleteClaim(claimId) {
+  return request(`/api/claims/${encodeURIComponent(claimId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function fetchMemberClaims(entityId, name, offset, limit) {
+  const q = new URLSearchParams({
+    name,
+    offset: String(offset),
+    limit: String(limit),
+  });
+  return request(
+    `/api/entities/${encodeURIComponent(entityId)}/member-claims?${q}`
+  );
+}
+
+export function createAggregation(claimIds, representative) {
+  return request("/api/aggregations", {
+    method: "POST",
+    body: JSON.stringify({ claim_ids: claimIds, representative }),
+  });
+}
+
+export function setAggregationRepresentative(groupId, claimId) {
+  return request(
+    `/api/aggregations/${encodeURIComponent(groupId)}/representative`,
+    {
+      method: "POST",
+      body: JSON.stringify({ claim_id: claimId }),
+    }
+  );
+}
+
+export function decoupleAggregationClaim(groupId, claimId) {
+  return request(`/api/aggregations/${encodeURIComponent(groupId)}/decouple`, {
+    method: "POST",
+    body: JSON.stringify({ claim_id: claimId }),
+  });
+}
+
+export function deleteAggregation(groupId) {
+  return request(`/api/aggregations/${encodeURIComponent(groupId)}`, {
+    method: "DELETE",
+  });
+}

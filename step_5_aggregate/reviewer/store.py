@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
+from step_5_aggregate.resolver import apply_entity_resolution, load_entity_resolver
 from step_5_aggregate.run import (
     DEFAULT_AUDIT_PATH,
     _load_audit_records,
@@ -152,8 +153,6 @@ class AggregateStore:
         with claims_path.open(encoding="utf-8") as f:
             claims_payload = json.load(f)
         claims = claims_payload.get("claims") or []
-
-        from step_4b_entities.run import apply_entity_resolution, load_entity_resolver
 
         apply_entity_resolution(claims, load_entity_resolver())
 

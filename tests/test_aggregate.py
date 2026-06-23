@@ -14,9 +14,56 @@ from step_5_aggregate.run import (
     _cluster,
     _medoid_index,
     _merge_claims,
+    apply_manual_aggregations,
     ensure_claim_embeddings,
     ensure_distance_matrix,
 )
+
+
+def test_manual_aggregation_force_merges_dissimilar_claims():
+    # Two claims with unrelated text and opposite stances would never cluster on
+    # their own, but a manual group forces them into one merged claim under the
+    # chosen representative (Req 4).
+    claims = [
+        {
+            "claim_id": "a",
+            "claim_text": "agency X is great",
+            "stance": "positive",
+            "date": "2024-01",
+            "entities": ["agency X"],
+            "thread_id": "t1",
+            "topic_tags": ["overview"],
+            "support_count": 1,
+        },
+        {
+            "claim_id": "b",
+            "claim_text": "completely unrelated wording about something else",
+            "stance": "negative",
+            "date": "2024-02",
+            "entities": ["Y"],
+            "thread_id": "t2",
+            "topic_tags": ["overview"],
+            "support_count": 1,
+        },
+    ]
+    aggregations = [{"id": "agg0000", "representative": "a", "claim_ids": ["a", "b"]}]
+
+    reduced = apply_manual_aggregations(claims, aggregations)
+    assert [c["claim_id"] for c in reduced] == ["a"]
+
+    merged = _merge_claims(
+        reduced,
+        {},
+        _claim_distance_matrix(_claim_texts(reduced), None, None),
+        similarity_threshold=0.9,
+    )
+    assert len(merged) == 1
+    entry = merged[0]
+    assert set(entry["source_claim_ids"]) == {"a", "b"}
+    assert entry["claim_text"] == "agency X is great"  # the chosen representative
+    assert entry["support_count"] == 2
+    assert entry["thread_count"] == 2
+    assert set(entry["entities"]) == {"Y", "agency X"}
 
 
 def test_cluster_bounds_diameter():

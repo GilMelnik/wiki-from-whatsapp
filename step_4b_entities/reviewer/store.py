@@ -11,7 +11,10 @@ from pathlib import Path
 from typing import Any, Literal
 
 from step_4b_entities.collect import _claim_contacts
-from step_4b_entities.constants import DEFAULT_ENTITY_ANALYSIS_PATH
+from step_4b_entities.constants import (
+    DEFAULT_ENTITY_ANALYSIS_PATH,
+    SAMPLE_CLAIMS_PER_MEMBER,
+)
 from step_4b_entities.mentions import (
     Analyzer,
     SimpleAnalyzer,
@@ -24,6 +27,7 @@ from utils.json_io import write_json_file
 from utils.paths import (
     BACKUPS_DIR,
     EDITED_ENTITIES_PATH,
+    MANUAL_AGGREGATIONS_PATH,
     ORIGINAL_ENTITIES_PATH,
     init_entities_edited,
     resolve_claims_path,
@@ -125,11 +129,17 @@ class EntityStore:
         claims_path: Path | str | None = None,
         analyzer: Analyzer | None = None,
         analysis_cache_path: Path | str | None = None,
+        aggregations_path: Path | str | None = None,
     ) -> None:
         self._entities_override = (
             Path(entities_path) if entities_path is not None else None
         )
         self._claims_override = Path(claims_path) if claims_path is not None else None
+        self._aggregations_path = (
+            Path(aggregations_path)
+            if aggregations_path is not None
+            else MANUAL_AGGREGATIONS_PATH
+        )
         # Model-free default keeps direct/test instantiation offline; the web server
         # injects a DictaAnalyzer + shared cache so highlighting matches the pipeline.
         self._analyzer: Analyzer = analyzer or SimpleAnalyzer()
@@ -144,6 +154,14 @@ class EntityStore:
         self._entities_source = ORIGINAL_ENTITIES_PATH
         self._backup_done = False
         self._loaded = False
+        # Manual claim aggregations: groups of near-duplicate claims the reviewer
+        # marks so step 5 force-merges them under one chosen representative.
+        self._aggregations: list[dict[str, Any]] = []
+        self._agg_by_claim: dict[str, dict[str, Any]] = {}
+        self._agg_by_rep: dict[str, dict[str, Any]] = {}
+        # Claims hard-deleted in the reviewer: persisted on the entities payload
+        # and filtered out everywhere (display + step 5).
+        self._deleted_claims: set[str] = set()
 
     def load(self) -> None:
         init_entities_edited()
@@ -161,6 +179,7 @@ class EntityStore:
             )
         with self._entities_source.open(encoding="utf-8") as f:
             self._data = json.load(f)
+        self._deleted_claims = set(self._data.get("deleted_claims") or [])
 
         claims_path = (
             self._claims_override
@@ -183,7 +202,25 @@ class EntityStore:
         else:
             self._analysis = analyze_claims(claims, self._analyzer)
         self._rebuild_alias_index()
+        self._load_aggregations()
         self._loaded = True
+
+    def _load_aggregations(self) -> None:
+        self._aggregations = []
+        if self._aggregations_path.is_file():
+            with self._aggregations_path.open(encoding="utf-8") as f:
+                self._aggregations = json.load(f).get("aggregations") or []
+        self._reindex_aggregations()
+
+    def _reindex_aggregations(self) -> None:
+        self._agg_by_claim = {}
+        self._agg_by_rep = {}
+        for group in self._aggregations:
+            rep = group.get("representative")
+            for claim_id in group.get("claim_ids") or []:
+                self._agg_by_claim[claim_id] = group
+            if rep:
+                self._agg_by_rep[rep] = group
 
     def _rebuild_alias_index(self) -> None:
         self._alias_to_entity = {}
@@ -251,7 +288,9 @@ class EntityStore:
 
     def _claim_ids_for_member(self, member: dict[str, Any]) -> list[str]:
         excluded = set(member.get("excluded_claim_ids") or [])
-        return sorted(self._raw_claim_ids_for_member(member) - excluded)
+        return sorted(
+            self._raw_claim_ids_for_member(member) - excluded - self._deleted_claims
+        )
 
     def _member_from_claims(
         self,
@@ -457,6 +496,72 @@ class EntityStore:
         )
         return items[offset : offset + limit], len(items)
 
+    def _is_hidden_by_aggregation(self, claim_id: str) -> bool:
+        """A non-representative member of an aggregation is folded away."""
+
+        group = self._agg_by_claim.get(claim_id)
+        return group is not None and group.get("representative") != claim_id
+
+    def _visible_claim_ids(self, claim_ids: list[str]) -> list[str]:
+        return [c for c in claim_ids if not self._is_hidden_by_aggregation(c)]
+
+    def _aggregation_view(self, claim_id: str) -> dict[str, Any] | None:
+        group = self._agg_by_rep.get(claim_id)
+        if group is None:
+            return None
+        ids = group.get("claim_ids") or []
+        return {
+            "id": group["id"],
+            "representative": group.get("representative"),
+            "count": len(ids),
+            "members": [
+                {
+                    "claim_id": cid,
+                    "claim_text": (self._claims_by_id.get(cid) or {}).get(
+                        "claim_text", ""
+                    ),
+                }
+                for cid in ids
+            ],
+        }
+
+    def _enrich_claim(
+        self,
+        claim_id: str,
+        member_name: str,
+        *,
+        entity_id: str,
+        entity_names: set[str],
+    ) -> dict[str, Any] | None:
+        claim = self._claims_by_id.get(claim_id)
+        if claim is None:
+            return None
+        other_entities = self._other_entities_in_claim(
+            claim,
+            current_entity_id=entity_id,
+            current_names=entity_names,
+        )
+        return {
+            "claim_id": claim_id,
+            "claim_text": claim.get("claim_text", ""),
+            "stance": claim.get("stance"),
+            "thread_id": claim.get("thread_id"),
+            "highlights": self._claim_highlights(
+                claim,
+                member_name,
+                current_entity_id=entity_id,
+                current_names=entity_names,
+            ),
+            "other_entities": other_entities,
+            "related_entities": self._related_entities_in_claim(
+                claim,
+                current_entity_id=entity_id,
+                current_names=entity_names,
+                mentioned_entity_ids={o["entity_id"] for o in other_entities},
+            ),
+            "aggregation": self._aggregation_view(claim_id),
+        }
+
     def _member_view(
         self,
         member: dict[str, Any],
@@ -466,42 +571,14 @@ class EntityStore:
         entity_names: set[str],
     ) -> dict[str, Any]:
         name = member["name"]
-        claim_ids = self._claim_ids_for_member(member)
-        sample_ids = claim_ids[:12]
+        claim_ids = self._visible_claim_ids(self._claim_ids_for_member(member))
         samples: list[dict[str, Any]] = []
-        for claim_id in sample_ids:
-            claim = self._claims_by_id.get(claim_id)
-            if claim is None:
-                continue
-            text = claim.get("claim_text", "")
-            other_entities = self._other_entities_in_claim(
-                claim,
-                current_entity_id=entity_id,
-                current_names=entity_names,
+        for claim_id in claim_ids[:SAMPLE_CLAIMS_PER_MEMBER]:
+            enriched = self._enrich_claim(
+                claim_id, name, entity_id=entity_id, entity_names=entity_names
             )
-            samples.append(
-                {
-                    "claim_id": claim_id,
-                    "claim_text": text,
-                    "stance": claim.get("stance"),
-                    "thread_id": claim.get("thread_id"),
-                    "highlights": self._claim_highlights(
-                        claim,
-                        name,
-                        current_entity_id=entity_id,
-                        current_names=entity_names,
-                    ),
-                    "other_entities": other_entities,
-                    "related_entities": self._related_entities_in_claim(
-                        claim,
-                        current_entity_id=entity_id,
-                        current_names=entity_names,
-                        mentioned_entity_ids={
-                            o["entity_id"] for o in other_entities
-                        },
-                    ),
-                }
-            )
+            if enriched is not None:
+                samples.append(enriched)
         return {
             "name": name,
             "member_index": member_index,
@@ -511,6 +588,42 @@ class EntityStore:
             "topics": member.get("topics") or [],
             "contacts": member.get("contacts") or {},
             "sample_claims": samples,
+        }
+
+    def member_claims(
+        self,
+        entity_id: str,
+        name: str,
+        *,
+        offset: int = 0,
+        limit: int = SAMPLE_CLAIMS_PER_MEMBER,
+    ) -> dict[str, Any]:
+        """One page of a member's visible claims (Req 1 pagination)."""
+
+        entity, _ = self._find_entity(entity_id)
+        member = next(
+            (m for m in entity.get("members") or [] if m["name"] == name), None
+        )
+        if member is None:
+            raise ValueError(f"name not a member of this entity: {name}")
+        entity_names = set(entity.get("aliases") or [])
+        canonical = entity.get("canonical_name")
+        if canonical:
+            entity_names.add(canonical)
+        claim_ids = self._visible_claim_ids(self._claim_ids_for_member(member))
+        claims: list[dict[str, Any]] = []
+        for claim_id in claim_ids[offset : offset + limit]:
+            enriched = self._enrich_claim(
+                claim_id, name, entity_id=entity_id, entity_names=entity_names
+            )
+            if enriched is not None:
+                claims.append(enriched)
+        return {
+            "name": name,
+            "count": len(claim_ids),
+            "offset": offset,
+            "limit": limit,
+            "claims": claims,
         }
 
     def get_entity(
@@ -577,6 +690,48 @@ class EntityStore:
         entity["status"] = status
         self.save()
         return self.get_entity(entity_id)["entity"]
+
+    def _llm_claim_ids(self, name: str) -> list[str]:
+        """Only claims whose LLM ``entities`` list tagged this name (Req 3)."""
+
+        return sorted(self._claim_ids_by_name.get(name, []))
+
+    def reject(self, entity_id: str) -> dict[str, Any]:
+        """Undo a merge suggestion: restrict every member to its LLM-tagged
+        claims (drop mention-matched ones, Req 3) and split a multi-member
+        cluster into one standalone ``suggested`` entity per member (Req 2)."""
+
+        entity, _ = self._find_entity(entity_id)
+        members = entity.get("members") or []
+        for member in members:
+            member["claim_ids"] = self._llm_claim_ids(member["name"])
+            member["excluded_claim_ids"] = []
+
+        if len(members) <= 1:
+            entity["status"] = "suggested"
+            if members:
+                _recompute_entity(entity)
+            self.save()
+            return self.get_entity(entity_id)["entity"]
+
+        new_entities: list[dict[str, Any]] = []
+        for member in members:
+            split = {
+                "entity_id": self._new_entity_id(),
+                "canonical_name": member["name"],
+                "status": "suggested",
+                "aliases": [member["name"]],
+                "members": [member],
+                "contacts": {"email": [], "phone": [], "website": []},
+                "topics": [],
+                "score": 1.0,
+            }
+            _recompute_entity(split)
+            self.entities.append(split)
+            new_entities.append(split)
+        self.entities.pop(self.entities.index(entity))
+        self.save()
+        return self.get_entity(new_entities[0]["entity_id"])["entity"]
 
     def set_canonical(self, entity_id: str, name: str) -> dict[str, Any]:
         entity, _ = self._find_entity(entity_id)
@@ -859,6 +1014,41 @@ class EntityStore:
         self.save()
         return self.get_entity(entity_id)["entity"]
 
+    def delete_claim(self, claim_id: str) -> dict[str, Any]:
+        """Hard-delete a claim: record it on the entities payload and scrub it
+        from every member/aggregation so it is gone from the reviewer and is
+        filtered out of step 5 (the deleted list lives in entities_edited.json)."""
+
+        if claim_id not in self._claims_by_id:
+            raise KeyError(f"unknown claim: {claim_id}")
+        self._deleted_claims.add(claim_id)
+        self._data["deleted_claims"] = sorted(self._deleted_claims)
+
+        for entity in self.entities:
+            members = entity.get("members") or []
+            touched = False
+            for i, member in enumerate(members):
+                cids = member.get("claim_ids")
+                excluded = member.get("excluded_claim_ids") or []
+                if cids is not None and claim_id in cids:
+                    members[i] = self._member_from_claims(
+                        member["name"],
+                        [c for c in cids if c != claim_id],
+                        excluded_claim_ids=[c for c in excluded if c != claim_id],
+                    )
+                    touched = True
+                elif claim_id in excluded:
+                    member["excluded_claim_ids"] = [
+                        c for c in excluded if c != claim_id
+                    ]
+                    touched = True
+            if touched:
+                _recompute_entity(entity)
+
+        self._remove_claim_from_aggregations(claim_id)
+        self.save()
+        return {"deleted_id": claim_id, "deleted_count": len(self._deleted_claims)}
+
     def merge(self, entity_id: str, target_entity_id: str) -> dict[str, Any]:
         if entity_id == target_entity_id:
             raise ValueError("source and target entity are the same")
@@ -869,6 +1059,113 @@ class EntityStore:
         self.entities.pop(self.entities.index(source))
         self.save()
         return self.get_entity(target_entity_id)["entity"]
+
+    # --- manual claim aggregation (Req 4) -------------------------------
+
+    def aggregations(self) -> list[dict[str, Any]]:
+        return self._aggregations
+
+    def _find_aggregation(self, group_id: str) -> dict[str, Any]:
+        for group in self._aggregations:
+            if group["id"] == group_id:
+                return group
+        raise KeyError(f"unknown aggregation: {group_id}")
+
+    def _new_aggregation_id(self) -> str:
+        nums = [
+            int(m.group(1))
+            for g in self._aggregations
+            if (m := re.fullmatch(r"agg(\d+)", g["id"]))
+        ]
+        return f"agg{(max(nums) + 1) if nums else 0:04d}"
+
+    def create_aggregation(
+        self, claim_ids: list[str], representative: str
+    ) -> dict[str, Any]:
+        ids = list(dict.fromkeys(claim_ids))
+        if len(ids) < 2:
+            raise ValueError("an aggregation needs at least two claims")
+        missing = [c for c in ids if c not in self._claims_by_id]
+        if missing:
+            raise ValueError(f"unknown claim_ids: {', '.join(missing)}")
+        if representative not in ids:
+            raise ValueError("representative must be one of the aggregated claims")
+        clash = [c for c in ids if c in self._agg_by_claim]
+        if clash:
+            raise ValueError(f"claims already aggregated: {', '.join(clash)}")
+        group = {
+            "id": self._new_aggregation_id(),
+            "representative": representative,
+            "claim_ids": ids,
+        }
+        self._aggregations.append(group)
+        self._save_aggregations()
+        return group
+
+    def set_representative(self, group_id: str, claim_id: str) -> dict[str, Any]:
+        group = self._find_aggregation(group_id)
+        if claim_id not in (group.get("claim_ids") or []):
+            raise ValueError("representative must be one of the aggregated claims")
+        group["representative"] = claim_id
+        self._save_aggregations()
+        return group
+
+    def decouple_claim(self, group_id: str, claim_id: str) -> dict[str, Any]:
+        group = self._find_aggregation(group_id)
+        if claim_id not in (group.get("claim_ids") or []):
+            raise ValueError("claim is not part of this aggregation")
+        remaining = [c for c in group["claim_ids"] if c != claim_id]
+        if len(remaining) < 2:
+            self._aggregations = [g for g in self._aggregations if g is not group]
+            self._save_aggregations()
+            return {"id": group_id, "dissolved": True}
+        group["claim_ids"] = remaining
+        if group["representative"] == claim_id:
+            group["representative"] = remaining[0]
+        self._save_aggregations()
+        return group
+
+    def delete_aggregation(self, group_id: str) -> dict[str, Any]:
+        self._find_aggregation(group_id)
+        self._aggregations = [g for g in self._aggregations if g["id"] != group_id]
+        self._save_aggregations()
+        return {"id": group_id, "dissolved": True}
+
+    def _remove_claim_from_aggregations(self, claim_id: str) -> None:
+        """Drop a (deleted) claim from any group, dissolving groups under two."""
+
+        changed = False
+        kept: list[dict[str, Any]] = []
+        for group in self._aggregations:
+            ids = group.get("claim_ids") or []
+            if claim_id not in ids:
+                kept.append(group)
+                continue
+            changed = True
+            remaining = [c for c in ids if c != claim_id]
+            if len(remaining) < 2:
+                continue  # dissolve
+            group["claim_ids"] = remaining
+            if group.get("representative") == claim_id:
+                group["representative"] = remaining[0]
+            kept.append(group)
+        if changed:
+            self._aggregations = kept
+            self._save_aggregations()
+
+    def _save_aggregations(self) -> None:
+        self._reindex_aggregations()
+        write_json_file(
+            {
+                "aggregations": self._aggregations,
+                "metadata": {
+                    "edited_by": "entity_reviewer",
+                    "edited_at": datetime.now().isoformat(timespec="seconds"),
+                    "count": len(self._aggregations),
+                },
+            },
+            self._aggregations_path,
+        )
 
     # --- persistence ----------------------------------------------------
 

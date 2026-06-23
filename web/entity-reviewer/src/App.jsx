@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   copyClaims,
+  createAggregation,
+  decoupleAggregationClaim,
+  deleteClaim,
   deleteEntity,
   excludeClaims,
   fetchEntities,
   fetchEntity,
+  fetchMemberClaims,
   fetchMeta,
   fetchStats,
   mergeEntity,
@@ -12,6 +16,7 @@ import {
   moveMember,
   renameEntity,
   resolveUncertainContact,
+  setAggregationRepresentative,
   setCanonical,
   setContacts,
   setStatus,
@@ -293,10 +298,43 @@ export default function App() {
                 selectedId
               )
             }
+            onDeleteClaim={(claimId) => {
+              if (
+                !window.confirm(
+                  "למחוק את הטענה לחלוטין? היא תוסר מכל הישויות ולא תשמש בהמשך הצנרת."
+                )
+              )
+                return;
+              guard(() => deleteClaim(claimId), "הטענה נמחקה", selectedId);
+            }}
             onOpenEntity={setSelectedId}
             onMerge={() => setDialog({ kind: "merge" })}
             onSetStatus={(value) =>
               guard(() => setStatus(selectedId, value), "הסטטוס עודכן", selectedId)
+            }
+            onFetchMemberClaims={(name, offset, limit) =>
+              fetchMemberClaims(selectedId, name, offset, limit)
+            }
+            onCreateAggregation={(claimIds, representative) =>
+              guard(
+                () => createAggregation(claimIds, representative),
+                "הטענות אוחדו",
+                selectedId
+              )
+            }
+            onSetRepresentative={(groupId, claimId) =>
+              guard(
+                () => setAggregationRepresentative(groupId, claimId),
+                "הנציג עודכן",
+                selectedId
+              )
+            }
+            onDecoupleClaim={(groupId, claimId) =>
+              guard(
+                () => decoupleAggregationClaim(groupId, claimId),
+                "הטענה נותקה מהאיחוד",
+                selectedId
+              )
             }
             onPrev={setSelectedId}
             onNext={setSelectedId}

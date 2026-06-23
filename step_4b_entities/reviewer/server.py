@@ -96,6 +96,19 @@ class MergeRequest(BaseModel):
     target_entity_id: str
 
 
+class CreateAggregationRequest(BaseModel):
+    claim_ids: list[str]
+    representative: str
+
+
+class RepresentativeRequest(BaseModel):
+    claim_id: str
+
+
+class DecoupleRequest(BaseModel):
+    claim_id: str
+
+
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -161,8 +174,27 @@ def _store_call(fn, *args, **kwargs) -> dict[str, Any]:
     return {"entity": result, "meta": store.meta()}
 
 
+@app.get("/api/entities/{entity_id}/member-claims")
+def member_claims(
+    entity_id: str,
+    name: str = Query(...),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(12, ge=1, le=200),
+) -> dict[str, Any]:
+    store = get_store()
+    try:
+        return store.member_claims(entity_id, name, offset=offset, limit=limit)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+
 @app.post("/api/entities/{entity_id}/status")
 def set_status(entity_id: str, body: StatusRequest) -> dict[str, Any]:
+    # Reject is no longer a label: it un-merges the cluster and trims claims.
+    if body.status == "rejected":
+        return _store_call(EntityStore.reject, entity_id)
     return _store_call(EntityStore.set_status, entity_id, body.status)
 
 
@@ -254,6 +286,54 @@ def exclude_claims(entity_id: str, body: ExcludeClaimsRequest) -> dict[str, Any]
 @app.post("/api/entities/{entity_id}/merge")
 def merge(entity_id: str, body: MergeRequest) -> dict[str, Any]:
     return _store_call(EntityStore.merge, entity_id, body.target_entity_id)
+
+
+@app.delete("/api/claims/{claim_id}")
+def delete_claim(claim_id: str) -> dict[str, Any]:
+    store = get_store()
+    try:
+        result = store.delete_claim(claim_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    return {**result, "meta": store.meta()}
+
+
+def _aggregation_call(fn, *args, **kwargs) -> dict[str, Any]:
+    store = get_store()
+    try:
+        result = fn(store, *args, **kwargs)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return {"aggregation": result, "meta": store.meta()}
+
+
+@app.get("/api/aggregations")
+def list_aggregations() -> dict[str, Any]:
+    return {"aggregations": get_store().aggregations()}
+
+
+@app.post("/api/aggregations")
+def create_aggregation(body: CreateAggregationRequest) -> dict[str, Any]:
+    return _aggregation_call(
+        EntityStore.create_aggregation, body.claim_ids, body.representative
+    )
+
+
+@app.post("/api/aggregations/{group_id}/representative")
+def set_representative(group_id: str, body: RepresentativeRequest) -> dict[str, Any]:
+    return _aggregation_call(EntityStore.set_representative, group_id, body.claim_id)
+
+
+@app.post("/api/aggregations/{group_id}/decouple")
+def decouple_claim(group_id: str, body: DecoupleRequest) -> dict[str, Any]:
+    return _aggregation_call(EntityStore.decouple_claim, group_id, body.claim_id)
+
+
+@app.delete("/api/aggregations/{group_id}")
+def delete_aggregation(group_id: str) -> dict[str, Any]:
+    return _aggregation_call(EntityStore.delete_aggregation, group_id)
 
 
 def mount_static() -> None:

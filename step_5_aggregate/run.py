@@ -22,9 +22,13 @@ from typing import Any
 
 import numpy as np
 
-from step_5_aggregate.resolver import load_entity_resolver, apply_entity_resolution
+from step_5_aggregate.resolver import (
+    apply_entity_resolution,
+    load_deleted_claims,
+    load_entity_resolver,
+)
 from utils.json_io import write_json_file
-from utils.paths import resolve_claims_path
+from utils.paths import MANUAL_AGGREGATIONS_PATH, resolve_claims_path
 from utils.support import aggregate_reaction_summary, positive_reaction_senders_from_messages
 from utils.taxonomy import category_title, get_page
 
@@ -40,6 +44,48 @@ DEFAULT_EMBEDDING_MODEL = "intfloat/multilingual-e5-large"
 
 def _normalize(text: str) -> str:
     return " ".join(text.split()).strip()
+
+
+def _load_manual_aggregations(
+    path: Path | str | None = None,
+) -> list[dict[str, Any]]:
+    resolved = Path(path) if path is not None else MANUAL_AGGREGATIONS_PATH
+    if not resolved.is_file():
+        return []
+    with resolved.open(encoding="utf-8") as f:
+        return json.load(f).get("aggregations") or []
+
+
+def apply_manual_aggregations(
+    claims: list[dict[str, Any]], aggregations: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Force-merge reviewer-chosen claim groups (Req 4).
+
+    Each group collapses to its representative claim, which carries the other
+    members under ``_manual_group`` so ``build_merged_claim`` can still tally
+    their support. Returns the reduced claims list; the dropped members no
+    longer cluster on their own.
+
+    ponytail: the group lands in the representative's topic(s)/stance only;
+    members tagged with other topics follow the representative.
+    """
+
+    if not aggregations:
+        return claims
+    by_id = {c["claim_id"]: c for c in claims}
+    drop: set[str] = set()
+    for group in aggregations:
+        member_ids = [cid for cid in (group.get("claim_ids") or []) if cid in by_id]
+        if len(member_ids) < 2:
+            continue
+        rep = group.get("representative")
+        if rep not in member_ids:
+            rep = member_ids[0]
+        by_id[rep]["_manual_group"] = [by_id[cid] for cid in member_ids]
+        drop.update(cid for cid in member_ids if cid != rep)
+    if not drop:
+        return claims
+    return [c for c in claims if c["claim_id"] not in drop]
 
 
 def _load_audit_records(audit_path: Path | str) -> dict[str, dict[str, Any]]:
@@ -441,6 +487,17 @@ def build_merged_claim(
 ) -> dict[str, Any]:
     """Aggregate source claims into one merged cluster entry."""
 
+    # Expand any reviewer-forced group so its folded-away members still count.
+    expanded: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for claim in member_claims:
+        for member in claim.get("_manual_group") or [claim]:
+            cid = member["claim_id"]
+            if cid not in seen_ids:
+                seen_ids.add(cid)
+                expanded.append(member)
+    member_claims = expanded
+
     all_supporters: set[str] = set()
     statement_supporters: set[str] = set()
     reaction_supporters: set[str] = set()
@@ -577,8 +634,13 @@ def run(
         claims_payload = json.load(f)
     claims = claims_payload["claims"]
 
+    deleted_claims = load_deleted_claims()
+    if deleted_claims:
+        claims = [c for c in claims if c["claim_id"] not in deleted_claims]
+
     entity_resolver = load_entity_resolver()
     apply_entity_resolution(claims, entity_resolver)
+    claims = apply_manual_aggregations(claims, _load_manual_aggregations())
 
     audit_by_id = _load_audit_records(audit_path)
     embedder = _Embedder(use_embeddings)
@@ -660,4 +722,4 @@ def run(
 
 
 if __name__ == "__main__":
-    run(similarity_threshold=0.90, max_cluster_size=8, keep_together_similarity=0.95)
+    run(similarity_threshold=0.93, max_cluster_size=8, keep_together_similarity=0.95)
