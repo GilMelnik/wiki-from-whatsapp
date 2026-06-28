@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [react()],
   base: "/",
   build: {
-    outDir: "../../step_4_extract/reviewer/static",
+    outDir: "../../step_3_extract/reviewer/static",
     emptyOutDir: true,
   },
   server: {

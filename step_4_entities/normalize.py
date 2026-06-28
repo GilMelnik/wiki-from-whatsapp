@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from step_4b_entities.constants import MIN_SKELETON_LEN, SHORT_NAME_MAX_CHARS
+from step_4_entities.constants import MIN_SKELETON_LEN, SHORT_NAME_MAX_CHARS
 
 # Hebrew consonants -> Latin skeleton phonemes (vowels/matres lectionis dropped).
 _HEB_TO_LATIN = {

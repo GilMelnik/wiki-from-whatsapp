@@ -15,11 +15,11 @@ import re
 from pathlib import Path
 from typing import Any, Protocol, Sequence, runtime_checkable
 
-from step_4b_entities.constants import (
+from step_4_entities.constants import (
     DEFAULT_ENTITY_ANALYSIS_PATH,
     DISALLOWED_ENTITY_POS,
 )
-from step_4b_entities.normalize import _is_hebrew, normalize_token
+from step_4_entities.normalize import _is_hebrew, normalize_token
 from utils.json_io import write_json_file
 
 Word = dict[str, Any]

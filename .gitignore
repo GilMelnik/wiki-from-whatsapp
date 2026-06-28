@@ -236,8 +236,8 @@ drafts/
 # Reviewer / thread-tagger Vite build output (keep .gitkeep)
 **/reviewer/static/*
 !**/reviewer/static/.gitkeep
-step_2_thread_review/static/*
-!step_2_thread_review/static/.gitkeep
+step_1_threads_split/review/static/*
+!step_1_threads_split/review/static/.gitkeep
 thread_tagger/static/*
 !thread_tagger/static/.gitkeep
 web/thread-tagger/node_modules/

@@ -5,10 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
-from step_2_thread_review.models import duration_sec
-from step_2_thread_review.operations import (
+from step_1_threads_split.review import duration_sec
+from step_1_threads_split.review import (
     extract_messages_to_new_thread,
     indices_for_split_mode,
     merge_threads,
@@ -18,7 +16,7 @@ from step_2_thread_review.operations import (
     split_by_mode,
     split_thread,
 )
-from step_2_thread_review.store import ThreadStore
+from step_1_threads_split.review.store import ThreadStore
 from utils.paths import (
     init_edited_files,
     ORIGINAL_CLASSIFIED_PATH,
@@ -28,7 +26,7 @@ from utils.paths import (
     resolve_classified_path,
     resolve_threads_path,
 )
-from step_2_thread_review.stats import compute_stats, enrich_thread, filter_threads, sort_threads
+from step_1_threads_split.review import compute_stats, enrich_thread, filter_threads, sort_threads
 
 
 def _msg(i: int, dt: str, sender: str = "a", content: str = "hi") -> dict:
@@ -171,7 +169,7 @@ class TestInspectMode:
 
         from fastapi.testclient import TestClient
 
-        from step_2_thread_review.server import app, configure_store
+        from step_1_threads_split.review import app, configure_store
 
         configure_store(inspect_only=True)
         client = TestClient(app)

@@ -10,7 +10,7 @@ from typing import Any
 
 import numpy as np
 
-from step_4b_entities.constants import (
+from step_4_entities.constants import (
     MIN_SKELETON_LEN,
     PREFIX_SIMILARITY,
     SIGNAL_CO_OCCUR,
@@ -22,7 +22,7 @@ from step_4b_entities.constants import (
     SIMILARITY_THRESHOLD,
     TOPIC_GUARD_CAP,
 )
-from step_4b_entities.normalize import (
+from step_4_entities.normalize import (
     _is_hebrew,
     _is_short_name,
     _is_word_prefix,

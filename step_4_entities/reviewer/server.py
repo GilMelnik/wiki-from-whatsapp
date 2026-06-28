@@ -8,9 +8,9 @@ from typing import Any
 from fastapi import HTTPException, Query
 from pydantic import BaseModel
 
-from step_4b_entities.constants import DEFAULT_ENTITY_ANALYSIS_PATH
-from step_4b_entities.mentions import DictaAnalyzer
-from step_4b_entities.reviewer.store import EntityStore, SortKind, SortOrder, Status
+from step_4_entities.constants import DEFAULT_ENTITY_ANALYSIS_PATH
+from step_4_entities.mentions import DictaAnalyzer
+from step_4_entities.reviewer.store import EntityStore, SortKind, SortOrder, Status
 from utils.reviewer_server import (
     StoreRegistry,
     make_reviewer_app,

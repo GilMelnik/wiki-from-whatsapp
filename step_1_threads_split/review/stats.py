@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any, Literal
 
-from step_2_thread_review.models import FilterKind, SortKind, duration_sec
+from step_1_threads_split.review.models import FilterKind, SortKind, duration_sec
 
 
 def _histogram(values: list[float], bucket_count: int = 20) -> list[dict[str, Any]]:

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from step_4b_entities.reviewer.store import EntityStore
+from step_4_entities.reviewer.store import EntityStore
 
 
 @pytest.fixture

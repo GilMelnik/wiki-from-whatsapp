@@ -12,8 +12,8 @@ from typing import Any
 
 from utils.json_io import write_json_file
 
-from step_2_thread_review.models import FilterKind, SortKind, SortOrder, default_classification
-from step_2_thread_review.operations import (
+from step_1_threads_split.review.models import FilterKind, SortKind, SortOrder, default_classification
+from step_1_threads_split.review.operations import (
     classification_from_thread,
     merge_threads,
     move_messages,
@@ -29,7 +29,7 @@ from utils.paths import (
     resolve_classified_path,
     resolve_threads_path,
 )
-from step_2_thread_review.stats import enrich_thread, filter_threads, sort_threads
+from step_1_threads_split.review.stats import enrich_thread, filter_threads, sort_threads
 
 _SPLIT_ID = re.compile(r"^(.+)-split-(\d+)$")
 

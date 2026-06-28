@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from utils.llm_client import LLMClient
-from step_3_classify.reclassify import run
+from step_2_classify.reclassify import run
 
 
 def _thread(tid: str, content: str = "פונדקאות בישראל") -> dict:

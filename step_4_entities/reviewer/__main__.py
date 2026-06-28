@@ -7,7 +7,7 @@ import webbrowser
 
 import uvicorn
 
-from step_4b_entities.reviewer.server import (
+from step_4_entities.reviewer.server import (
     app,
     configure_store,
     get_store,

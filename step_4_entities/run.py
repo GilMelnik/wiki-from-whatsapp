@@ -32,10 +32,10 @@ from typing import Any
 
 from utils.json_io import write_json_file
 
-from step_4b_entities.cluster import cluster_entities
-from step_4b_entities.collect import collect_entities, load_claims_for_entities
-from step_4b_entities.constants import DEFAULT_OUTPUT_PATH, SIMILARITY_THRESHOLD
-from step_4b_entities.mentions import DictaAnalyzer, build_or_load_analysis
+from step_4_entities.cluster import cluster_entities
+from step_4_entities.collect import collect_entities, load_claims_for_entities
+from step_4_entities.constants import DEFAULT_OUTPUT_PATH, SIMILARITY_THRESHOLD
+from step_4_entities.mentions import DictaAnalyzer, build_or_load_analysis
 
 
 def run(

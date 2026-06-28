@@ -14,8 +14,8 @@ from typing import Any
 
 from utils.json_io import write_json_file
 from utils.llm_client import BatchRequest, LLMClient
-from step_4_extract.scrub import FORBIDDEN_TERM_INSTRUCTION
-from utils.taxonomy import CATEGORIES, category_title, taxonomy_seed_block
+from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION
+from utils.taxonomy import CATEGORIES, category_title, resolve_search_focus, taxonomy_seed_block
 
 from utils.paths import resolve_aggregated_path
 DEFAULT_AGGREGATED_PATH = Path("data/claims_aggregated.json")
@@ -29,7 +29,8 @@ PLAN_SYSTEM = (
     "2. כל עמוד חייב לכלול לפחות טענה אחת, באמצעות source_tags המצביעים על מזהי הנושאים המקוריים.\n"
     "3. הצע גרף קישורים סמנטי בין עמודים (ללא הגבלת מספר): קשר כל עמוד לעמודים "
     "המשלימים או הקרובים לו מבחינת תוכן. קישורים אלה מזינים את סעיף 'עמודים קשורים'.\n"
-    "4. עבור כל עמוד, הצע search_focus — שאילתת חיפוש באנגלית לרקע ציבורי כללי (לא דעות הקבוצה).\n"
+    "4. עבור עמודים ברשימת הנושאים עם search_focus מוגדר — השתמש בערך הזה כפי שהוא. "
+    "עבור עמודים חדשים שלא ברשימה, הצע search_focus — שאילתת חיפוש לרקע ציבורי כללי (לא דעות הקבוצה).\n"
     f"5. {FORBIDDEN_TERM_INSTRUCTION}\n"
     "החזר אך ורק אובייקט JSON תקין, ללא טקסט נוסף."
 )
@@ -72,7 +73,7 @@ def build_plan_prompt(topics: dict[str, Any]) -> str:
         '      "category": "<category-id>",\n'
         '      "source_tags": ["<topic-id>", ...],\n'
         '      "rationale": "<משפט קצר>",\n'
-        '      "search_focus": "<English search query for public background>"\n'
+        '      "search_focus": "<search query — use seed value when defined, else propose one>"\n'
         "    }\n"
         "  ],\n"
         '  "links": [\n'
@@ -100,7 +101,7 @@ def identity_plan(
                 "category": topic["category"],
                 "source_tags": [topic_id],
                 "rationale": "identity mapping (no plan agent)",
-                "search_focus": f"{topic['title']} gay surrogacy overview",
+                "search_focus": resolve_search_focus(topic_id, [topic_id]),
             }
         )
     return {"pages": pages, "links": []}
@@ -135,8 +136,10 @@ def _normalize_plan(raw: dict[str, Any], topics: dict[str, Any]) -> dict[str, An
                 "category": category,
                 "source_tags": source_tags,
                 "rationale": str(page.get("rationale") or ""),
-                "search_focus": str(
-                    page.get("search_focus") or f"{title} gay surrogacy overview"
+                "search_focus": resolve_search_focus(
+                    page_id,
+                    source_tags,
+                    llm_value=page.get("search_focus"),
                 ),
             }
         )
@@ -257,3 +260,10 @@ def pages_by_category(plan: dict[str, Any]) -> dict[str, list[tuple[str, str]]]:
         cat = page.get("category", "emergent")
         grouped[category_title(cat)].append((page["id"], page["title"]))
     return dict(grouped)
+
+
+if __name__ == "__main__":
+    run(
+        llm=LLMClient.for_stage(stage='plan', use_hybrid_defaults=True),
+        use_batch=True
+    )

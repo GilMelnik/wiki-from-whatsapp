@@ -17,7 +17,7 @@ Output: `step_4_extract/reviewer/static/`.
 Requires `data/claims.json` from step 4 extract.
 
 ```bash
-uvicorn step_4_extract.reviewer.server:app --host 127.0.0.1 --port 8766
+uvicorn step_3_extract.reviewer.server:app --host 127.0.0.1 --port 8766
 ```
 
 Create `data/claims_edited.json` from pipeline output:

@@ -8,9 +8,9 @@ from typing import Any, Literal
 from fastapi import HTTPException, Query
 from pydantic import BaseModel, Field
 
-from step_2_thread_review.models import FilterKind, SortKind, SortOrder
-from step_2_thread_review.stats import compute_stats, enrich_thread
-from step_2_thread_review.store import ThreadStore
+from step_1_threads_split.review.models import FilterKind, SortKind, SortOrder
+from step_1_threads_split.review.stats import compute_stats
+from step_1_threads_split.review.store import ThreadStore
 from utils.reviewer_server import StoreRegistry, make_reviewer_app, mount_static as _mount_static
 from utils.taxonomy import CATEGORIES, TAXONOMY
 

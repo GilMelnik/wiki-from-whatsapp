@@ -11,9 +11,9 @@ Runs steps in order:
     8. site      -> mkdocs.yml
 
 Human gates (web UIs, no CLI):
-    step 2 — thread review: ``python -m step_2_thread_review``
-    step 4 — PII review: ``uvicorn step_4_extract.reviewer.server:app``
-    step 4b — entity review: ``python -m step_4b_entities.reviewer``
+    step 1 — thread review: ``python -m step_1_threads_split.review``
+    step 3 — PII review: ``uvicorn step_3_extract.reviewer.server:app``
+    step 4 — entity review: ``python -m step_4_entities.reviewer``
     step 5 — aggregate review: ``python -m step_5_aggregate.reviewer``
     step 6 — plan review: ``uvicorn step_6_plan.reviewer.server:app``
 """
@@ -22,9 +22,9 @@ from __future__ import annotations
 
 import os
 
-from step_3_classify.run import run as classify
-from step_4_extract.run import run as extract
-from step_4b_entities.run import run as resolve_entities
+from step_2_classify.run import run as classify
+from step_3_extract.run import run as extract
+from step_4_entities.run import run as resolve_entities
 from step_5_aggregate.run import run as aggregate
 from step_6_plan.run import run as plan
 from step_7_generate.run import run as generate
@@ -80,7 +80,7 @@ def run(
     )
     print(
         "    → Review claims via "
-        "`uvicorn step_4_extract.reviewer.server:app` before aggregate."
+        "`uvicorn step_3_extract.reviewer.server:app` before aggregate."
     )
 
     print("\n[4b] Resolving entities...")
@@ -92,7 +92,7 @@ def run(
     )
     print(
         "    → Review entity merges via "
-        "`python -m step_4b_entities.reviewer` before aggregate."
+        "`python -m step_4_entities.reviewer` before aggregate."
     )
 
     print("\n[5] Aggregating claims...")

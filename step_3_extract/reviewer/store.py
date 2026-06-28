@@ -16,7 +16,7 @@ from utils.paths import (
     init_claims_edited,
     resolve_claims_path,
 )
-from step_4_extract.scrub import REDACTION_MARK, restore_scrubbed_text, summarize_redactions
+from step_3_extract.scrub import REDACTION_MARK, restore_scrubbed_text, summarize_redactions
 
 FilterKind = Literal["pending", "reviewed", "all"]
 ReviewDecision = Literal["accept", "restore"]

@@ -736,6 +736,8 @@ def _mock_plan(user: str) -> str:
             elif key == "claims":
                 claim_count = int(val) if val.isdigit() else 0
         if claim_count > 0:
+            from utils.taxonomy import resolve_search_focus
+
             pages.append(
                 {
                     "id": page_id,
@@ -743,7 +745,7 @@ def _mock_plan(user: str) -> str:
                     "category": "emergent",
                     "source_tags": [page_id],
                     "rationale": "mock identity mapping",
-                    "search_focus": f"{title} surrogacy",
+                    "search_focus": resolve_search_focus(page_id, [page_id]),
                 }
             )
     return json.dumps({"pages": pages, "links": []}, ensure_ascii=False)

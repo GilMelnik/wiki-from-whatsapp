@@ -22,7 +22,7 @@ Output: `step_4b_entities/reviewer/static/`.
 Requires `data/entities.json` from step 4b (`python -m step_4b_entities.run`).
 
 ```bash
-python -m step_4b_entities.reviewer
+python -m step_4_entities.reviewer
 ```
 
 If port 8770 is already in use, the previous listener is stopped automatically.
@@ -31,7 +31,7 @@ Pass `--no-kill-port` to disable that, or `--port` for a different port.
 Create `data/entities_edited.json` from pipeline output:
 
 ```bash
-python -m step_4b_entities.reviewer --init-edited
+python -m step_4_entities.reviewer --init-edited
 ```
 
 Step 5 aggregate prefers `entities_edited.json` when it exists and maps each
@@ -42,7 +42,7 @@ claim's raw entities to the canonical entity.
 Terminal 1:
 
 ```bash
-python -m step_4b_entities.reviewer --no-browser
+python -m step_4_entities.reviewer --no-browser
 ```
 
 Terminal 2:

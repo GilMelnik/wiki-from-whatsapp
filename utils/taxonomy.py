@@ -1,8 +1,9 @@
 """Seed taxonomy for the surrogacy wiki.
 
 Defines the canonical set of wiki pages (topics), their Hebrew titles, slugs,
-hierarchy and the keywords used for heuristic tagging and the offline mock
-LLM provider. The taxonomy is intentionally extensible: the LLM tagging step
+hierarchy, the keywords used for heuristic tagging and the offline mock
+LLM provider, and user-reviewed ``SEARCH_FOCUS`` queries for background
+research. The taxonomy is intentionally extensible: the LLM tagging step
 may attach emergent topic ids that are not listed here, and those are collected
 under the ``EMERGENT`` category during aggregation.
 """
@@ -491,6 +492,82 @@ TAXONOMY: tuple[TopicPage, ...] = (
 
 _BY_ID: dict[str, TopicPage] = {page.id: page for page in TAXONOMY}
 
+# User-reviewed background search queries (from wiki_plan_edited.json).
+SEARCH_FOCUS: dict[str, str] = {
+    "argentina": "פונדקאות גייז ארגנטינה",
+    "armenia": "ארמניה פונדקאות גייז",
+    "baby-development": "התפתחות התינוק וקורסי הכנה אבות גאים פונדקאות גייז",
+    "baby-formula": "מזון לתינוקות פונדקאות חלב שאוב",
+    "baby-gear": "baby gear intended parents surrogacy",
+    "babybloom": "בייביבלום Babybloom פונדקאות",
+    "birth": "gay dads surrogacy birth newborn first weeks",
+    "books-and-media": "ספרים ותכנים לילדים הורות גאה פונדקאות שני אבות",
+    "bringing-baby-home": 'משרד הפנים משרד החוץ פונדקאות חו"ל',
+    "canada": "פונדקאות גייז קנדה",
+    "choosing-agency": "בחירת סוכנות פונדקאות gay surrogacy",
+    "clinics": "מרפאות וצוות רפואי gay surrogacy overview",
+    "colombia": "קולומביה פונדקאות גייז",
+    "conversion": "גיור קטינים פונדקאות גייז",
+    "cyprus": "קפריסין פונדקאות",
+    "egg-donor": "gay surrogacy selecting egg donor",
+    "egg-donor-genetics": "בדיקות גנטיות לתורמת ולהורים פונדקאות גייז אבות גאים",
+    "escrow": "חשבון נאמנות Escrow gay surrogacy overview",
+    "europe-post-birth-bureaucracy": "european citizenship to surrogacy children gay parents",
+    "gaya": "גאיה (Gaya) פונדקאות",
+    "georgia": "גאורגיה פונדקאות גייז",
+    "insurance-bituach-leumi": "ביטוח לאומי פונדקאות אבות גייז",
+    "insurance-hospital-bills": "gay surrogacy hospital medical bills",
+    "insurance-israeli-private": "ביטוח בריאות פרטי פונדקאות גייז",
+    "insurance-newborn": "gay surrogacy international intended parents newborn insurance",
+    "insurance-surrogate": "insurance for surrogate",
+    "israel": "פונדקאות גייז בישראל",
+    "ivf": "הפריה והחזרת עוברים (IVF) פונדקאות גייז",
+    "ivy": "Ivy Fertility Israel (Ivy) gay surrogacy overview",
+    "legal-citizenship": "אזרחות, דרכון ורישום ילדי פונדקאות שנולדו בחול גייז",
+    "legal-contracts": "gay surrogacy contract",
+    "legal-lawyers": "עורכי דין פונדקאות גייז",
+    "legal-marriage": "נישואין גייז הכרה בישראל",
+    "legal-parentage": "צו הורות פסיקתי פונדקאות גייז",
+    "mexico": "פונדקאות גייז מקסיקו",
+    "money-costs": "עלויות תהליך פונדקאות גייז",
+    "money-transfers": "העברה והמרת כספים דולרים פונדקאות",
+    "orm": "ORM Pinnacle Fertility Oregon gay surrogacy overview",
+    "overview": "פונדקאות גייז התחלת התהליך",
+    "pregnancy": "מעקב הריון פונדקאות בדיקות",
+    "providers-other": "סוכנויות וספקים נוספים gay surrogacy overview",
+    "rights": 'מיצוי זכויות ביטוח לאומי פונדקאות גייז חו"ל',
+    "surmom": "סורמום (Surmom) פונדקאות גייז",
+    "surrogacy-warnings": "אזהרות משרד המשפטים — יעדים בעייתיים פונדקאות",
+    "surrogate": "choosing a surrogate relationship",
+    "surrogate-gifts": "gifts for surrogate",
+    "tamuz": "תמוז (Tammuz) gay surrogacy overview",
+    "tax": "נקודות זכות מס הכנסה פונדקאות גייז",
+    "tax-irs-children": 'דיווח מס ל-IRS לילדים שנולדו בארה"ב',
+    "travel-with-baby": "gay surrogacy flights accommodation vehicle",
+    "usa": "ארצות הברית gay surrogacy overview",
+    "usa-california": "gay surrogacy california",
+    "usa-states-legal": "ארצות הברית - מדינות מומלצות משפטית gay surrogacy overview",
+}
+
+
+def search_focus_for(topic_id: str) -> str | None:
+    return SEARCH_FOCUS.get(topic_id)
+
+
+def resolve_search_focus(
+    page_id: str,
+    source_tags: list[str],
+    *,
+    llm_value: str | None = None,
+) -> str:
+    """Taxonomy term wins; else LLM suggestion for pages not in the seed list."""
+
+    for topic_id in (page_id, *source_tags):
+        sf = SEARCH_FOCUS.get(topic_id)
+        if sf:
+            return sf
+    return str(llm_value or "").strip()
+
 
 def all_pages() -> tuple[TopicPage, ...]:
     return TAXONOMY
@@ -514,5 +591,7 @@ def taxonomy_seed_block() -> str:
     lines: list[str] = []
     for page in TAXONOMY:
         parent = f" (תת-נושא של {page.parent})" if page.parent else ""
-        lines.append(f"- {page.id}: {page.title_he}{parent}")
+        sf = SEARCH_FOCUS.get(page.id)
+        sf_part = f" | search_focus: {sf}" if sf else ""
+        lines.append(f"- {page.id}: {page.title_he}{parent}{sf_part}")
     return "\n".join(lines)

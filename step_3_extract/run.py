@@ -22,7 +22,7 @@ from typing import Any
 from utils.json_io import write_json_file
 from utils.llm_client import BatchRequest, LLMClient, extract_json
 from utils.paths import resolve_classified_path
-from step_4_extract.scrub import FORBIDDEN_TERM_INSTRUCTION, scrub_claims
+from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION, scrub_claims
 from utils.support import compute_support
 from utils.taxonomy import page_ids, taxonomy_seed_block
 from utils.threads_io import (

@@ -5,22 +5,22 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from step_4b_entities.cluster import (
+from step_4_entities.cluster import (
     cluster_entities,
     ensure_entity_distance_matrix,
     _entity_distance_matrix_metadata,
     _entity_distance_matrix_need_rebuild,
 )
-from step_4b_entities.collect import collect_entities, _claim_contacts
-from step_4b_entities.constants import DISTANCE_METHOD
-from step_4b_entities.mentions import (
+from step_4_entities.collect import collect_entities, _claim_contacts
+from step_4_entities.constants import DISTANCE_METHOD
+from step_4_entities.mentions import (
     SimpleAnalyzer,
     analyze_claims,
     find_mentions,
     mentions_name,
 )
-from step_4b_entities.normalize import normalize_name, transliteration_skeleton
-from step_4b_entities.pair_index import EntityPairIndex
+from step_4_entities.normalize import normalize_name, transliteration_skeleton
+from step_4_entities.pair_index import EntityPairIndex
 from step_5_aggregate.resolver import EntityResolver, load_entity_resolver, apply_entity_resolution
 
 
@@ -414,7 +414,7 @@ def test_multi_word_match_is_not_gated_by_name_likeness():
 
 
 def test_short_hotline_phones_detected():
-    from step_4_extract.scrub import find_phones
+    from step_3_extract.scrub import find_phones
 
     text = 'מוקד משרד הבריאות (5400*), גם *5400'
     assert "(5400*)" in find_phones(text)

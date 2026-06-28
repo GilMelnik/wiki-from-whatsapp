@@ -8,16 +8,16 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
 
-from step_4_extract.scrub import find_emails, find_phones
-from step_4b_entities.constants import SAMPLE_CLAIMS_PER_MEMBER
-from step_4b_entities.mentions import (
+from step_3_extract.scrub import find_emails, find_phones
+from step_4_entities.constants import SAMPLE_CLAIMS_PER_MEMBER
+from step_4_entities.mentions import (
     Analyzer,
     SimpleAnalyzer,
     Word,
     analyze_claims,
     mentions_name,
 )
-from step_4b_entities.normalize import normalize_name
+from step_4_entities.normalize import normalize_name
 from utils.paths import ORIGINAL_CLAIMS_PATH, resolve_claims_path
 
 _URL_RE = re.compile(

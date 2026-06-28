@@ -10,12 +10,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from step_4b_entities.collect import _claim_contacts
-from step_4b_entities.constants import (
+from step_4_entities.collect import _claim_contacts
+from step_4_entities.constants import (
     DEFAULT_ENTITY_ANALYSIS_PATH,
     SAMPLE_CLAIMS_PER_MEMBER,
 )
-from step_4b_entities.mentions import (
+from step_4_entities.mentions import (
     Analyzer,
     SimpleAnalyzer,
     Word,
@@ -32,7 +32,7 @@ from utils.paths import (
     init_entities_edited,
     resolve_claims_path,
 )
-from step_4b_entities.run import load_claims_for_entities
+from step_4_entities.run import load_claims_for_entities
 
 SortKind = Literal["count", "size", "score"]
 SortOrder = Literal["asc", "desc"]

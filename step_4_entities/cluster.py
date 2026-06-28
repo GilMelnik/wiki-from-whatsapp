@@ -9,7 +9,7 @@ from typing import Any
 
 import numpy as np
 
-from step_4b_entities.constants import (
+from step_4_entities.constants import (
     DEFAULT_ENTITY_DISTANCE_MATRIX_PATH,
     DEFAULT_ENTITY_DISTANCE_META_PATH,
     DEFAULT_SEED_PATH,
@@ -17,8 +17,8 @@ from step_4b_entities.constants import (
     MIN_SKELETON_LEN,
     SIMILARITY_THRESHOLD,
 )
-from step_4b_entities.normalize import normalize_name
-from step_4b_entities.pair_index import EntityPairIndex
+from step_4_entities.normalize import normalize_name
+from step_4_entities.pair_index import EntityPairIndex
 from utils.json_io import write_json_file
 
 

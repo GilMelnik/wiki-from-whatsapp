@@ -20,7 +20,7 @@ from utils.paths import (
     EDITED_CLASSIFIED_PATH,
     EDITED_THREADS_PATH,
 )
-from step_3_classify.run import (
+from step_2_classify.run import (
     CLASSIFY_SYSTEM,
     build_classify_prompt,
     classify_from_text,

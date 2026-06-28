@@ -8,7 +8,7 @@ from typing import Any, Literal
 from fastapi import HTTPException, Query
 from pydantic import BaseModel
 
-from step_4_extract.reviewer.store import ClaimStore, FilterKind, SortKind, SortOrder
+from step_3_extract.reviewer.store import ClaimStore, FilterKind, SortKind, SortOrder
 from utils.reviewer_server import StoreRegistry, make_reviewer_app, mount_static as _mount_static
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"

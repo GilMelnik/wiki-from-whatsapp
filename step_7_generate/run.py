@@ -42,7 +42,7 @@ from step_6_plan.run import (
     pages_by_category,
 )
 from utils.paths import resolve_aggregated_path, resolve_plan_path
-from step_4_extract.scrub import (
+from step_3_extract.scrub import (
     FORBIDDEN_TERM_INSTRUCTION,
     correct_surrogate_terminology,
     summarize_redactions,

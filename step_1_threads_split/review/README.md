@@ -25,7 +25,7 @@ For development with hot reload:
 
 ```bash
 # Terminal 1 — API
-python -m step_2_thread_review --no-browser
+python -m review --no-browser
 
 # Terminal 2 — Vite dev server (proxies /api to port 8765)
 cd web/thread-tagger && npm run dev
@@ -36,7 +36,7 @@ cd web/thread-tagger && npm run dev
 Requires `data/threads.json` (from step 1). Classification is optional.
 
 ```bash
-python -m step_2_thread_review
+python -m review
 ```
 
 Opens `http://127.0.0.1:8765` in your browser.
@@ -44,7 +44,7 @@ Opens `http://127.0.0.1:8765` in your browser.
 **Inspect threads only** (no `threads_classified.json` needed):
 
 ```bash
-python -m step_2_thread_review --inspect
+python -m review --inspect
 ```
 
 Options: `--port`, `--host`, `--no-browser`, `--no-kill-port`, `--init-edited`, `--inspect`, `--threads PATH`.

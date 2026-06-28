@@ -9,7 +9,7 @@ import uvicorn
 
 from utils.port import free_port
 from utils.paths import has_classification_data, init_edited_files
-from step_2_thread_review.server import app, configure_store, get_store, mount_static
+from step_1_threads_split.review.server import app, configure_store, get_store, mount_static
 
 
 def main() -> None:
