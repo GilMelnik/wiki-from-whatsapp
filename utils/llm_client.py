@@ -634,6 +634,8 @@ def _mock_response(system: str, user: str, task: str) -> str:
         return _mock_plan(user)
     if task == "community":
         return _mock_generate(user)
+    if task == "community_agent":
+        return _mock_community_agent(user)
     return ""
 
 
@@ -712,6 +714,30 @@ def _mock_generate(user: str) -> str:
         "_עמוד זה נוצר במצב mock — הפעילו ספק LLM אמיתי לתוכן מלא._"
     )
     return json.dumps({"body": body, "related_pages": related}, ensure_ascii=False)
+
+
+def _mock_community_agent(user: str) -> str:
+    """Schema-valid agent stub: one statement per batch claim, citing its id.
+
+    Parses the rendered batch prompt for the current page id and the claim ids so
+    the offline pipeline and tests exercise the full store/render path.
+    """
+
+    page_match = re.search(r"עמוד נוכחי:\s*(\S+)", user)
+    page_id = page_match.group(1) if page_match else "overview"
+    claim_ids = re.findall(r"claim_id:\s*(\S+)", user)
+    actions = [
+        {
+            "type": "upsert_statement",
+            "page_id": page_id,
+            "section": "",
+            "statement_id": None,
+            "text": "חברי הקבוצה שיתפו מידע רלוונטי לנושא זה.",
+            "claim_ids": [cid],
+        }
+        for cid in claim_ids
+    ]
+    return json.dumps({"actions": actions}, ensure_ascii=False)
 
 
 def _mock_plan(user: str) -> str:

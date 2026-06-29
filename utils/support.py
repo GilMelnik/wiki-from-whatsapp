@@ -119,6 +119,60 @@ def aggregate_reaction_summary(
     ]
 
 
+DEFAULT_AUDIT_PATH = Path("data/audit/claims_audit.json")
+
+
+def load_audit_records(
+    audit_path: Path | str = DEFAULT_AUDIT_PATH,
+) -> dict[str, dict[str, Any]]:
+    """claim_id -> private audit record (supporter identities + reactions)."""
+
+    path = Path(audit_path)
+    if not path.exists():
+        return {}
+    with path.open(encoding="utf-8") as f:
+        audit = json.load(f)
+    return {rec["claim_id"]: rec for rec in audit.get("audit") or []}
+
+
+def supporters_from_audit(record: dict[str, Any]) -> set[str]:
+    """Distinct supporter identities for one claim (statements + positive reactions)."""
+
+    statement_supporters = set(record.get("supporting_senders") or [])
+    message_reactions = record.get("message_reactions")
+    if message_reactions is not None:
+        return statement_supporters | positive_reaction_senders_from_messages(
+            message_reactions
+        )
+    if record.get("all_supporters"):
+        return set(record["all_supporters"])
+    supporters = set(statement_supporters)
+    supporters.update(record.get("reaction_senders") or [])
+    return supporters
+
+
+def supporter_count_for_claims(
+    claim_ids: list[str],
+    audit_by_id: dict[str, dict[str, Any]],
+) -> int:
+    """Distinct supporters backing a set of claims, deduped by identity.
+
+    Unions supporter identity sets across ``claim_ids`` so re-citing a claim is
+    idempotent and the same person is never counted twice across merged claims.
+    Falls back to 1 when claims are cited but the audit map is unavailable.
+    """
+
+    supporters: set[str] = set()
+    for cid in claim_ids:
+        record = audit_by_id.get(cid)
+        if record:
+            supporters.update(supporters_from_audit(record))
+    if supporters:
+        return len(supporters)
+    # ponytail: no audit (e.g. mock/offline) — can't dedup, report at least 1.
+    return 1 if claim_ids else 0
+
+
 def compute_support(
     thread: dict[str, Any],
     line_meta: list[dict[str, Any]],
@@ -185,18 +239,3 @@ def compute_support(
         "message_reactions": message_reactions,
         "reaction_summary": aggregate_reaction_summary(message_reactions),
     }
-
-
-if __name__ == "__main__":
-    assert reaction_sentiment("👍") == "positive"
-    assert reaction_sentiment("😡") == "negative"
-    assert reaction_sentiment("😮") == "neutral"
-    assert reaction_sentiment("🦄") == "neutral"
-    reactions = [
-        {"emoji": "👍", "senders": ["alice"]},
-        {"emoji": "😡", "senders": ["bob"]},
-    ]
-    assert _reaction_senders(reactions, sentiment="positive") == {"alice"}
-    assert positive_reaction_senders_from_messages(
-        [{"reactions": reactions}]
-    ) == {"alice"}

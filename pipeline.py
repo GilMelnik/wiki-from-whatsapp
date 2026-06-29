@@ -6,9 +6,10 @@ Runs steps in order:
     4. extract   -> data/claims.json + data/audit/ (private)
     4b. entities -> data/entities.json
     5. aggregate -> data/claims_aggregated.json
-    6. plan      -> data/wiki_plan.json
-    7. generate  -> drafts/*.md
-    8. site      -> mkdocs.yml
+    6. plan      -> data/wiki_plan.json (seed page catalog)
+    7. community -> data/wiki_pages.json (agentic, mini-batch over claims)
+    8. background-> drafts/*.md (public overview + assembled drafts)
+    9. site      -> mkdocs.yml
 
 Human gates (web UIs, no CLI):
     step 1 — thread review: ``python -m step_1_threads_split.review``
@@ -27,8 +28,9 @@ from step_3_extract.run import run as extract
 from step_4_entities.run import run as resolve_entities
 from step_5_aggregate.run import run as aggregate
 from step_6_plan.run import run as plan
-from step_7_generate.run import run as generate
-from step_8_site.run import run as site
+from step_7_community.run import run as community
+from step_8_background.run import run as background
+from step_9_site.run import run as site
 from utils.llm_client import LLMClient
 
 
@@ -114,20 +116,27 @@ def run(
         "`uvicorn step_6_plan.reviewer.server:app` before generate."
     )
 
-    print("\n[7] Generating page drafts...")
-    g_meta = generate(
-        llm=clients["generate"],
+    print("\n[7] Building community pages (agentic, mini-batch)...")
+    cm_meta = community(llm=clients["generate"])
+    print(
+        f"    {cm_meta['statements']} statements across {cm_meta['pages']} pages "
+        f"from {cm_meta['claims']} claims ({cm_meta['batches']} batches)"
+    )
+    print(
+        "    → Review pages in data/wiki_pages.json before background/assembly."
+    )
+
+    print("\n[8] Researching background + assembling drafts...")
+    bg_meta = background(
         research_llm=clients["research"],
-        use_batch=use_batch,
-        skip_plan=skip_plan,
         enable_web_search=enable_web_search,
     )
-    search_note = "with web search" if g_meta.get("web_search") else "no web search"
-    print(f"    {g_meta['pages_written']} drafts in {g_meta['drafts_dir']}/ ({search_note})")
+    search_note = "with web search" if bg_meta.get("web_search") else "no web search"
+    print(f"    {bg_meta['pages_written']} drafts in {bg_meta['drafts_dir']}/ ({search_note})")
 
     print("\n    Manual review: edit drafts/ and copy approved pages into docs/.")
 
-    print("\n[8] Writing site config...")
+    print("\n[9] Writing site config...")
     s_meta = site()
     nav_src = "plan" if s_meta.get("plan_nav") else "taxonomy"
     print(

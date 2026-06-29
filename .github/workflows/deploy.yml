@@ -7,7 +7,7 @@ on:
       - "docs/**"
       - "mkdocs.yml"
       - ".github/workflows/deploy.yml"
-      - "step_8_site/run.py"
+      - "step_9_site/run.py"
   workflow_dispatch:
 
 permissions:

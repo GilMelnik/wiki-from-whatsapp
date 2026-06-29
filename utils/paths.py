@@ -30,6 +30,10 @@ AGGREGATED = Artifact(
     Path("data/claims_aggregated_edited.json"),
 )
 PLAN = Artifact(Path("data/wiki_plan.json"), Path("data/wiki_plan_edited.json"))
+WIKI_PAGES = Artifact(
+    Path("data/wiki_pages.json"),
+    Path("data/wiki_pages_edited.json"),
+)
 
 # ponytail: named aliases for call-site readability
 ORIGINAL_THREADS_PATH = THREADS.original
@@ -76,6 +80,10 @@ def resolve_aggregated_path() -> Path:
 
 def resolve_plan_path() -> Path:
     return resolve(PLAN)
+
+
+def resolve_wiki_pages_path() -> Path:
+    return resolve(WIKI_PAGES)
 
 
 def edited_output_threads_path(source: Path | None = None) -> Path:
