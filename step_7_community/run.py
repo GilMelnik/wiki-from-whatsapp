@@ -1,9 +1,13 @@
 """Step 7: build community-insight pages with an agentic, mini-batch loop.
 
 Instead of consuming the aggregate step, this reads the published claims, the
-entity registry, and the PRIVATE supporter audit directly. Claims are grouped by
-taxonomy (their ``topic_tags`` -> a seed page) and fed to the LLM one mini-batch
-at a time. For each batch the agent sees the current page content plus the new
+entity registry, and the PRIVATE supporter audit directly. Each claim is routed
+to *every* page its ``topic_tags`` map to (so a multi-topic claim can influence
+all relevant pages), and those per-page claims are fed to the LLM one mini-batch
+at a time. A claim may back several statements, counted fully in each; ``PageStore``
+recomputes a statement's support by unioning supporter identities across its
+deduped claim_ids, so a claim is never counted twice within a single statement.
+For each batch the agent sees the current page content plus the new
 claims (with canonical entities, supporter counts, stance, dates) and emits JSON
 actions that write/update statements or evolve the page catalog.
 
@@ -274,14 +278,15 @@ def _load_seed(
     return pages, tag_to_page
 
 
-def _primary_page(claim: dict[str, Any], tag_to_page: dict[str, str]) -> str:
-    tags = claim.get("topic_tags") or []
-    for tag in tags:
-        if tag in tag_to_page:
-            return tag_to_page[tag]
-    if tags:
-        return tags[0]
-    return OVERVIEW_PAGE_ID
+def _related_pages(claim: dict[str, Any], tag_to_page: dict[str, str]) -> list[str]:
+    """Every page this claim's topic_tags map to (mapped page or emergent tag)."""
+
+    pages: list[str] = []
+    for tag in claim.get("topic_tags") or []:
+        page_id = tag_to_page.get(tag, tag)
+        if page_id and page_id not in pages:
+            pages.append(page_id)
+    return pages or [OVERVIEW_PAGE_ID]
 
 
 def run(
@@ -316,15 +321,18 @@ def run(
     store.ensure_page(OVERVIEW_PAGE_ID, title="סקירה כללית", category="start")
 
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    seen: dict[str, set[str]] = defaultdict(set)
     for claim in claims:
-        page_id = _primary_page(claim, tag_to_page)
-        seed = get_page(page_id)
-        store.ensure_page(
-            page_id,
-            title=seed.title_he if seed else None,
-            category=seed.category if seed else "emergent",
-        )
-        grouped[page_id].append(claim)
+        for page_id in _related_pages(claim, tag_to_page):
+            seed = get_page(page_id)
+            store.ensure_page(
+                page_id,
+                title=seed.title_he if seed else None,
+                category=seed.category if seed else "emergent",
+            )
+            if claim["claim_id"] not in seen[page_id]:
+                seen[page_id].add(claim["claim_id"])
+                grouped[page_id].append(claim)
 
     out_path = Path(output_path) if output_path is not None else WIKI_PAGES.original
 

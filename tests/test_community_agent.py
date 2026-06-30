@@ -58,6 +58,26 @@ def test_unknown_claim_ids_are_dropped():
     assert store.upsert_statement("p", "", None, "txt", ["ghost"]) is None
 
 
+def test_claim_backs_many_statements_but_counts_once_per_statement():
+    # A claim may back several statements and is counted fully in each; the only
+    # dedup is within a single statement (same claim/supporter not counted twice).
+    claims = {"c1": {"claim_id": "c1", "stance": "positive"}}
+    audit = {"c1": {"all_supporters": ["a", "b"]}}
+    store = PageStore(claims, audit)
+
+    first = store.upsert_statement("p", "", None, "ראשון", ["c1"])
+    second = store.upsert_statement("p", "", None, "שני", ["c1"])
+
+    # Same claim backs two statements, counted fully in each.
+    assert first["supporter_count"] == 2
+    assert second["supporter_count"] == 2
+
+    # Within one statement, citing the same claim twice still counts once.
+    dup = store.upsert_statement("p", "", None, "כפול", ["c1", "c1"])
+    assert dup["claim_ids"] == ["c1"]
+    assert dup["supporter_count"] == 2
+
+
 def test_mock_community_run_is_traceable_and_anonymous(tmp_path):
     claims = [
         {
@@ -114,3 +134,39 @@ def test_mock_community_run_is_traceable_and_anonymous(tmp_path):
     assert "מידע מהקהילה" in page_md
     assert "t1-c1" not in page_md
     assert (drafts / "index.md").exists()
+
+
+def test_multi_topic_claim_reaches_every_page(tmp_path):
+    # A claim tagged for two pages must influence both, not just the first.
+    claims = [
+        {
+            "claim_id": "t1-c1", "thread_id": "t1",
+            "claim_text": "מידע שרלוונטי לשתי המדינות.",
+            "topic_tags": ["usa", "israel"],
+            "entities": [], "stance": "neutral", "date": "2024-01",
+            "support_count": 1,
+        }
+    ]
+    claims_file = tmp_path / "claims.json"
+    claims_file.write_text(
+        json.dumps({"claims": claims}, ensure_ascii=False), encoding="utf-8"
+    )
+    out = tmp_path / "wiki_pages.json"
+
+    community_run.run(
+        llm=_mock_llm(),
+        claims_path=claims_file,
+        plan_path=tmp_path / "noplan.json",  # absent -> taxonomy seed
+        output_path=out,
+        batch_size=10,
+    )
+
+    data = json.loads(out.read_text(encoding="utf-8"))
+    cited_on = {
+        page_id
+        for page_id, page in data["pages"].items()
+        for sec in page["sections"]
+        for st in sec["statements"]
+        if "t1-c1" in st["claim_ids"]
+    }
+    assert {"usa", "israel"} <= cited_on

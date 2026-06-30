@@ -1,9 +1,10 @@
 """Structured, traceable wiki page store for the community agent (step 7).
 
 Pages hold sections of *statements*; every statement records the ``claim_ids`` it
-is based on. Supporter counts are always recomputed from the private audit by
-unioning supporter identities across a statement's claim_ids, so re-citing a
-claim is idempotent and no supporter is ever double-counted.
+is based on. The same claim may back several statements (on one page or across
+pages), counted fully in each. Within a statement, supporter counts are recomputed
+from the private audit by unioning supporter identities across its deduped
+claim_ids, so a claim — and a supporter — is never counted twice for one statement.
 
 Markdown rendering exposes supporter counts only — never claim_ids or member
 identities. The structured JSON (``data/wiki_pages.json``) is the traceable
@@ -115,6 +116,9 @@ class PageStore:
         return None
 
     def _recompute(self, statement: dict[str, Any]) -> None:
+        # claim_ids are deduped per statement and supporter identities are unioned,
+        # so a claim (and a supporter) is never counted twice within one statement.
+        # The same claim may freely back other statements, counted fully in each.
         statement["supporter_count"] = supporter_count_for_claims(
             statement["claim_ids"], self.audit_by_id
         )
