@@ -29,7 +29,11 @@ from step_5_aggregate.resolver import (
 )
 from utils.json_io import write_json_file
 from utils.paths import MANUAL_AGGREGATIONS_PATH, resolve_claims_path
-from utils.support import aggregate_reaction_summary, positive_reaction_senders_from_messages
+from utils.support import (
+    aggregate_reaction_summary,
+    participants_from_audit,
+    reaction_senders_from_messages,
+)
 from utils.taxonomy import category_title, get_page
 
 DEFAULT_CLAIMS_PATH: Path | None = None
@@ -100,19 +104,7 @@ def _load_audit_records(audit_path: Path | str) -> dict[str, dict[str, Any]]:
 
 
 def _supporters_from_audit(record: dict[str, Any]) -> set[str]:
-    """Distinct users supporting a claim (statements + positive reactions, deduped)."""
-
-    statement_supporters = set(record.get("supporting_senders") or [])
-    message_reactions = record.get("message_reactions")
-    if message_reactions is not None:
-        return statement_supporters | positive_reaction_senders_from_messages(
-            message_reactions
-        )
-    if record.get("all_supporters"):
-        return set(record["all_supporters"])
-    supporters = set(statement_supporters)
-    supporters.update(record.get("reaction_senders") or [])
-    return supporters
+    return participants_from_audit(record, side="supporter")
 
 
 def _claim_ids(claims: list[dict[str, Any]]) -> list[str]:
@@ -509,10 +501,8 @@ def build_merged_claim(
         message_rx = audit.get("message_reactions")
         if message_rx is not None:
             reaction_supporters.update(
-                positive_reaction_senders_from_messages(message_rx)
+                reaction_senders_from_messages(message_rx, sentiment="positive")
             )
-        else:
-            reaction_supporters.update(audit.get("reaction_senders") or [])
         message_reactions.extend(audit.get("message_reactions") or [])
 
     support_count = len(all_supporters) if all_supporters else sum(

@@ -1,11 +1,10 @@
-"""Compute claim support from message authors and reactions.
+"""Compute claim support and opposition from message authors and reactions.
 
-Each claim is backed by one or more supporting messages. Support counts
-distinct users who either authored those messages or reacted with a
-*positive* reaction. Neutral and negative reactions are tracked in the
-audit trace but do not add supporters. A user is never counted twice,
-even if they both stated and reacted, or appeared in multiple merged
-duplicate claims.
+Supporters are distinct users who authored a supporting message or reacted with a
+*positive* emoji on one. Opposers are distinct users who authored an opposing
+message or reacted with a *negative* emoji. Neutral reactions count toward
+neither side. Emoji sentiment is independent of claim stance — a 👎 never adds
+a supporter. A user is never double-counted within the same side.
 """
 
 from __future__ import annotations
@@ -14,10 +13,15 @@ import json
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, TypedDict
 
 ReactionSentiment = Literal["positive", "neutral", "negative"]
 _SENTIMENT_PATH = Path(__file__).with_name("reaction_sentiment.json")
+
+
+class ClaimEngagement(TypedDict):
+    supporter_count: int
+    opposer_count: int
 
 
 @lru_cache(maxsize=1)
@@ -32,7 +36,7 @@ def reaction_sentiment(emoji: str) -> ReactionSentiment:
     if not emoji:
         return "neutral"
     category = _load_reaction_sentiment().get(emoji)
-    # ponytail: unmapped emojis default neutral — won't inflate supporter counts
+    # ponytail: unmapped emojis default neutral — won't inflate either side
     if category in ("positive", "neutral", "negative"):
         return category
     return "neutral"
@@ -54,15 +58,17 @@ def _reaction_senders(
     return senders
 
 
-def positive_reaction_senders_from_messages(
+def reaction_senders_from_messages(
     message_reactions: list[dict[str, Any]],
+    *,
+    sentiment: ReactionSentiment,
 ) -> set[str]:
-    """Distinct users who reacted positively to any supporting message."""
+    """Distinct users who reacted with the given emoji sentiment on linked messages."""
 
     senders: set[str] = set()
     for entry in message_reactions:
         senders.update(
-            _reaction_senders(entry.get("reactions"), sentiment="positive")
+            _reaction_senders(entry.get("reactions"), sentiment=sentiment)
         )
     return senders
 
@@ -101,7 +107,7 @@ def format_reactions_for_llm(reactions: list[dict[str, Any]] | None) -> str:
 def aggregate_reaction_summary(
     message_reactions: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Sum reaction counts by emoji across all supporting messages."""
+    """Sum reaction counts by emoji across all linked messages."""
 
     counts: Counter[str] = Counter()
     for entry in message_reactions:
@@ -135,50 +141,99 @@ def load_audit_records(
     return {rec["claim_id"]: rec for rec in audit.get("audit") or []}
 
 
-def supporters_from_audit(record: dict[str, Any]) -> set[str]:
-    """Distinct supporter identities for one claim (statements + positive reactions)."""
+EngagementSide = Literal["supporter", "opposer"]
 
-    statement_supporters = set(record.get("supporting_senders") or [])
+
+def participants_from_audit(
+    record: dict[str, Any], *, side: EngagementSide
+) -> set[str]:
+    """Distinct users on one side of a claim (statements + matching emoji reactions)."""
+
+    if side == "supporter":
+        statement_key = "supporting_senders"
+        sentiment: ReactionSentiment = "positive"
+    else:
+        statement_key = "opposing_senders"
+        sentiment = "negative"
+
+    participants = set(record.get(statement_key) or [])
     message_reactions = record.get("message_reactions")
     if message_reactions is not None:
-        return statement_supporters | positive_reaction_senders_from_messages(
-            message_reactions
+        participants.update(
+            reaction_senders_from_messages(message_reactions, sentiment=sentiment)
         )
-    if record.get("all_supporters"):
-        return set(record["all_supporters"])
-    supporters = set(statement_supporters)
-    supporters.update(record.get("reaction_senders") or [])
-    return supporters
+        return participants
+
+    if side == "supporter":
+        # Legacy audit rows may list every reactor in reaction_senders; without
+        # per-emoji detail we cannot re-filter, so ignore that field.
+        if record.get("all_supporters") and not record.get("reaction_senders"):
+            return set(record["all_supporters"])
+        return participants
+
+    if record.get("reaction_opposers"):
+        participants.update(record["reaction_opposers"])
+    return participants
+
+
+def engagement_for_claim(
+    claim_id: str, audit_by_id: dict[str, dict[str, Any]]
+) -> ClaimEngagement:
+    record = audit_by_id.get(claim_id)
+    if not record:
+        return {"supporter_count": 1, "opposer_count": 0}
+    supporters = participants_from_audit(record, side="supporter")
+    opposers = participants_from_audit(record, side="opposer")
+    return {
+        "supporter_count": max(len(supporters), 1),
+        "opposer_count": len(opposers),
+    }
 
 
 def supporter_count_for_claims(
     claim_ids: list[str],
     audit_by_id: dict[str, dict[str, Any]],
 ) -> int:
-    """Distinct supporters backing a set of claims, deduped by identity.
-
-    Unions supporter identity sets across ``claim_ids`` so re-citing a claim is
-    idempotent and the same person is never counted twice across merged claims.
-    Falls back to 1 when claims are cited but the audit map is unavailable.
-    """
+    """Distinct supporters backing a set of claims, deduped by identity."""
 
     supporters: set[str] = set()
     for cid in claim_ids:
         record = audit_by_id.get(cid)
         if record:
-            supporters.update(supporters_from_audit(record))
+            supporters.update(participants_from_audit(record, side="supporter"))
     if supporters:
         return len(supporters)
     # ponytail: no audit (e.g. mock/offline) — can't dedup, report at least 1.
     return 1 if claim_ids else 0
 
 
+def engagement_for_claims(
+    claim_ids: list[str],
+    audit_by_id: dict[str, dict[str, Any]],
+) -> ClaimEngagement:
+    """Distinct supporters and opposers across a set of claims."""
+
+    supporters: set[str] = set()
+    opposers: set[str] = set()
+    for cid in claim_ids:
+        record = audit_by_id.get(cid)
+        if record:
+            supporters.update(participants_from_audit(record, side="supporter"))
+            opposers.update(participants_from_audit(record, side="opposer"))
+    return {
+        "supporter_count": max(len(supporters), 1) if claim_ids else 0,
+        "opposer_count": len(opposers),
+    }
+
+
 def compute_support(
     thread: dict[str, Any],
     line_meta: list[dict[str, Any]],
     local_message_ids: list[int],
+    *,
+    opposing_local_message_ids: list[int] | None = None,
 ) -> dict[str, Any]:
-    """Derive supporter sets and reaction trace for a claim.
+    """Derive supporter/opposer sets and reaction trace for a claim.
 
     ``local_message_ids`` are indices into ``line_meta`` (rendered lines),
     not raw ``thread["messages"]`` indices.
@@ -188,17 +243,26 @@ def compute_support(
     message_ids = thread.get("message_ids", [])
 
     statement_senders: set[str] = set()
-    reaction_senders: set[str] = set()
+    opposing_senders: set[str] = set()
+    reaction_supporters: set[str] = set()
+    reaction_opposers: set[str] = set()
     message_reactions: list[dict[str, Any]] = []
 
-    for local_id in local_message_ids:
+    linked_ids = set(local_message_ids)
+    linked_ids.update(opposing_local_message_ids or [])
+
+    for local_id in sorted(linked_ids):
         meta = line_meta[local_id]
-        statement_senders.add(meta["sender"])
+        if local_id in local_message_ids:
+            statement_senders.add(meta["sender"])
 
         msg_index = meta["message_index"]
         msg = messages[msg_index]
         rx_list = msg.get("reactions") or meta.get("reactions") or []
-        reaction_senders.update(_reaction_senders(rx_list, sentiment="positive"))
+        reaction_supporters.update(
+            _reaction_senders(rx_list, sentiment="positive")
+        )
+        reaction_opposers.update(_reaction_senders(rx_list, sentiment="negative"))
 
         rx_audit: list[dict[str, Any]] = []
         for reaction in rx_list:
@@ -225,16 +289,24 @@ def compute_support(
                 }
             )
 
-    all_supporters = statement_senders | reaction_senders
-    reaction_only = reaction_senders - statement_senders
+    for local_id in opposing_local_message_ids or []:
+        opposing_senders.add(line_meta[local_id]["sender"])
+
+    all_supporters = statement_senders | reaction_supporters
+    all_opposers = opposing_senders | reaction_opposers
+    reaction_only = reaction_supporters - statement_senders
 
     return {
         "statement_senders": sorted(statement_senders),
-        "reaction_senders": sorted(reaction_senders),
+        "opposing_senders": sorted(opposing_senders),
+        "reaction_senders": sorted(reaction_supporters),
+        "reaction_opposers": sorted(reaction_opposers),
         "all_supporters": sorted(all_supporters),
+        "all_opposers": sorted(all_opposers),
         "support_count": max(len(all_supporters), 1),
+        "opposer_count": len(all_opposers),
         "statement_count": len(statement_senders),
-        "reaction_endorser_count": len(reaction_senders),
+        "reaction_endorser_count": len(reaction_supporters),
         "reaction_only_count": len(reaction_only),
         "message_reactions": message_reactions,
         "reaction_summary": aggregate_reaction_summary(message_reactions),

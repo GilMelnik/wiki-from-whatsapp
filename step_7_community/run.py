@@ -39,7 +39,7 @@ from utils.paths import (
     resolve_claims_path,
     resolve_plan_path,
 )
-from utils.support import load_audit_records
+from utils.support import engagement_for_claim, load_audit_records
 from utils.taxonomy import all_pages, get_page
 
 DEFAULT_BATCH_SIZE = 15
@@ -86,12 +86,19 @@ _ACTION_SCHEMA = (
 )
 
 
-def _claim_line(claim: dict[str, Any], entities: list[str]) -> str:
+def _claim_line(
+    claim: dict[str, Any],
+    entities: list[str],
+    audit_by_id: dict[str, dict[str, Any]] | None = None,
+) -> str:
     stance = STANCE_HE.get(claim.get("stance", ""), claim.get("stance", ""))
+    cid = claim["claim_id"]
+    engagement = engagement_for_claim(cid, audit_by_id or {})
     bits = [
-        f"claim_id: {claim['claim_id']}",
+        f"claim_id: {cid}",
         f"stance: {stance}",
-        f"תומכים: {claim.get('support_count', 1)}",
+        f"תומכים: {engagement['supporter_count']}",
+        f"מתנגדים: {engagement['opposer_count']}",
     ]
     if claim.get("date"):
         bits.append(f"תאריך: {claim['date']}")
@@ -101,14 +108,16 @@ def _claim_line(claim: dict[str, Any], entities: list[str]) -> str:
 
 
 def _claims_block(
-    claims: list[dict[str, Any]], resolver: EntityResolver | None
+    claims: list[dict[str, Any]],
+    resolver: EntityResolver | None,
+    audit_by_id: dict[str, dict[str, Any]] | None = None,
 ) -> str:
     lines = []
     for claim in claims:
         entities = (
             resolver.resolve_claim(claim) if resolver else (claim.get("entities") or [])
         )
-        lines.append(_claim_line(claim, entities))
+        lines.append(_claim_line(claim, entities, audit_by_id))
     return "\n".join(lines)
 
 
@@ -129,7 +138,7 @@ def build_batch_prompt(
         store.catalog(exclude=None),
         "",
         "## טענות באצווה זו",
-        _claims_block(claims, resolver),
+        _claims_block(claims, resolver, store.audit_by_id),
     ]
     if extra_pages:
         sections += ["", "## תוכן עמודים שביקשת (read_page)", extra_pages]

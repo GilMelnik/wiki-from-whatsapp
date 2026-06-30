@@ -62,7 +62,8 @@ def build_extract_prompt(rendered: str) -> str:
         '      "topic_tags": ["<מזהה נושא>", ...],\n'
         '      "entities": ["<ספק/עו״ד/סוכנות/מדינה/מקום>", ...],\n'
         '      "stance": "positive|negative|neutral|factual",\n'
-        '      "supporting_message_ids": [<מספרי [m..] התומכים בטענה>]\n'
+        '      "supporting_message_ids": [<מספרי [m..] התומכים בטענה>],\n'
+        '      "opposing_message_ids": [<מספרי [m..] הסותרים את הטענה, אם יש>]\n'
         "    }\n"
         "  ]\n"
         "}\n"
@@ -105,7 +106,14 @@ def _claims_from_result(
             for i in (raw.get("supporting_message_ids") or [])
             if isinstance(i, int) and 0 <= i < len(line_meta)
         ]
-        support = compute_support(thread, line_meta, local_ids)
+        opposing_ids = [
+            i
+            for i in (raw.get("opposing_message_ids") or [])
+            if isinstance(i, int) and 0 <= i < len(line_meta)
+        ]
+        support = compute_support(
+            thread, line_meta, local_ids, opposing_local_message_ids=opposing_ids
+        )
         months = sorted({line_meta[i]["month"] for i in local_ids})
         if not months:
             months = sorted({m["month"] for m in line_meta})
@@ -126,12 +134,14 @@ def _claims_from_result(
                 "stance": raw.get("stance", "neutral"),
                 "date": months[0],
                 "support_count": support["support_count"],
+                "opposer_count": support["opposer_count"],
                 "statement_count": support["statement_count"],
                 "reaction_endorser_count": support["reaction_endorser_count"],
                 "reaction_only_count": support["reaction_only_count"],
                 "reaction_summary": support["reaction_summary"],
                 "_support": support,
                 "_local_message_ids": local_ids,
+                "_opposing_local_message_ids": opposing_ids,
                 "_global_message_ids": global_ids,
             }
         )
@@ -213,9 +223,15 @@ def run(
                     "thread_id": claim["thread_id"],
                     "raw_claim_text": claim["claim_text"],
                     "supporting_senders": support["statement_senders"],
+                    "opposing_senders": support["opposing_senders"],
                     "reaction_senders": support["reaction_senders"],
+                    "reaction_opposers": support["reaction_opposers"],
                     "all_supporters": support["all_supporters"],
+                    "all_opposers": support["all_opposers"],
                     "local_message_ids": claim.pop("_local_message_ids"),
+                    "opposing_local_message_ids": claim.pop(
+                        "_opposing_local_message_ids", []
+                    ),
                     "global_message_ids": claim.pop("_global_message_ids"),
                     "message_reactions": support["message_reactions"],
                 }
