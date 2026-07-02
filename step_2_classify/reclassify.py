@@ -23,7 +23,7 @@ from utils.paths import (
 from step_2_classify.run import (
     CLASSIFY_SYSTEM,
     build_classify_prompt,
-    classify_from_text,
+    classify_from_parsed,
     classify_thread,
 )
 from utils.llm_client import BatchRequest, LLMClient
@@ -132,20 +132,19 @@ def run(
     if pending_llm:
         if use_batch and llm.supports_batch():
             print(f"  Reclassify: submitting {len(pending_llm)} requests via batch API...")
-            batch_results = llm.complete_batch(
-                [
-                    BatchRequest(
-                        request_id=thread["thread_id"],
-                        system=CLASSIFY_SYSTEM,
-                        user=prompt,
-                        task="classify",
-                    )
-                    for thread, prompt in pending_llm
-                ]
-            )
+            requests = [
+                BatchRequest(
+                    request_id=thread["thread_id"],
+                    system=CLASSIFY_SYSTEM,
+                    user=prompt,
+                    task="classify",
+                )
+                for thread, prompt in pending_llm
+            ]
+            parsed = llm.complete_batch_json(requests)
             for (thread, _), record_idx in zip(pending_llm, pending_indices):
                 output_records[record_idx].update(
-                    classify_from_text(batch_results.get(thread["thread_id"], ""))
+                    classify_from_parsed(parsed.get(thread["thread_id"]))
                 )
         else:
             if use_batch:

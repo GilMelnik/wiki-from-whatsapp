@@ -6,6 +6,8 @@ The client exposes methods used across the wiki pipeline:
 - ``complete_text(system, user, task=...)`` -> ``str``
 - ``complete_grounded(system, user)`` -> ``GroundedResult`` (Gemini + Google Search)
 - ``complete_batch(requests)`` -> ``dict[request_id, str]`` (anthropic / gemini)
+- ``complete_batch_json(requests)`` -> ``dict[request_id, parsed]`` (re-submits only
+  the truncated/unparseable items as another batch with a larger max_tokens window)
 
 Configuration (most-specific wins):
 
@@ -89,6 +91,15 @@ STAGE_DEFAULTS: dict[str, dict[str, str]] = {
 VALID_STAGES = frozenset(STAGE_DEFAULTS)
 BATCH_PROVIDERS = frozenset({"anthropic", "gemini"})
 DEFAULT_BATCH_POLL_INTERVAL = 30.0
+
+# When a JSON completion fails to parse (usually a response truncated at
+# max_tokens), complete_json doubles max_tokens and retries, up to this ceiling.
+MAX_TOKENS_CEILING = 16384
+JSON_PARSE_RETRIES = 2
+
+# Every unsuccessful call (API error, unparseable JSON after retries, empty batch
+# response) is appended here as one JSON line for later inspection / manual retry.
+DEFAULT_FAILURE_LOG = Path("data/llm_failures.jsonl")
 
 
 @dataclass(frozen=True)
@@ -251,6 +262,7 @@ class LLMClient:
         max_tokens: int = 4096,
         use_cache: bool = True,
         batch_poll_interval: float | None = None,
+        failure_log: Path | str | None = None,
     ):
         self.provider = (provider or os.environ.get("WIKI_LLM_PROVIDER") or "mock").lower()
         self.model = model or os.environ.get("WIKI_LLM_MODEL") or DEFAULT_MODELS.get(
@@ -260,6 +272,11 @@ class LLMClient:
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.use_cache = use_cache
+        self.failure_log = Path(
+            failure_log
+            if failure_log is not None
+            else os.environ.get("WIKI_LLM_FAILURE_LOG") or DEFAULT_FAILURE_LOG
+        )
         env_poll = os.environ.get("WIKI_LLM_BATCH_POLL_INTERVAL")
         self.batch_poll_interval = (
             batch_poll_interval
@@ -318,6 +335,50 @@ class LLMClient:
         with self._cache_path(key).open("w", encoding="utf-8") as f:
             json.dump({"response": response}, f, ensure_ascii=False, indent=2)
 
+    def _delete_cache(self, key: str) -> None:
+        self._cache_path(key).unlink(missing_ok=True)
+
+    # ------------------------------------------------------------- call logging
+    def _log_call(self, ok: bool, task: str, detail: str) -> None:
+        status = "ok  " if ok else "FAIL"
+        print(f"  LLM {status} [{self.provider}/{self.model}] task={task or '-'} {detail}")
+
+    def _record_failure(
+        self,
+        *,
+        task: str,
+        kind: str,
+        error: str,
+        system: PromptInput,
+        user: PromptInput,
+        response: str = "",
+    ) -> None:
+        """Append one unsuccessful call to the failure log (JSONL).
+
+        The full prompts and any raw response are stored so a failed call can be
+        examined and re-run differently later. Works for every provider because
+        it's driven off the flattened prompt text, not provider objects.
+        """
+
+        entry = {
+            "time": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "provider": self.provider,
+            "model": self.model,
+            "task": task,
+            "kind": kind,
+            "error": error,
+            "max_tokens": self.max_tokens,
+            "system": _flatten(system),
+            "user": _flatten(user),
+            "response": response,
+        }
+        try:
+            self.failure_log.parent.mkdir(parents=True, exist_ok=True)
+            with self.failure_log.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except OSError as exc:
+            print(f"  LLM: could not write failure log {self.failure_log}: {exc}")
+
     def _grounded_cache_key(self, system: str, user: str) -> str:
         payload = json.dumps(
             {
@@ -375,17 +436,101 @@ class LLMClient:
             key = self._cache_key(_flatten(system), _flatten(user))
             cached = self._read_cache(key)
             if cached is not None:
+                self._log_call(True, task, "(cache)")
                 return cached
 
-        response = self._dispatch(system, user, task)
+        try:
+            response = self._dispatch(system, user, task)
+        except Exception as exc:  # noqa: BLE001 - record any provider error, then re-raise
+            self._record_failure(
+                task=task, kind="api_error", error=repr(exc), system=system, user=user
+            )
+            self._log_call(False, task, f"api_error: {exc} -> logged")
+            raise
 
+        self._log_call(True, task, f"({len(response)} chars)")
         if self.use_cache:
             self._write_cache(key, response)
         return response
 
+    def _raise_max_tokens(self) -> bool:
+        """Double max_tokens toward the ceiling; return False if already there.
+
+        ponytail: raising the ceiling is free (billing is on tokens actually
+        generated), so the bump persists for the client's lifetime rather than
+        being restored per-call — later batches likely need the extra room too.
+        """
+
+        if self.max_tokens >= MAX_TOKENS_CEILING:
+            return False
+        self.max_tokens = min(self.max_tokens * 2, MAX_TOKENS_CEILING)
+        return True
+
     def complete_json(self, system: PromptInput, user: PromptInput, task: str = "") -> Any:
-        raw = self.complete_text(system, user, task)
-        return extract_json(raw)
+        """Parse the model's JSON output, retrying with more room on failure.
+
+        A response truncated at max_tokens is invalid JSON. Such a response is
+        never cached; if a *previous* run already cached one, it's dropped and
+        re-requested. Each parse failure doubles max_tokens before retrying.
+        """
+
+        key = (
+            self._cache_key(_flatten(system), _flatten(user))
+            if self.use_cache
+            else None
+        )
+        if key is not None:
+            cached = self._read_cache(key)
+            if cached is not None:
+                try:
+                    data = extract_json(cached)
+                    self._log_call(True, task, "(cache)")
+                    return data
+                except ValueError as exc:
+                    # Failed (likely truncated) cache entry from a prior run: drop
+                    # it and re-request with more output room.
+                    self._delete_cache(key)
+                    self._log_call(
+                        False, task, f"stale cache unparseable ({exc}); re-requesting"
+                    )
+                    self._raise_max_tokens()
+
+        last_exc: ValueError | None = None
+        response = ""
+        for _ in range(JSON_PARSE_RETRIES + 1):
+            try:
+                response = self._dispatch(system, user, task)
+            except Exception as exc:  # noqa: BLE001 - record any provider error
+                self._record_failure(
+                    task=task, kind="api_error", error=repr(exc),
+                    system=system, user=user,
+                )
+                self._log_call(False, task, f"api_error: {exc} -> logged")
+                raise exc
+            try:
+                data = extract_json(response)
+            except ValueError as exc:
+                last_exc = exc
+                self._log_call(
+                    False, task, f"parse_error (max_tokens={self.max_tokens}): {exc}"
+                )
+                if not self._raise_max_tokens():
+                    break
+                continue
+            self._log_call(
+                True, task, f"({len(response)} chars, max_tokens={self.max_tokens})"
+            )
+            if key is not None:
+                self._write_cache(key, response)
+            return data
+
+        # Retries/ceiling exhausted: persist the last bad response for inspection.
+        self._record_failure(
+            task=task, kind="parse_error", error=str(last_exc),
+            system=system, user=user, response=response,
+        )
+        self._log_call(False, task, "parse_error exhausted -> logged")
+        raise last_exc  # type: ignore[misc]
 
     def complete_grounded(self, system: str, user: str) -> GroundedResult:
         """Run Gemini with Google Search grounding; returns text + citations."""
@@ -424,6 +569,7 @@ class LLMClient:
                 cached = self._read_cache(self._cache_key(req.system, req.user))
                 if cached is not None:
                     results[req.request_id] = cached
+                    self._log_call(True, req.task, f"(batch cache {req.request_id})")
                     continue
             pending.append(req)
 
@@ -434,6 +580,7 @@ class LLMClient:
             for req in pending:
                 response = _mock_response(req.system, req.user, req.task)
                 results[req.request_id] = response
+                self._log_call(True, req.task, f"(batch mock {req.request_id})")
                 if self.use_cache:
                     self._write_cache(self._cache_key(req.system, req.user), response)
             return results
@@ -451,9 +598,70 @@ class LLMClient:
         for req in pending:
             response = batch_results.get(req.request_id, "")
             results[req.request_id] = response
-            if self.use_cache and response:
-                self._write_cache(self._cache_key(req.system, req.user), response)
+            if response:
+                self._log_call(
+                    True, req.task, f"(batch {req.request_id}, {len(response)} chars)"
+                )
+                if self.use_cache:
+                    self._write_cache(self._cache_key(req.system, req.user), response)
+            else:
+                # Transport-level miss; the JSON layer (complete_batch_json)
+                # retries and records it if the retry also fails.
+                self._log_call(False, req.task, f"batch_empty ({req.request_id})")
         return results
+
+    def complete_batch_json(self, requests: Sequence[BatchRequest]) -> dict[str, Any]:
+        """Batch call returning parsed JSON per request, self-healing bad ones.
+
+        Runs the batch, parses each response, and re-submits *only* the subset
+        that is empty or unparseable (typically truncated at max_tokens) as
+        another batch with a doubled max_tokens window — repeating until every
+        item parses or max_tokens hits the ceiling. Successful responses are used
+        as-is and never re-submitted. Returns ``{request_id: parsed}``; items
+        that still fail at the ceiling are recorded to the failure log and
+        omitted from the result.
+        """
+
+        parsed: dict[str, Any] = {}
+        pending: list[BatchRequest] = list(requests)
+        while pending:
+            raw = self.complete_batch(pending)
+            failed: list[BatchRequest] = []
+            for req in pending:
+                text = raw.get(req.request_id, "")
+                try:
+                    if not text:
+                        raise ValueError("empty batch response")
+                    parsed[req.request_id] = extract_json(text)
+                except ValueError:
+                    failed.append(req)
+            if not failed:
+                break
+
+            if not self._raise_max_tokens():
+                # No room left to grow: record the survivors and give up.
+                for req in failed:
+                    self._record_failure(
+                        task=req.task, kind="parse_error",
+                        error="unparseable batch response at max_tokens ceiling",
+                        system=req.system, user=req.user,
+                        response=raw.get(req.request_id, ""),
+                    )
+                    self._log_call(
+                        False, req.task, f"batch parse_error ({req.request_id}) -> logged"
+                    )
+                break
+
+            # complete_batch caches responses; drop the truncated ones so the
+            # retry batch actually re-requests them at the larger max_tokens.
+            for req in failed:
+                self._delete_cache(self._cache_key(_flatten(req.system), _flatten(req.user)))
+            print(
+                f"  LLM: {len(failed)}/{len(pending)} batch items unparseable; "
+                f"re-submitting those as a batch with max_tokens={self.max_tokens}"
+            )
+            pending = failed
+        return parsed
 
     def _dispatch(self, system: PromptInput, user: PromptInput, task: str) -> str:
         if self.provider == "anthropic":

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from utils.json_io import write_json_file
-from utils.llm_client import BatchRequest, LLMClient
+from utils.llm_client import BatchRequest, LLMClient, extract_json
 from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION
 from utils.taxonomy import CATEGORIES, category_title, resolve_search_focus, taxonomy_seed_block
 
@@ -223,22 +223,21 @@ def run(
     llm = llm or LLMClient()
     prompt = build_plan_prompt(topics)
 
+    raw: Any = {}
     if use_batch and llm.supports_batch():
-        results = llm.complete_batch(
-            [BatchRequest(request_id="plan", system=PLAN_SYSTEM, user=prompt, task="plan")]
-        )
-        raw_text = results.get("plan", "{}")
+        req = BatchRequest(request_id="plan", system=PLAN_SYSTEM, user=prompt, task="plan")
+        # Retries the plan synchronously with a larger window if it truncates.
+        raw = llm.complete_batch_json([req]).get("plan", {})
     else:
         raw_text = llm.complete_text(PLAN_SYSTEM, prompt, task="plan")
-
-    try:
-        raw = json.loads(raw_text) if raw_text.strip().startswith("{") else {}
-        if not raw:
-            from utils.llm_client import extract_json
-
-            raw = extract_json(raw_text)
-    except (json.JSONDecodeError, ValueError):
-        raw = {}
+        try:
+            raw = (
+                json.loads(raw_text)
+                if raw_text.strip().startswith("{")
+                else extract_json(raw_text)
+            )
+        except (json.JSONDecodeError, ValueError):
+            raw = {}
 
     plan = _normalize_plan(raw if isinstance(raw, dict) else {}, topics)
     write_json_file(plan, Path(output_path))

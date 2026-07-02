@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from utils.json_io import write_json_file
-from utils.llm_client import BatchRequest, LLMClient, extract_json
+from utils.llm_client import BatchRequest, LLMClient
 from utils.paths import resolve_classified_path
 from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION, scrub_claims
 from utils.support import compute_support
@@ -148,17 +148,6 @@ def _claims_from_result(
     return claims
 
 
-def extract_from_text(
-    raw: str, thread: dict[str, Any], line_meta: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
-    try:
-        if not raw:
-            return []
-        return _claims_from_result(extract_json(raw), thread, line_meta)
-    except Exception:  # noqa: BLE001 - keep the batch going
-        return []
-
-
 def extract_thread(thread: dict[str, Any], llm: LLMClient) -> list[dict[str, Any]]:
     rendered, line_meta = render_thread_for_llm(thread)
     if not rendered:
@@ -241,20 +230,21 @@ def run(
     if pending_llm:
         if use_batch and llm.supports_batch():
             print(f"  Extract: submitting {len(pending_llm)} requests via batch API...")
-            batch_results = llm.complete_batch(
-                [
-                    BatchRequest(
-                        request_id=thread["thread_id"],
-                        system=EXTRACT_SYSTEM,
-                        user=prompt,
-                        task="extract",
-                    )
-                    for thread, prompt, _ in pending_llm
-                ]
-            )
+            requests = [
+                BatchRequest(
+                    request_id=thread["thread_id"],
+                    system=EXTRACT_SYSTEM,
+                    user=prompt,
+                    task="extract",
+                )
+                for thread, prompt, _ in pending_llm
+            ]
+            parsed = llm.complete_batch_json(requests)
             for thread, _, line_meta in pending_llm:
-                raw = batch_results.get(thread["thread_id"], "")
-                _publish_claims(extract_from_text(raw, thread, line_meta))
+                data = parsed.get(thread["thread_id"])
+                if data is None:
+                    continue  # failed even after retry; already logged
+                _publish_claims(_claims_from_result(data, thread, line_meta))
         else:
             if use_batch:
                 print("  Extract: batch not supported for this provider; using sync API.")

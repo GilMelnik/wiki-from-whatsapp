@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from utils.json_io import write_json_file
-from utils.llm_client import BatchRequest, LLMClient, extract_json
+from utils.llm_client import BatchRequest, LLMClient
 from utils.paths import (
     EDITED_THREADS_PATH,
     ORIGINAL_CLASSIFIED_PATH,
@@ -86,11 +86,17 @@ def _classify_error(reason: str) -> dict[str, Any]:
     }
 
 
-def classify_from_text(raw: str) -> dict[str, Any]:
+def classify_from_parsed(data: Any) -> dict[str, Any]:
+    """Turn one (already-parsed) batch result into a classification record.
+
+    ``data is None`` means the batch item was unparseable even after retry
+    (logged by the client); we degrade to an error record so the batch survives.
+    """
+
+    if data is None:
+        return _classify_error("classification_error: no parseable response")
     try:
-        if not raw:
-            raise ValueError("empty response")
-        return _parse_classify_result(extract_json(raw))
+        return _parse_classify_result(data)
     except Exception as exc:  # noqa: BLE001 - keep the batch going
         return _classify_error(f"classification_error: {exc}")
 
@@ -176,20 +182,19 @@ def run(
     if pending_llm:
         if use_batch and llm.supports_batch():
             print(f"  Classify: submitting {len(pending_llm)} requests via batch API...")
-            batch_results = llm.complete_batch(
-                [
-                    BatchRequest(
-                        request_id=thread["thread_id"],
-                        system=CLASSIFY_SYSTEM,
-                        user=prompt,
-                        task="classify",
-                    )
-                    for thread, prompt in pending_llm
-                ]
-            )
+            requests = [
+                BatchRequest(
+                    request_id=thread["thread_id"],
+                    system=CLASSIFY_SYSTEM,
+                    user=prompt,
+                    task="classify",
+                )
+                for thread, prompt in pending_llm
+            ]
+            parsed = llm.complete_batch_json(requests)
             for (thread, _), record_idx in zip(pending_llm, pending_indices):
                 classified[record_idx].update(
-                    classify_from_text(batch_results.get(thread["thread_id"], ""))
+                    classify_from_parsed(parsed.get(thread["thread_id"]))
                 )
         else:
             if use_batch:
