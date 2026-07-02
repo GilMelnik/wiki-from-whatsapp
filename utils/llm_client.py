@@ -67,7 +67,7 @@ load_dotenv(PROJECT_ROOT / ".env", override=False)
 
 
 DEFAULT_MODELS = {
-    "anthropic": "claude-sonnet-4-6",
+    "anthropic": "claude-sonnet-5",
     "openai": "gpt-4o",
     "gemini": "gemini-3.1-flash-lite",
     "mock": "mock",
@@ -78,7 +78,7 @@ STAGE_DEFAULTS: dict[str, dict[str, str]] = {
     "classify": {"provider": "gemini", "model": "gemini-3.1-flash-lite"},
     "extract": {"provider": "gemini", "model": "gemini-3.5-flash"},
     "plan": {"provider": "gemini", "model": "gemini-3.5-flash"},
-    "generate": {"provider": "anthropic", "model": "claude-sonnet-4-6"},
+    "generate": {"provider": "anthropic", "model": "claude-sonnet-5"},
     "research": {"provider": "gemini", "model": "gemini-3.5-flash"},
 }
 
@@ -434,7 +434,6 @@ class LLMClient:
         message = self._client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
-            temperature=self.temperature,
             system=system,
             messages=[{"role": "user", "content": user}],
         )
