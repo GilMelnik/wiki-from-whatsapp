@@ -79,7 +79,7 @@ def run(
     classified_path: Path | str = EDITED_CLASSIFIED_PATH,
     llm: LLMClient | None = None,
     max_threads: int | None = None,
-    use_batch: bool = False,
+    use_batch: bool = True,
 ) -> dict[str, Any]:
     """Re-classify edited threads, preserving manual ``is_knowledge_bearing: false``."""
 
@@ -173,3 +173,9 @@ def run(
     _backup_classified(classified_path)
     write_json_file(output, classified_path)
     return metadata
+
+
+if __name__ == "__main__":
+    run(
+        llm=LLMClient.for_stage("classify", use_hybrid_defaults=True)
+    )

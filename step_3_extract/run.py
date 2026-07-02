@@ -168,7 +168,7 @@ def run(
     llm: LLMClient | None = None,
     topic_filter: str | None = None,
     max_threads: int | None = None,
-    use_batch: bool = False,
+    use_batch: bool = True,
 ) -> dict[str, Any]:
     """Extract claims from knowledge-bearing threads.
 
@@ -292,3 +292,9 @@ def run(
         "scrub": scrub_summary,
         "audit_path": str(audit_path),
     }
+
+
+if __name__ == "__main__":
+    run(
+        llm=LLMClient.for_stage("extract", use_hybrid_defaults=True)
+    )
