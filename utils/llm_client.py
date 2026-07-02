@@ -39,6 +39,10 @@ lazily so only the providers you use must be installed.
 Every call is cached on disk keyed by a hash of (provider, model, system, user).
 The cache lives in ``data/llm_cache/`` (gitignored).
 
+Anthropic calls also use server-side prompt caching (``cache_control`` on the
+system prefix and any ``CacheSegment(..., cache=True)`` in the user prompt). Set
+``WIKI_LLM_LOG_CACHE=1`` to print per-call cache hit/write token counts.
+
 Batch mode (``--batch`` on the pipeline or individual stages) submits uncached
 prompts via the provider batch API at ~50% lower cost. Anthropic and Gemini are
 supported; cached prompts are still served from disk without a batch job.
@@ -98,6 +102,17 @@ class GroundedResult:
     text: str
     citations: tuple[GroundedCitation, ...] = ()
     search_queries: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class CacheSegment:
+    """One text segment of a prompt; ``cache`` places a cache_control breakpoint after it."""
+
+    text: str
+    cache: bool = False
+
+
+PromptInput = str | Sequence["CacheSegment"]
 
 
 @dataclass(frozen=True)
@@ -191,6 +206,32 @@ def extract_json(text: str) -> Any:
         if not match:
             raise
         return json.loads(match.group(1))
+
+
+def _flatten(prompt: PromptInput) -> str:
+    """Collapse a prompt into plain text for the disk cache key and non-anthropic providers."""
+
+    if isinstance(prompt, str):
+        return prompt
+    return "".join(seg.text for seg in prompt)
+
+
+def _to_blocks(prompt: PromptInput, *, cache_last: bool = False) -> list[dict[str, Any]]:
+    """Build Anthropic text blocks, adding cache_control per-segment or on the final block."""
+
+    if isinstance(prompt, str):
+        segments = [CacheSegment(prompt)]
+    else:
+        segments = list(prompt)
+    if not segments:
+        segments = [CacheSegment("")]
+    blocks: list[dict[str, Any]] = []
+    for i, seg in enumerate(segments):
+        block: dict[str, Any] = {"type": "text", "text": seg.text}
+        if seg.cache or (cache_last and i == len(segments) - 1):
+            block["cache_control"] = {"type": "ephemeral"}
+        blocks.append(block)
+    return blocks
 
 
 def _sanitize_batch_custom_id(request_id: str) -> str:
@@ -329,9 +370,9 @@ class LLMClient:
             )
 
     # --------------------------------------------------------------- complete
-    def complete_text(self, system: str, user: str, task: str = "") -> str:
+    def complete_text(self, system: PromptInput, user: PromptInput, task: str = "") -> str:
         if self.use_cache:
-            key = self._cache_key(system, user)
+            key = self._cache_key(_flatten(system), _flatten(user))
             cached = self._read_cache(key)
             if cached is not None:
                 return cached
@@ -342,7 +383,7 @@ class LLMClient:
             self._write_cache(key, response)
         return response
 
-    def complete_json(self, system: str, user: str, task: str = "") -> Any:
+    def complete_json(self, system: PromptInput, user: PromptInput, task: str = "") -> Any:
         raw = self.complete_text(system, user, task)
         return extract_json(raw)
 
@@ -414,19 +455,21 @@ class LLMClient:
                 self._write_cache(self._cache_key(req.system, req.user), response)
         return results
 
-    def _dispatch(self, system: str, user: str, task: str) -> str:
-        if self.provider == "mock":
-            return _mock_response(system, user, task)
+    def _dispatch(self, system: PromptInput, user: PromptInput, task: str) -> str:
         if self.provider == "anthropic":
             return self._anthropic(system, user)
+        # Other providers take plain text; cache segments only matter to anthropic.
+        system_text, user_text = _flatten(system), _flatten(user)
+        if self.provider == "mock":
+            return _mock_response(system_text, user_text, task)
         if self.provider == "openai":
-            return self._openai(system, user)
+            return self._openai(system_text, user_text)
         if self.provider == "gemini":
-            return self._gemini(system, user)
+            return self._gemini(system_text, user_text)
         raise ValueError(f"Unknown LLM provider: {self.provider}")
 
     # ----------------------------------------------------------- providers
-    def _anthropic(self, system: str, user: str) -> str:
+    def _anthropic(self, system: PromptInput, user: PromptInput) -> str:
         if self._client is None:
             import anthropic
 
@@ -434,10 +477,31 @@ class LLMClient:
         message = self._client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
+            system=_to_blocks(system, cache_last=True),
+            messages=[{"role": "user", "content": _to_blocks(user)}],
         )
+        self._log_cache_usage(message.usage)
         return "".join(block.text for block in message.content if block.type == "text")
+
+    def _log_cache_usage(self, usage: Any) -> None:
+        """Print prompt-cache stats when WIKI_LLM_LOG_CACHE is set (off by default).
+
+        HIT means tokens were read from cache; WRITE means the prefix was (re)written;
+        fresh is the uncached remainder. See the module docstring for the 1024-token
+        minimum and 5-minute TTL caveats.
+        """
+
+        if not os.environ.get("WIKI_LLM_LOG_CACHE"):
+            return
+        read = getattr(usage, "cache_read_input_tokens", 0) or 0
+        write = getattr(usage, "cache_creation_input_tokens", 0) or 0
+        fresh = getattr(usage, "input_tokens", 0) or 0
+        out = getattr(usage, "output_tokens", 0) or 0
+        state = "HIT" if read else ("WRITE" if write else "MISS")
+        print(
+            f"  [cache {state}] read={read} write={write} fresh={fresh} "
+            f"out={out} ({self.model})"
+        )
 
     def _openai(self, system: str, user: str) -> str:
         if self._client is None:

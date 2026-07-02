@@ -37,7 +37,7 @@ from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION
 from step_5_aggregate.resolver import EntityResolver, load_entity_resolver
 from step_7_community.store import STANCE_HE, PageStore
 from utils.json_io import write_json_file
-from utils.llm_client import LLMClient
+from utils.llm_client import CacheSegment, LLMClient
 from utils.paths import (
     WIKI_PAGES,
     resolve_claims_path,
@@ -50,6 +50,25 @@ DEFAULT_BATCH_SIZE = 15
 DEFAULT_MAX_READS = 3
 OVERVIEW_PAGE_ID = "overview"
 
+_ACTION_SCHEMA = (
+    "{\n"
+    '  "actions": [\n'
+    '    {"type": "upsert_statement", "page_id": "<id>", "section": "<כותרת תת-סעיף או '
+    'מחרוזת ריקה>", "statement_id": "<מזהה statement קיים לעדכון, או null לחדש>", '
+    '"text": "<משפט/משפטים בעברית>", "claim_ids": ["<claim_id>", "..."]},\n'
+    '    {"type": "new_page", "id": "<slug-latin>", "title": "<כותרת>", '
+    '"category": "<category-id>", "parent": null},\n'
+    '    {"type": "split_page", "from": "<id>", "into": [{"id": "<id>", '
+    '"title": "<כותרת>", "category": "<category-id>"}], "reason": "<סיבה>"},\n'
+    '    {"type": "add_link", "from": "<id>", "to": "<id>", "reason": "<סיבה>"},\n'
+    '    {"type": "set_related", "page_id": "<id>", "related_pages": ["<id>", "..."]},\n'
+    '    {"type": "read_page", "id": "<id>"}\n'
+    "  ]\n"
+    "}"
+)
+
+# The schema never changes, so it lives in the (cached) system prompt rather than
+# the per-call user prompt. See build_batch_prompt for the cache layout.
 COMMUNITY_AGENT_SYSTEM = (
     "אתה עורך ויקי בעברית הבונה את תוכן הקהילה על פונדקאות לגייז, על בסיס טענות "
     "שחולצו מקבוצת וואטסאפ. אתה עובד באופן הדרגתי: בכל פעם תקבל אצווה (batch) של "
@@ -69,24 +88,8 @@ COMMUNITY_AGENT_SYSTEM = (
     "אותן ל-section עם heading קצר.\n"
     "6. אתה רשאי להשתמש בכלים: new_page, split_page, add_link, set_related, read_page.\n"
     f"7. {FORBIDDEN_TERM_INSTRUCTION}\n"
-    "החזר אך ורק אובייקט JSON תקין במבנה המבוקש, ללא טקסט נוסף וללא code fence."
-)
-
-_ACTION_SCHEMA = (
-    "{\n"
-    '  "actions": [\n'
-    '    {"type": "upsert_statement", "page_id": "<id>", "section": "<כותרת תת-סעיף או '
-    'מחרוזת ריקה>", "statement_id": "<מזהה statement קיים לעדכון, או null לחדש>", '
-    '"text": "<משפט/משפטים בעברית>", "claim_ids": ["<claim_id>", "..."]},\n'
-    '    {"type": "new_page", "id": "<slug-latin>", "title": "<כותרת>", '
-    '"category": "<category-id>", "parent": null},\n'
-    '    {"type": "split_page", "from": "<id>", "into": [{"id": "<id>", '
-    '"title": "<כותרת>", "category": "<category-id>"}], "reason": "<סיבה>"},\n'
-    '    {"type": "add_link", "from": "<id>", "to": "<id>", "reason": "<סיבה>"},\n'
-    '    {"type": "set_related", "page_id": "<id>", "related_pages": ["<id>", "..."]},\n'
-    '    {"type": "read_page", "id": "<id>"}\n'
-    "  ]\n"
-    "}"
+    "החזר אך ורק אובייקט JSON יחיד ותקין במבנה הבא, ללא טקסט נוסף וללא code fence:\n"
+    f"{_ACTION_SCHEMA}"
 )
 
 
@@ -131,15 +134,24 @@ def build_batch_prompt(
     claims: list[dict[str, Any]],
     resolver: EntityResolver | None,
     extra_pages: str = "",
-) -> str:
+) -> list[CacheSegment]:
+    """Order the prompt for prompt caching: almost-static catalog first (cached),
+    then the per-call page content + claims (uncached). The static schema lives in
+    COMMUNITY_AGENT_SYSTEM, so the cached prefix is system+schema+catalog.
+    """
+
+    catalog = "\n".join(
+        [
+            "## קטלוג עמודים (id — כותרת)",
+            store.catalog(exclude=None),
+        ]
+    )
+
     page_view = json.dumps(store.page_view(page_id), ensure_ascii=False, indent=2)
     sections = [
         f"## עמוד נוכחי: {page_id}",
         "התוכן הקיים של העמוד (JSON):",
         page_view,
-        "",
-        "## קטלוג עמודים (id — כותרת)",
-        store.catalog(exclude=None),
         "",
         "## טענות באצווה זו",
         _claims_block(claims, resolver, store.audit_by_id),
@@ -149,11 +161,14 @@ def build_batch_prompt(
     sections += [
         "",
         "## פלט",
-        f"החזר אובייקט JSON יחיד במבנה הבא (ללא טקסט נוסף וללא code fence):\n{_ACTION_SCHEMA}",
+        "החזר אובייקט JSON יחיד במבנה שהוגדר במערכת (ללא טקסט נוסף וללא code fence).",
         "כל claim_id חייב להופיע ברשימת הטענות שסופקו. אם ביקשת read_page, תוכל לכתוב "
         "statements לאחר שיוצג לך התוכן המבוקש.",
     ]
-    return "\n".join(sections)
+    return [
+        CacheSegment(catalog + "\n", cache=True),
+        CacheSegment("\n".join(sections)),
+    ]
 
 
 def _apply_actions(
@@ -227,6 +242,7 @@ def _run_batch(
         ]
         reads = [r for r in reads if r and r in store.pages]
         if reads:
+            print(f"      {page_id}: agent requested read_page {reads}; re-prompting")
             # Don't write yet — show requested pages and let the agent re-decide
             # with that context. Avoids double-applying writes across re-prompts.
             extra_pages = "\n\n".join(
@@ -336,12 +352,28 @@ def run(
 
     out_path = Path(output_path) if output_path is not None else WIKI_PAGES.original
 
+    total_batches = sum(
+        -(-len(page_claims) // batch_size) for page_claims in grouped.values()
+    )
+    print(
+        f"Community: {len(claims)} claims across {len(grouped)} pages "
+        f"-> {total_batches} batches ({llm.provider}/{llm.model})"
+    )
+
     batch_count = 0
     for page_id, page_claims in grouped.items():
+        page_batches = -(-len(page_claims) // batch_size)
+        print(f"  {page_id}: {len(page_claims)} claims in {page_batches} batch(es)")
         for start in range(0, len(page_claims), batch_size):
             batch = page_claims[start : start + batch_size]
-            _run_batch(llm, store, page_id, batch, resolver, max_reads)
             batch_count += 1
+            before = store.statement_count()
+            _run_batch(llm, store, page_id, batch, resolver, max_reads)
+            after = store.statement_count()
+            print(
+                f"    [{batch_count}/{total_batches}] {page_id}: "
+                f"{len(batch)} claims -> +{after - before} statements ({after} total)"
+            )
             # Persist after each batch so progress survives interruptions.
             # ponytail: re-runs reprocess all batches (LLM cache makes this cheap);
             # no skip-completed-batch resume logic.
@@ -356,6 +388,11 @@ def run(
                 ),
                 out_path,
             )
+
+    print(
+        f"Community: done — {len(store.pages)} pages, {store.statement_count()} "
+        f"statements, {len(store.links)} links, {batch_count} batches"
+    )
 
     return {
         "pages": len(store.pages),
