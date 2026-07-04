@@ -5,9 +5,13 @@ The client exposes methods used across the wiki pipeline:
 - ``complete_json(system, user, task=...)`` -> parsed ``dict``/``list``
 - ``complete_text(system, user, task=...)`` -> ``str``
 - ``complete_grounded(system, user)`` -> ``GroundedResult`` (Gemini + Google Search)
-- ``complete_batch(requests)`` -> ``dict[request_id, str]`` (anthropic / gemini)
+- ``complete_batch(requests)`` -> ``dict[request_id, (text, truncated)]`` (anthropic / gemini)
 - ``complete_batch_json(requests)`` -> ``dict[request_id, parsed]`` (re-submits only
-  the truncated/unparseable items as another batch with a larger max_tokens window)
+  items *truncated at max_tokens* as another batch with a larger window; other
+  unparseable items are logged and dropped rather than retried)
+
+Unparseable responses are also copied verbatim to a sibling ``*_bad`` cache dir
+for inspection, keyed the same way as the normal cache.
 
 Configuration (most-specific wins):
 
@@ -92,8 +96,10 @@ VALID_STAGES = frozenset(STAGE_DEFAULTS)
 BATCH_PROVIDERS = frozenset({"anthropic", "gemini"})
 DEFAULT_BATCH_POLL_INTERVAL = 30.0
 
-# When a JSON completion fails to parse (usually a response truncated at
-# max_tokens), complete_json doubles max_tokens and retries, up to this ceiling.
+# When a JSON completion is truncated at max_tokens, complete_json doubles
+# max_tokens and retries, up to this ceiling. A parse failure that is *not* a
+# max_tokens truncation (e.g. the model returned prose) is not retried — a bigger
+# window would not change the format — but is logged and saved for inspection.
 MAX_TOKENS_CEILING = 16384
 JSON_PARSE_RETRIES = 2
 
@@ -219,6 +225,17 @@ def extract_json(text: str) -> Any:
         return json.loads(match.group(1))
 
 
+def _gemini_truncated(response: Any) -> bool:
+    """True if a Gemini response stopped because it hit max_output_tokens."""
+
+    for cand in getattr(response, "candidates", None) or []:
+        reason = getattr(cand, "finish_reason", None)
+        name = getattr(reason, "name", None) or (str(reason) if reason else "")
+        if name.endswith("MAX_TOKENS"):
+            return True
+    return False
+
+
 def _flatten(prompt: PromptInput) -> str:
     """Collapse a prompt into plain text for the disk cache key and non-anthropic providers."""
 
@@ -269,6 +286,8 @@ class LLMClient:
             self.provider, "mock"
         )
         self.cache_dir = Path(cache_dir)
+        # Unparseable responses are copied here (same key) for later inspection.
+        self.bad_cache_dir = self.cache_dir.parent / f"{self.cache_dir.name}_bad"
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.use_cache = use_cache
@@ -337,6 +356,13 @@ class LLMClient:
 
     def _delete_cache(self, key: str) -> None:
         self._cache_path(key).unlink(missing_ok=True)
+
+    def _write_bad_cache(self, key: str, response: str) -> None:
+        """Persist an unparseable response to the sibling ``*_bad`` cache dir."""
+
+        self.bad_cache_dir.mkdir(parents=True, exist_ok=True)
+        with (self.bad_cache_dir / f"{key}.json").open("w", encoding="utf-8") as f:
+            json.dump({"response": response}, f, ensure_ascii=False, indent=2)
 
     # ------------------------------------------------------------- call logging
     def _log_call(self, ok: bool, task: str, detail: str) -> None:
@@ -440,7 +466,7 @@ class LLMClient:
                 return cached
 
         try:
-            response = self._dispatch(system, user, task)
+            response, _ = self._dispatch(system, user, task)
         except Exception as exc:  # noqa: BLE001 - record any provider error, then re-raise
             self._record_failure(
                 task=task, kind="api_error", error=repr(exc), system=system, user=user
@@ -467,11 +493,13 @@ class LLMClient:
         return True
 
     def complete_json(self, system: PromptInput, user: PromptInput, task: str = "") -> Any:
-        """Parse the model's JSON output, retrying with more room on failure.
+        """Parse the model's JSON output, growing the window only on truncation.
 
-        A response truncated at max_tokens is invalid JSON. Such a response is
-        never cached; if a *previous* run already cached one, it's dropped and
-        re-requested. Each parse failure doubles max_tokens before retrying.
+        A response truncated at max_tokens is invalid JSON; it is never cached and
+        each *truncated* attempt doubles max_tokens before retrying. A parse
+        failure that is not a truncation (e.g. the model returned prose) is not
+        retried — a larger window would not fix the format. Every unparseable
+        response is saved to the ``*_bad`` cache for inspection.
         """
 
         key = (
@@ -487,19 +515,18 @@ class LLMClient:
                     self._log_call(True, task, "(cache)")
                     return data
                 except ValueError as exc:
-                    # Failed (likely truncated) cache entry from a prior run: drop
-                    # it and re-request with more output room.
+                    # Failed cache entry from a prior run: drop it and re-request;
+                    # the fresh call's finish_reason decides any max_tokens bump.
                     self._delete_cache(key)
                     self._log_call(
                         False, task, f"stale cache unparseable ({exc}); re-requesting"
                     )
-                    self._raise_max_tokens()
 
         last_exc: ValueError | None = None
         response = ""
         for _ in range(JSON_PARSE_RETRIES + 1):
             try:
-                response = self._dispatch(system, user, task)
+                response, truncated = self._dispatch(system, user, task, json_mode=True)
             except Exception as exc:  # noqa: BLE001 - record any provider error
                 self._record_failure(
                     task=task, kind="api_error", error=repr(exc),
@@ -511,12 +538,18 @@ class LLMClient:
                 data = extract_json(response)
             except ValueError as exc:
                 last_exc = exc
+                if key is not None:
+                    self._write_bad_cache(key, response)
                 self._log_call(
-                    False, task, f"parse_error (max_tokens={self.max_tokens}): {exc}"
+                    False,
+                    task,
+                    f"parse_error (max_tokens={self.max_tokens}, "
+                    f"truncated={truncated}): {exc}",
                 )
-                if not self._raise_max_tokens():
-                    break
-                continue
+                # Only a max_tokens truncation is worth retrying with more room.
+                if truncated and self._raise_max_tokens():
+                    continue
+                break
             self._log_call(
                 True, task, f"({len(response)} chars, max_tokens={self.max_tokens})"
             )
@@ -554,21 +587,25 @@ class LLMClient:
             self._write_grounded_cache(self._grounded_cache_key(system, user), result)
         return result
 
-    def complete_batch(self, requests: Sequence[BatchRequest]) -> dict[str, str]:
+    def complete_batch(
+        self, requests: Sequence[BatchRequest]
+    ) -> dict[str, tuple[str, bool]]:
         """Run many prompts via the provider batch API (50% cheaper, async).
 
-        Cached prompts are returned immediately; only uncached items are submitted.
-        Mock provider runs synchronously without an API call.
+        Returns ``{request_id: (text, truncated)}`` where ``truncated`` is True
+        when the item hit max_output_tokens. Cached prompts are returned
+        immediately (never truncated — only good responses are cached). Mock
+        provider runs synchronously without an API call.
         """
 
-        results: dict[str, str] = {}
+        results: dict[str, tuple[str, bool]] = {}
         pending: list[BatchRequest] = []
 
         for req in requests:
             if self.use_cache:
                 cached = self._read_cache(self._cache_key(req.system, req.user))
                 if cached is not None:
-                    results[req.request_id] = cached
+                    results[req.request_id] = (cached, False)
                     self._log_call(True, req.task, f"(batch cache {req.request_id})")
                     continue
             pending.append(req)
@@ -579,7 +616,7 @@ class LLMClient:
         if self.provider == "mock":
             for req in pending:
                 response = _mock_response(req.system, req.user, req.task)
-                results[req.request_id] = response
+                results[req.request_id] = (response, False)
                 self._log_call(True, req.task, f"(batch mock {req.request_id})")
                 if self.use_cache:
                     self._write_cache(self._cache_key(req.system, req.user), response)
@@ -596,88 +633,97 @@ class LLMClient:
             )
 
         for req in pending:
-            response = batch_results.get(req.request_id, "")
-            results[req.request_id] = response
+            response, truncated = batch_results.get(req.request_id, ("", False))
+            results[req.request_id] = (response, truncated)
             if response:
                 self._log_call(
                     True, req.task, f"(batch {req.request_id}, {len(response)} chars)"
                 )
-                if self.use_cache:
+                # Only cache a parseable-looking response; the JSON layer decides
+                # what to keep, but a truncated one must never persist as valid.
+                if self.use_cache and not truncated:
                     self._write_cache(self._cache_key(req.system, req.user), response)
             else:
-                # Transport-level miss; the JSON layer (complete_batch_json)
-                # retries and records it if the retry also fails.
                 self._log_call(False, req.task, f"batch_empty ({req.request_id})")
         return results
 
     def complete_batch_json(self, requests: Sequence[BatchRequest]) -> dict[str, Any]:
         """Batch call returning parsed JSON per request, self-healing bad ones.
 
-        Runs the batch, parses each response, and re-submits *only* the subset
-        that is empty or unparseable (typically truncated at max_tokens) as
-        another batch with a doubled max_tokens window — repeating until every
-        item parses or max_tokens hits the ceiling. Successful responses are used
-        as-is and never re-submitted. Returns ``{request_id: parsed}``; items
-        that still fail at the ceiling are recorded to the failure log and
-        omitted from the result.
+        Runs the batch and parses each response. Items *truncated at max_tokens*
+        are re-submitted as another batch with a doubled window, repeating until
+        they parse or max_tokens hits the ceiling. Items that fail to parse for
+        any other reason (e.g. the model returned prose) are logged and dropped —
+        a bigger window would not change the format. Every unparseable response
+        is copied to the ``*_bad`` cache. Returns ``{request_id: parsed}``;
+        failed items are omitted from the result.
         """
 
         parsed: dict[str, Any] = {}
         pending: list[BatchRequest] = list(requests)
         while pending:
             raw = self.complete_batch(pending)
-            failed: list[BatchRequest] = []
+            retry: list[BatchRequest] = []  # truncated -> worth a larger window
             for req in pending:
-                text = raw.get(req.request_id, "")
+                text, truncated = raw.get(req.request_id, ("", False))
                 try:
                     if not text:
                         raise ValueError("empty batch response")
                     parsed[req.request_id] = extract_json(text)
-                except ValueError:
-                    failed.append(req)
-            if not failed:
+                    continue
+                except ValueError as exc:
+                    error = str(exc)
+                key = self._cache_key(_flatten(req.system), _flatten(req.user))
+                self._write_bad_cache(key, text)
+                # Never let an unparseable response linger in the good cache.
+                self._delete_cache(key)
+                if truncated and self.max_tokens < MAX_TOKENS_CEILING:
+                    retry.append(req)
+                    continue
+                self._record_failure(
+                    task=req.task, kind="parse_error",
+                    error=(
+                        f"unparseable batch response (truncated={truncated}): {error}"
+                    ),
+                    system=req.system, user=req.user, response=text,
+                )
+                self._log_call(
+                    False, req.task, f"batch parse_error ({req.request_id}) -> logged"
+                )
+            if not retry:
                 break
 
-            if not self._raise_max_tokens():
-                # No room left to grow: record the survivors and give up.
-                for req in failed:
-                    self._record_failure(
-                        task=req.task, kind="parse_error",
-                        error="unparseable batch response at max_tokens ceiling",
-                        system=req.system, user=req.user,
-                        response=raw.get(req.request_id, ""),
-                    )
-                    self._log_call(
-                        False, req.task, f"batch parse_error ({req.request_id}) -> logged"
-                    )
-                break
-
-            # complete_batch caches responses; drop the truncated ones so the
-            # retry batch actually re-requests them at the larger max_tokens.
-            for req in failed:
-                self._delete_cache(self._cache_key(_flatten(req.system), _flatten(req.user)))
+            self._raise_max_tokens()
             print(
-                f"  LLM: {len(failed)}/{len(pending)} batch items unparseable; "
+                f"  LLM: {len(retry)}/{len(pending)} batch items truncated; "
                 f"re-submitting those as a batch with max_tokens={self.max_tokens}"
             )
-            pending = failed
+            pending = retry
         return parsed
 
-    def _dispatch(self, system: PromptInput, user: PromptInput, task: str) -> str:
+    def _dispatch(
+        self,
+        system: PromptInput,
+        user: PromptInput,
+        task: str,
+        json_mode: bool = False,
+    ) -> tuple[str, bool]:
+        """Return ``(text, truncated)``; ``truncated`` marks a max_tokens cutoff."""
+
         if self.provider == "anthropic":
             return self._anthropic(system, user)
         # Other providers take plain text; cache segments only matter to anthropic.
         system_text, user_text = _flatten(system), _flatten(user)
         if self.provider == "mock":
-            return _mock_response(system_text, user_text, task)
+            return _mock_response(system_text, user_text, task), False
         if self.provider == "openai":
             return self._openai(system_text, user_text)
         if self.provider == "gemini":
-            return self._gemini(system_text, user_text)
+            return self._gemini(system_text, user_text, json_mode=json_mode)
         raise ValueError(f"Unknown LLM provider: {self.provider}")
 
     # ----------------------------------------------------------- providers
-    def _anthropic(self, system: PromptInput, user: PromptInput) -> str:
+    def _anthropic(self, system: PromptInput, user: PromptInput) -> tuple[str, bool]:
         if self._client is None:
             import anthropic
 
@@ -689,7 +735,8 @@ class LLMClient:
             messages=[{"role": "user", "content": _to_blocks(user)}],
         )
         self._log_cache_usage(message.usage)
-        return "".join(block.text for block in message.content if block.type == "text")
+        text = "".join(block.text for block in message.content if block.type == "text")
+        return text, message.stop_reason == "max_tokens"
 
     def _log_cache_usage(self, usage: Any) -> None:
         """Print prompt-cache stats when WIKI_LLM_LOG_CACHE is set (off by default).
@@ -711,7 +758,7 @@ class LLMClient:
             f"out={out} ({self.model})"
         )
 
-    def _openai(self, system: str, user: str) -> str:
+    def _openai(self, system: str, user: str) -> tuple[str, bool]:
         if self._client is None:
             import openai
 
@@ -725,9 +772,28 @@ class LLMClient:
                 {"role": "user", "content": user},
             ],
         )
-        return response.choices[0].message.content or ""
+        choice = response.choices[0]
+        return choice.message.content or "", choice.finish_reason == "length"
 
-    def _gemini(self, system: str, user: str) -> str:
+    def _gemini_config(self, json_mode: bool) -> Any:
+        """Config shared by sync/batch Gemini JSON calls.
+
+        Gemini 3 flash reasons by default; without a cap the whole output budget
+        can be spent 'thinking', leaving prose (or nothing) instead of JSON. We
+        turn thinking off and, for JSON tasks, ask the API for JSON directly so
+        the answer is well-formed rather than fenced/annotated.
+        """
+
+        from google.genai import types as genai_types
+
+        return genai_types.GenerateContentConfig(
+            temperature=self.temperature,
+            max_output_tokens=self.max_tokens,
+            thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
+            response_mime_type="application/json" if json_mode else None,
+        )
+
+    def _gemini(self, system: str, user: str, *, json_mode: bool = False) -> tuple[str, bool]:
         if self._client is None:
             from google import genai
 
@@ -735,8 +801,9 @@ class LLMClient:
         response = self._client.models.generate_content(
             model=self.model,
             contents=f"{system}\n\n{user}",
+            config=self._gemini_config(json_mode),
         )
-        return response.text or ""
+        return response.text or "", _gemini_truncated(response)
 
     def _gemini_grounded(self, system: str, user: str) -> GroundedResult:
         from google import genai
@@ -765,7 +832,9 @@ class LLMClient:
             search_queries=search_queries,
         )
 
-    def _anthropic_batch(self, requests: Sequence[BatchRequest]) -> dict[str, str]:
+    def _anthropic_batch(
+        self, requests: Sequence[BatchRequest]
+    ) -> dict[str, tuple[str, bool]]:
         import anthropic
         from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
         from anthropic.types.messages.batch_create_params import Request
@@ -808,20 +877,23 @@ class LLMClient:
             )
             time.sleep(self.batch_poll_interval)
 
-        out: dict[str, str] = {}
+        out: dict[str, tuple[str, bool]] = {}
         for result in self._client.messages.batches.results(batch.id):
             request_id = id_map.get(result.custom_id, result.custom_id)
             if result.result.type == "succeeded":
                 message = result.result.message
-                out[request_id] = "".join(
+                text = "".join(
                     block.text for block in message.content if block.type == "text"
                 )
+                out[request_id] = (text, message.stop_reason == "max_tokens")
             else:
                 print(f"  Warning: Anthropic batch item {request_id} -> {result.result.type}")
-                out[request_id] = ""
+                out[request_id] = ("", False)
         return out
 
-    def _gemini_batch(self, requests: Sequence[BatchRequest]) -> dict[str, str]:
+    def _gemini_batch(
+        self, requests: Sequence[BatchRequest]
+    ) -> dict[str, tuple[str, bool]]:
         from google import genai
         from google.genai import types as genai_types
 
@@ -840,6 +912,10 @@ class LLMClient:
                 "config": {
                     "temperature": self.temperature,
                     "max_output_tokens": self.max_tokens,
+                    # Extract/classify/plan all want JSON; keep the budget for the
+                    # answer (not chain-of-thought) so responses are parseable.
+                    "response_mime_type": "application/json",
+                    "thinking_config": {"thinking_budget": 0},
                 },
             }
             for req in requests
@@ -868,7 +944,7 @@ class LLMClient:
         if state_name not in genai_types.JOB_STATES_SUCCEEDED:
             raise RuntimeError(f"Gemini batch job ended with state {state_name!r}")
 
-        out: dict[str, str] = {}
+        out: dict[str, tuple[str, bool]] = {}
         dest = batch_job.dest
         inlined = dest.inlined_responses if dest else None
         if not inlined:
@@ -879,11 +955,14 @@ class LLMClient:
             if inline_resp.metadata:
                 request_id = inline_resp.metadata.get("key")
             if inline_resp.response:
-                out[request_id or ""] = inline_resp.response.text or ""
+                out[request_id or ""] = (
+                    inline_resp.response.text or "",
+                    _gemini_truncated(inline_resp.response),
+                )
             elif inline_resp.error:
                 print(f"  Warning: Gemini batch item {request_id} error: {inline_resp.error}")
                 if request_id:
-                    out[request_id] = ""
+                    out[request_id] = ("", False)
         return out
 
 

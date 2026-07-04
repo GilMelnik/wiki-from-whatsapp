@@ -148,6 +148,86 @@ def _claims_from_result(
     return claims
 
 
+def publish_claims(
+    thread_claims: list[dict[str, Any]],
+    published_claims: list[dict[str, Any]],
+    audit_records: list[dict[str, Any]],
+) -> None:
+    """Split each claim into a public record and a PRIVATE audit record."""
+
+    for claim in thread_claims:
+        support = claim.pop("_support")
+        audit_records.append(
+            {
+                "claim_id": claim["claim_id"],
+                "thread_id": claim["thread_id"],
+                "raw_claim_text": claim["claim_text"],
+                "supporting_senders": support["statement_senders"],
+                "opposing_senders": support["opposing_senders"],
+                "reaction_senders": support["reaction_senders"],
+                "reaction_opposers": support["reaction_opposers"],
+                "all_supporters": support["all_supporters"],
+                "all_opposers": support["all_opposers"],
+                "local_message_ids": claim.pop("_local_message_ids"),
+                "opposing_local_message_ids": claim.pop(
+                    "_opposing_local_message_ids", []
+                ),
+                "global_message_ids": claim.pop("_global_message_ids"),
+                "message_reactions": support["message_reactions"],
+            }
+        )
+        published_claims.append(claim)
+
+
+def extract_claims_for_threads(
+    pending_llm: list[tuple[dict[str, Any], str, list[dict[str, Any]]]],
+    llm: LLMClient,
+    use_batch: bool,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Run extraction over prepared prompts, returning (public, audit) records."""
+
+    published_claims: list[dict[str, Any]] = []
+    audit_records: list[dict[str, Any]] = []
+    if not pending_llm:
+        return published_claims, audit_records
+
+    if use_batch and llm.supports_batch():
+        print(f"  Extract: submitting {len(pending_llm)} requests via batch API...")
+        requests = [
+            BatchRequest(
+                request_id=thread["thread_id"],
+                system=EXTRACT_SYSTEM,
+                user=prompt,
+                task="extract",
+            )
+            for thread, prompt, _ in pending_llm
+        ]
+        parsed = llm.complete_batch_json(requests)
+        for thread, _, line_meta in pending_llm:
+            data = parsed.get(thread["thread_id"])
+            if data is None:
+                continue  # failed even after retry; already logged
+            publish_claims(
+                _claims_from_result(data, thread, line_meta),
+                published_claims,
+                audit_records,
+            )
+    else:
+        if use_batch:
+            print("  Extract: batch not supported for this provider; using sync API.")
+        for thread, prompt, line_meta in pending_llm:
+            try:
+                result = llm.complete_json(EXTRACT_SYSTEM, prompt, task="extract")
+                publish_claims(
+                    _claims_from_result(result, thread, line_meta),
+                    published_claims,
+                    audit_records,
+                )
+            except Exception:  # noqa: BLE001 - keep the batch going
+                continue
+    return published_claims, audit_records
+
+
 def extract_thread(thread: dict[str, Any], llm: LLMClient) -> list[dict[str, Any]]:
     rendered, line_meta = render_thread_for_llm(thread)
     if not rendered:
@@ -186,8 +266,6 @@ def run(
         classified = json.load(f)
     keep_ids = _knowledge_bearing_ids(classified, topic_filter)
 
-    published_claims: list[dict[str, Any]] = []
-    audit_records: list[dict[str, Any]] = []
     pending_llm: list[tuple[dict[str, Any], str, list[dict[str, Any]]]] = []
     processed = 0
 
@@ -203,57 +281,9 @@ def run(
             pending_llm.append((thread, build_extract_prompt(rendered), line_meta))
         processed += 1
 
-    def _publish_claims(thread_claims: list[dict[str, Any]]) -> None:
-        for claim in thread_claims:
-            support = claim.pop("_support")
-            audit_records.append(
-                {
-                    "claim_id": claim["claim_id"],
-                    "thread_id": claim["thread_id"],
-                    "raw_claim_text": claim["claim_text"],
-                    "supporting_senders": support["statement_senders"],
-                    "opposing_senders": support["opposing_senders"],
-                    "reaction_senders": support["reaction_senders"],
-                    "reaction_opposers": support["reaction_opposers"],
-                    "all_supporters": support["all_supporters"],
-                    "all_opposers": support["all_opposers"],
-                    "local_message_ids": claim.pop("_local_message_ids"),
-                    "opposing_local_message_ids": claim.pop(
-                        "_opposing_local_message_ids", []
-                    ),
-                    "global_message_ids": claim.pop("_global_message_ids"),
-                    "message_reactions": support["message_reactions"],
-                }
-            )
-            published_claims.append(claim)
-
-    if pending_llm:
-        if use_batch and llm.supports_batch():
-            print(f"  Extract: submitting {len(pending_llm)} requests via batch API...")
-            requests = [
-                BatchRequest(
-                    request_id=thread["thread_id"],
-                    system=EXTRACT_SYSTEM,
-                    user=prompt,
-                    task="extract",
-                )
-                for thread, prompt, _ in pending_llm
-            ]
-            parsed = llm.complete_batch_json(requests)
-            for thread, _, line_meta in pending_llm:
-                data = parsed.get(thread["thread_id"])
-                if data is None:
-                    continue  # failed even after retry; already logged
-                _publish_claims(_claims_from_result(data, thread, line_meta))
-        else:
-            if use_batch:
-                print("  Extract: batch not supported for this provider; using sync API.")
-            for thread, prompt, line_meta in pending_llm:
-                try:
-                    result = llm.complete_json(EXTRACT_SYSTEM, prompt, task="extract")
-                    _publish_claims(_claims_from_result(result, thread, line_meta))
-                except Exception:  # noqa: BLE001 - keep the batch going
-                    continue
+    published_claims, audit_records = extract_claims_for_threads(
+        pending_llm, llm, use_batch
+    )
 
     scrub_summary = scrub_claims(published_claims)
 
