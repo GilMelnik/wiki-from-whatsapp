@@ -25,7 +25,7 @@ def _client(tmp_path, responses):
         failure_log=tmp_path / "failures.jsonl",
     )
     queue = list(responses)
-    llm._dispatch = lambda system, user, task="", json_mode=False: queue.pop(0)  # type: ignore[method-assign]
+    llm._dispatch = lambda system, user, task="", json_mode=False, response_schema=None: queue.pop(0)  # type: ignore[method-assign]
     return llm
 
 

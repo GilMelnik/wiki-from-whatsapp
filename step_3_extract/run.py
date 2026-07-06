@@ -49,6 +49,48 @@ EXTRACT_SYSTEM = (
     "החזר אך ורק JSON תקין."
 )
 
+# JSON Schema for structured output: guarantees the model returns valid JSON in
+# this exact shape (mirrors the structure described in build_extract_prompt).
+EXTRACT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "claims": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "claim_text": {"type": "string"},
+                    "topic_tags": {"type": "array", "items": {"type": "string"}},
+                    "entities": {"type": "array", "items": {"type": "string"}},
+                    "stance": {
+                        "type": "string",
+                        "enum": ["positive", "negative", "neutral", "factual"],
+                    },
+                    "supporting_message_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                    },
+                    "opposing_message_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                    },
+                },
+                "required": [
+                    "claim_text",
+                    "topic_tags",
+                    "entities",
+                    "stance",
+                    "supporting_message_ids",
+                    "opposing_message_ids",
+                ],
+            },
+        }
+    },
+    "required": ["claims"],
+}
+
 
 def build_extract_prompt(rendered: str) -> str:
     return (
@@ -199,6 +241,7 @@ def extract_claims_for_threads(
                 system=EXTRACT_SYSTEM,
                 user=prompt,
                 task="extract",
+                response_schema=EXTRACT_SCHEMA,
             )
             for thread, prompt, _ in pending_llm
         ]
@@ -217,7 +260,10 @@ def extract_claims_for_threads(
             print("  Extract: batch not supported for this provider; using sync API.")
         for thread, prompt, line_meta in pending_llm:
             try:
-                result = llm.complete_json(EXTRACT_SYSTEM, prompt, task="extract")
+                result = llm.complete_json(
+                    EXTRACT_SYSTEM, prompt, task="extract",
+                    response_schema=EXTRACT_SCHEMA,
+                )
                 publish_claims(
                     _claims_from_result(result, thread, line_meta),
                     published_claims,
@@ -234,7 +280,9 @@ def extract_thread(thread: dict[str, Any], llm: LLMClient) -> list[dict[str, Any
         return []
     prompt = build_extract_prompt(rendered)
     try:
-        result = llm.complete_json(EXTRACT_SYSTEM, prompt, task="extract")
+        result = llm.complete_json(
+            EXTRACT_SYSTEM, prompt, task="extract", response_schema=EXTRACT_SCHEMA
+        )
         return _claims_from_result(result, thread, line_meta)
     except Exception:  # noqa: BLE001 - keep the batch going
         return []

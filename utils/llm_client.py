@@ -86,7 +86,7 @@ DEFAULT_MODELS = {
 # Hybrid defaults: cheap classify, strong extract + generate (override via env).
 STAGE_DEFAULTS: dict[str, dict[str, str]] = {
     "classify": {"provider": "gemini", "model": "gemini-3.1-flash-lite"},
-    "extract": {"provider": "gemini", "model": "gemini-3.5-flash"},
+    "extract": {"provider": "anthropic", "model": "claude-sonnet-5"},
     "plan": {"provider": "gemini", "model": "gemini-3.5-flash"},
     "generate": {"provider": "anthropic", "model": "claude-sonnet-5"},
     "research": {"provider": "gemini", "model": "gemini-3.5-flash"},
@@ -134,12 +134,18 @@ PromptInput = str | Sequence["CacheSegment"]
 
 @dataclass(frozen=True)
 class BatchRequest:
-    """One prompt submitted as part of a provider batch job."""
+    """One prompt submitted as part of a provider batch job.
+
+    ``response_schema`` (a JSON Schema dict) turns on provider structured output
+    so the response is guaranteed to be schema-valid JSON — used with models
+    whose reasoning would otherwise leak into or truncate a free-form reply.
+    """
 
     request_id: str
     system: str
     user: str
     task: str = ""
+    response_schema: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -276,7 +282,9 @@ class LLMClient:
         model: str | None = None,
         cache_dir: Path | str = DEFAULT_CACHE_DIR,
         temperature: float = 0.2,
-        max_tokens: int = 4096,
+        # Adaptive-thinking models (e.g. Claude Sonnet 5) count reasoning tokens
+        # against max_tokens, so the answer needs headroom beyond its own size.
+        max_tokens: int = 8192,
         use_cache: bool = True,
         batch_poll_interval: float | None = None,
         failure_log: Path | str | None = None,
@@ -492,14 +500,21 @@ class LLMClient:
         self.max_tokens = min(self.max_tokens * 2, MAX_TOKENS_CEILING)
         return True
 
-    def complete_json(self, system: PromptInput, user: PromptInput, task: str = "") -> Any:
+    def complete_json(
+        self,
+        system: PromptInput,
+        user: PromptInput,
+        task: str = "",
+        response_schema: dict[str, Any] | None = None,
+    ) -> Any:
         """Parse the model's JSON output, growing the window only on truncation.
 
         A response truncated at max_tokens is invalid JSON; it is never cached and
         each *truncated* attempt doubles max_tokens before retrying. A parse
         failure that is not a truncation (e.g. the model returned prose) is not
         retried — a larger window would not fix the format. Every unparseable
-        response is saved to the ``*_bad`` cache for inspection.
+        response is saved to the ``*_bad`` cache for inspection. ``response_schema``
+        enables provider structured output for a hard JSON guarantee.
         """
 
         key = (
@@ -526,7 +541,9 @@ class LLMClient:
         response = ""
         for _ in range(JSON_PARSE_RETRIES + 1):
             try:
-                response, truncated = self._dispatch(system, user, task, json_mode=True)
+                response, truncated = self._dispatch(
+                    system, user, task, json_mode=True, response_schema=response_schema
+                )
             except Exception as exc:  # noqa: BLE001 - record any provider error
                 self._record_failure(
                     task=task, kind="api_error", error=repr(exc),
@@ -707,11 +724,12 @@ class LLMClient:
         user: PromptInput,
         task: str,
         json_mode: bool = False,
+        response_schema: dict[str, Any] | None = None,
     ) -> tuple[str, bool]:
         """Return ``(text, truncated)``; ``truncated`` marks a max_tokens cutoff."""
 
         if self.provider == "anthropic":
-            return self._anthropic(system, user)
+            return self._anthropic(system, user, response_schema=response_schema)
         # Other providers take plain text; cache segments only matter to anthropic.
         system_text, user_text = _flatten(system), _flatten(user)
         if self.provider == "mock":
@@ -722,17 +740,37 @@ class LLMClient:
             return self._gemini(system_text, user_text, json_mode=json_mode)
         raise ValueError(f"Unknown LLM provider: {self.provider}")
 
+    @staticmethod
+    def _anthropic_output_config(response_schema: dict[str, Any] | None) -> dict[str, Any]:
+        """Extra ``messages.create`` kwargs for a JSON-schema structured output."""
+
+        if response_schema is None:
+            return {}
+        return {
+            "output_config": {
+                "format": {"type": "json_schema", "schema": response_schema}
+            }
+        }
+
     # ----------------------------------------------------------- providers
-    def _anthropic(self, system: PromptInput, user: PromptInput) -> tuple[str, bool]:
+    def _anthropic(
+        self,
+        system: PromptInput,
+        user: PromptInput,
+        *,
+        response_schema: dict[str, Any] | None = None,
+    ) -> tuple[str, bool]:
         if self._client is None:
             import anthropic
 
             self._client = anthropic.Anthropic()
+        # No temperature: Sonnet 5+ rejects non-default sampling params (400).
         message = self._client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
             system=_to_blocks(system, cache_last=True),
             messages=[{"role": "user", "content": _to_blocks(user)}],
+            **self._anthropic_output_config(response_schema),
         )
         self._log_cache_usage(message.usage)
         text = "".join(block.text for block in message.content if block.type == "text")
@@ -778,10 +816,9 @@ class LLMClient:
     def _gemini_config(self, json_mode: bool) -> Any:
         """Config shared by sync/batch Gemini JSON calls.
 
-        Gemini 3 flash reasons by default; without a cap the whole output budget
-        can be spent 'thinking', leaving prose (or nothing) instead of JSON. We
-        turn thinking off and, for JSON tasks, ask the API for JSON directly so
-        the answer is well-formed rather than fenced/annotated.
+        Gemini 3.x always reasons (thinking can't be disabled), so for JSON tasks
+        we ask the API for JSON directly: the answer is then well-formed rather
+        than fenced or mixed with the model's reasoning prose.
         """
 
         from google.genai import types as genai_types
@@ -789,7 +826,6 @@ class LLMClient:
         return genai_types.GenerateContentConfig(
             temperature=self.temperature,
             max_output_tokens=self.max_tokens,
-            thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
             response_mime_type="application/json" if json_mode else None,
         )
 
@@ -851,9 +887,9 @@ class LLMClient:
                 params=MessageCreateParamsNonStreaming(
                     model=self.model,
                     max_tokens=self.max_tokens,
-                    temperature=self.temperature,
                     system=req.system,
                     messages=[{"role": "user", "content": req.user}],
+                    **self._anthropic_output_config(req.response_schema),
                 ),
             )
             for req in requests
@@ -912,10 +948,9 @@ class LLMClient:
                 "config": {
                     "temperature": self.temperature,
                     "max_output_tokens": self.max_tokens,
-                    # Extract/classify/plan all want JSON; keep the budget for the
-                    # answer (not chain-of-thought) so responses are parseable.
+                    # Extract/classify/plan all want JSON; asking for it directly
+                    # keeps the model's reasoning prose out of the response.
                     "response_mime_type": "application/json",
-                    "thinking_config": {"thinking_budget": 0},
                 },
             }
             for req in requests
