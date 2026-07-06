@@ -737,7 +737,10 @@ class LLMClient:
         if self.provider == "openai":
             return self._openai(system_text, user_text)
         if self.provider == "gemini":
-            return self._gemini(system_text, user_text, json_mode=json_mode)
+            return self._gemini(
+                system_text, user_text,
+                json_mode=json_mode, response_schema=response_schema,
+            )
         raise ValueError(f"Unknown LLM provider: {self.provider}")
 
     @staticmethod
@@ -813,12 +816,16 @@ class LLMClient:
         choice = response.choices[0]
         return choice.message.content or "", choice.finish_reason == "length"
 
-    def _gemini_config(self, json_mode: bool) -> Any:
+    def _gemini_config(
+        self, json_mode: bool, response_schema: dict[str, Any] | None = None
+    ) -> Any:
         """Config shared by sync/batch Gemini JSON calls.
 
         Gemini 3.x always reasons (thinking can't be disabled), so for JSON tasks
         we ask the API for JSON directly: the answer is then well-formed rather
-        than fenced or mixed with the model's reasoning prose.
+        than fenced or mixed with the model's reasoning prose. When a schema is
+        given we pass it via ``response_json_schema`` (raw JSON Schema, the
+        recommended field) for a hard structural guarantee.
         """
 
         from google.genai import types as genai_types
@@ -827,9 +834,17 @@ class LLMClient:
             temperature=self.temperature,
             max_output_tokens=self.max_tokens,
             response_mime_type="application/json" if json_mode else None,
+            response_json_schema=response_schema if json_mode else None,
         )
 
-    def _gemini(self, system: str, user: str, *, json_mode: bool = False) -> tuple[str, bool]:
+    def _gemini(
+        self,
+        system: str,
+        user: str,
+        *,
+        json_mode: bool = False,
+        response_schema: dict[str, Any] | None = None,
+    ) -> tuple[str, bool]:
         if self._client is None:
             from google import genai
 
@@ -837,7 +852,7 @@ class LLMClient:
         response = self._client.models.generate_content(
             model=self.model,
             contents=f"{system}\n\n{user}",
-            config=self._gemini_config(json_mode),
+            config=self._gemini_config(json_mode, response_schema),
         )
         return response.text or "", _gemini_truncated(response)
 
@@ -949,8 +964,14 @@ class LLMClient:
                     "temperature": self.temperature,
                     "max_output_tokens": self.max_tokens,
                     # Extract/classify/plan all want JSON; asking for it directly
-                    # keeps the model's reasoning prose out of the response.
+                    # keeps the model's reasoning prose out of the response. A
+                    # schema (when given) hard-constrains the structure too.
                     "response_mime_type": "application/json",
+                    **(
+                        {"response_json_schema": req.response_schema}
+                        if req.response_schema is not None
+                        else {}
+                    ),
                 },
             }
             for req in requests

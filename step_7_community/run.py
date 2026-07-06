@@ -50,25 +50,9 @@ DEFAULT_BATCH_SIZE = 15
 DEFAULT_MAX_READS = 3
 OVERVIEW_PAGE_ID = "overview"
 
-_ACTION_SCHEMA = (
-    "{\n"
-    '  "actions": [\n'
-    '    {"type": "upsert_statement", "page_id": "<id>", "section": "<כותרת תת-סעיף או '
-    'מחרוזת ריקה>", "statement_id": "<מזהה statement קיים לעדכון, או null לחדש>", '
-    '"text": "<משפט/משפטים בעברית>", "claim_ids": ["<claim_id>", "..."]},\n'
-    '    {"type": "new_page", "id": "<slug-latin>", "title": "<כותרת>", '
-    '"category": "<category-id>", "parent": null},\n'
-    '    {"type": "split_page", "from": "<id>", "into": [{"id": "<id>", '
-    '"title": "<כותרת>", "category": "<category-id>"}], "reason": "<סיבה>"},\n'
-    '    {"type": "add_link", "from": "<id>", "to": "<id>", "reason": "<סיבה>"},\n'
-    '    {"type": "set_related", "page_id": "<id>", "related_pages": ["<id>", "..."]},\n'
-    '    {"type": "read_page", "id": "<id>"}\n'
-    "  ]\n"
-    "}"
-)
-
-# The schema never changes, so it lives in the (cached) system prompt rather than
-# the per-call user prompt. See build_batch_prompt for the cache layout.
+# The rules never change, so the system prompt is a stable (cached) prefix; the
+# action structure is enforced separately via COMMUNITY_ACTIONS_SCHEMA (provider
+# structured output). See build_batch_prompt for the cache layout.
 COMMUNITY_AGENT_SYSTEM = (
     "אתה עורך ויקי בעברית הבונה את תוכן הקהילה על פונדקאות לגייז, על בסיס טענות "
     "שחולצו מקבוצת וואטסאפ. אתה עובד באופן הדרגתי: בכל פעם תקבל אצווה (batch) של "
@@ -88,9 +72,138 @@ COMMUNITY_AGENT_SYSTEM = (
     "אותן ל-section עם heading קצר.\n"
     "6. אתה רשאי להשתמש בכלים: new_page, split_page, add_link, set_related, read_page.\n"
     f"7. {FORBIDDEN_TERM_INSTRUCTION}\n"
-    "החזר אך ורק אובייקט JSON יחיד ותקין במבנה הבא, ללא טקסט נוסף וללא code fence:\n"
-    f"{_ACTION_SCHEMA}"
+    'החזר אך ורק אובייקט JSON יחיד ותקין עם השדה "actions" (מערך פעולות), '
+    "ללא טקסט נוסף וללא code fence."
 )
+
+
+def _prop(base: dict[str, Any], description: str) -> dict[str, Any]:
+    """A schema property (a shared type dict plus its Hebrew ``description``)."""
+
+    return {**base, "description": description}
+
+
+_STR: dict[str, Any] = {"type": "string"}
+_STR_LIST: dict[str, Any] = {"type": "array", "items": {"type": "string"}}
+_NULLABLE_STR: dict[str, Any] = {"type": ["string", "null"]}
+
+
+def _action_variant(
+    type_name: str, description: str, props: dict[str, Any]
+) -> dict[str, Any]:
+    """One closed, fully-required action object for the structured-output union.
+
+    Structured outputs (Anthropic and Gemini) don't support ``const``, so the
+    ``type`` tag is a single-value ``enum``; every field is required (nullable
+    where optional). Field ``description``s carry the guidance that used to live
+    in the prompt's prose schema.
+    """
+
+    properties = {"type": {"type": "string", "enum": [type_name]}, **props}
+    return {
+        "type": "object",
+        "description": description,
+        "additionalProperties": False,
+        "properties": properties,
+        "required": list(properties),
+    }
+
+
+# The single source of truth for the agent's action protocol: guides the model
+# via its ``description`` fields and hard-constrains the output as provider
+# structured output (Anthropic output_config / Gemini response_json_schema).
+COMMUNITY_ACTIONS_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "actions": {
+            "type": "array",
+            "description": "רשימת הפעולות לביצוע על קטלוג העמודים והתוכן.",
+            "items": {
+                "anyOf": [
+                    _action_variant(
+                        "upsert_statement",
+                        "כתוב או עדכן statement; צירוף claim_ids ל-statement קיים "
+                        "צובר תמיכה ללא כפילויות.",
+                        {
+                            "page_id": _prop(_STR, "מזהה העמוד שאליו שייך ה-statement."),
+                            "section": _prop(
+                                _STR, "כותרת תת-סעיף, או מחרוזת ריקה אם אין."
+                            ),
+                            "statement_id": _prop(
+                                _NULLABLE_STR,
+                                "מזהה statement קיים לעדכון, או null ליצירת חדש.",
+                            ),
+                            "text": _prop(_STR, "המשפט/משפטים בעברית."),
+                            "claim_ids": _prop(
+                                _STR_LIST, "מזהי הטענות שעליהן מתבסס ה-statement."
+                            ),
+                        },
+                    ),
+                    _action_variant(
+                        "new_page",
+                        "צור עמוד חדש בקטלוג.",
+                        {
+                            "id": _prop(_STR, "מזהה העמוד (slug באותיות לטיניות)."),
+                            "title": _prop(_STR, "כותרת העמוד בעברית."),
+                            "category": _prop(_STR, "מזהה הקטגוריה."),
+                            "parent": _prop(
+                                _NULLABLE_STR, "מזהה עמוד האב, או null אם אין."
+                            ),
+                        },
+                    ),
+                    _action_variant(
+                        "split_page",
+                        "פצל עמוד קיים למספר עמודים חדשים.",
+                        {
+                            "from": _prop(_STR, "מזהה העמוד לפיצול."),
+                            "into": {
+                                "type": "array",
+                                "description": "העמודים החדשים שאליהם לפצל.",
+                                "items": {
+                                    "type": "object",
+                                    "additionalProperties": False,
+                                    "properties": {
+                                        "id": _prop(_STR, "מזהה העמוד החדש (slug)."),
+                                        "title": _prop(_STR, "כותרת העמוד החדש."),
+                                        "category": _prop(_STR, "מזהה הקטגוריה."),
+                                    },
+                                    "required": ["id", "title", "category"],
+                                },
+                            },
+                            "reason": _prop(_STR, "הסיבה לפיצול."),
+                        },
+                    ),
+                    _action_variant(
+                        "add_link",
+                        "הוסף קישור בין שני עמודים.",
+                        {
+                            "from": _prop(_STR, "מזהה עמוד המקור."),
+                            "to": _prop(_STR, "מזהה עמוד היעד."),
+                            "reason": _prop(_STR, "הסיבה לקישור."),
+                        },
+                    ),
+                    _action_variant(
+                        "set_related",
+                        "קבע את רשימת העמודים הקשורים לעמוד.",
+                        {
+                            "page_id": _prop(_STR, "מזהה העמוד."),
+                            "related_pages": _prop(
+                                _STR_LIST, "מזהי העמודים הקשורים."
+                            ),
+                        },
+                    ),
+                    _action_variant(
+                        "read_page",
+                        "בקש את תוכן עמוד אחר; הלולאה תריץ מחדש עם התוכן (מוגבל).",
+                        {"id": _prop(_STR, "מזהה העמוד לקריאה.")},
+                    ),
+                ]
+            },
+        }
+    },
+    "required": ["actions"],
+}
 
 
 def _claim_line(
@@ -136,8 +249,8 @@ def build_batch_prompt(
     extra_pages: str = "",
 ) -> list[CacheSegment]:
     """Order the prompt for prompt caching: almost-static catalog first (cached),
-    then the per-call page content + claims (uncached). The static schema lives in
-    COMMUNITY_AGENT_SYSTEM, so the cached prefix is system+schema+catalog.
+    then the per-call page content + claims (uncached). The output structure is
+    enforced via COMMUNITY_ACTIONS_SCHEMA, so the cached prefix is system+catalog.
     """
 
     catalog = "\n".join(
@@ -228,7 +341,10 @@ def _run_batch(
         prompt = build_batch_prompt(store, page_id, claims, resolver, extra_pages)
         try:
             data = llm.complete_json(
-                COMMUNITY_AGENT_SYSTEM, prompt, task="community_agent"
+                COMMUNITY_AGENT_SYSTEM,
+                prompt,
+                task="community_agent",
+                response_schema=COMMUNITY_ACTIONS_SCHEMA,
             )
         except Exception as exc:  # noqa: BLE001
             print(f"  Community: batch for {page_id} failed: {exc}")
