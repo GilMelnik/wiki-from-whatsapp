@@ -161,11 +161,11 @@ class AssignerAccuracyTests(unittest.TestCase):
     def test_large_gap_without_quote_starts_new_thread(self) -> None:
         messages = [
             _message(0, minutes=0, content="topic A"),
-            _message(1, minutes=7 * 60, content="topic A"),
+            _message(1, minutes=7 * 60, content="topic B"),
         ]
         embeddings = [
             np.array([1.0, 0.0], dtype=np.float32),
-            np.array([1.0, 0.0], dtype=np.float32),
+            np.array([0.0, 1.0], dtype=np.float32),
         ]
         config = ThreadConfig()
         assigner = ThreadAssigner(messages, embeddings, config=config)
