@@ -140,12 +140,13 @@ class LLMClient:
         if self.use_cache:
             key = self.cache._cache_key(_flatten(system), _flatten(user))
             cached = self.cache._read_cache(key)
-            if cached is not None:
+            # A GroundedResult can share this key space but is not plain text.
+            if isinstance(cached, str):
                 self._log_call(True, task, "(cache)")
                 return cached
 
         try:
-            response, _ = self._dispatch(system, user, task)
+            response, _ = self._dispatch(system, user)
         except Exception as exc:  # noqa: BLE001 - record any provider error, then re-raise
             self._record_failure(
                 task=task, kind="api_error", error=repr(exc), system=system, user=user
@@ -196,7 +197,9 @@ class LLMClient:
         )
         if key is not None:
             cached = self.cache._read_cache(key)
-            if cached is not None:
+            # A GroundedResult can share this key space; it isn't a JSON string,
+            # so only a str cache entry is a candidate for extract_json.
+            if isinstance(cached, str):
                 try:
                     data = extract_json(cached)
                     self._log_call(True, task, "(cache)")
@@ -213,9 +216,7 @@ class LLMClient:
         response = ""
         for _ in range(CONFIG["json_parse_retries"] + 1):
             try:
-                response, truncated = self._dispatch(
-                    system, user, task, json_mode=True, response_schema=response_schema
-                )
+                response, truncated = self._dispatch(system, user, json_mode=True, response_schema=response_schema)
             except Exception as exc:  # noqa: BLE001 - record any provider error
                 self._record_failure(
                     task=task, kind="api_error", error=repr(exc),
@@ -263,9 +264,7 @@ class LLMClient:
                 return cached
 
         if not self._provider.supports_grounded:
-            raise ValueError(
-                f"Grounded search requires provider 'gemini'; got {self.provider!r}"
-            )
+            raise ValueError(f"Grounded search requires provider 'gemini'; got {self.provider!r}")
         result = self._provider.generate_grounded(system, user)
 
         if self.use_cache:
@@ -288,7 +287,8 @@ class LLMClient:
         for req in requests:
             if self.use_cache:
                 cached = self.cache._read_cache(self.cache._cache_key(req.system, req.user))
-                if cached is not None:
+                # A GroundedResult can share this key space but is not batch text.
+                if isinstance(cached, str):
                     results[req.request_id] = (cached, False)
                     self._log_call(True, req.task, f"(batch cache {req.request_id})")
                     continue
@@ -355,9 +355,7 @@ class LLMClient:
                     continue
                 self._record_failure(
                     task=req.task, kind="parse_error",
-                    error=(
-                        f"unparseable batch response (truncated={truncated}): {error}"
-                    ),
+                    error=f"unparseable batch response (truncated={truncated}): {error}",
                     system=req.system, user=req.user, response=text,
                 )
                 self._log_call(
@@ -374,14 +372,8 @@ class LLMClient:
             pending = retry
         return parsed
 
-    def _dispatch(
-        self,
-        system: PromptInput,
-        user: PromptInput,
-        task: str = "",
-        json_mode: bool = False,
-        response_schema: dict[str, Any] | None = None,
-    ) -> tuple[str, bool]:
+    def _dispatch(self, system: PromptInput, user: PromptInput, json_mode: bool = False,
+                  response_schema: dict[str, Any] | None = None) -> tuple[str, bool]:
         """Return ``(text, truncated)``; ``truncated`` marks a max_tokens cutoff."""
 
         self._provider.max_tokens = self.max_tokens
