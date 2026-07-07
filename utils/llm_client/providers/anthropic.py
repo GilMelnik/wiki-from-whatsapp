@@ -8,6 +8,10 @@ from __future__ import annotations
 import time
 from typing import Any, Sequence
 
+import anthropic
+from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
+from anthropic.types.messages.batch_create_params import Request
+
 from utils.llm_client import settings
 from utils.llm_client.models import BatchRequest, PromptInput
 from utils.llm_client.prompts import _sanitize_batch_custom_id, _to_blocks
@@ -40,8 +44,6 @@ class AnthropicProvider(LLMProvider):
         response_schema: dict[str, Any] | None = None,
     ) -> tuple[str, bool]:
         if self._client is None:
-            import anthropic
-
             self._client = anthropic.Anthropic()
         # No temperature: Sonnet 5+ rejects non-default sampling params (400).
         message = self._client.messages.create(
@@ -77,10 +79,6 @@ class AnthropicProvider(LLMProvider):
     def generate_batch(
         self, requests: Sequence[BatchRequest]
     ) -> dict[str, tuple[str, bool]]:
-        import anthropic
-        from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
-        from anthropic.types.messages.batch_create_params import Request
-
         if self._client is None:
             self._client = anthropic.Anthropic()
 

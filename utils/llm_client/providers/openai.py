@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import openai
+
 from utils.llm_client.models import PromptInput
 from utils.llm_client.prompts import _flatten
 from utils.llm_client.providers.base import LLMProvider
@@ -23,8 +25,6 @@ class OpenAIProvider(LLMProvider):
         response_schema: dict[str, Any] | None = None,
     ) -> tuple[str, bool]:
         if self._client is None:
-            import openai
-
             self._client = openai.OpenAI()
         response = self._client.chat.completions.create(
             model=self.model,

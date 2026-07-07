@@ -12,6 +12,9 @@ import re
 import time
 from typing import Any, Sequence
 
+from google import genai
+from google.genai import types as genai_types
+
 from utils.llm_client.models import (
     BatchRequest,
     GroundedCitation,
@@ -30,8 +33,6 @@ class GeminiProvider(LLMProvider):
     def _config(
         self, json_mode: bool, response_schema: dict[str, Any] | None = None
     ) -> Any:
-        from google.genai import types as genai_types
-
         return genai_types.GenerateContentConfig(
             temperature=self.temperature,
             max_output_tokens=self.max_tokens,
@@ -48,8 +49,6 @@ class GeminiProvider(LLMProvider):
         response_schema: dict[str, Any] | None = None,
     ) -> tuple[str, bool]:
         if self._client is None:
-            from google import genai
-
             self._client = genai.Client()
         system_text, user_text = _flatten(system), _flatten(user)
         response = self._client.models.generate_content(
@@ -60,9 +59,6 @@ class GeminiProvider(LLMProvider):
         return response.text or "", _gemini_truncated(response)
 
     def generate_grounded(self, system: str, user: str) -> GroundedResult:
-        from google import genai
-        from google.genai import types as genai_types
-
         if self._client is None:
             self._client = genai.Client()
 
@@ -89,9 +85,6 @@ class GeminiProvider(LLMProvider):
     def generate_batch(
         self, requests: Sequence[BatchRequest]
     ) -> dict[str, tuple[str, bool]]:
-        from google import genai
-        from google.genai import types as genai_types
-
         if self._client is None:
             self._client = genai.Client()
 

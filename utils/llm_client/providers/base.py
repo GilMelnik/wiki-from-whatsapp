@@ -1,8 +1,8 @@
 """Abstract provider interface.
 
-Each concrete provider owns its SDK client (imported lazily so only the
-providers actually used must be installed) and converts prompts to whatever
-shape its API expects. ``generate`` returns ``(text, truncated)`` where
+Each concrete provider owns its SDK client (constructed on first use) and
+converts prompts to whatever shape its API expects. ``generate`` returns
+``(text, truncated)`` where
 ``truncated`` marks a max_tokens cutoff. Grounded search and batch are optional
 capabilities; the base raises ``NotImplementedError`` and advertises support via
 ``supports_grounded`` / ``supports_batch`` so the client can fail fast.
