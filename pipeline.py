@@ -21,8 +21,6 @@ Human gates (web UIs, no CLI):
 
 from __future__ import annotations
 
-import os
-
 from step_2_classify.run import run as classify
 from step_3_extract.run import run as extract
 from step_4_entities.run import run as resolve_entities
@@ -34,13 +32,13 @@ from step_9_site.run import run as site
 from utils.llm_client import LLMClient
 
 
-def _stage_clients(*, use_hybrid_defaults: bool) -> dict[str, LLMClient]:
+def _stage_clients() -> dict[str, LLMClient]:
     return {
-        "classify": LLMClient.for_stage("classify", use_hybrid_defaults=use_hybrid_defaults),
-        "extract": LLMClient.for_stage("extract", use_hybrid_defaults=use_hybrid_defaults),
-        "plan": LLMClient.for_stage("plan", use_hybrid_defaults=use_hybrid_defaults),
-        "generate": LLMClient.for_stage("generate", use_hybrid_defaults=use_hybrid_defaults),
-        "research": LLMClient.for_stage("research", use_hybrid_defaults=use_hybrid_defaults),
+        "classify": LLMClient.for_stage("classify"),
+        "extract": LLMClient.for_stage("extract"),
+        "plan": LLMClient.for_stage("plan"),
+        "generate": LLMClient.for_stage("generate"),
+        "research": LLMClient.for_stage("research"),
     }
 
 
@@ -48,16 +46,11 @@ def run(
     pilot_topic: str | None = None,
     use_embeddings: bool = True,
     *,
-    use_mock: bool = False,
     use_batch: bool = False,
     skip_plan: bool = False,
     enable_web_search: bool | None = None,
 ) -> None:
-    use_hybrid = not use_mock and not os.environ.get("WIKI_LLM_PROVIDER")
-    clients = _stage_clients(use_hybrid_defaults=use_hybrid)
-
-    if use_mock:
-        clients = {stage: LLMClient(provider="mock", model="mock") for stage in clients}
+    clients = _stage_clients()
 
     print("LLM configuration:")
     for stage, client in clients.items():

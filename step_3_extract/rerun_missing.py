@@ -117,4 +117,4 @@ def run(
 
 
 if __name__ == "__main__":
-    run(llm=LLMClient.for_stage("extract", use_hybrid_defaults=True))
+    run(llm=LLMClient.for_stage("extract"))

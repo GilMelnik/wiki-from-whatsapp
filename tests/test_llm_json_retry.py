@@ -19,7 +19,8 @@ def _client(tmp_path, responses):
     """A client whose _dispatch yields queued ``(text, truncated)`` in order."""
 
     llm = LLMClient(
-        provider="mock",
+        provider="anthropic",
+        model="claude-sonnet-5",
         cache_dir=tmp_path,
         max_tokens=4096,
         failure_log=tmp_path / "failures.jsonl",
@@ -52,25 +53,26 @@ def test_non_truncation_parse_failure_is_not_retried(tmp_path):
     assert len(lines) == 1  # a single attempt, then give up
     assert json.loads(lines[0])["kind"] == "parse_error"
     # Bad answer copied to the sibling *_bad cache for inspection.
-    key = llm._cache_key("sys", "usr")
-    assert (llm.bad_cache_dir / f"{key}.json").exists()
+    key = llm.cache._cache_key("sys", "usr")
+    assert (llm.cache.bad_cache_dir / f"{key}.json").exists()
 
 
 def test_stale_bad_cache_is_dropped_and_rerequested(tmp_path):
     llm = LLMClient(
-        provider="mock",
+        provider="anthropic",
+        model="claude-sonnet-5",
         cache_dir=tmp_path,
         max_tokens=4096,
         failure_log=tmp_path / "failures.jsonl",
     )
-    key = llm._cache_key("sys", "usr")
-    llm._write_cache(key, '{"a": 1')  # truncated answer left by a prior run
+    key = llm.cache._cache_key("sys", "usr")
+    llm.cache._write_cache(key, '{"a": 1')  # truncated answer left by a prior run
 
     llm._dispatch = lambda *a, **k: ('{"a": 2}', False)  # type: ignore[method-assign]
     assert llm.complete_json("sys", "usr") == {"a": 2}
     # A clean re-request does not need more room, so max_tokens is unchanged.
     assert llm.max_tokens == 4096
-    assert llm._read_cache(key) is not None  # replaced with the good response
+    assert llm.cache._read_cache(key) is not None  # replaced with the good response
 
 
 def test_gives_up_at_ceiling_and_logs_failure(tmp_path):
@@ -93,7 +95,8 @@ def test_complete_batch_json_resubmits_only_truncated_as_batch(tmp_path):
     """
 
     llm = LLMClient(
-        provider="mock",
+        provider="anthropic",
+        model="claude-sonnet-5",
         cache_dir=tmp_path,
         max_tokens=4096,
         failure_log=tmp_path / "failures.jsonl",
@@ -133,7 +136,8 @@ def test_complete_batch_json_drops_non_truncation_without_retry(tmp_path):
     """
 
     llm = LLMClient(
-        provider="mock",
+        provider="anthropic",
+        model="claude-sonnet-5",
         cache_dir=tmp_path,
         max_tokens=4096,
         failure_log=tmp_path / "failures.jsonl",
@@ -154,13 +158,14 @@ def test_complete_batch_json_drops_non_truncation_without_retry(tmp_path):
     assert llm.max_tokens == 4096  # window untouched
     entry = json.loads((tmp_path / "failures.jsonl").read_text().splitlines()[0])
     assert entry["kind"] == "parse_error"
-    key = llm._cache_key("s", "u")
-    assert (llm.bad_cache_dir / f"{key}.json").exists()
+    key = llm.cache._cache_key("s", "u")
+    assert (llm.cache.bad_cache_dir / f"{key}.json").exists()
 
 
 def test_complete_batch_json_records_when_ceiling_reached(tmp_path):
     llm = LLMClient(
-        provider="mock",
+        provider="anthropic",
+        model="claude-sonnet-5",
         cache_dir=tmp_path,
         max_tokens=MAX_TOKENS_CEILING,  # no room left to grow
         failure_log=tmp_path / "failures.jsonl",

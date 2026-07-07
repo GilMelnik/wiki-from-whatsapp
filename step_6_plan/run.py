@@ -263,6 +263,6 @@ def pages_by_category(plan: dict[str, Any]) -> dict[str, list[tuple[str, str]]]:
 
 if __name__ == "__main__":
     run(
-        llm=LLMClient.for_stage(stage='plan', use_hybrid_defaults=True),
+        llm=LLMClient.for_stage(stage='plan'),
         use_batch=True
     )
