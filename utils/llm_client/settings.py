@@ -2,7 +2,8 @@
 
 All non-secret tunables live in the sibling ``config.json`` (provider/model per
 stage, cache/failure paths, batch poll interval, JSON-retry ceiling, cache
-logging, web-search toggle). It is loaded once into ``CONFIG``; consumers read
+logging, Anthropic prompt-cache toggle, web-search toggle). It is loaded once
+into ``CONFIG``; consumers read
 the keys they need from that single object rather than importing a constant per
 value. Only real secrets (API keys) belong in ``.env``, which is loaded here so
 each provider SDK and the web-search key check can read them from the environment.

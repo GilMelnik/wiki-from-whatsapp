@@ -1,6 +1,10 @@
 """Anthropic provider: prompt caching (cache_control), structured output, and
 the batch API. Adaptive-thinking models count reasoning tokens against
 max_tokens, so temperature is left at the API default (Sonnet 5+ rejects it).
+
+Auto-caching of the system prompt on every ``generate`` call is controlled by
+the ``anthropic_prompt_cache`` config flag; explicit ``CacheSegment`` breakpoints
+in a prompt are always honoured.
 """
 
 from __future__ import annotations
@@ -12,7 +16,7 @@ import anthropic
 from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
 from anthropic.types.messages.batch_create_params import Request
 
-from utils.llm_client import settings
+from utils.llm_client.settings import CONFIG
 from utils.llm_client.models import BatchRequest, PromptInput
 from utils.llm_client.prompts import _sanitize_batch_custom_id, _to_blocks
 from utils.llm_client.providers.base import LLMProvider
@@ -46,10 +50,12 @@ class AnthropicProvider(LLMProvider):
         if self._client is None:
             self._client = anthropic.Anthropic()
         # No temperature: Sonnet 5+ rejects non-default sampling params (400).
+        # Auto-caching the system prompt is opt-out via config; explicit
+        # per-segment CacheSegment breakpoints are honoured regardless.
         message = self._client.messages.create(
             model=self.model,
             max_tokens=self.max_tokens,
-            system=_to_blocks(system, cache_last=True),
+            system=_to_blocks(system, cache_last=CONFIG["anthropic_prompt_cache"]),
             messages=[{"role": "user", "content": _to_blocks(user)}],
             **self._output_config(response_schema),
         )
@@ -64,7 +70,7 @@ class AnthropicProvider(LLMProvider):
         fresh is the uncached remainder.
         """
 
-        if not settings.CONFIG["log_cache"]:
+        if not CONFIG["log_cache"]:
             return
         read = getattr(usage, "cache_read_input_tokens", 0) or 0
         write = getattr(usage, "cache_creation_input_tokens", 0) or 0

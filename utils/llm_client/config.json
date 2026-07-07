@@ -14,5 +14,6 @@
   "cache_dir": "data/llm_cache",
   "failure_log": "data/llm_failures.jsonl",
   "log_cache": true,
+  "anthropic_prompt_cache": true,
   "enable_web_search": null
 }
