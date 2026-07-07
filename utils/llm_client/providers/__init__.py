@@ -16,17 +16,14 @@ def create_provider(
     batch_poll_interval: float,
 ) -> LLMProvider:
     registry: dict[str, type[LLMProvider]] = {
-        "anthropic": AnthropicProvider,
-        "openai": OpenAIProvider,
-        "gemini": GeminiProvider,
+        provider_object.name: provider_object
+        for provider_object in (AnthropicProvider, GeminiProvider, OpenAIProvider)
     }
 
     try:
         provider_cls = registry[provider]
     except KeyError:
-        raise ValueError(
-            f"Unknown LLM provider: {provider!r}; expected one of {sorted(registry)}"
-        )
+        raise ValueError(f"Unknown LLM provider: {provider!r}; expected one of {sorted(registry.keys())}")
     return provider_cls(
         model=model,
         temperature=temperature,

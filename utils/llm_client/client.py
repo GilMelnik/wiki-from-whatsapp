@@ -298,10 +298,7 @@ class LLMClient:
             return results
 
         if not self._provider.supports_batch:
-            raise ValueError(
-                f"Batch API not supported for provider {self.provider!r}; "
-                f"supported: {sorted(CONFIG['batch_providers'])}"
-            )
+            raise ValueError(f"Batch API not supported for provider {self.provider!r}")
 
         self._provider.max_tokens = self.max_tokens
         batch_results = self._provider.generate_batch(pending)

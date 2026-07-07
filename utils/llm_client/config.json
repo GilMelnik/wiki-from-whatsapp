@@ -6,7 +6,6 @@
     "generate": {"provider": "anthropic", "model": "claude-sonnet-5"},
     "research": {"provider": "gemini", "model": "gemini-3.5-flash"}
   },
-  "batch_providers": ["anthropic", "gemini"],
   "batch_poll_interval": 30.0,
   "max_tokens_ceiling": 16384,
   "json_parse_retries": 2,
