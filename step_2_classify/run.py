@@ -131,7 +131,8 @@ def run(
     """
 
     logger = setup_step_logging(STEP_2)
-    llm = llm or LLMClient()
+    llm = LLMClient.for_stage("classify", logger=logger) if llm is None else llm
+    llm.set_logger(logger)
     ensure_edited_workspace()
 
     input_path = Path(input_path)

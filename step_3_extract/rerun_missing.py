@@ -14,7 +14,6 @@ last time hit the API again.
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -34,8 +33,6 @@ from utils.threads_io import (
     load_threads,
     render_thread_for_llm,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -58,14 +55,15 @@ def run(
     the file the rest of the pipeline reads.
     """
 
-    setup_step_logging(STEP_3)
+    logger = setup_step_logging(STEP_3)
     output_path = Path(output_path) if output_path is not None else resolve_claims_path()
     if not output_path.is_file():
         raise FileNotFoundError(
             f"{output_path} not found. Run step_3_extract first before backfilling."
         )
 
-    llm = llm or LLMClient()
+    llm = LLMClient.for_stage("extract", logger=logger) if llm is None else llm
+    llm.set_logger(logger)
     threads_by_id = {t["thread_id"]: t for t in load_threads(input_path)["threads"]}
     classified = _load_json(Path(classified_path))
     keep_ids = _knowledge_bearing_ids(classified, None)
@@ -93,7 +91,7 @@ def run(
     if not pending_llm:
         return {"missing_threads": len(missing_ids), "new_claims": 0, "recovered_threads": 0}
 
-    new_claims, new_audit = extract_claims_for_threads(pending_llm, llm, use_batch)
+    new_claims, new_audit = extract_claims_for_threads(pending_llm, llm, use_batch, logger)
     scrub_summary = scrub_claims(new_claims)
     recovered = {claim["thread_id"] for claim in new_claims}
 
@@ -121,4 +119,4 @@ def run(
 
 
 if __name__ == "__main__":
-    run(llm=LLMClient.for_stage("extract"))
+    run()

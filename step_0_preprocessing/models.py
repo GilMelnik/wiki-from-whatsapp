@@ -28,7 +28,7 @@ class Message:
         message_id: str | None = None,
         quote: dict[str, str] | None = None,
         reactions: list[dict[str, Any]] | None = None,
-    ):
+    ) -> None:
         self.id = message_id
         self.datetime = date_time
         self.sender = sender

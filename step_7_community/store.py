@@ -48,7 +48,7 @@ class PageStore:
         self,
         claims_by_id: dict[str, dict[str, Any]] | None = None,
         audit_by_id: dict[str, dict[str, Any]] | None = None,
-    ):
+    ) -> None:
         self.pages: dict[str, dict[str, Any]] = {}
         self.links: list[dict[str, str]] = []
         self.claims_by_id = claims_by_id or {}

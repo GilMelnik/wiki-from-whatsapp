@@ -18,7 +18,7 @@ class EntityResolver:
     was split across two real people in the review tool).
     """
 
-    def __init__(self, entities: list[dict[str, Any]]):
+    def __init__(self, entities: list[dict[str, Any]]) -> None:
         self._by_name: dict[str, str] = {}
         self._by_name_claim: dict[tuple[str, str], str] = {}
         # When one alias maps to several entities (human-curated homonyms), keep

@@ -12,7 +12,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from utils.llm_client.settings import DATA_DIR
+from utils.config import DATA_DIR
 
 STEP_0 = "step_0_preprocessing"
 STEP_1 = "step_1_threads_split"

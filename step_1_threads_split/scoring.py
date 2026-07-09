@@ -94,7 +94,7 @@ class ThreadScorer:
         input_path: Path | str | None = None,
         corpus_path: Path | str = TFIDF_CORPUS_PATH,
         tokens_path: Path | str = TFIDF_TOKENS_PATH,
-    ):
+    ) -> None:
         self.config = config
         self.messages = messages
         self.message_embeddings = message_embeddings

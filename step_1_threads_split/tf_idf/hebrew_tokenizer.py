@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Sequence
+from typing import TYPE_CHECKING, Any, Sequence
+
+if TYPE_CHECKING:
+    import torch
+    from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
 _SPECIAL_TOKENS = {"[CLS]", "[SEP]"}
 _KEEP_TOKEN_RE = re.compile(r"[\u0590-\u05FFa-zA-Z0-9]")
@@ -33,7 +37,7 @@ def _cuda_device_is_supported() -> bool:
     return f"sm_{major}0" in arch_list
 
 
-def _resolve_device(device_arg: str | None):
+def _resolve_device(device_arg: str | None) -> "torch.device":
     import torch
 
     if device_arg is not None:
@@ -50,7 +54,7 @@ class HebrewTokenizer:
         batch_size: int = 32,
         device: str | None = None,
         model_kwargs: dict[str, Any] | None = None,
-    ):
+    ) -> None:
         self.model_name = model_name
         self.batch_size = batch_size
         self._device_arg = device
@@ -60,13 +64,13 @@ class HebrewTokenizer:
         self._device = None
 
     @property
-    def device(self):
+    def device(self) -> "torch.device":
         if self._device is None:
             self._device = _resolve_device(self._device_arg)
         return self._device
 
     @property
-    def tokenizer(self):
+    def tokenizer(self) -> "PreTrainedTokenizerBase":
         if self._tokenizer is None:
             from transformers import AutoTokenizer
 
@@ -74,7 +78,7 @@ class HebrewTokenizer:
         return self._tokenizer
 
     @property
-    def model(self):
+    def model(self) -> "PreTrainedModel":
         if self._model is None:
             from transformers import AutoModel
 

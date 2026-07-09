@@ -9,13 +9,9 @@ from typing import Any
 
 import numpy as np
 
-from step_4_entities.constants import (
-    DISTANCE_METHOD,
-    MIN_SKELETON_LEN,
-    SIMILARITY_THRESHOLD,
-)
 from step_4_entities.normalize import normalize_name
 from step_4_entities.pair_index import EntityPairIndex
+from utils.config import ENTITIES_CONFIG
 from utils.json_io import write_json_file
 from utils.paths import (
     ENTITIES_SEED_PATH,
@@ -58,8 +54,8 @@ def _entity_distance_matrix_metadata(
         "source": str(source_path.resolve()),
         "entity_count": len(names),
         "entity_names": names,
-        "distance_method": DISTANCE_METHOD,
-        "min_skeleton_len": MIN_SKELETON_LEN,
+        "distance_method": ENTITIES_CONFIG["distance_method"],
+        "min_skeleton_len": ENTITIES_CONFIG["min_skeleton_len"],
         "signal_signature": signature,
     }
 
@@ -213,7 +209,7 @@ def cluster_entities(
     entities: list[dict[str, Any]],
     source_path: Path | str,
     *,
-    similarity_threshold: float = SIMILARITY_THRESHOLD,
+    similarity_threshold: float = ENTITIES_CONFIG["similarity_threshold"],
     matrix_path: Path | str = ENTITY_DISTANCE_MATRIX_PATH,
     meta_path: Path | str = ENTITY_DISTANCE_META_PATH,
     seed_path: Path | str = ENTITIES_SEED_PATH,

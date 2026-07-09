@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 from logging.handlers import RotatingFileHandler
 
-from utils.llm_client.settings import DATA_DIR, LOGGING_CONFIG
+from utils.config import DATA_DIR, LOGGING_CONFIG
 
 LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 _FORMATTER = logging.Formatter(LOG_FORMAT)

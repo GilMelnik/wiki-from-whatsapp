@@ -2,22 +2,29 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Sequence
+from typing import TYPE_CHECKING, Any, Sequence
 
 import numpy as np
 
 from utils.paths import MESSAGE_EMBEDDINGS_PATH, MESSAGE_QUERY_EMBEDDINGS_PATH
 
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
+
 
 class Embedder:
-    def __init__(self, model_name: str = "intfloat/multilingual-e5-large", batch_size: int = 64):
+    def __init__(
+        self,
+        model_name: str = "intfloat/multilingual-e5-large",
+        batch_size: int = 64,
+    ) -> None:
         self.model_name = model_name
         self.batch_size = batch_size
         self._model = None
         self._embedding_dim: int | None = None
 
     @property
-    def model(self):
+    def model(self) -> SentenceTransformer:
         if self._model is None:
             from sentence_transformers import SentenceTransformer
 
@@ -98,7 +105,7 @@ class MessageEmbeddings:
         self,
         embeddings: list[np.ndarray],
         metadata: dict[str, Any] | None = None,
-    ):
+    ) -> None:
         self.embeddings = embeddings
         self.metadata = metadata or {}
 

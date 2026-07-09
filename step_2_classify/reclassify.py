@@ -96,7 +96,8 @@ def run(
             "Run classify or init the review workspace first."
         )
 
-    llm = llm or LLMClient()
+    llm = LLMClient.for_stage("classify", logger=logger) if llm is None else llm
+    llm.set_logger(logger)
     threads_payload = load_threads(threads_path)
     with classified_path.open(encoding="utf-8") as f:
         classified_payload = json.load(f)
@@ -179,6 +180,4 @@ def run(
 
 
 if __name__ == "__main__":
-    run(
-        llm=LLMClient.for_stage("classify")
-    )
+    run()

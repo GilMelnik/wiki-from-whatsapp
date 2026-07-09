@@ -20,7 +20,7 @@ class TfidfCorpus:
         terms: dict[str, dict[str, float | int]],
         default_idf: float,
         metadata: dict[str, Any] | None = None,
-    ):
+    ) -> None:
         self.document_count = document_count
         self.terms = terms
         self.default_idf = default_idf
@@ -69,7 +69,7 @@ class TokenizedMessages:
         self,
         tokenized_messages: list[list[str]],
         metadata: dict[str, Any] | None = None,
-    ):
+    ) -> None:
         self.tokenized_messages = tokenized_messages
         self.metadata = metadata or {}
 

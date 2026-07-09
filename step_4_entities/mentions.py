@@ -15,12 +15,16 @@ import re
 from pathlib import Path
 from typing import Any, Protocol, Sequence, runtime_checkable
 
-from step_4_entities.constants import DISALLOWED_ENTITY_POS
 from step_4_entities.normalize import _is_hebrew, normalize_token
+from utils.config import ENTITIES_CONFIG
 from utils.json_io import write_json_file
 from utils.paths import ENTITY_ANALYSIS_PATH
 
 Word = dict[str, Any]
+
+# A surface match is rejected only when every matched word is one of these clearly
+# non-entity parts of speech (built once from config for O(1) membership checks).
+_DISALLOWED_ENTITY_POS = frozenset(ENTITIES_CONFIG["disallowed_entity_pos"])
 
 
 @runtime_checkable
@@ -112,7 +116,7 @@ def _name_words(name: str) -> list[str]:
 def _pos_ok(window: list[Word]) -> bool:
     # Reject only when every matched word is a clearly non-entity POS. ``None`` (no
     # POS, e.g. SimpleAnalyzer) is never disallowed, so the gate is a no-op there.
-    return any(word.get("pos") not in DISALLOWED_ENTITY_POS for word in window)
+    return any(word.get("pos") not in _DISALLOWED_ENTITY_POS for word in window)
 
 
 def _name_like(word: Word) -> bool:

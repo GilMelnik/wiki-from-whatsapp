@@ -32,7 +32,8 @@ from utils.llm_client import (
     LLMClient,
     web_search_enabled,
 )
-from utils.paths import DRAFTS_DIR, resolve_claims_path, resolve_wiki_pages_path
+from utils.logging_setup import setup_step_logging
+from utils.paths import DRAFTS_DIR, STEP_8, resolve_claims_path, resolve_wiki_pages_path
 from utils.rtl import wrap_rtl_markdown
 from utils.taxonomy import category_title, resolve_search_focus
 
@@ -215,6 +216,7 @@ def run(
     research_llm: LLMClient | None = None,
     enable_web_search: bool | None = None,
 ) -> dict[str, Any]:
+    logger = setup_step_logging(STEP_8)
     pages_file = (
         Path(pages_path) if pages_path is not None else resolve_wiki_pages_path()
     )
@@ -229,8 +231,10 @@ def run(
         claims_by_id = {}
 
     search_on = web_search_enabled(explicit=enable_web_search)
-    if search_on and research_llm is None:
-        research_llm = LLMClient.for_stage("research")
+    if research_llm is not None:
+        research_llm.set_logger(logger)
+    elif search_on:
+        research_llm = LLMClient.for_stage("research", logger=logger)
 
     drafts = Path(drafts_dir)
     drafts.mkdir(parents=True, exist_ok=True)

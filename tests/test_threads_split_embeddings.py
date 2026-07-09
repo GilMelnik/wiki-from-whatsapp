@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import json
 import tempfile
 import unittest
-from datetime import datetime, timedelta
+from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
 
-from step_0_preprocessing.models import Message
 from step_1_threads_split.embedding.embedding import load_message_embeddings
 from step_1_threads_split.embedding.prepare_embeddings import ensure_embeddings
 from utils.json_io import write_json_file

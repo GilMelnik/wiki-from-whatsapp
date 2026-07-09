@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import logging
 import re
 from collections import Counter, defaultdict
 from difflib import SequenceMatcher
@@ -24,8 +23,6 @@ from utils.paths import (
     SENDER_ID_TO_NICKNAME_PATH,
     STEP_0,
 )
-
-logger = logging.getLogger(__name__)
 
 UNICODE_MARKS = re.compile(r"[\u200e\u200f\u202a-\u202e\u2066-\u2069\u2068\u2069]")
 PHONE_IN_SENDER = re.compile(r"^\+?[\d\s\-‑–—().]+$")
@@ -147,7 +144,7 @@ def find_unmapped_senders(
 
 
 def main() -> None:
-    setup_step_logging(STEP_0)
+    logger = setup_step_logging(STEP_0)
     parser = argparse.ArgumentParser(
         description="Map Android sender IDs to reference nicknames by content alignment."
     )

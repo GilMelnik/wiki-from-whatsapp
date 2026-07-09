@@ -12,7 +12,7 @@ from step_4_entities.cluster import (
     _entity_distance_matrix_need_rebuild,
 )
 from step_4_entities.collect import collect_entities, _claim_contacts
-from step_4_entities.constants import DISTANCE_METHOD
+from utils.config import ENTITIES_CONFIG
 from step_4_entities.mentions import (
     SimpleAnalyzer,
     analyze_claims,
@@ -511,7 +511,7 @@ def test_entity_distance_matrix_cache(tmp_path: Path):
     assert np.array_equal(first, second)
 
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    assert meta["metadata"]["distance_method"] == DISTANCE_METHOD
+    assert meta["metadata"]["distance_method"] == ENTITIES_CONFIG["distance_method"]
 
     expected = _entity_distance_matrix_metadata(
         source,

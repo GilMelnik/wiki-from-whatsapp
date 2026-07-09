@@ -34,8 +34,8 @@ from utils.json_io import write_json_file
 
 from step_4_entities.cluster import cluster_entities
 from step_4_entities.collect import collect_entities, load_claims_for_entities
-from step_4_entities.constants import SIMILARITY_THRESHOLD
 from step_4_entities.mentions import DictaAnalyzer, build_or_load_analysis
+from utils.config import ENTITIES_CONFIG
 from utils.logging_setup import setup_step_logging
 from utils.paths import ORIGINAL_ENTITIES_PATH, STEP_4
 
@@ -43,7 +43,7 @@ from utils.paths import ORIGINAL_ENTITIES_PATH, STEP_4
 def run(
     claims_path: Path | str | None = None,
     output_path: Path | str = ORIGINAL_ENTITIES_PATH,
-    similarity_threshold: float = SIMILARITY_THRESHOLD,
+    similarity_threshold: float = ENTITIES_CONFIG["similarity_threshold"],
 ) -> dict[str, Any]:
     logger = setup_step_logging(STEP_4)
     claims, resolved_claims, original_by_id = load_claims_for_entities(claims_path)

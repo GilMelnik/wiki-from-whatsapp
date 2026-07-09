@@ -27,7 +27,7 @@ def make_reviewer_app(title: str) -> FastAPI:
 class StoreRegistry(Generic[T]):
     """Thread-safe lazy store loader for reviewer UIs."""
 
-    def __init__(self, store_cls: type[T], default_config: dict[str, Any]):
+    def __init__(self, store_cls: type[T], default_config: dict[str, Any]) -> None:
         self._store_cls = store_cls
         self._store: T | None = None
         self._config = dict(default_config)

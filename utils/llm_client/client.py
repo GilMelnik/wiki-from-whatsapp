@@ -43,7 +43,7 @@ class LLMClient:
         batch_poll_interval: float | None = None,
         failure_log: Path | str | None = None,
         logger: logging.Logger | None = None,
-    ):
+    ) -> None:
         if not provider:
             raise ValueError(
                 "No LLM provider configured; pass provider=... or use "

@@ -23,5 +23,25 @@
     "log_cache": true,
     "anthropic_prompt_cache": true,
     "enable_web_search": null
+  },
+  "entities": {
+    "similarity_threshold": 0.88,
+    "min_skeleton_len": 3,
+    "sample_claims_per_member": 12,
+    "prefix_similarity": 0.93,
+    "topic_guard_cap": 0.5,
+    "short_name_max_chars": 8,
+    "distance_method": "string_plus_transliteration_v2",
+    "disallowed_entity_pos": [
+      "VERB", "ADV", "ADP", "AUX", "CCONJ", "SCONJ", "DET", "PRON", "PART", "INTJ", "PUNCT"
+    ],
+    "signals": {
+      "co_occur": "co_occur",
+      "confident_contact": "confident_contact",
+      "seed": "seed",
+      "prefix": "prefix",
+      "string": "string",
+      "transliteration": "transliteration"
+    }
   }
 }

@@ -94,7 +94,7 @@ class Thread:
         recent_embeddings_window: int,
         is_open: bool = True,
         recent_embeddings: list[np.ndarray] | None = None,
-    ):
+    ) -> None:
         self.thread_id = thread_id
         self.start_time = start_time
         self.last_time = last_time

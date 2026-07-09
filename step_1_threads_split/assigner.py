@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -20,7 +20,7 @@ class ThreadAssigner:
         query_embeddings: Sequence[np.ndarray] | None = None,
         config: ThreadConfig | None = None,
         input_path: Path | str | None = None,
-    ):
+    ) -> None:
         self.config = config or ThreadConfig()
         self.open_threads: list[Thread] = []
         self.closed_threads: list[Thread] = []
@@ -68,7 +68,7 @@ class ThreadAssigner:
         message_index: int,
         message: Message,
         previous_message_index: int | None,
-        previous_message_time,
+        previous_message_time: datetime | None,
     ) -> None:
         message_embedding = self.message_embeddings[message_index]
         quoted_idx = self._resolve_quote_index(message_index, message)
@@ -293,7 +293,7 @@ class ThreadAssigner:
         if thread not in self.open_threads:
             self.open_threads.append(thread)
 
-    def _close_stale_threads(self, current_time) -> None:
+    def _close_stale_threads(self, current_time: datetime) -> None:
         cutoff = timedelta(hours=self.config.close_after_hours)
         still_open: list[Thread] = []
         for thread in self.open_threads:

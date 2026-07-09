@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -163,7 +164,7 @@ def get_entity(
         raise HTTPException(status_code=404, detail="entity not found") from None
 
 
-def _store_call(fn, *args, **kwargs) -> dict[str, Any]:
+def _store_call(fn: Callable[..., dict[str, Any]], *args: Any, **kwargs: Any) -> dict[str, Any]:
     store = get_store()
     try:
         result = fn(store, *args, **kwargs)
@@ -298,7 +299,7 @@ def delete_claim(claim_id: str) -> dict[str, Any]:
     return {**result, "meta": store.meta()}
 
 
-def _aggregation_call(fn, *args, **kwargs) -> dict[str, Any]:
+def _aggregation_call(fn: Callable[..., dict[str, Any]], *args: Any, **kwargs: Any) -> dict[str, Any]:
     store = get_store()
     try:
         result = fn(store, *args, **kwargs)

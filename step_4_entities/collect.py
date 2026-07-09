@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from step_3_extract.scrub import find_emails, find_phones
-from step_4_entities.constants import SAMPLE_CLAIMS_PER_MEMBER
+from utils.config import ENTITIES_CONFIG
 from step_4_entities.mentions import (
     Analyzer,
     SimpleAnalyzer,
@@ -122,7 +122,7 @@ def collect_entities(
         if not claim_id or claim_id in claim_ids[name]:
             return
         claim_ids[name].add(claim_id)
-        if len(sample_ids[name]) < SAMPLE_CLAIMS_PER_MEMBER:
+        if len(sample_ids[name]) < ENTITIES_CONFIG["sample_claims_per_member"]:
             sample_ids[name].append(claim_id)
         topics[name].update(claim.get("topic_tags") or [])
         claim_emails, claim_phones, claim_sites = _claim_contacts(claim, original)

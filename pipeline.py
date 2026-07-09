@@ -21,6 +21,8 @@ Human gates (web UIs, no CLI):
 
 from __future__ import annotations
 
+import logging
+
 from step_2_classify.run import run as classify
 from step_3_extract.run import run as extract
 from step_4_entities.run import run as resolve_entities
@@ -44,13 +46,13 @@ from utils.paths import (
 )
 
 
-def _stage_clients() -> dict[str, LLMClient]:
+def _stage_clients(logger: logging.Logger) -> dict[str, LLMClient]:
     return {
-        "classify": LLMClient.for_stage("classify"),
-        "extract": LLMClient.for_stage("extract"),
-        "plan": LLMClient.for_stage("plan"),
-        "generate": LLMClient.for_stage("generate"),
-        "research": LLMClient.for_stage("research"),
+        "classify": LLMClient.for_stage("classify", logger=logger),
+        "extract": LLMClient.for_stage("extract", logger=logger),
+        "plan": LLMClient.for_stage("plan", logger=logger),
+        "generate": LLMClient.for_stage("generate", logger=logger),
+        "research": LLMClient.for_stage("research", logger=logger),
     }
 
 
@@ -62,16 +64,14 @@ def run(
     skip_plan: bool = False,
     enable_web_search: bool | None = None,
 ) -> None:
-    clients = _stage_clients()
-
     logger = setup_step_logging(SHARED)
+    clients = _stage_clients(logger)
     logger.info("LLM configuration:")
     for stage, client in clients.items():
         batch_note = " (batch)" if use_batch and client.supports_batch() else ""
         logger.info(f"  {stage}: {client.provider} / {client.model}{batch_note}")
 
     logger = setup_step_logging(STEP_2)
-    clients["classify"].set_logger(logger)
     logger.info("[3] Classifying threads...")
     c_meta = classify(llm=clients["classify"], use_batch=use_batch)
     logger.info(
@@ -80,7 +80,6 @@ def run(
     )
 
     logger = setup_step_logging(STEP_3)
-    clients["extract"].set_logger(logger)
     logger.info("[4] Extracting claims...")
     e_meta = extract(
         llm=clients["extract"], topic_filter=pilot_topic, use_batch=use_batch
@@ -114,7 +113,6 @@ def run(
     logger.info(f"    {a_meta['topic_count']} topics (merge: {a_meta['merge_method']})")
 
     logger = setup_step_logging(STEP_6)
-    clients["plan"].set_logger(logger)
     if skip_plan:
         logger.info("[6] Planning wiki structure... (identity mapping, skip_plan=True)")
         p_meta = plan(llm=clients["plan"], skip_agent=True)
@@ -131,7 +129,6 @@ def run(
     )
 
     logger = setup_step_logging(STEP_7)
-    clients["generate"].set_logger(logger)
     logger.info("[7] Building community pages (agentic, mini-batch)...")
     cm_meta = community(llm=clients["generate"])
     logger.info(
@@ -143,7 +140,6 @@ def run(
     )
 
     logger = setup_step_logging(STEP_8)
-    clients["research"].set_logger(logger)
     logger.info("[8] Researching background + assembling drafts...")
     bg_meta = background(
         research_llm=clients["research"],

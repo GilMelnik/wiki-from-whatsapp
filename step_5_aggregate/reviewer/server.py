@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from fastapi import HTTPException, Query
 from pydantic import BaseModel

@@ -167,7 +167,7 @@ def parse_messages(file_path: Path, cutoff: Optional[datetime] = None) -> List[D
     return messages
 
 
-def main():
+def main() -> None:
     input_file = CHAT_OLD_TXT_PATH
     cutoff_file = CHAT_TXT_PATH
     output_file = MESSAGES_OLD_PATH

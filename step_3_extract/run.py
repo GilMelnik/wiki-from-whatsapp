@@ -35,8 +35,6 @@ from utils.threads_io import (
 
 DEFAULT_CLASSIFIED_PATH = resolve_classified_path()
 
-logger = logging.getLogger(__name__)
-
 EXTRACT_SYSTEM = (
     "אתה עוזר שמחלץ ידע מקבוצת וואטסאפ על פונדקאות לגייז, לטובת בניית ויקי בעברית. "
     "מכל שיחה חלץ טענות/תובנות ספציפיות ומועילות: המלצות, אזהרות, עובדות, עלויות, "
@@ -227,6 +225,7 @@ def extract_claims_for_threads(
     pending_llm: list[tuple[dict[str, Any], str, list[dict[str, Any]]]],
     llm: LLMClient,
     use_batch: bool,
+    logger: logging.Logger,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Run extraction over prepared prompts, returning (public, audit) records."""
 
@@ -306,8 +305,9 @@ def run(
     ``max_threads`` caps how many threads are processed.
     """
 
-    setup_step_logging(STEP_3)
-    llm = llm or LLMClient()
+    logger = setup_step_logging(STEP_3)
+    llm = LLMClient.for_stage("extract", logger=logger) if llm is None else llm
+    llm.set_logger(logger)
     payload = load_threads(input_path)
     threads_by_id = {t["thread_id"]: t for t in payload["threads"]}
 
@@ -333,7 +333,7 @@ def run(
         processed += 1
 
     published_claims, audit_records = extract_claims_for_threads(
-        pending_llm, llm, use_batch
+        pending_llm, llm, use_batch, logger
     )
 
     scrub_summary = scrub_claims(published_claims)
@@ -376,6 +376,4 @@ def run(
 
 
 if __name__ == "__main__":
-    run(
-        llm=LLMClient.for_stage("extract")
-    )
+    run()

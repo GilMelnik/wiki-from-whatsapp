@@ -113,7 +113,7 @@ def parse_messages(file_path: Path) -> List[Dict]:
     return messages
 
 
-def main():
+def main() -> None:
     input_file = CHAT_TXT_PATH
     output_file = MESSAGES_PATH
 

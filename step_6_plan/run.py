@@ -14,10 +14,16 @@ from typing import Any
 
 from utils.json_io import write_json_file
 from utils.llm_client import BatchRequest, LLMClient, extract_json
+from utils.logging_setup import setup_step_logging
 from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION
 from utils.taxonomy import CATEGORIES, category_title, resolve_search_focus, taxonomy_seed_block
 
-from utils.paths import ORIGINAL_AGGREGATED_PATH, ORIGINAL_PLAN_PATH, resolve_aggregated_path
+from utils.paths import (
+    ORIGINAL_AGGREGATED_PATH,
+    ORIGINAL_PLAN_PATH,
+    STEP_6,
+    resolve_aggregated_path,
+)
 
 PLAN_SYSTEM = (
     "אתה מתכנן את מבנה הויקי בעברית על פונדקאות לגייז, על בסיס טענות שחולצו מקבוצת וואטסאפ.\n"
@@ -204,6 +210,7 @@ def run(
     *,
     skip_agent: bool = False,
 ) -> dict[str, Any]:
+    logger = setup_step_logging(STEP_6)
     agg_path = Path(aggregated_path) if aggregated_path is not None else resolve_aggregated_path()
     with agg_path.open(encoding="utf-8") as f:
         topics = json.load(f)["topics"]
@@ -218,7 +225,8 @@ def run(
             "mode": "identity",
         }
 
-    llm = llm or LLMClient()
+    llm = LLMClient.for_stage("plan", logger=logger) if llm is None else llm
+    llm.set_logger(logger)
     prompt = build_plan_prompt(topics)
 
     raw: Any = {}
@@ -260,7 +268,4 @@ def pages_by_category(plan: dict[str, Any]) -> dict[str, list[tuple[str, str]]]:
 
 
 if __name__ == "__main__":
-    run(
-        llm=LLMClient.for_stage(stage='plan'),
-        use_batch=True
-    )
+    run(use_batch=True)

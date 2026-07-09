@@ -1,35 +1,20 @@
-"""Configuration for the whole project, loaded from the root ``config.json``.
+"""LLM-client configuration, sourced from the shared project config reader.
 
-The single root ``config.json`` holds separate top-level sections:
-``data_dir`` (the configurable parent folder for all pipeline artifacts),
-``logging`` (rotating-file/console tunables), and ``llm_client`` (provider/model
-per stage, cache/failure paths, batch poll interval, JSON-retry ceiling, cache
-logging, Anthropic prompt-cache toggle, web-search toggle). It is loaded once;
-the ``llm_client`` section is exposed as ``CONFIG`` so existing ``CONFIG[...]``
-reads keep working, and ``LOGGING_CONFIG`` / ``DATA_DIR`` expose the other two.
-Only real secrets (API keys) belong in ``.env``, which is loaded here so each
-provider SDK and the web-search key check can read them from the environment.
+The single root ``config.json`` is parsed once in :mod:`utils.config`; here we
+re-expose its ``llm_client`` section as ``CONFIG`` (so existing ``CONFIG[...]``
+reads keep working) alongside ``LOGGING_CONFIG`` / ``DATA_DIR`` for callers that
+still import them from this module. Only real secrets (API keys) belong in
+``.env``, which :mod:`utils.config` loads so each provider SDK and the web-search
+key check can read them from the environment.
 """
 
 from __future__ import annotations
 
-import json
 import os
-from pathlib import Path
 
-from dotenv import load_dotenv
+from utils.config import DATA_DIR, LLM_CONFIG as CONFIG, LOGGING_CONFIG
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_CONFIG_PATH = PROJECT_ROOT / "config.json"
-
-load_dotenv(PROJECT_ROOT / ".env", override=False)
-
-with _CONFIG_PATH.open(encoding="utf-8") as _f:
-    ROOT_CONFIG = json.load(_f)
-
-CONFIG = ROOT_CONFIG["llm_client"]
-LOGGING_CONFIG = ROOT_CONFIG["logging"]
-DATA_DIR = Path(ROOT_CONFIG["data_dir"])
+__all__ = ["CONFIG", "DATA_DIR", "LOGGING_CONFIG", "web_search_enabled"]
 
 
 def web_search_enabled(*, explicit: bool | None = None) -> bool:

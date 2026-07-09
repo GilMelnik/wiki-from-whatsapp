@@ -7,7 +7,6 @@ because the exports come from different users/time zones.
 """
 
 import json
-import logging
 import re
 from collections import Counter, defaultdict
 from difflib import SequenceMatcher
@@ -22,8 +21,6 @@ from step_0_preprocessing.parse_messages_old_format import (
 )
 from utils.logging_setup import setup_step_logging
 from utils.paths import CHAT_OLD_TXT_PATH, CHAT_TXT_PATH, MESSAGES_OLD_PATH, STEP_0
-
-logger = logging.getLogger(__name__)
 
 UNICODE_MARKS = re.compile(r"[\u200e\u200f\u202a-\u202e\u2066-\u2069\u2068\u2069]")
 PHONE_IN_SENDER = re.compile(r"^\+?[\d\s\-‑–—().]+$")
@@ -110,7 +107,7 @@ def apply_mapping(messages: List[dict], mapping: Dict[str, str]) -> Tuple[int, L
 
 
 def main() -> None:
-    setup_step_logging(STEP_0)
+    logger = setup_step_logging(STEP_0)
     old_chat = CHAT_OLD_TXT_PATH
     new_chat = CHAT_TXT_PATH
     messages_file = MESSAGES_OLD_PATH

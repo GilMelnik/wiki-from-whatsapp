@@ -10,24 +10,26 @@ from typing import Any
 
 import numpy as np
 
-from step_4_entities.constants import (
-    MIN_SKELETON_LEN,
-    PREFIX_SIMILARITY,
-    SIGNAL_CO_OCCUR,
-    SIGNAL_CONFIDENT_CONTACT,
-    SIGNAL_PREFIX,
-    SIGNAL_SEED,
-    SIGNAL_STRING,
-    SIGNAL_TRANSLITERATION,
-    SIMILARITY_THRESHOLD,
-    TOPIC_GUARD_CAP,
-)
 from step_4_entities.normalize import (
     _is_hebrew,
     _is_short_name,
     _is_word_prefix,
     transliteration_skeleton,
 )
+from utils.config import ENTITIES_CONFIG
+
+# Bound once from config for the O(n^2) pairwise scoring hot path below.
+MIN_SKELETON_LEN = ENTITIES_CONFIG["min_skeleton_len"]
+PREFIX_SIMILARITY = ENTITIES_CONFIG["prefix_similarity"]
+SIMILARITY_THRESHOLD = ENTITIES_CONFIG["similarity_threshold"]
+TOPIC_GUARD_CAP = ENTITIES_CONFIG["topic_guard_cap"]
+_SIGNALS = ENTITIES_CONFIG["signals"]
+SIGNAL_CO_OCCUR = _SIGNALS["co_occur"]
+SIGNAL_CONFIDENT_CONTACT = _SIGNALS["confident_contact"]
+SIGNAL_PREFIX = _SIGNALS["prefix"]
+SIGNAL_SEED = _SIGNALS["seed"]
+SIGNAL_STRING = _SIGNALS["string"]
+SIGNAL_TRANSLITERATION = _SIGNALS["transliteration"]
 
 
 @dataclass

@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-from step_4_entities.constants import MIN_SKELETON_LEN, SHORT_NAME_MAX_CHARS
+from utils.config import ENTITIES_CONFIG
 
 # Hebrew consonants -> Latin skeleton phonemes (vowels/matres lectionis dropped).
 _HEB_TO_LATIN = {
@@ -99,4 +99,4 @@ def _is_word_prefix(a: str, b: str) -> bool:
 
 
 def _is_short_name(norm: str) -> bool:
-    return len(norm) <= SHORT_NAME_MAX_CHARS
+    return len(norm) <= ENTITIES_CONFIG["short_name_max_chars"]

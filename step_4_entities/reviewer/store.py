@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from step_4_entities.collect import _claim_contacts
-from step_4_entities.constants import SAMPLE_CLAIMS_PER_MEMBER
+from utils.config import ENTITIES_CONFIG
 from step_4_entities.mentions import (
     Analyzer,
     SimpleAnalyzer,
@@ -570,7 +570,7 @@ class EntityStore:
         name = member["name"]
         claim_ids = self._visible_claim_ids(self._claim_ids_for_member(member))
         samples: list[dict[str, Any]] = []
-        for claim_id in claim_ids[:SAMPLE_CLAIMS_PER_MEMBER]:
+        for claim_id in claim_ids[: ENTITIES_CONFIG["sample_claims_per_member"]]:
             enriched = self._enrich_claim(
                 claim_id, name, entity_id=entity_id, entity_names=entity_names
             )
@@ -593,7 +593,7 @@ class EntityStore:
         name: str,
         *,
         offset: int = 0,
-        limit: int = SAMPLE_CLAIMS_PER_MEMBER,
+        limit: int = ENTITIES_CONFIG["sample_claims_per_member"],
     ) -> dict[str, Any]:
         """One page of a member's visible claims (Req 1 pagination)."""
 

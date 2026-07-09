@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import webbrowser
 
 import uvicorn
@@ -13,11 +12,9 @@ from utils.port import free_port
 from utils.paths import STEP_1, has_classification_data, init_edited_files
 from step_1_threads_split.review.server import app, configure_store, get_store, mount_static
 
-logger = logging.getLogger(__name__)
-
 
 def main() -> None:
-    setup_step_logging(STEP_1)
+    logger = setup_step_logging(STEP_1)
     parser = argparse.ArgumentParser(description="Thread tagging web tool")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
