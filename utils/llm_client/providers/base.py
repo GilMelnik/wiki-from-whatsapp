@@ -10,6 +10,7 @@ capabilities; the base raises ``NotImplementedError`` and advertises support via
 
 from __future__ import annotations
 
+import logging
 from abc import ABC, abstractmethod
 from typing import Any, Sequence
 
@@ -27,11 +28,13 @@ class LLMProvider(ABC):
         temperature: float,
         max_tokens: int,
         batch_poll_interval: float,
+        logger: logging.Logger | None = None,
     ) -> None:
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.batch_poll_interval = batch_poll_interval
+        self.logger = logger or logging.getLogger("utils.llm_client")
         self._client: Any = None
 
     @abstractmethod

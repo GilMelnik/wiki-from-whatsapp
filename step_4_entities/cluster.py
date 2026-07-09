@@ -10,9 +10,6 @@ from typing import Any
 import numpy as np
 
 from step_4_entities.constants import (
-    DEFAULT_ENTITY_DISTANCE_MATRIX_PATH,
-    DEFAULT_ENTITY_DISTANCE_META_PATH,
-    DEFAULT_SEED_PATH,
     DISTANCE_METHOD,
     MIN_SKELETON_LEN,
     SIMILARITY_THRESHOLD,
@@ -20,10 +17,15 @@ from step_4_entities.constants import (
 from step_4_entities.normalize import normalize_name
 from step_4_entities.pair_index import EntityPairIndex
 from utils.json_io import write_json_file
+from utils.paths import (
+    ENTITIES_SEED_PATH,
+    ENTITY_DISTANCE_MATRIX_PATH,
+    ENTITY_DISTANCE_META_PATH,
+)
 
 
 def _load_seed_index(
-    seed_path: Path | str = DEFAULT_SEED_PATH,
+    seed_path: Path | str = ENTITIES_SEED_PATH,
 ) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
     """Load seed file and return ``normalized name -> seed_id``, ``seed_id -> entry``."""
 
@@ -78,8 +80,8 @@ def ensure_entity_distance_matrix(
     entities_or_index: list[dict[str, Any]] | EntityPairIndex,
     source_path: Path | str,
     *,
-    matrix_path: Path | str = DEFAULT_ENTITY_DISTANCE_MATRIX_PATH,
-    meta_path: Path | str = DEFAULT_ENTITY_DISTANCE_META_PATH,
+    matrix_path: Path | str = ENTITY_DISTANCE_MATRIX_PATH,
+    meta_path: Path | str = ENTITY_DISTANCE_META_PATH,
     seed_groups: list[str | None] | None = None,
 ) -> np.ndarray:
     """Build or load the cached entity distance matrix."""
@@ -212,9 +214,9 @@ def cluster_entities(
     source_path: Path | str,
     *,
     similarity_threshold: float = SIMILARITY_THRESHOLD,
-    matrix_path: Path | str = DEFAULT_ENTITY_DISTANCE_MATRIX_PATH,
-    meta_path: Path | str = DEFAULT_ENTITY_DISTANCE_META_PATH,
-    seed_path: Path | str = DEFAULT_SEED_PATH,
+    matrix_path: Path | str = ENTITY_DISTANCE_MATRIX_PATH,
+    meta_path: Path | str = ENTITY_DISTANCE_META_PATH,
+    seed_path: Path | str = ENTITIES_SEED_PATH,
 ) -> list[dict[str, Any]]:
     """Group distinct entity records into suggested canonical entities."""
 

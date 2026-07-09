@@ -4,6 +4,8 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple
 
+from utils.paths import CHAT_OLD_TXT_PATH, CHAT_TXT_PATH, MESSAGES_OLD_PATH
+
 # Old WhatsApp export: M/D/YY, H:MM - Sender: message
 MSG_HEADER = re.compile(
     r"^[\u200e\u200f\u202a-\u202e\u2066-\u2069]*"
@@ -166,13 +168,13 @@ def parse_messages(file_path: Path, cutoff: Optional[datetime] = None) -> List[D
 
 
 def main():
-    data_path = Path(__file__).resolve().parent.parent / "data"
-    input_file = data_path / "_chat_old.txt"
-    cutoff_file = data_path / "_chat.txt"
-    output_file = data_path / "messages_old.json"
+    input_file = CHAT_OLD_TXT_PATH
+    cutoff_file = CHAT_TXT_PATH
+    output_file = MESSAGES_OLD_PATH
 
     cutoff = get_oldest_new_format_timestamp(cutoff_file)
     messages = parse_messages(input_file, cutoff=cutoff)
 
+    output_file.parent.mkdir(parents=True, exist_ok=True)
     with output_file.open("w", encoding="utf-8") as f:
         json.dump(messages, f, ensure_ascii=False, indent=2)

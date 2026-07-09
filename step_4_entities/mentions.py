@@ -15,12 +15,10 @@ import re
 from pathlib import Path
 from typing import Any, Protocol, Sequence, runtime_checkable
 
-from step_4_entities.constants import (
-    DEFAULT_ENTITY_ANALYSIS_PATH,
-    DISALLOWED_ENTITY_POS,
-)
+from step_4_entities.constants import DISALLOWED_ENTITY_POS
 from step_4_entities.normalize import _is_hebrew, normalize_token
 from utils.json_io import write_json_file
+from utils.paths import ENTITY_ANALYSIS_PATH
 
 Word = dict[str, Any]
 
@@ -190,7 +188,7 @@ def build_or_load_analysis(
     claims: list[dict[str, Any]],
     analyzer: Analyzer,
     *,
-    cache_path: Path | str = DEFAULT_ENTITY_ANALYSIS_PATH,
+    cache_path: Path | str = ENTITY_ANALYSIS_PATH,
     source_path: Path | str | None = None,
 ) -> dict[str, list[Word]]:
     """Build the per-claim analysis or load it from ``cache_path`` when fresh."""

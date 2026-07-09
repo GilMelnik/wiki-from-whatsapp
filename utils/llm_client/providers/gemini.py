@@ -119,8 +119,8 @@ class GeminiProvider(LLMProvider):
             src=inline_requests,
             config={"display_name": "wiki-build-batch"},
         )
-        print(
-            f"  Gemini batch {batch_job.name} submitted "
+        self.logger.info(
+            f"Gemini batch {batch_job.name} submitted "
             f"({len(requests)} requests, ~50% cheaper)..."
         )
 
@@ -131,7 +131,7 @@ class GeminiProvider(LLMProvider):
             state_name = batch_job.state.name if batch_job.state else ""
             if state_name in genai_types.JOB_STATES_ENDED:
                 break
-            print(f"  Gemini batch {job_name}: {state_name}")
+            self.logger.info(f"Gemini batch {job_name}: {state_name}")
             time.sleep(self.batch_poll_interval)
 
         if state_name not in genai_types.JOB_STATES_SUCCEEDED:
@@ -153,7 +153,9 @@ class GeminiProvider(LLMProvider):
                     _gemini_truncated(inline_resp.response),
                 )
             elif inline_resp.error:
-                print(f"  Warning: Gemini batch item {request_id} error: {inline_resp.error}")
+                self.logger.warning(
+                    f"Gemini batch item {request_id} error: {inline_resp.error}"
+                )
                 if request_id:
                     out[request_id] = ("", False)
         return out

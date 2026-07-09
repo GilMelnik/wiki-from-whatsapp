@@ -77,8 +77,8 @@ class AnthropicProvider(LLMProvider):
         fresh = getattr(usage, "input_tokens", 0) or 0
         out = getattr(usage, "output_tokens", 0) or 0
         state = "HIT" if read else ("WRITE" if write else "MISS")
-        print(
-            f"  [cache {state}] read={read} write={write} fresh={fresh} "
+        self.logger.info(
+            f"[cache {state}] read={read} write={write} fresh={fresh} "
             f"out={out} ({self.model})"
         )
 
@@ -106,8 +106,8 @@ class AnthropicProvider(LLMProvider):
         ]
 
         batch = self._client.messages.batches.create(requests=api_requests)
-        print(
-            f"  Anthropic batch {batch.id} submitted "
+        self.logger.info(
+            f"Anthropic batch {batch.id} submitted "
             f"({len(requests)} requests, ~50% cheaper)..."
         )
 
@@ -116,8 +116,8 @@ class AnthropicProvider(LLMProvider):
             if batch.processing_status == "ended":
                 break
             counts = batch.request_counts
-            print(
-                f"  Anthropic batch {batch.id}: "
+            self.logger.info(
+                f"Anthropic batch {batch.id}: "
                 f"processing={counts.processing}, succeeded={counts.succeeded}, "
                 f"errored={counts.errored}"
             )
@@ -133,6 +133,8 @@ class AnthropicProvider(LLMProvider):
                 )
                 out[request_id] = (text, message.stop_reason == "max_tokens")
             else:
-                print(f"  Warning: Anthropic batch item {request_id} -> {result.result.type}")
+                self.logger.warning(
+                    f"Anthropic batch item {request_id} -> {result.result.type}"
+                )
                 out[request_id] = ("", False)
         return out

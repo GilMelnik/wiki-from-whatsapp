@@ -19,6 +19,7 @@ from utils.paths import (
     BACKUPS_DIR,
     EDITED_CLASSIFIED_PATH,
     EDITED_THREADS_PATH,
+    STEP_2,
 )
 from step_2_classify.run import (
     CLASSIFY_SYSTEM,
@@ -27,6 +28,7 @@ from step_2_classify.run import (
     classify_thread,
 )
 from utils.llm_client import BatchRequest, LLMClient
+from utils.logging_setup import setup_step_logging
 from utils.threads_io import load_threads, render_thread_for_llm
 
 
@@ -83,6 +85,7 @@ def run(
 ) -> dict[str, Any]:
     """Re-classify edited threads, preserving manual ``is_knowledge_bearing: false``."""
 
+    logger = setup_step_logging(STEP_2)
     threads_path = Path(threads_path)
     classified_path = Path(classified_path)
     if not threads_path.is_file():
@@ -131,7 +134,7 @@ def run(
 
     if pending_llm:
         if use_batch and llm.supports_batch():
-            print(f"  Reclassify: submitting {len(pending_llm)} requests via batch API...")
+            logger.info(f"Reclassify: submitting {len(pending_llm)} requests via batch API...")
             requests = [
                 BatchRequest(
                     request_id=thread["thread_id"],
@@ -148,7 +151,7 @@ def run(
                 )
         else:
             if use_batch:
-                print("  Reclassify: batch not supported for this provider; using sync API.")
+                logger.info("Reclassify: batch not supported for this provider; using sync API.")
             for (thread, _), record_idx in zip(pending_llm, pending_indices):
                 output_records[record_idx].update(classify_thread(thread, llm))
 

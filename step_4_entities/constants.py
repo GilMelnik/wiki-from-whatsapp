@@ -1,13 +1,8 @@
-"""Thresholds, signal vocabulary, and default paths for entity clustering."""
+"""Thresholds and signal vocabulary for entity clustering.
 
-from pathlib import Path
+Artifact paths live in ``utils.paths`` (derived from the configurable data root).
+"""
 
-DEFAULT_OUTPUT_PATH = Path("data/entities.json")
-DEFAULT_ENTITY_DISTANCE_MATRIX_PATH = Path("data/entity_distance_matrix.npy")
-DEFAULT_ENTITY_DISTANCE_META_PATH = Path("data/entity_distance_matrix.json")
-# Per-claim morphological analysis cache (dictabert-joint seg/pos), built once and
-# reused by collection and the reviewer for word-aware mention matching.
-DEFAULT_ENTITY_ANALYSIS_PATH = Path("data/entity_claim_analysis.json")
 ENTITY_ANALYSIS_MODEL = "dicta-il/dictabert-joint"
 
 # A surface match is rejected only when every matched word is one of these clearly
@@ -31,7 +26,6 @@ SAMPLE_CLAIMS_PER_MEMBER = 12
 PREFIX_SIMILARITY = 0.93  # boost when one name is a whole-word prefix of the other
 TOPIC_GUARD_CAP = 0.5  # cap for short near-identical names with disjoint topics
 SHORT_NAME_MAX_CHARS = 8  # "short" names are the ones prone to homonym collisions
-DEFAULT_SEED_PATH = Path("data/entities_seed.json")
 
 # merge_signals vocabulary surfaced to the reviewer UI.
 SIGNAL_CO_OCCUR = "co_occur"

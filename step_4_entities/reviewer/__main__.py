@@ -13,11 +13,13 @@ from step_4_entities.reviewer.server import (
     get_store,
     mount_static,
 )
-from utils.paths import init_entities_edited
+from utils.logging_setup import setup_step_logging
+from utils.paths import STEP_4, init_entities_edited
 from utils.port import free_port
 
 
 def main() -> None:
+    logger = setup_step_logging(STEP_4)
     parser = argparse.ArgumentParser(description="Entity resolution review web tool")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8770)
@@ -39,7 +41,7 @@ def main() -> None:
     parser.add_argument(
         "--init-edited",
         action="store_true",
-        help="create data/entities_edited.json from original, then exit",
+        help="create data/step_4_entities/entities_edited.json from original, then exit",
     )
     parser.add_argument(
         "--no-kill-port",
@@ -51,20 +53,20 @@ def main() -> None:
     if args.init_edited:
         path = init_entities_edited()
         if path:
-            print(f"Created {path}")
+            logger.info(f"Created {path}")
         else:
-            print("Edited entities file already exists; nothing to create.")
+            logger.info("Edited entities file already exists; nothing to create.")
         return
 
     configure_store(entities_path=args.entities, claims_path=args.claims)
     store = get_store()
     info = store.meta()
-    print(f"Loaded {info['entity_count']} entities from {info['entities_path']}")
+    logger.info(f"Loaded {info['entity_count']} entities from {info['entities_path']}")
 
     if not args.no_kill_port:
         killed = free_port(args.port, host=args.host)
         if killed:
-            print(f"Freed port {args.port} (stopped PIDs: {', '.join(map(str, killed))})")
+            logger.info(f"Freed port {args.port} (stopped PIDs: {', '.join(map(str, killed))})")
 
     mount_static()
     url = f"http://{args.host}:{args.port}"

@@ -11,12 +11,12 @@ from typing import Any, Literal
 
 from step_5_aggregate.resolver import apply_entity_resolution, load_entity_resolver
 from step_5_aggregate.run import (
-    DEFAULT_AUDIT_PATH,
     _load_audit_records,
     build_merged_claim,
 )
 from utils.json_io import write_json_file
 from utils.paths import (
+    AUDIT_PATH,
     BACKUPS_DIR,
     EDITED_AGGREGATED_PATH,
     ORIGINAL_AGGREGATED_PATH,
@@ -118,7 +118,7 @@ class AggregateStore:
             Path(aggregated_path) if aggregated_path is not None else None
         )
         self._claims_override = Path(claims_path) if claims_path is not None else None
-        self._audit_path = Path(audit_path) if audit_path is not None else DEFAULT_AUDIT_PATH
+        self._audit_path = Path(audit_path) if audit_path is not None else AUDIT_PATH
         self._aggregated: dict[str, Any] | None = None
         self._claims_by_id: dict[str, dict[str, Any]] = {}
         self._audit_by_id: dict[str, dict[str, Any]] = {}

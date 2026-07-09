@@ -16,12 +16,14 @@ message indices and the entities mentioned. We then:
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
 from utils.json_io import write_json_file
 from utils.llm_client import BatchRequest, LLMClient
-from utils.paths import resolve_classified_path
+from utils.logging_setup import setup_step_logging
+from utils.paths import AUDIT_DIR, ORIGINAL_CLAIMS_PATH, STEP_3, resolve_classified_path
 from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION, scrub_claims
 from utils.support import compute_support
 from utils.taxonomy import page_ids, taxonomy_seed_block
@@ -32,8 +34,8 @@ from utils.threads_io import (
 )
 
 DEFAULT_CLASSIFIED_PATH = resolve_classified_path()
-DEFAULT_OUTPUT_PATH = Path("data/claims.json")
-DEFAULT_AUDIT_DIR = Path("data/audit")
+
+logger = logging.getLogger(__name__)
 
 EXTRACT_SYSTEM = (
     "אתה עוזר שמחלץ ידע מקבוצת וואטסאפ על פונדקאות לגייז, לטובת בניית ויקי בעברית. "
@@ -234,7 +236,7 @@ def extract_claims_for_threads(
         return published_claims, audit_records
 
     if use_batch and llm.supports_batch():
-        print(f"  Extract: submitting {len(pending_llm)} requests via batch API...")
+        logger.info(f"Extract: submitting {len(pending_llm)} requests via batch API...")
         requests = [
             BatchRequest(
                 request_id=thread["thread_id"],
@@ -257,7 +259,7 @@ def extract_claims_for_threads(
             )
     else:
         if use_batch:
-            print("  Extract: batch not supported for this provider; using sync API.")
+            logger.info("Extract: batch not supported for this provider; using sync API.")
         for thread, prompt, line_meta in pending_llm:
             try:
                 result = llm.complete_json(
@@ -291,8 +293,8 @@ def extract_thread(thread: dict[str, Any], llm: LLMClient) -> list[dict[str, Any
 def run(
     input_path: Path | str = DEFAULT_THREADS_PATH,
     classified_path: Path | str = DEFAULT_CLASSIFIED_PATH,
-    output_path: Path | str = DEFAULT_OUTPUT_PATH,
-    audit_dir: Path | str = DEFAULT_AUDIT_DIR,
+    output_path: Path | str = ORIGINAL_CLAIMS_PATH,
+    audit_dir: Path | str = AUDIT_DIR,
     llm: LLMClient | None = None,
     topic_filter: str | None = None,
     max_threads: int | None = None,
@@ -304,6 +306,7 @@ def run(
     ``max_threads`` caps how many threads are processed.
     """
 
+    setup_step_logging(STEP_3)
     llm = llm or LLMClient()
     payload = load_threads(input_path)
     threads_by_id = {t["thread_id"]: t for t in payload["threads"]}

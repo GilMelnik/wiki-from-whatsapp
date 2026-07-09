@@ -14,11 +14,11 @@ last time hit the API again.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
 from step_3_extract.run import (
-    DEFAULT_AUDIT_DIR,
     DEFAULT_CLASSIFIED_PATH,
     build_extract_prompt,
     extract_claims_for_threads,
@@ -27,12 +27,15 @@ from step_3_extract.run import (
 from step_3_extract.scrub import scrub_claims
 from utils.json_io import write_json_file
 from utils.llm_client import LLMClient
-from utils.paths import resolve_claims_path
+from utils.logging_setup import setup_step_logging
+from utils.paths import AUDIT_DIR, STEP_3, resolve_claims_path
 from utils.threads_io import (
     DEFAULT_THREADS_PATH,
     load_threads,
     render_thread_for_llm,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _load_json(path: Path) -> dict[str, Any]:
@@ -44,7 +47,7 @@ def run(
     input_path: Path | str = DEFAULT_THREADS_PATH,
     classified_path: Path | str = DEFAULT_CLASSIFIED_PATH,
     output_path: Path | str | None = None,
-    audit_dir: Path | str = DEFAULT_AUDIT_DIR,
+    audit_dir: Path | str = AUDIT_DIR,
     llm: LLMClient | None = None,
     use_batch: bool = True,
 ) -> dict[str, Any]:
@@ -55,6 +58,7 @@ def run(
     the file the rest of the pipeline reads.
     """
 
+    setup_step_logging(STEP_3)
     output_path = Path(output_path) if output_path is not None else resolve_claims_path()
     if not output_path.is_file():
         raise FileNotFoundError(
@@ -82,8 +86,8 @@ def run(
                 (threads_by_id[thread_id], build_extract_prompt(rendered), line_meta)
             )
 
-    print(
-        f"  Rerun: {len(missing_ids)} knowledge-bearing threads have no saved claims "
+    logger.info(
+        f"Rerun: {len(missing_ids)} knowledge-bearing threads have no saved claims "
         f"({len(pending_llm)} with renderable content)."
     )
     if not pending_llm:
@@ -104,8 +108,8 @@ def run(
     audit_doc.setdefault("metadata", {})["claims_count"] = len(audit_doc["audit"])
     write_json_file(audit_doc, audit_path)
 
-    print(
-        f"  Rerun: recovered {len(recovered)}/{len(missing_ids)} threads, "
+    logger.info(
+        f"Rerun: recovered {len(recovered)}/{len(missing_ids)} threads, "
         f"added {len(new_claims)} claims."
     )
     return {

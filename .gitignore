@@ -218,20 +218,14 @@ __marimo__/
 .streamlit/secrets.toml
 
 
+# All pipeline artifacts (per-step folders, shared cache, private audit, drafts)
+# live under data/ and are never published.
 data/
 
-# --- Wiki pipeline: private / sensitive artifacts (never publish) ---
-# Real-name / phone mapping used only to build the PII denylist.
-data/sender_id_to_nickname.json
-# Private audit trail mapping published claims back to source messages.
-data/audit/
-# On-disk LLM response cache.
-data/llm_cache/
 # Local API keys.
 .env
 .cursor
 .idea
-drafts/
 
 # Reviewer / thread-tagger Vite build output (keep .gitkeep)
 **/reviewer/static/*

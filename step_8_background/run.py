@@ -32,11 +32,9 @@ from utils.llm_client import (
     LLMClient,
     web_search_enabled,
 )
-from utils.paths import resolve_claims_path, resolve_wiki_pages_path
+from utils.paths import DRAFTS_DIR, resolve_claims_path, resolve_wiki_pages_path
 from utils.rtl import wrap_rtl_markdown
 from utils.taxonomy import category_title, resolve_search_focus
-
-DEFAULT_DRAFTS_DIR = Path("drafts")
 
 GENERATE_BACKGROUND_SYSTEM = (
     "אתה עורך ויקי הכותב סעיף 'רקע כללי' בעברית לערך על פונדקאות לגייז. "
@@ -213,7 +211,7 @@ def run(
     *,
     pages_path: Path | str | None = None,
     claims_path: Path | str | None = None,
-    drafts_dir: Path | str = DEFAULT_DRAFTS_DIR,
+    drafts_dir: Path | str = DRAFTS_DIR,
     research_llm: LLMClient | None = None,
     enable_web_search: bool | None = None,
 ) -> dict[str, Any]:

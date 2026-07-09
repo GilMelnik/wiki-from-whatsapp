@@ -8,6 +8,7 @@ from step_1_threads_split.tf_idf.hebrew_tokenizer import HebrewTokenizer
 from step_1_threads_split.run import load_messages
 from step_1_threads_split.tf_idf.tfidf import IDF_FORMULA, compute_idf
 from utils.json_io import write_json_file
+from utils.paths import CHAT_ANDROID_PATH, TFIDF_CORPUS_PATH, TFIDF_TOKENS_PATH
 
 
 def _aggregate_term_stats(
@@ -79,9 +80,9 @@ def _build_tokens_payload(
 
 
 def run(
-    input_path: Path | str = Path("data/chats_from_phone/chat_android.json"),
-    output_path: Path | str = Path("data/tfidf_corpus.json"),
-    tokens_output_path: Path | str = Path("data/tfidf_tokens.json"),
+    input_path: Path | str = CHAT_ANDROID_PATH,
+    output_path: Path | str = TFIDF_CORPUS_PATH,
+    tokens_output_path: Path | str = TFIDF_TOKENS_PATH,
     batch_size: int = 32,
     max_messages: int | None = None,
     tokenizer: HebrewTokenizer | None = None,

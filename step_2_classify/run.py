@@ -15,10 +15,12 @@ from typing import Any
 
 from utils.json_io import write_json_file
 from utils.llm_client import BatchRequest, LLMClient
+from utils.logging_setup import setup_step_logging
 from utils.paths import (
     EDITED_THREADS_PATH,
     ORIGINAL_CLASSIFIED_PATH,
     ORIGINAL_THREADS_PATH,
+    STEP_2,
     ensure_edited_workspace,
 )
 from utils.taxonomy import page_ids, taxonomy_seed_block
@@ -128,6 +130,7 @@ def run(
     keyword text mentions the given substring (pilot on one topic).
     """
 
+    logger = setup_step_logging(STEP_2)
     llm = llm or LLMClient()
     ensure_edited_workspace()
 
@@ -181,7 +184,7 @@ def run(
 
     if pending_llm:
         if use_batch and llm.supports_batch():
-            print(f"  Classify: submitting {len(pending_llm)} requests via batch API...")
+            logger.info(f"Classify: submitting {len(pending_llm)} requests via batch API...")
             requests = [
                 BatchRequest(
                     request_id=thread["thread_id"],
@@ -198,7 +201,7 @@ def run(
                 )
         else:
             if use_batch:
-                print("  Classify: batch not supported for this provider; using sync API.")
+                logger.info("Classify: batch not supported for this provider; using sync API.")
             for (thread, _), record_idx in zip(pending_llm, pending_indices):
                 classified[record_idx].update(classify_thread(thread, llm))
 
@@ -219,5 +222,5 @@ def run(
     actions = ensure_edited_workspace(classified_output=output_path)
     if actions:
         summary = ", ".join(f"{name} {action}" for name, action in actions.items())
-        print(f"  Review workspace: {summary}")
+        logger.info(f"Review workspace: {summary}")
     return output["metadata"]

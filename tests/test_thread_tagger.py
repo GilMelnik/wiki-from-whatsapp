@@ -63,17 +63,16 @@ class TestPaths:
 
     def test_resolve_edited_when_present(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        (tmp_path / "data").mkdir()
-        (tmp_path / "data" / "threads_edited.json").write_text("{}")
+        EDITED_THREADS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        EDITED_THREADS_PATH.write_text("{}")
         assert resolve_threads_path() == EDITED_THREADS_PATH
 
 
 class TestInitEdited:
     def test_init_creates_threads_only_without_classified(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        data = tmp_path / "data"
-        data.mkdir()
-        (data / "threads.json").write_text('{"threads": []}')
+        ORIGINAL_THREADS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        ORIGINAL_THREADS_PATH.write_text('{"threads": []}')
 
         created = init_edited_files(require_classified=False)
         assert created["threads"] == EDITED_THREADS_PATH
@@ -81,10 +80,10 @@ class TestInitEdited:
 
     def test_init_creates_missing_files(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        data = tmp_path / "data"
-        data.mkdir()
-        (data / "threads.json").write_text('{"threads": []}')
-        (data / "threads_classified.json").write_text('{"threads": []}')
+        ORIGINAL_THREADS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        ORIGINAL_CLASSIFIED_PATH.parent.mkdir(parents=True, exist_ok=True)
+        ORIGINAL_THREADS_PATH.write_text('{"threads": []}')
+        ORIGINAL_CLASSIFIED_PATH.write_text('{"threads": []}')
 
         created = init_edited_files()
         assert created["threads"] == EDITED_THREADS_PATH
@@ -94,24 +93,23 @@ class TestInitEdited:
 
     def test_init_skips_existing(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        data = tmp_path / "data"
-        data.mkdir()
-        (data / "threads.json").write_text('{"threads": []}')
-        (data / "threads_classified.json").write_text('{"threads": []}')
-        (data / "threads_edited.json").write_text('{"threads": ["edited"]}')
-        (data / "threads_classified_edited.json").write_text('{"threads": []}')
+        ORIGINAL_THREADS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        ORIGINAL_CLASSIFIED_PATH.parent.mkdir(parents=True, exist_ok=True)
+        ORIGINAL_THREADS_PATH.write_text('{"threads": []}')
+        ORIGINAL_CLASSIFIED_PATH.write_text('{"threads": []}')
+        EDITED_THREADS_PATH.write_text('{"threads": ["edited"]}')
+        EDITED_CLASSIFIED_PATH.write_text('{"threads": []}')
 
         created = init_edited_files()
         assert created == {}
-        assert (data / "threads_edited.json").read_text() == '{"threads": ["edited"]}'
+        assert EDITED_THREADS_PATH.read_text() == '{"threads": ["edited"]}'
 
 
 class TestInspectMode:
     def test_load_threads_without_classification(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        data = tmp_path / "data"
-        data.mkdir()
-        (data / "threads.json").write_text(
+        ORIGINAL_THREADS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        ORIGINAL_THREADS_PATH.write_text(
             '{"threads": [{"thread_id": "t1", "start_time": "2022-01-01T10:00:00", '
             '"last_time": "2022-01-01T11:00:00", "num_messages": 1, '
             '"num_unique_senders": 1, "messages": []}]}'
@@ -126,9 +124,8 @@ class TestInspectMode:
 
     def test_message_context_in_inspect_mode(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        data = tmp_path / "data"
-        data.mkdir()
-        (data / "threads.json").write_text(
+        ORIGINAL_THREADS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        ORIGINAL_THREADS_PATH.write_text(
             json.dumps(
                 {
                     "threads": [
@@ -317,11 +314,11 @@ class TestStats:
 class TestStoreMetadata:
     def test_save_updates_thread_count_after_split(self, tmp_path: Path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        data = tmp_path / "data"
-        data.mkdir()
+        ORIGINAL_THREADS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        ORIGINAL_CLASSIFIED_PATH.parent.mkdir(parents=True, exist_ok=True)
         messages = [_msg(i, f"2022-01-01T{10+i}:00:00") for i in range(4)]
         t = _thread("thread-0001", messages)
-        (data / "threads.json").write_text(
+        ORIGINAL_THREADS_PATH.write_text(
             json.dumps(
                 {
                     "threads": [t],
@@ -329,7 +326,7 @@ class TestStoreMetadata:
                 }
             )
         )
-        (data / "threads_classified.json").write_text(
+        ORIGINAL_CLASSIFIED_PATH.write_text(
             json.dumps(
                 {
                     "threads": [_class("thread-0001", True)],

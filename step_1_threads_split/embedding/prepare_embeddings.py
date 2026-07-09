@@ -6,14 +6,17 @@ from typing import Any
 import numpy as np
 
 from step_1_threads_split.embedding.embedding import (
-    DEFAULT_PASSAGE_EMBEDDINGS_PATH,
-    DEFAULT_QUERY_EMBEDDINGS_PATH,
     Embedder,
     MessageEmbeddings,
     _embeddings_need_rebuild,
 )
 from step_1_threads_split.run import load_messages
 from utils.json_io import write_json_file
+from utils.paths import (
+    CHAT_ANDROID_PATH,
+    MESSAGE_EMBEDDINGS_PATH,
+    MESSAGE_QUERY_EMBEDDINGS_PATH,
+)
 
 
 def _build_payload(
@@ -63,8 +66,8 @@ def _write_embeddings(
 
 def ensure_embeddings(
     input_path: Path | str,
-    passage_path: Path | str = DEFAULT_PASSAGE_EMBEDDINGS_PATH,
-    query_path: Path | str = DEFAULT_QUERY_EMBEDDINGS_PATH,
+    passage_path: Path | str = MESSAGE_EMBEDDINGS_PATH,
+    query_path: Path | str = MESSAGE_QUERY_EMBEDDINGS_PATH,
     model_name: str = "intfloat/multilingual-e5-large",
     batch_size: int = 64,
     max_messages: int | None = None,
@@ -135,9 +138,9 @@ def ensure_embeddings(
 
 
 def run(
-    input_path: Path | str = Path("data/chats_from_phone/chat_android.json"),
-    output_path: Path | str = DEFAULT_PASSAGE_EMBEDDINGS_PATH,
-    query_output_path: Path | str = DEFAULT_QUERY_EMBEDDINGS_PATH,
+    input_path: Path | str = CHAT_ANDROID_PATH,
+    output_path: Path | str = MESSAGE_EMBEDDINGS_PATH,
+    query_output_path: Path | str = MESSAGE_QUERY_EMBEDDINGS_PATH,
     model_name: str = "intfloat/multilingual-e5-large",
     batch_size: int = 64,
     max_messages: int | None = None,

@@ -15,21 +15,19 @@ from typing import Any
 
 import yaml
 
-from utils.paths import resolve_plan_path
+from utils.paths import DRAFTS_DIR, ORIGINAL_PLAN_PATH, resolve_plan_path
 from utils.rtl import HEBREW_CSS, wrap_rtl_markdown
 from utils.taxonomy import CATEGORIES, all_pages, category_title
 
 DEFAULT_DOCS_DIR = Path("docs")
-DEFAULT_DRAFTS_DIR = Path("drafts")
 DEFAULT_CONFIG_PATH = Path("mkdocs.yml")
-DEFAULT_PLAN_PATH = Path("data/wiki_plan.json")
 
 
 def effective_plan_path(plan_path: Path | str | None = None) -> Path:
     if plan_path is None:
         return resolve_plan_path()
     resolved = Path(plan_path)
-    if resolved == DEFAULT_PLAN_PATH:
+    if resolved == ORIGINAL_PLAN_PATH:
         return resolve_plan_path()
     return resolved
 
@@ -53,7 +51,7 @@ def _load_plan_pages(plan_path: Path) -> list[dict[str, str]] | None:
     ]
 
 
-def _build_nav(docs_dir: Path, plan_path: Path | str = DEFAULT_PLAN_PATH) -> list[Any]:
+def _build_nav(docs_dir: Path, plan_path: Path | str = ORIGINAL_PLAN_PATH) -> list[Any]:
     def exists(slug: str) -> bool:
         return (docs_dir / f"{slug}.md").exists()
 
@@ -97,7 +95,7 @@ def _build_nav(docs_dir: Path, plan_path: Path | str = DEFAULT_PLAN_PATH) -> lis
 
 def build_config(
     docs_dir: Path,
-    plan_path: Path | str = DEFAULT_PLAN_PATH,
+    plan_path: Path | str = ORIGINAL_PLAN_PATH,
 ) -> dict[str, Any]:
     return {
         "site_name": "ויקי פונדקאות לגייז",
@@ -153,9 +151,9 @@ def build_config(
 
 def run(
     docs_dir: Path | str = DEFAULT_DOCS_DIR,
-    drafts_dir: Path | str = DEFAULT_DRAFTS_DIR,
+    drafts_dir: Path | str = DRAFTS_DIR,
     config_path: Path | str = DEFAULT_CONFIG_PATH,
-    plan_path: Path | str = DEFAULT_PLAN_PATH,
+    plan_path: Path | str = ORIGINAL_PLAN_PATH,
     seed_from_drafts: bool = False,
 ) -> dict[str, Any]:
     docs = Path(docs_dir)

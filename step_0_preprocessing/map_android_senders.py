@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 from collections import Counter, defaultdict
 from difflib import SequenceMatcher
@@ -16,6 +17,15 @@ from pathlib import Path
 from typing import Any
 
 from step_0_preprocessing.parse_messages import clean_text, normalize_content
+from utils.logging_setup import setup_step_logging
+from utils.paths import (
+    CHAT_ANDROID_PATH,
+    MESSAGES_COMBINED_PATH,
+    SENDER_ID_TO_NICKNAME_PATH,
+    STEP_0,
+)
+
+logger = logging.getLogger(__name__)
 
 UNICODE_MARKS = re.compile(r"[\u200e\u200f\u202a-\u202e\u2066-\u2069\u2068\u2069]")
 PHONE_IN_SENDER = re.compile(r"^\+?[\d\s\-‑–—().]+$")
@@ -137,24 +147,24 @@ def find_unmapped_senders(
 
 
 def main() -> None:
+    setup_step_logging(STEP_0)
     parser = argparse.ArgumentParser(
         description="Map Android sender IDs to reference nicknames by content alignment."
     )
-    data_dir = Path(__file__).resolve().parent.parent / "data"
     parser.add_argument(
         "--android",
         type=Path,
-        default=data_dir / "chats_from_phone" / "chat_android.json",
+        default=CHAT_ANDROID_PATH,
     )
     parser.add_argument(
         "--reference",
         type=Path,
-        default=data_dir / "messages_combined.json",
+        default=MESSAGES_COMBINED_PATH,
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=data_dir / "sender_id_to_nickname.json",
+        default=SENDER_ID_TO_NICKNAME_PATH,
     )
     args = parser.parse_args()
 
@@ -180,12 +190,12 @@ def main() -> None:
     with args.output.open("w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
-    print(f"Matched message pairs: {payload['_metadata']['matched_pairs']}")
-    print(f"Sender ID → nickname mappings: {len(mapping)}")
-    print(f"Wrote {args.output}")
+    logger.info(f"Matched message pairs: {payload['_metadata']['matched_pairs']}")
+    logger.info(f"Sender ID -> nickname mappings: {len(mapping)}")
+    logger.info(f"Wrote {args.output}")
     if unmapped:
-        print(f"Unmapped senders ({len(unmapped)}):")
+        logger.info(f"Unmapped senders ({len(unmapped)}):")
         for sender in unmapped[:20]:
-            print(f"  {sender}")
+            logger.info(f"  {sender}")
         if len(unmapped) > 20:
-            print(f"  ... and {len(unmapped) - 20} more")
+            logger.info(f"  ... and {len(unmapped) - 20} more")

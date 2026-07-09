@@ -7,19 +7,23 @@ because the exports come from different users/time zones.
 """
 
 import json
+import logging
 import re
 from collections import Counter, defaultdict
 from difflib import SequenceMatcher
-from pathlib import Path
 from typing import Dict, List, Tuple
 
-from parse_messages import parse_messages as parse_new_messages
-from parse_messages_old_format import (
+from step_0_preprocessing.parse_messages import parse_messages as parse_new_messages
+from step_0_preprocessing.parse_messages_old_format import (
     clean_text,
     get_oldest_new_format_timestamp,
     normalize_content,
     parse_messages as parse_old_messages,
 )
+from utils.logging_setup import setup_step_logging
+from utils.paths import CHAT_OLD_TXT_PATH, CHAT_TXT_PATH, MESSAGES_OLD_PATH, STEP_0
+
+logger = logging.getLogger(__name__)
 
 UNICODE_MARKS = re.compile(r"[\u200e\u200f\u202a-\u202e\u2066-\u2069\u2068\u2069]")
 PHONE_IN_SENDER = re.compile(r"^\+?[\d\s\-‑–—().]+$")
@@ -105,11 +109,11 @@ def apply_mapping(messages: List[dict], mapping: Dict[str, str]) -> Tuple[int, L
     return updated, sorted(unmapped_senders)
 
 
-def main():
-    data_dir = Path(__file__).resolve().parent.parent / "data"
-    old_chat = data_dir / "_chat_old.txt"
-    new_chat = data_dir / "_chat.txt"
-    messages_file = data_dir / "messages_old.json"
+def main() -> None:
+    setup_step_logging(STEP_0)
+    old_chat = CHAT_OLD_TXT_PATH
+    new_chat = CHAT_TXT_PATH
+    messages_file = MESSAGES_OLD_PATH
 
     cutoff = get_oldest_new_format_timestamp(new_chat)
     if cutoff is None:
@@ -134,14 +138,14 @@ def main():
         m["sender"] for m in messages if is_phone_sender(m["sender"])
     }
 
-    print(f"Overlap period starts: {cutoff.isoformat()}")
-    print(f"Matched message pairs: {sum(pair_counts.values())}")
-    print(f"Phone → nickname mappings: {len(mapping)}")
-    print(f"Messages updated: {updated_count} / {len(messages)}")
-    print(f"Senders still showing as phone: {len(unique_old_phones)}")
+    logger.info(f"Overlap period starts: {cutoff.isoformat()}")
+    logger.info(f"Matched message pairs: {sum(pair_counts.values())}")
+    logger.info(f"Phone -> nickname mappings: {len(mapping)}")
+    logger.info(f"Messages updated: {updated_count} / {len(messages)}")
+    logger.info(f"Senders still showing as phone: {len(unique_old_phones)}")
     if unmapped:
-        print(f"Unmapped phones ({len(unmapped)}):")
+        logger.info(f"Unmapped phones ({len(unmapped)}):")
         for phone in unmapped[:20]:
-            print(f"  {phone}")
+            logger.info(f"  {phone}")
         if len(unmapped) > 20:
-            print(f"  ... and {len(unmapped) - 20} more")
+            logger.info(f"  ... and {len(unmapped) - 20} more")

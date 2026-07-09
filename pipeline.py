@@ -30,6 +30,18 @@ from step_7_community.run import run as community
 from step_8_background.run import run as background
 from step_9_site.run import run as site
 from utils.llm_client import LLMClient
+from utils.logging_setup import setup_step_logging
+from utils.paths import (
+    SHARED,
+    STEP_2,
+    STEP_3,
+    STEP_4,
+    STEP_5,
+    STEP_6,
+    STEP_7,
+    STEP_8,
+    STEP_9,
+)
 
 
 def _stage_clients() -> dict[str, LLMClient]:
@@ -52,86 +64,101 @@ def run(
 ) -> None:
     clients = _stage_clients()
 
-    print("LLM configuration:")
+    logger = setup_step_logging(SHARED)
+    logger.info("LLM configuration:")
     for stage, client in clients.items():
         batch_note = " (batch)" if use_batch and client.supports_batch() else ""
-        print(f"  {stage}: {client.provider} / {client.model}{batch_note}")
+        logger.info(f"  {stage}: {client.provider} / {client.model}{batch_note}")
 
-    print("\n[3] Classifying threads...")
+    logger = setup_step_logging(STEP_2)
+    clients["classify"].set_logger(logger)
+    logger.info("[3] Classifying threads...")
     c_meta = classify(llm=clients["classify"], use_batch=use_batch)
-    print(
+    logger.info(
         f"    {c_meta['knowledge_bearing_count']} knowledge-bearing of "
         f"{c_meta['thread_count']} threads"
     )
 
-    print("\n[4] Extracting claims...")
+    logger = setup_step_logging(STEP_3)
+    clients["extract"].set_logger(logger)
+    logger.info("[4] Extracting claims...")
     e_meta = extract(
         llm=clients["extract"], topic_filter=pilot_topic, use_batch=use_batch
     )
-    print(
+    logger.info(
         f"    {e_meta['claims_count']} claims; "
         f"redactions: {e_meta['scrub']['total_redactions']}, "
         f"PII review: {e_meta['scrub']['pii_review_claims']}"
     )
-    print(
-        "    → Review claims via "
+    logger.info(
+        "    -> Review claims via "
         "`uvicorn step_3_extract.reviewer.server:app` before aggregate."
     )
 
-    print("\n[4b] Resolving entities...")
+    logger = setup_step_logging(STEP_4)
+    logger.info("[4b] Resolving entities...")
     en_meta = resolve_entities()
-    print(
+    logger.info(
         f"    {en_meta['entity_count']} entities "
         f"({en_meta['multi_member_count']} multi-member) "
         f"from {en_meta['distinct_entity_count']} distinct strings"
     )
-    print(
-        "    → Review entity merges via "
+    logger.info(
+        "    -> Review entity merges via "
         "`python -m step_4_entities.reviewer` before aggregate."
     )
 
-    print("\n[5] Aggregating claims...")
+    logger = setup_step_logging(STEP_5)
+    logger.info("[5] Aggregating claims...")
     a_meta = aggregate(use_embeddings=use_embeddings)
-    print(f"    {a_meta['topic_count']} topics (merge: {a_meta['merge_method']})")
+    logger.info(f"    {a_meta['topic_count']} topics (merge: {a_meta['merge_method']})")
 
+    logger = setup_step_logging(STEP_6)
+    clients["plan"].set_logger(logger)
     if skip_plan:
-        print("\n[6] Planning wiki structure... (identity mapping, skip_plan=True)")
+        logger.info("[6] Planning wiki structure... (identity mapping, skip_plan=True)")
         p_meta = plan(llm=clients["plan"], skip_agent=True)
     else:
-        print("\n[6] Planning wiki structure...")
+        logger.info("[6] Planning wiki structure...")
         p_meta = plan(llm=clients["plan"], use_batch=use_batch)
-    print(
+    logger.info(
         f"    {p_meta['page_count']} pages, {p_meta['link_count']} links "
         f"-> {p_meta['output_path']} ({p_meta['mode']})"
     )
-    print(
-        "    → Edit plan via "
+    logger.info(
+        "    -> Edit plan via "
         "`uvicorn step_6_plan.reviewer.server:app` before generate."
     )
 
-    print("\n[7] Building community pages (agentic, mini-batch)...")
+    logger = setup_step_logging(STEP_7)
+    clients["generate"].set_logger(logger)
+    logger.info("[7] Building community pages (agentic, mini-batch)...")
     cm_meta = community(llm=clients["generate"])
-    print(
+    logger.info(
         f"    {cm_meta['statements']} statements across {cm_meta['pages']} pages "
         f"from {cm_meta['claims']} claims ({cm_meta['batches']} batches)"
     )
-    print(
-        "    → Review pages in data/wiki_pages.json before background/assembly."
+    logger.info(
+        "    -> Review pages in the community page store before background/assembly."
     )
 
-    print("\n[8] Researching background + assembling drafts...")
+    logger = setup_step_logging(STEP_8)
+    clients["research"].set_logger(logger)
+    logger.info("[8] Researching background + assembling drafts...")
     bg_meta = background(
         research_llm=clients["research"],
         enable_web_search=enable_web_search,
     )
     search_note = "with web search" if bg_meta.get("web_search") else "no web search"
-    print(f"    {bg_meta['pages_written']} drafts in {bg_meta['drafts_dir']}/ ({search_note})")
+    logger.info(
+        f"    {bg_meta['pages_written']} drafts in {bg_meta['drafts_dir']}/ ({search_note})"
+    )
+    logger.info("    Manual review: edit drafts/ and copy approved pages into docs/.")
 
-    print("\n    Manual review: edit drafts/ and copy approved pages into docs/.")
-
-    print("\n[9] Writing site config...")
+    logger = setup_step_logging(STEP_9)
+    logger.info("[9] Writing site config...")
     s_meta = site()
     nav_src = "plan" if s_meta.get("plan_nav") else "taxonomy"
-    print(
+    logger.info(
         f"    {s_meta['config_path']} ({s_meta['page_count']} pages in docs/, nav: {nav_src})"
     )

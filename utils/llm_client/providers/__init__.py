@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from utils.llm_client.providers.anthropic import AnthropicProvider
 from utils.llm_client.providers.base import LLMProvider
 from utils.llm_client.providers.gemini import GeminiProvider
@@ -14,6 +16,7 @@ def create_provider(
     temperature: float,
     max_tokens: int,
     batch_poll_interval: float,
+    logger: logging.Logger | None = None,
 ) -> LLMProvider:
     registry: dict[str, type[LLMProvider]] = {
         provider_object.name: provider_object
@@ -29,4 +32,5 @@ def create_provider(
         temperature=temperature,
         max_tokens=max_tokens,
         batch_poll_interval=batch_poll_interval,
+        logger=logger,
     )

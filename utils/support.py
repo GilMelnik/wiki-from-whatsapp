@@ -15,6 +15,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal, TypedDict
 
+from utils.paths import AUDIT_PATH
+
 ReactionSentiment = Literal["positive", "neutral", "negative"]
 _SENTIMENT_PATH = Path(__file__).with_name("reaction_sentiment.json")
 
@@ -125,11 +127,8 @@ def aggregate_reaction_summary(
     ]
 
 
-DEFAULT_AUDIT_PATH = Path("data/audit/claims_audit.json")
-
-
 def load_audit_records(
-    audit_path: Path | str = DEFAULT_AUDIT_PATH,
+    audit_path: Path | str = AUDIT_PATH,
 ) -> dict[str, dict[str, Any]]:
     """claim_id -> private audit record (supporter identities + reactions)."""
 

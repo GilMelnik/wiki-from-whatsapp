@@ -17,9 +17,7 @@ from utils.llm_client import BatchRequest, LLMClient, extract_json
 from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION
 from utils.taxonomy import CATEGORIES, category_title, resolve_search_focus, taxonomy_seed_block
 
-from utils.paths import resolve_aggregated_path
-DEFAULT_AGGREGATED_PATH = Path("data/claims_aggregated.json")
-DEFAULT_OUTPUT_PATH = Path("data/wiki_plan.json")
+from utils.paths import ORIGINAL_AGGREGATED_PATH, ORIGINAL_PLAN_PATH, resolve_aggregated_path
 
 PLAN_SYSTEM = (
     "אתה מתכנן את מבנה הויקי בעברית על פונדקאות לגייז, על בסיס טענות שחולצו מקבוצת וואטסאפ.\n"
@@ -198,8 +196,8 @@ def links_from_plan(plan: dict[str, Any], page_id: str) -> list[str]:
 
 
 def run(
-    aggregated_path: Path | str = DEFAULT_AGGREGATED_PATH,
-    output_path: Path | str = DEFAULT_OUTPUT_PATH,
+    aggregated_path: Path | str = ORIGINAL_AGGREGATED_PATH,
+    output_path: Path | str = ORIGINAL_PLAN_PATH,
     llm: LLMClient | None = None,
     min_claims: int = 1,
     use_batch: bool = False,

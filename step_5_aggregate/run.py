@@ -28,7 +28,16 @@ from step_5_aggregate.resolver import (
     load_entity_resolver,
 )
 from utils.json_io import write_json_file
-from utils.paths import MANUAL_AGGREGATIONS_PATH, resolve_claims_path
+from utils.paths import (
+    AUDIT_PATH,
+    CLAIM_DISTANCE_MATRIX_PATH,
+    CLAIM_DISTANCE_META_PATH,
+    CLAIM_PASSAGE_EMBEDDINGS_PATH,
+    CLAIM_QUERY_EMBEDDINGS_PATH,
+    MANUAL_AGGREGATIONS_PATH,
+    ORIGINAL_AGGREGATED_PATH,
+    resolve_claims_path,
+)
 from utils.support import (
     aggregate_reaction_summary,
     participants_from_audit,
@@ -36,13 +45,6 @@ from utils.support import (
 )
 from utils.taxonomy import category_title, get_page
 
-DEFAULT_CLAIMS_PATH: Path | None = None
-DEFAULT_AUDIT_PATH = Path("data/audit/claims_audit.json")
-DEFAULT_OUTPUT_PATH = Path("data/claims_aggregated.json")
-DEFAULT_CLAIM_QUERY_EMBEDDINGS_PATH = Path("data/claim_query_embeddings.json")
-DEFAULT_CLAIM_PASSAGE_EMBEDDINGS_PATH = Path("data/claim_passage_embeddings.json")
-DEFAULT_DISTANCE_MATRIX_PATH = Path("data/claim_distance_matrix.npy")
-DEFAULT_DISTANCE_META_PATH = Path("data/claim_distance_matrix.json")
 DEFAULT_EMBEDDING_MODEL = "intfloat/multilingual-e5-large"
 
 
@@ -175,8 +177,8 @@ def ensure_claim_embeddings(
     texts: list[str],
     source_path: Path | str,
     *,
-    query_path: Path | str = DEFAULT_CLAIM_QUERY_EMBEDDINGS_PATH,
-    passage_path: Path | str = DEFAULT_CLAIM_PASSAGE_EMBEDDINGS_PATH,
+    query_path: Path | str = CLAIM_QUERY_EMBEDDINGS_PATH,
+    passage_path: Path | str = CLAIM_PASSAGE_EMBEDDINGS_PATH,
     model_name: str = DEFAULT_EMBEDDING_MODEL,
 ) -> tuple[list[np.ndarray], list[np.ndarray]]:
     """Build or load cached query/passage embeddings for all claims."""
@@ -282,8 +284,8 @@ def ensure_distance_matrix(
     query_vectors: list[np.ndarray] | None,
     passage_vectors: list[np.ndarray] | None,
     *,
-    matrix_path: Path | str = DEFAULT_DISTANCE_MATRIX_PATH,
-    meta_path: Path | str = DEFAULT_DISTANCE_META_PATH,
+    matrix_path: Path | str = CLAIM_DISTANCE_MATRIX_PATH,
+    meta_path: Path | str = CLAIM_DISTANCE_META_PATH,
 ) -> np.ndarray:
     """Build or load the cached all-claims distance matrix."""
 
@@ -611,9 +613,9 @@ def _contradictions(entity_stances: dict[str, dict[str, int]]) -> list[dict[str,
 
 
 def run(
-    claims_path: Path | str | None = DEFAULT_CLAIMS_PATH,
-    audit_path: Path | str = DEFAULT_AUDIT_PATH,
-    output_path: Path | str = DEFAULT_OUTPUT_PATH,
+    claims_path: Path | str | None = None,
+    audit_path: Path | str = AUDIT_PATH,
+    output_path: Path | str = ORIGINAL_AGGREGATED_PATH,
     use_embeddings: bool = True,
     similarity_threshold: float = 0.86,
     max_cluster_size: int = 8,

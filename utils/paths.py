@@ -1,4 +1,10 @@
-"""Resolve pipeline artifact paths: prefer human-reviewed edits when present."""
+"""Resolve pipeline artifact paths: prefer human-reviewed edits when present.
+
+Every artifact lives under ``<data_dir>/<step_folder>/<filename>`` where
+``data_dir`` comes from the root ``config.json`` (default ``data``), so the
+parent folder is a one-line config change. This module is the single source of
+truth for those locations; nothing else hardcodes a ``data/...`` literal.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +12,23 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-BACKUPS_DIR = Path("data/backups")
+from utils.llm_client.settings import DATA_DIR
+
+STEP_0 = "step_0_preprocessing"
+STEP_1 = "step_1_threads_split"
+STEP_2 = "step_2_classify"
+STEP_3 = "step_3_extract"
+STEP_4 = "step_4_entities"
+STEP_5 = "step_5_aggregate"
+STEP_6 = "step_6_plan"
+STEP_7 = "step_7_community"
+STEP_8 = "step_8_background"
+STEP_9 = "step_9_site"
+SHARED = "shared"
+
+
+def step_path(step_folder: str, *parts: str) -> Path:
+    return DATA_DIR.joinpath(step_folder, *parts)
 
 
 @dataclass(frozen=True)
@@ -15,24 +37,45 @@ class Artifact:
     edited: Path
 
 
-THREADS = Artifact(Path("data/threads.json"), Path("data/threads_edited.json"))
-CLASSIFIED = Artifact(
-    Path("data/threads_classified.json"),
-    Path("data/threads_classified_edited.json"),
+# --------------------------------------------------------------- step 0 inputs
+CHAT_TXT_PATH = step_path(STEP_0, "_chat.txt")
+CHAT_OLD_TXT_PATH = step_path(STEP_0, "_chat_old.txt")
+CHATS_FROM_PHONE_DIR = step_path(STEP_0, "chats_from_phone")
+CHAT_ANDROID_PATH = step_path(STEP_0, "chats_from_phone", "chat_android.json")
+MESSAGES_PATH = step_path(STEP_0, "messages.json")
+MESSAGES_OLD_PATH = step_path(STEP_0, "messages_old.json")
+MESSAGES_COMBINED_PATH = step_path(STEP_0, "messages_combined.json")
+SENDER_ID_TO_NICKNAME_PATH = step_path(STEP_0, "sender_id_to_nickname.json")
+
+# ------------------------------------------------------- step 1 threads_split
+TFIDF_CORPUS_PATH = step_path(STEP_1, "tfidf_corpus.json")
+TFIDF_TOKENS_PATH = step_path(STEP_1, "tfidf_tokens.json")
+MESSAGE_EMBEDDINGS_PATH = step_path(STEP_1, "message_embeddings.json")
+MESSAGE_QUERY_EMBEDDINGS_PATH = step_path(STEP_1, "message_query_embeddings.json")
+
+# ------------------------------------------------------- reviewed artifacts
+THREADS = Artifact(
+    step_path(STEP_1, "threads.json"), step_path(STEP_1, "threads_edited.json")
 )
-CLAIMS = Artifact(Path("data/claims.json"), Path("data/claims_edited.json"))
+CLASSIFIED = Artifact(
+    step_path(STEP_2, "threads_classified.json"),
+    step_path(STEP_2, "threads_classified_edited.json"),
+)
+CLAIMS = Artifact(
+    step_path(STEP_3, "claims.json"), step_path(STEP_3, "claims_edited.json")
+)
 ENTITIES = Artifact(
-    Path("data/entities.json"),
-    Path("data/entities_edited.json"),
+    step_path(STEP_4, "entities.json"), step_path(STEP_4, "entities_edited.json")
 )
 AGGREGATED = Artifact(
-    Path("data/claims_aggregated.json"),
-    Path("data/claims_aggregated_edited.json"),
+    step_path(STEP_5, "claims_aggregated.json"),
+    step_path(STEP_5, "claims_aggregated_edited.json"),
 )
-PLAN = Artifact(Path("data/wiki_plan.json"), Path("data/wiki_plan_edited.json"))
+PLAN = Artifact(
+    step_path(STEP_6, "wiki_plan.json"), step_path(STEP_6, "wiki_plan_edited.json")
+)
 WIKI_PAGES = Artifact(
-    Path("data/wiki_pages.json"),
-    Path("data/wiki_pages_edited.json"),
+    step_path(STEP_7, "wiki_pages.json"), step_path(STEP_7, "wiki_pages_edited.json")
 )
 
 # ponytail: named aliases for call-site readability
@@ -49,9 +92,30 @@ EDITED_AGGREGATED_PATH = AGGREGATED.edited
 ORIGINAL_PLAN_PATH = PLAN.original
 EDITED_PLAN_PATH = PLAN.edited
 
+# --------------------------------------------------------------- step 3 extract
+AUDIT_DIR = step_path(STEP_3, "audit")
+AUDIT_PATH = AUDIT_DIR / "claims_audit.json"
+
+# -------------------------------------------------------------- step 4 entities
+ENTITIES_SEED_PATH = step_path(STEP_4, "entities_seed.json")
+ENTITY_ANALYSIS_PATH = step_path(STEP_4, "entity_claim_analysis.json")
+ENTITY_DISTANCE_MATRIX_PATH = step_path(STEP_4, "entity_distance_matrix.npy")
+ENTITY_DISTANCE_META_PATH = step_path(STEP_4, "entity_distance_matrix.json")
 # Manual claim aggregations created in the entity reviewer (no pipeline original);
 # consumed by step 5 to force-merge the grouped claims.
-MANUAL_AGGREGATIONS_PATH = Path("data/claim_aggregations.json")
+MANUAL_AGGREGATIONS_PATH = step_path(STEP_4, "claim_aggregations.json")
+
+# ------------------------------------------------------------ step 5 aggregate
+CLAIM_QUERY_EMBEDDINGS_PATH = step_path(STEP_5, "claim_query_embeddings.json")
+CLAIM_PASSAGE_EMBEDDINGS_PATH = step_path(STEP_5, "claim_passage_embeddings.json")
+CLAIM_DISTANCE_MATRIX_PATH = step_path(STEP_5, "claim_distance_matrix.npy")
+CLAIM_DISTANCE_META_PATH = step_path(STEP_5, "claim_distance_matrix.json")
+
+# ----------------------------------------------------------- step 8 background
+DRAFTS_DIR = step_path(STEP_8, "drafts")
+
+# ------------------------------------------------------------------- shared
+BACKUPS_DIR = step_path(SHARED, "backups")
 
 
 def resolve(artifact: Artifact) -> Path:

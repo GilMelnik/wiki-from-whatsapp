@@ -6,11 +6,7 @@ from typing import Any, Sequence
 
 import numpy as np
 
-DEFAULT_PASSAGE_EMBEDDINGS_PATH = Path("data/message_embeddings.json")
-DEFAULT_QUERY_EMBEDDINGS_PATH = Path("data/message_query_embeddings.json")
-
-# Backward compatibility alias.
-DEFAULT_EMBEDDINGS_PATH = DEFAULT_PASSAGE_EMBEDDINGS_PATH
+from utils.paths import MESSAGE_EMBEDDINGS_PATH, MESSAGE_QUERY_EMBEDDINGS_PATH
 
 
 class Embedder:
@@ -160,8 +156,8 @@ def _embeddings_need_rebuild(
 
 def load_message_embeddings(
     input_path: Path | str,
-    passage_path: Path | str = DEFAULT_PASSAGE_EMBEDDINGS_PATH,
-    query_path: Path | str = DEFAULT_QUERY_EMBEDDINGS_PATH,
+    passage_path: Path | str = MESSAGE_EMBEDDINGS_PATH,
+    query_path: Path | str = MESSAGE_QUERY_EMBEDDINGS_PATH,
     model_name: str = "intfloat/multilingual-e5-large",
     batch_size: int = 64,
     embedder: Embedder | None = None,

@@ -11,10 +11,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from step_4_entities.collect import _claim_contacts
-from step_4_entities.constants import (
-    DEFAULT_ENTITY_ANALYSIS_PATH,
-    SAMPLE_CLAIMS_PER_MEMBER,
-)
+from step_4_entities.constants import SAMPLE_CLAIMS_PER_MEMBER
 from step_4_entities.mentions import (
     Analyzer,
     SimpleAnalyzer,

@@ -93,7 +93,7 @@ def _cluster(
         source,
         matrix_path=tmp_path / "dist.npy",
         meta_path=tmp_path / "dist.json",
-        # Isolate from the shipped data/entities_seed.json unless a test opts in.
+        # Isolate from the shipped data/step_4_entities/entities_seed.json unless a test opts in.
         seed_path=seed_path or (tmp_path / "no_seed.json"),
     )
 

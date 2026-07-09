@@ -29,6 +29,7 @@ sees identities. Output: ``data/wiki_pages.json``.
 from __future__ import annotations
 
 import json
+import logging
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -38,13 +39,17 @@ from step_5_aggregate.resolver import EntityResolver, load_entity_resolver
 from step_7_community.store import STANCE_HE, PageStore
 from utils.json_io import write_json_file
 from utils.llm_client import CacheSegment, LLMClient
+from utils.logging_setup import setup_step_logging
 from utils.paths import (
+    STEP_7,
     WIKI_PAGES,
     resolve_claims_path,
     resolve_plan_path,
 )
 from utils.support import engagement_for_claim, load_audit_records
 from utils.taxonomy import all_pages, get_page
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_BATCH_SIZE = 15
 DEFAULT_MAX_READS = 3
@@ -347,7 +352,7 @@ def _run_batch(
                 response_schema=COMMUNITY_ACTIONS_SCHEMA,
             )
         except Exception as exc:  # noqa: BLE001
-            print(f"  Community: batch for {page_id} failed: {exc}")
+            logger.warning(f"Community: batch for {page_id} failed: {exc}")
             return
         actions = data.get("actions") if isinstance(data, dict) else None
         actions = [a for a in (actions or []) if isinstance(a, dict)]
@@ -358,7 +363,7 @@ def _run_batch(
         ]
         reads = [r for r in reads if r and r in store.pages]
         if reads:
-            print(f"      {page_id}: agent requested read_page {reads}; re-prompting")
+            logger.info(f"{page_id}: agent requested read_page {reads}; re-prompting")
             # Don't write yet — show requested pages and let the agent re-decide
             # with that context. Avoids double-applying writes across re-prompts.
             extra_pages = "\n\n".join(
@@ -430,6 +435,7 @@ def run(
     batch_size: int = DEFAULT_BATCH_SIZE,
     max_reads: int = DEFAULT_MAX_READS,
 ) -> dict[str, Any]:
+    setup_step_logging(STEP_7)
     llm = llm or LLMClient()
 
     claims_file = Path(claims_path) if claims_path is not None else resolve_claims_path()
@@ -471,7 +477,7 @@ def run(
     total_batches = sum(
         -(-len(page_claims) // batch_size) for page_claims in grouped.values()
     )
-    print(
+    logger.info(
         f"Community: {len(claims)} claims across {len(grouped)} pages "
         f"-> {total_batches} batches ({llm.provider}/{llm.model})"
     )
@@ -479,15 +485,15 @@ def run(
     batch_count = 0
     for page_id, page_claims in grouped.items():
         page_batches = -(-len(page_claims) // batch_size)
-        print(f"  {page_id}: {len(page_claims)} claims in {page_batches} batch(es)")
+        logger.info(f"{page_id}: {len(page_claims)} claims in {page_batches} batch(es)")
         for start in range(0, len(page_claims), batch_size):
             batch = page_claims[start : start + batch_size]
             batch_count += 1
             before = store.statement_count()
             _run_batch(llm, store, page_id, batch, resolver, max_reads)
             after = store.statement_count()
-            print(
-                f"    [{batch_count}/{total_batches}] {page_id}: "
+            logger.info(
+                f"[{batch_count}/{total_batches}] {page_id}: "
                 f"{len(batch)} claims -> +{after - before} statements ({after} total)"
             )
             # Persist after each batch so progress survives interruptions.
@@ -505,8 +511,8 @@ def run(
                 out_path,
             )
 
-    print(
-        f"Community: done — {len(store.pages)} pages, {store.statement_count()} "
+    logger.info(
+        f"Community: done - {len(store.pages)} pages, {store.statement_count()} "
         f"statements, {len(store.links)} links, {batch_count} batches"
     )
 

@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from collections import Counter
 from pathlib import Path
 
-DEFAULT_CHAT = Path("data/chats_from_phone/chat_android.json")
+from utils.logging_setup import setup_step_logging
+from utils.paths import CHAT_ANDROID_PATH, STEP_0
+
 SENTIMENT_PATH = Path(__file__).with_name("reaction_sentiment.json")
+
+logger = logging.getLogger(__name__)
 
 
 def reaction_counts(chat_path: Path) -> Counter[str]:
@@ -28,18 +33,19 @@ def reaction_counts(chat_path: Path) -> Counter[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    chat_path = Path(argv[1]) if argv and len(argv) > 1 else DEFAULT_CHAT
+    setup_step_logging(STEP_0)
+    chat_path = Path(argv[1]) if argv and len(argv) > 1 else CHAT_ANDROID_PATH
     counts = reaction_counts(chat_path)
     with SENTIMENT_PATH.open(encoding="utf-8") as f:
         sentiment = json.load(f)
 
     missing = sorted(set(counts) - set(sentiment), key=lambda e: (-counts[e], e))
-    print(f"chat: {chat_path}")
-    print(f"unique emojis in chat: {len(counts)}")
-    print(f"mapped emojis: {len(sentiment)}")
-    print(f"missing: {len(missing)}")
+    logger.info(f"chat: {chat_path}")
+    logger.info(f"unique emojis in chat: {len(counts)}")
+    logger.info(f"mapped emojis: {len(sentiment)}")
+    logger.info(f"missing: {len(missing)}")
     for emoji in missing:
-        print(f"  {emoji!r}\t{counts[emoji]}")
+        logger.info(f"  {emoji!r}\t{counts[emoji]}")
     return 1 if missing else 0
 
 

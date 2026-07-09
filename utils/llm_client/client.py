@@ -19,6 +19,7 @@ an explicit ``provider`` for ad-hoc use. An unconfigured client raises.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from pathlib import Path
 from typing import Any, Sequence
@@ -41,6 +42,7 @@ class LLMClient:
         use_cache: bool = True,
         batch_poll_interval: float | None = None,
         failure_log: Path | str | None = None,
+        logger: logging.Logger | None = None,
     ):
         if not provider:
             raise ValueError(
@@ -54,6 +56,7 @@ class LLMClient:
             )
         self.provider = provider.lower()
         self.model = model
+        self.logger = logger or logging.getLogger("utils.llm_client")
         self.temperature = (
             temperature if temperature is not None else CONFIG["default_temperature"]
         )
@@ -77,10 +80,16 @@ class LLMClient:
             self.temperature,
             self.max_tokens,
             self.batch_poll_interval,
+            logger=self.logger,
         )
 
     def supports_batch(self) -> bool:
         return self._provider.supports_batch
+
+    def set_logger(self, logger: logging.Logger) -> None:
+        """Retarget this client's (and its provider's) logging, e.g. per step."""
+        self.logger = logger
+        self._provider.logger = logger
 
     @classmethod
     def for_stage(cls, stage: str, **kwargs: Any) -> "LLMClient":
@@ -98,7 +107,9 @@ class LLMClient:
     # ------------------------------------------------------------- call logging
     def _log_call(self, ok: bool, task: str, detail: str) -> None:
         status = "ok  " if ok else "FAIL"
-        print(f"  LLM {status} [{self.provider}/{self.model}] task={task or '-'} {detail}")
+        self.logger.info(
+            f"LLM {status} [{self.provider}/{self.model}] task={task or '-'} {detail}"
+        )
 
     def _record_failure(
         self,
@@ -133,7 +144,9 @@ class LLMClient:
             with self.failure_log.open("a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         except OSError as exc:
-            print(f"  LLM: could not write failure log {self.failure_log}: {exc}")
+            self.logger.warning(
+                f"LLM: could not write failure log {self.failure_log}: {exc}"
+            )
 
     # --------------------------------------------------------------- complete
     def complete_text(self, system: PromptInput, user: PromptInput, task: str = "") -> str:
@@ -365,8 +378,8 @@ class LLMClient:
                 break
 
             self._raise_max_tokens()
-            print(
-                f"  LLM: {len(retry)}/{len(pending)} batch items truncated; "
+            self.logger.info(
+                f"LLM: {len(retry)}/{len(pending)} batch items truncated; "
                 f"re-submitting those as a batch with max_tokens={self.max_tokens}"
             )
             pending = retry

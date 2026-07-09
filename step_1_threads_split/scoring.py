@@ -10,9 +10,7 @@ from step_0_preprocessing.models import Message
 from step_1_threads_split.embedding.embedding import cosine_similarity
 from step_1_threads_split.models import ScoredCandidate, Thread, ThreadConfig
 from step_1_threads_split.tf_idf.tfidf import TfidfCorpus, TokenizedMessages, tfidf_cosine_similarity
-
-DEFAULT_CORPUS_PATH = Path("data/tfidf_corpus.json")
-DEFAULT_TOKENS_PATH = Path("data/tfidf_tokens.json")
+from utils.paths import TFIDF_CORPUS_PATH, TFIDF_TOKENS_PATH
 
 T = TypeVar("T")
 
@@ -29,8 +27,8 @@ def load_tfidf_resources(
     corpus_path: Path | str | None = None,
     tokens_path: Path | str | None = None,
 ) -> tuple[TfidfCorpus, TokenizedMessages]:
-    corpus_file = Path(corpus_path or DEFAULT_CORPUS_PATH)
-    tokens_file = Path(tokens_path or DEFAULT_TOKENS_PATH)
+    corpus_file = Path(corpus_path or TFIDF_CORPUS_PATH)
+    tokens_file = Path(tokens_path or TFIDF_TOKENS_PATH)
 
     needs_build = not corpus_file.exists() or not tokens_file.exists()
     if not needs_build and input_path is not None:
@@ -94,8 +92,8 @@ class ThreadScorer:
         tfidf_corpus: TfidfCorpus | None = None,
         tokenized_messages: TokenizedMessages | None = None,
         input_path: Path | str | None = None,
-        corpus_path: Path | str = DEFAULT_CORPUS_PATH,
-        tokens_path: Path | str = DEFAULT_TOKENS_PATH,
+        corpus_path: Path | str = TFIDF_CORPUS_PATH,
+        tokens_path: Path | str = TFIDF_TOKENS_PATH,
     ):
         self.config = config
         self.messages = messages
