@@ -46,7 +46,7 @@ def run(
     output_path: Path | str | None = None,
     audit_dir: Path | str = AUDIT_DIR,
     llm: LLMClient | None = None,
-    use_batch: bool = True,
+    use_batch: bool = False,
 ) -> dict[str, Any]:
     """Fill in claims for knowledge-bearing threads missing from ``output_path``.
 

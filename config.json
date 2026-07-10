@@ -8,7 +8,7 @@
   "llm_client": {
     "stages": {
       "classify": {"provider": "gemini", "model": "gemini-3.1-flash-lite"},
-      "extract": {"provider": "anthropic", "model": "claude-sonnet-5"},
+      "extract": {"provider": "gemini", "model": "gemini-3.5-flash"},
       "plan": {"provider": "gemini", "model": "gemini-3.5-flash"},
       "generate": {"provider": "anthropic", "model": "claude-sonnet-5"},
       "research": {"provider": "gemini", "model": "gemini-3.5-flash"}

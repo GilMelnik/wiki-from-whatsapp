@@ -2,8 +2,17 @@
 
 from __future__ import annotations
 
-from step_3_extract.run import ENTITY_HINT_HEADER, build_extract_prompt
+from step_3_extract.run import ENTITY_HINT_HEADER, EXTRACT_SCHEMA, build_extract_prompt
 from utils.taxonomy import taxonomy_seed_block, taxonomy_tag_seed
+
+_CLAIM_FIELDS = (
+    "claim_text",
+    "topic_tags",
+    "entities",
+    "stance",
+    "supporting_message_ids",
+    "opposing_message_ids",
+)
 
 
 def test_taxonomy_tag_seed_omits_search_focus() -> None:
@@ -27,3 +36,11 @@ def test_extract_prompt_includes_entity_hints() -> None:
     assert ENTITY_HINT_HEADER in prompt
     assert "- ORM" in prompt
     assert "- קולומביה" in prompt
+
+
+def test_extract_schema_field_descriptions() -> None:
+    claims = EXTRACT_SCHEMA["properties"]["claims"]
+    assert claims.get("description")
+    props = claims["items"]["properties"]
+    for name in _CLAIM_FIELDS:
+        assert props[name].get("description"), f"{name} missing description"

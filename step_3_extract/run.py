@@ -55,23 +55,42 @@ EXTRACT_SCHEMA: dict[str, Any] = {
     "properties": {
         "claims": {
             "type": "array",
+            "description": "רשימת הטענות שחולצו מהשיחה (ריק אם אין ידע מועיל)",
             "items": {
                 "type": "object",
                 "additionalProperties": False,
                 "properties": {
-                    "claim_text": {"type": "string"},
-                    "topic_tags": {"type": "array", "items": {"type": "string"}},
-                    "entities": {"type": "array", "items": {"type": "string"}},
+                    "claim_text": {
+                        "type": "string",
+                        "description": (
+                            "טענה ניטרלית בעברית; שמות ספקים/מקצוענים מותרים"
+                        ),
+                    },
+                    "topic_tags": {
+                        "type": "array",
+                        "description": (
+                            "מזהי נושא מהרשימה המוצעת (או מזהה חדש אם צריך)"
+                        ),
+                        "items": {"type": "string"},
+                    },
+                    "entities": {
+                        "type": "array",
+                        "description": "ספק / עו״ד / סוכנות / מדינה / מקום",
+                        "items": {"type": "string"},
+                    },
                     "stance": {
                         "type": "string",
+                        "description": "positive / negative / neutral / factual",
                         "enum": ["positive", "negative", "neutral", "factual"],
                     },
                     "supporting_message_ids": {
                         "type": "array",
+                        "description": "מספרי [m..] התומכים בטענה",
                         "items": {"type": "integer"},
                     },
                     "opposing_message_ids": {
                         "type": "array",
+                        "description": "מספרי [m..] הסותרים את הטענה, אם יש",
                         "items": {"type": "integer"},
                     },
                 },
