@@ -94,8 +94,18 @@ def category_title(category_id: str) -> str:
     return CATEGORIES.get(category_id, category_id)
 
 
+def taxonomy_tag_seed() -> str:
+    """Topic id/title listing for classify/extract tagging (no search_focus)."""
+
+    lines: list[str] = []
+    for page in TAXONOMY:
+        parent = f" (תת-נושא של {page.parent})" if page.parent else ""
+        lines.append(f"- {page.id}: {page.title_he}{parent}")
+    return "\n".join(lines)
+
+
 def taxonomy_seed_block() -> str:
-    """Compact seed listing of suggested wiki pages for LLM tagging/planning."""
+    """Compact seed listing for planning (includes search_focus when defined)."""
 
     lines: list[str] = []
     for page in TAXONOMY:

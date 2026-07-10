@@ -23,7 +23,7 @@ from utils.paths import (
     STEP_2,
     ensure_edited_workspace,
 )
-from utils.taxonomy import page_ids, taxonomy_seed_block
+from utils.taxonomy import page_ids, taxonomy_tag_seed
 from utils.threads_io import (
     load_threads,
     render_thread_for_llm,
@@ -42,7 +42,7 @@ CLASSIFY_SYSTEM = (
 def build_classify_prompt(rendered: str) -> str:
     return (
         "נושאים מוצעים (נקודת התחלה — ניתן להוסיף מזהים חדשים):\n"
-        f"{taxonomy_seed_block()}\n\n"
+        f"{taxonomy_tag_seed()}\n\n"
         "סווג את השיחה הבאה והחזר JSON במבנה:\n"
         "{\n"
         '  "is_knowledge_bearing": true/false,\n'

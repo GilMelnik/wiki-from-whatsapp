@@ -81,7 +81,13 @@ def run(
         rendered, line_meta = render_thread_for_llm(threads_by_id[thread_id])
         if rendered:
             pending_llm.append(
-                (threads_by_id[thread_id], build_extract_prompt(rendered), line_meta)
+                (
+                    threads_by_id[thread_id],
+                    build_extract_prompt(
+                        rendered, entities_hint=record.get("entities") or []
+                    ),
+                    line_meta,
+                )
             )
 
     logger.info(

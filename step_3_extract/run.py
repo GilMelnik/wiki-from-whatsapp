@@ -26,7 +26,7 @@ from utils.logging_setup import setup_step_logging
 from utils.paths import AUDIT_DIR, ORIGINAL_CLAIMS_PATH, STEP_3, resolve_classified_path
 from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION, scrub_claims
 from utils.support import compute_support
-from utils.taxonomy import page_ids, taxonomy_seed_block
+from utils.taxonomy import page_ids, taxonomy_tag_seed
 from utils.threads_io import (
     DEFAULT_THREADS_PATH,
     load_threads,
@@ -49,8 +49,6 @@ EXTRACT_SYSTEM = (
     "החזר אך ורק JSON תקין."
 )
 
-# JSON Schema for structured output: guarantees the model returns valid JSON in
-# this exact shape (mirrors the structure described in build_extract_prompt).
 EXTRACT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
@@ -91,26 +89,26 @@ EXTRACT_SCHEMA: dict[str, Any] = {
     "required": ["claims"],
 }
 
+ENTITY_HINT_HEADER = (
+    "ישויות שכבר זוהו בשיחה זו (העדף את הכתיב הזה אם הן מופיעות בטענה; "
+    "אפשר להוסיף חדשות):"
+)
 
-def build_extract_prompt(rendered: str) -> str:
+
+def build_extract_prompt(
+    rendered: str, entities_hint: list[str] | None = None
+) -> str:
+    hints = [e.strip() for e in (entities_hint or []) if isinstance(e, str) and e.strip()]
+    hint_block = ""
+    if hints:
+        listed = "\n".join(f"- {name}" for name in hints)
+        hint_block = f"{ENTITY_HINT_HEADER}\n{listed}\n\n"
     return (
         "נושאים מוצעים (נקודת התחלה — ניתן להוסיף מזהים חדשים):\n"
-        f"{taxonomy_seed_block()}\n\n"
-        "חלץ טענות מהשיחה והחזר JSON במבנה:\n"
-        "{\n"
-        '  "claims": [\n'
-        "    {\n"
-        '      "claim_text": "<טענה ניטרלית בעברית; שמות ספקים/מקצוענים מותרים>",\n'
-        '      "topic_tags": ["<מזהה נושא>", ...],\n'
-        '      "entities": ["<ספק/עו״ד/סוכנות/מדינה/מקום>", ...],\n'
-        '      "stance": "positive|negative|neutral|factual",\n'
-        '      "supporting_message_ids": [<מספרי [m..] התומכים בטענה>],\n'
-        '      "opposing_message_ids": [<מספרי [m..] הסותרים את הטענה, אם יש>]\n'
-        "    }\n"
-        "  ]\n"
-        "}\n"
-        "שורות עם [תגובות: ...] מציינות תגובות אימוג'י להודעה — קח אותן בחשבון "
-        "כשאתה מעריך עד כמה הטענה נתמכת.\n"
+        f"{taxonomy_tag_seed()}\n\n"
+        f"{hint_block}"
+        "חלץ טענות מהשיחה. שורות עם [תגובות: ...] מציינות תגובות אימוג'י להודעה — "
+        "קח אותן בחשבון כשאתה מעריך עד כמה הטענה נתמכת. "
         "אם אין ידע מועיל, החזר claims ריק.\n\n"
         "השיחה:\n"
         f"{rendered}"
@@ -329,7 +327,15 @@ def run(
         thread = threads_by_id[thread_id]
         rendered, line_meta = render_thread_for_llm(thread)
         if rendered:
-            pending_llm.append((thread, build_extract_prompt(rendered), line_meta))
+            pending_llm.append(
+                (
+                    thread,
+                    build_extract_prompt(
+                        rendered, entities_hint=record.get("entities") or []
+                    ),
+                    line_meta,
+                )
+            )
         processed += 1
 
     published_claims, audit_records = extract_claims_for_threads(
