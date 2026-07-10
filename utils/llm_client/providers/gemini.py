@@ -3,7 +3,12 @@
 Gemini 3.x always reasons (thinking can't be disabled), so for JSON tasks we ask
 the API for JSON directly (``response_mime_type``), optionally hard-constrained
 by a raw JSON Schema, so the reply is well-formed rather than fenced or mixed
-with reasoning prose.
+with reasoning prose. Reasoning effort is instead dialled with ``thinking_level``
+(minimal/low/medium/high) so cheap stages don't overthink.
+
+Temperature is deliberately not sent: Gemini 3.x is optimised for the default of
+1.0, and lower values can cause looping, degraded reasoning, or empty structured
+output.
 """
 
 from __future__ import annotations
@@ -30,12 +35,26 @@ class GeminiProvider(LLMProvider):
     supports_batch = True
     supports_grounded = True
 
+    def _thinking(self) -> Any:
+        """A ThinkingConfig when a level is set, else None (model's default)."""
+
+        if not self.thinking_level:
+            return None
+        return genai_types.ThinkingConfig(thinking_level=self.thinking_level)
+
     def _config(
-        self, json_mode: bool, response_schema: dict[str, Any] | None = None
+        self,
+        json_mode: bool,
+        response_schema: dict[str, Any] | None = None,
+        system: str | None = None,
     ) -> Any:
+        # ponytail: temperature is intentionally omitted (Gemini 3.x wants the
+        # 1.0 default). Ceiling: a Gemini 2.5 model configured here would lose
+        # temperature tuning; upgrade path is to send it only for non-3.x models.
         return genai_types.GenerateContentConfig(
-            temperature=self.temperature,
             max_output_tokens=self.max_tokens,
+            system_instruction=system,
+            thinking_config=self._thinking(),
             response_mime_type="application/json" if json_mode else None,
             response_json_schema=response_schema if json_mode else None,
         )
@@ -53,8 +72,8 @@ class GeminiProvider(LLMProvider):
         system_text, user_text = _flatten(system), _flatten(user)
         response = self._client.models.generate_content(
             model=self.model,
-            contents=f"{system_text}\n\n{user_text}",
-            config=self._config(json_mode, response_schema),
+            contents=user_text,
+            config=self._config(json_mode, response_schema, system=system_text),
         )
         return response.text or "", _gemini_truncated(response)
 
@@ -64,12 +83,13 @@ class GeminiProvider(LLMProvider):
 
         config = genai_types.GenerateContentConfig(
             tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())],
-            temperature=self.temperature,
             max_output_tokens=self.max_tokens,
+            system_instruction=system,
+            thinking_config=self._thinking(),
         )
         response = self._client.models.generate_content(
             model=self.model,
-            contents=f"{system}\n\n{user}",
+            contents=user,
             config=config,
         )
         text = response.text or ""
@@ -92,14 +112,21 @@ class GeminiProvider(LLMProvider):
             {
                 "contents": [
                     {
-                        "parts": [{"text": f"{req.system}\n\n{req.user}"}],
+                        "parts": [{"text": req.user}],
                         "role": "user",
                     }
                 ],
                 "metadata": {"key": req.request_id},
                 "config": {
-                    "temperature": self.temperature,
+                    # ponytail: temperature omitted (Gemini 3.x wants the 1.0
+                    # default); see _config for the ceiling/upgrade note.
                     "max_output_tokens": self.max_tokens,
+                    "system_instruction": req.system,
+                    **(
+                        {"thinking_config": {"thinking_level": self.thinking_level}}
+                        if self.thinking_level
+                        else {}
+                    ),
                     # Extract/classify/plan all want JSON; asking for it directly
                     # keeps the model's reasoning prose out of the response. A
                     # schema (when given) hard-constrains the structure too.

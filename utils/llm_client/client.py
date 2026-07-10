@@ -43,6 +43,7 @@ class LLMClient:
         batch_poll_interval: float | None = None,
         failure_log: Path | str | None = None,
         logger: logging.Logger | None = None,
+        thinking_level: str | None = None,
     ) -> None:
         if not provider:
             raise ValueError(
@@ -81,6 +82,7 @@ class LLMClient:
             self.max_tokens,
             self.batch_poll_interval,
             logger=self.logger,
+            thinking_level=thinking_level,
         )
 
     def supports_batch(self) -> bool:
@@ -102,7 +104,12 @@ class LLMClient:
             raise ValueError(
                 f"Unknown stage {stage!r}; expected one of {sorted(stages)}"
             )
-        return cls(provider=resolved["provider"], model=resolved["model"], **kwargs)
+        return cls(
+            provider=resolved["provider"],
+            model=resolved["model"],
+            thinking_level=resolved.get("thinking_level"),
+            **kwargs,
+        )
 
     # ------------------------------------------------------------- call logging
     def _log_call(self, ok: bool, task: str, detail: str) -> None:
