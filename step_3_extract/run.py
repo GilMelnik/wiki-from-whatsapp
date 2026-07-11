@@ -24,6 +24,7 @@ from utils.json_io import write_json_file
 from utils.llm_client import BatchRequest, LLMClient
 from utils.logging_setup import setup_step_logging
 from utils.paths import AUDIT_DIR, ORIGINAL_CLAIMS_PATH, STEP_3, resolve_classified_path
+from step_3_extract.parsing import _normalize_claims
 from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION, scrub_claims
 from utils.support import compute_support
 from utils.taxonomy import page_ids, taxonomy_tag_seed
@@ -114,18 +115,63 @@ ENTITY_HINT_HEADER = (
 )
 
 
+def _schema_json_example(schema: dict[str, Any], indent: int = 1) -> str:
+    """Render a JSON-shaped template from a JSON Schema, using each field's
+    ``description`` as its placeholder and ``enum`` values joined with ``|``.
+
+    Derived from the schema so editing ``EXTRACT_SCHEMA`` updates the prompt.
+    """
+
+    pad = "  " * indent
+    kind = schema.get("type")
+    if kind == "object":
+        props = schema.get("properties", {})
+        body = ",\n".join(
+            f'{pad}"{key}": {_schema_json_example(sub, indent + 1)}'
+            for key, sub in props.items()
+        )
+        return "{\n" + body + "\n" + "  " * (indent - 1) + "}"
+    if kind == "array":
+        item = schema.get("items", {})
+        desc = schema.get("description", "")
+        if item.get("type") == "object":
+            return (
+                "[\n" + pad + _schema_json_example(item, indent + 1)
+                + "\n" + "  " * (indent - 1) + "]"
+            )
+        if item.get("type") in ("integer", "number"):
+            return f"[<{desc}>]"
+        return f'["<{desc}>", ...]'
+    if kind == "string":
+        if schema.get("enum"):
+            return '"' + "|".join(schema["enum"]) + '"'
+        return f'"<{schema.get("description", "")}>"'
+    if kind in ("integer", "number"):
+        return f'<{schema.get("description", "")}>'
+    return "null"
+
+
 def build_extract_prompt(
-    rendered: str, entities_hint: list[str] | None = None
+    rendered: str,
+    entities_hint: list[str] | None = None,
+    include_schema_example: bool = False,
 ) -> str:
     hints = [e.strip() for e in (entities_hint or []) if isinstance(e, str) and e.strip()]
     hint_block = ""
     if hints:
         listed = "\n".join(f"- {name}" for name in hints)
         hint_block = f"{ENTITY_HINT_HEADER}\n{listed}\n\n"
+    schema_block = ""
+    if include_schema_example:
+        schema_block = (
+            "חלץ טענות מהשיחה והחזר JSON במבנה:\n"
+            f"{_schema_json_example(EXTRACT_SCHEMA)}\n\n"
+        )
     return (
         "נושאים מוצעים (נקודת התחלה — ניתן להוסיף מזהים חדשים):\n"
         f"{taxonomy_tag_seed()}\n\n"
         f"{hint_block}"
+        f"{schema_block}"
         "חלץ טענות מהשיחה. שורות עם [תגובות: ...] מציינות תגובות אימוג'י להודעה — "
         "קח אותן בחשבון כשאתה מעריך עד כמה הטענה נתמכת. "
         "אם אין ידע מועיל, החזר claims ריק.\n\n"
@@ -148,27 +194,18 @@ def _knowledge_bearing_ids(
 
 
 def _claims_from_result(
-    result: dict[str, Any], thread: dict[str, Any], line_meta: list[dict[str, Any]]
+    result: Any, thread: dict[str, Any], line_meta: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    raw_claims = result.get("claims") or []
     known = set(page_ids())
     claims: list[dict[str, Any]] = []
-    for position, raw in enumerate(raw_claims):
-        if not isinstance(raw, dict):
-            continue
-        claim_text = (raw.get("claim_text") or "").strip()
-        if not claim_text:
-            continue
+    for position, raw in enumerate(_normalize_claims(result)):
+        claim_text = raw["claim_text"]
 
         local_ids = [
-            i
-            for i in (raw.get("supporting_message_ids") or [])
-            if isinstance(i, int) and 0 <= i < len(line_meta)
+            i for i in raw["supporting_message_ids"] if 0 <= i < len(line_meta)
         ]
         opposing_ids = [
-            i
-            for i in (raw.get("opposing_message_ids") or [])
-            if isinstance(i, int) and 0 <= i < len(line_meta)
+            i for i in raw["opposing_message_ids"] if 0 <= i < len(line_meta)
         ]
         support = compute_support(
             thread, line_meta, local_ids, opposing_local_message_ids=opposing_ids
@@ -177,7 +214,7 @@ def _claims_from_result(
         if not months:
             months = sorted({m["month"] for m in line_meta})
 
-        topic_tags = [t for t in (raw.get("topic_tags") or []) if isinstance(t, str)]
+        topic_tags = raw["topic_tags"]
         global_ids = [
             thread["message_ids"][line_meta[i]["message_index"]] for i in local_ids
         ]
@@ -189,8 +226,8 @@ def _claims_from_result(
                 "claim_text": claim_text,
                 "topic_tags": topic_tags,
                 "emergent_tags": [t for t in topic_tags if t not in known],
-                "entities": raw.get("entities") or [],
-                "stance": raw.get("stance", "neutral"),
+                "entities": raw["entities"],
+                "stance": raw["stance"],
                 "date": months[0],
                 "support_count": support["support_count"],
                 "opposer_count": support["opposer_count"],
@@ -268,11 +305,14 @@ def extract_claims_for_threads(
             data = parsed.get(thread["thread_id"])
             if data is None:
                 continue  # failed even after retry; already logged
-            publish_claims(
-                _claims_from_result(data, thread, line_meta),
-                published_claims,
-                audit_records,
-            )
+            try:
+                publish_claims(
+                    _claims_from_result(data, thread, line_meta),
+                    published_claims,
+                    audit_records,
+                )
+            except Exception:  # noqa: BLE001 - one bad item mustn't abort the batch
+                continue
     else:
         if use_batch:
             logger.info("Extract: batch not supported for this provider; using sync API.")
