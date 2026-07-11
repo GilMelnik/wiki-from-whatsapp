@@ -17,7 +17,7 @@ def create_provider(
     max_tokens: int,
     batch_poll_interval: float,
     logger: logging.Logger | None = None,
-    thinking_level: str | None = None,
+    thinking_param: str | None = None,
 ) -> LLMProvider:
     registry: dict[str, type[LLMProvider]] = {
         provider_object.name: provider_object
@@ -34,5 +34,5 @@ def create_provider(
         max_tokens=max_tokens,
         batch_poll_interval=batch_poll_interval,
         logger=logger,
-        thinking_level=thinking_level,
+        thinking_param=thinking_param,
     )

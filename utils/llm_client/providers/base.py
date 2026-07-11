@@ -29,15 +29,14 @@ class LLMProvider(ABC):
         max_tokens: int,
         batch_poll_interval: float,
         logger: logging.Logger | None = None,
-        thinking_level: str | None = None,
+        thinking_param: str | None = None,
     ) -> None:
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.batch_poll_interval = batch_poll_interval
         self.logger = logger or logging.getLogger("utils.llm_client")
-        # Gemini-only reasoning-effort control; ignored by other providers.
-        self.thinking_level = thinking_level
+        self.thinking_param = thinking_param
         self._client: Any = None
 
     @abstractmethod

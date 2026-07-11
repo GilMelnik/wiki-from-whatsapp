@@ -43,7 +43,7 @@ class LLMClient:
         batch_poll_interval: float | None = None,
         failure_log: Path | str | None = None,
         logger: logging.Logger | None = None,
-        thinking_level: str | None = None,
+        thinking_param: str | None = None,
     ) -> None:
         if not provider:
             raise ValueError(
@@ -82,7 +82,7 @@ class LLMClient:
             self.max_tokens,
             self.batch_poll_interval,
             logger=self.logger,
-            thinking_level=thinking_level,
+            thinking_param=thinking_param,
         )
 
     def supports_batch(self) -> bool:
@@ -107,7 +107,7 @@ class LLMClient:
         return cls(
             provider=resolved["provider"],
             model=resolved["model"],
-            thinking_level=resolved.get("thinking_level"),
+            thinking_param=resolved.get("thinking_param"),
             **kwargs,
         )
 

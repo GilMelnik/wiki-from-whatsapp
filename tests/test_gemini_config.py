@@ -1,7 +1,7 @@
 """Gemini provider config wiring.
 
 Guards the Gemini 3.x fixes: temperature is never sent (the model wants its 1.0
-default), a set ``thinking_level`` becomes a ThinkingConfig, and the system
+default), a set ``thinking_param`` becomes a ThinkingConfig, and the system
 prompt travels via ``system_instruction`` rather than being glued onto contents.
 """
 
@@ -15,13 +15,13 @@ from utils.llm_client.models import BatchRequest
 from utils.llm_client.providers.gemini import GeminiProvider
 
 
-def _provider(thinking_level: str | None) -> GeminiProvider:
+def _provider(thinking_param: str | None) -> GeminiProvider:
     return GeminiProvider(
         model="gemini-3.5-flash",
         temperature=0.2,  # must be ignored for Gemini 3.x
         max_tokens=1024,
         batch_poll_interval=1.0,
-        thinking_level=thinking_level,
+        thinking_param=thinking_param,
     )
 
 

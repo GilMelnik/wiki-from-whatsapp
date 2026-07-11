@@ -1,6 +1,8 @@
 """Anthropic provider: prompt caching (cache_control), structured output, and
-the batch API. Adaptive-thinking models count reasoning tokens against
-max_tokens, so temperature is left at the API default (Sonnet 5+ rejects it).
+the batch API. Reasoning effort is set via ``output_config.effort`` (the shared
+``thinking_param``; default ``high``). Sampling params (temperature/top_p/top_k)
+are unsupported on Opus 4.7+/Sonnet 5 — a non-default value returns 400 — so
+they are omitted and the API default is used.
 
 Auto-caching of the system prompt on every ``generate`` call is controlled by
 the ``anthropic_prompt_cache`` config flag; explicit ``CacheSegment`` breakpoints
@@ -27,17 +29,17 @@ class AnthropicProvider(LLMProvider):
     supports_batch = True
     supports_grounded = False
 
-    @staticmethod
-    def _output_config(response_schema: dict[str, Any] | None) -> dict[str, Any]:
-        """Extra ``messages.create`` kwargs for a JSON-schema structured output."""
+    def _output_config(self, response_schema: dict[str, Any] | None) -> dict[str, Any]:
+        """Extra ``messages.create`` kwargs: reasoning ``effort`` (from the
+        shared ``thinking_param``) and/or a JSON-schema structured-output format.
+        """
 
-        if response_schema is None:
-            return {}
-        return {
-            "output_config": {
-                "format": {"type": "json_schema", "schema": response_schema}
-            }
-        }
+        cfg: dict[str, Any] = {}
+        if self.thinking_param:
+            cfg["effort"] = self.thinking_param
+        if response_schema is not None:
+            cfg["format"] = {"type": "json_schema", "schema": response_schema}
+        return {"output_config": cfg} if cfg else {}
 
     def generate(
         self,

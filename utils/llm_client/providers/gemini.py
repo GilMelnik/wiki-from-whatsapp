@@ -3,8 +3,9 @@
 Gemini 3.x always reasons (thinking can't be disabled), so for JSON tasks we ask
 the API for JSON directly (``response_mime_type``), optionally hard-constrained
 by a raw JSON Schema, so the reply is well-formed rather than fenced or mixed
-with reasoning prose. Reasoning effort is instead dialled with ``thinking_level``
-(minimal/low/medium/high) so cheap stages don't overthink.
+with reasoning prose. Reasoning effort is instead dialled with the config's
+``thinking_param`` (mapped to ``thinking_level``: minimal/low/medium/high) so
+cheap stages don't overthink.
 
 Temperature is deliberately not sent: Gemini 3.x is optimised for the default of
 1.0, and lower values can cause looping, degraded reasoning, or empty structured
@@ -38,9 +39,9 @@ class GeminiProvider(LLMProvider):
     def _thinking(self) -> Any:
         """A ThinkingConfig when a level is set, else None (model's default)."""
 
-        if not self.thinking_level:
+        if not self.thinking_param:
             return None
-        return genai_types.ThinkingConfig(thinking_level=self.thinking_level)
+        return genai_types.ThinkingConfig(thinking_level=self.thinking_param)
 
     def _config(
         self,
