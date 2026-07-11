@@ -11,6 +11,7 @@ import pytest
 
 pytest.importorskip("google.genai")
 
+from utils.llm_client.models import BatchRequest
 from utils.llm_client.providers.gemini import GeminiProvider
 
 
@@ -44,3 +45,36 @@ def test_config_without_thinking_level_leaves_default() -> None:
     assert cfg.thinking_config is None
     assert cfg.response_mime_type is None
     assert cfg.response_json_schema is None
+
+
+def test_grounded_config_passes_tools_and_stays_non_json() -> None:
+    from google.genai import types as genai_types
+
+    tools = [genai_types.Tool(google_search=genai_types.GoogleSearch())]
+    cfg = _provider("low")._config(json_mode=False, system="sys", tools=tools)
+
+    assert cfg.tools == tools
+    assert cfg.response_mime_type is None  # grounded wants prose, not JSON
+    assert cfg.response_json_schema is None
+
+
+def test_batch_inline_request_config_matches_single_config() -> None:
+    provider = _provider("low")
+    req = BatchRequest(
+        request_id="r1",
+        system="sys",
+        user="hello",
+        response_schema={"type": "object"},
+    )
+
+    inline = provider._inline_request(req)
+    cfg = inline.config
+    expected = provider._config(
+        json_mode=True, response_schema={"type": "object"}, system="sys"
+    )
+
+    assert inline.metadata == {"key": "r1"}
+    assert cfg.system_instruction == expected.system_instruction == "sys"
+    assert cfg.response_mime_type == expected.response_mime_type == "application/json"
+    assert cfg.response_json_schema == expected.response_json_schema == {"type": "object"}
+    assert cfg.thinking_config.thinking_level == expected.thinking_config.thinking_level

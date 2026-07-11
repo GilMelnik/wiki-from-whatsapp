@@ -47,6 +47,7 @@ class GeminiProvider(LLMProvider):
         json_mode: bool,
         response_schema: dict[str, Any] | None = None,
         system: str | None = None,
+        tools: list[Any] | None = None,
     ) -> Any:
         # ponytail: temperature is intentionally omitted (Gemini 3.x wants the
         # 1.0 default). Ceiling: a Gemini 2.5 model configured here would lose
@@ -57,6 +58,7 @@ class GeminiProvider(LLMProvider):
             thinking_config=self._thinking(),
             response_mime_type="application/json" if json_mode else None,
             response_json_schema=response_schema if json_mode else None,
+            tools=tools,
         )
 
     def generate(
@@ -81,11 +83,10 @@ class GeminiProvider(LLMProvider):
         if self._client is None:
             self._client = genai.Client()
 
-        config = genai_types.GenerateContentConfig(
+        config = self._config(
+            json_mode=False,
+            system=system,
             tools=[genai_types.Tool(google_search=genai_types.GoogleSearch())],
-            max_output_tokens=self.max_tokens,
-            system_instruction=system,
-            thinking_config=self._thinking(),
         )
         response = self._client.models.generate_content(
             model=self.model,
@@ -102,44 +103,26 @@ class GeminiProvider(LLMProvider):
             search_queries=search_queries,
         )
 
+    def _inline_request(self, req: BatchRequest) -> Any:
+        # Extract/classify/plan all want JSON, so batch always runs json_mode via
+        # the shared _config so it can't drift from the single-call path.
+        return genai_types.InlinedRequest(
+            contents=req.user,
+            metadata={"key": req.request_id},
+            config=self._config(
+                json_mode=True,
+                response_schema=req.response_schema,
+                system=req.system,
+            ),
+        )
+
     def generate_batch(
         self, requests: Sequence[BatchRequest]
     ) -> dict[str, tuple[str, bool]]:
         if self._client is None:
             self._client = genai.Client()
 
-        inline_requests = [
-            {
-                "contents": [
-                    {
-                        "parts": [{"text": req.user}],
-                        "role": "user",
-                    }
-                ],
-                "metadata": {"key": req.request_id},
-                "config": {
-                    # ponytail: temperature omitted (Gemini 3.x wants the 1.0
-                    # default); see _config for the ceiling/upgrade note.
-                    "max_output_tokens": self.max_tokens,
-                    "system_instruction": req.system,
-                    **(
-                        {"thinking_config": {"thinking_level": self.thinking_level}}
-                        if self.thinking_level
-                        else {}
-                    ),
-                    # Extract/classify/plan all want JSON; asking for it directly
-                    # keeps the model's reasoning prose out of the response. A
-                    # schema (when given) hard-constrains the structure too.
-                    "response_mime_type": "application/json",
-                    **(
-                        {"response_json_schema": req.response_schema}
-                        if req.response_schema is not None
-                        else {}
-                    ),
-                },
-            }
-            for req in requests
-        ]
+        inline_requests = [self._inline_request(req) for req in requests]
 
         batch_job = self._client.batches.create(
             model=self.model,
