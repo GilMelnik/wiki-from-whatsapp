@@ -302,7 +302,8 @@ def extract_claims_for_threads(
         ]
         parsed = llm.complete_batch_json(requests)
         for thread, _, line_meta in pending_llm:
-            data = parsed.get(thread["thread_id"])
+            thread_id = thread["thread_id"]
+            data = parsed.get(thread_id)
             if data is None:
                 continue  # failed even after retry; already logged
             try:
@@ -311,23 +312,34 @@ def extract_claims_for_threads(
                     published_claims,
                     audit_records,
                 )
-            except Exception:  # noqa: BLE001 - one bad item mustn't abort the batch
+            except Exception as exc:  # noqa: BLE001 - one bad item mustn't abort the batch
+                logger.warning(
+                    f"Extract: parsing output failed for {thread_id}: {exc}"
+                )
                 continue
     else:
         if use_batch:
             logger.info("Extract: batch not supported for this provider; using sync API.")
         for thread, prompt, line_meta in pending_llm:
+            thread_id = thread["thread_id"]
             try:
                 result = llm.complete_json(
                     EXTRACT_SYSTEM, prompt, task="extract",
                     response_schema=EXTRACT_SCHEMA,
                 )
+            except Exception as exc:  # noqa: BLE001 - keep the run going
+                logger.warning(f"Extract: LLM call failed for {thread_id}: {exc}")
+                continue
+            try:
                 publish_claims(
                     _claims_from_result(result, thread, line_meta),
                     published_claims,
                     audit_records,
                 )
-            except Exception:  # noqa: BLE001 - keep the batch going
+            except Exception as exc:  # noqa: BLE001 - a bad output mustn't abort the run
+                logger.warning(
+                    f"Extract: parsing output failed for {thread_id}: {exc}"
+                )
                 continue
     return published_claims, audit_records
 
