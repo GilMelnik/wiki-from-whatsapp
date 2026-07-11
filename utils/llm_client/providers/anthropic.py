@@ -12,9 +12,10 @@ in a prompt are always honoured.
 from __future__ import annotations
 
 import time
-from typing import Any, Sequence
+from typing import Any, Sequence, cast
 
 import anthropic
+from anthropic.types import JSONOutputFormatParam, MessageParam, OutputConfigParam
 from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
 from anthropic.types.messages.batch_create_params import Request
 
@@ -29,16 +30,22 @@ class AnthropicProvider(LLMProvider):
     supports_batch = True
     supports_grounded = False
 
-    def _output_config(self, response_schema: dict[str, Any] | None) -> dict[str, Any]:
+    def _output_config(
+        self, response_schema: dict[str, Any] | None
+    ) -> dict[str, OutputConfigParam]:
         """Extra ``messages.create`` kwargs: reasoning ``effort`` (from the
         shared ``thinking_param``) and/or a JSON-schema structured-output format.
         """
 
-        cfg: dict[str, Any] = {}
+        cfg: OutputConfigParam = {}
         if self.thinking_param:
-            cfg["effort"] = self.thinking_param
+            # effort is a fixed Literal in the SDK; thinking_param is a free
+            # config string, so cast (an invalid value is rejected by the API).
+            cfg["effort"] = cast(Any, self.thinking_param)
         if response_schema is not None:
-            cfg["format"] = {"type": "json_schema", "schema": response_schema}
+            cfg["format"] = JSONOutputFormatParam(
+                type="json_schema", schema=response_schema
+            )
         return {"output_config": cfg} if cfg else {}
 
     def generate(
@@ -58,7 +65,7 @@ class AnthropicProvider(LLMProvider):
             model=self.model,
             max_tokens=self.max_tokens,
             system=_to_blocks(system, cache_last=CONFIG["anthropic_prompt_cache"]),
-            messages=[{"role": "user", "content": _to_blocks(user)}],
+            messages=[MessageParam(role="user", content=_to_blocks(user))],
             **self._output_config(response_schema),
         )
         self._log_cache_usage(message.usage)
@@ -100,7 +107,7 @@ class AnthropicProvider(LLMProvider):
                     model=self.model,
                     max_tokens=self.max_tokens,
                     system=req.system,
-                    messages=[{"role": "user", "content": req.user}],
+                    messages=[MessageParam(role="user", content=req.user)],
                     **self._output_config(req.response_schema),
                 ),
             )

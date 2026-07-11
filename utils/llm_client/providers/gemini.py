@@ -41,7 +41,11 @@ class GeminiProvider(LLMProvider):
 
         if not self.thinking_param:
             return None
-        return genai_types.ThinkingConfig(thinking_level=self.thinking_param)
+        # The SDK field is the ThinkingLevel enum; construct it from the config
+        # string (case-insensitive) so an invalid value fails fast here.
+        return genai_types.ThinkingConfig(
+            thinking_level=genai_types.ThinkingLevel(self.thinking_param)
+        )
 
     def _config(
         self,
@@ -136,7 +140,6 @@ class GeminiProvider(LLMProvider):
         )
 
         job_name = batch_job.name
-        state_name = ""
         while True:
             batch_job = self._client.batches.get(name=job_name)
             state_name = batch_job.state.name if batch_job.state else ""

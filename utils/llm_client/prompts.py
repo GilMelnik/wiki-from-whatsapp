@@ -6,9 +6,14 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from utils.llm_client.models import CacheSegment, PromptInput
+
+if TYPE_CHECKING:
+    # Anthropic-only typing; guarded so gemini/openai-only installs need not
+    # have the anthropic SDK present at runtime.
+    from anthropic.types import TextBlockParam
 
 
 def _strip_code_fence(text: str) -> str:
@@ -52,7 +57,7 @@ def _flatten(prompt: PromptInput) -> str:
     return "".join(seg.text for seg in prompt)
 
 
-def _to_blocks(prompt: PromptInput, *, cache_last: bool = False) -> list[dict[str, Any]]:
+def _to_blocks(prompt: PromptInput, *, cache_last: bool = False) -> list[TextBlockParam]:
     """Build Anthropic text blocks, adding cache_control per-segment or on the final block."""
 
     if isinstance(prompt, str):
@@ -61,9 +66,9 @@ def _to_blocks(prompt: PromptInput, *, cache_last: bool = False) -> list[dict[st
         segments = list(prompt)
     if not segments:
         segments = [CacheSegment("")]
-    blocks: list[dict[str, Any]] = []
+    blocks: list[TextBlockParam] = []
     for i, seg in enumerate(segments):
-        block: dict[str, Any] = {"type": "text", "text": seg.text}
+        block: TextBlockParam = {"type": "text", "text": seg.text}
         if seg.cache or (cache_last and i == len(segments) - 1):
             block["cache_control"] = {"type": "ephemeral"}
         blocks.append(block)
