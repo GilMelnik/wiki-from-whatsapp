@@ -104,7 +104,7 @@ def run(
     existing["claims"] = existing.get("claims", []) + new_claims
     metadata = existing.setdefault("metadata", {})
     metadata["claims_count"] = len(existing["claims"])
-    metadata["threads_processed"] = metadata.get("threads_processed", 0) + len(recovered)
+    metadata["threads_processed"] = len(saved_ids) + len(recovered)
     prior_scrub = metadata.get("scrub") or {}
     metadata["scrub"] = {
         "claims_count": len(existing["claims"]),

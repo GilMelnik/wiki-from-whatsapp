@@ -154,7 +154,7 @@ def _schema_json_example(schema: dict[str, Any], indent: int = 1) -> str:
 def build_extract_prompt(
     rendered: str,
     entities_hint: list[str] | None = None,
-    include_schema_example: bool = False,
+    include_schema_example: bool = True,
 ) -> str:
     hints = [e.strip() for e in (entities_hint or []) if isinstance(e, str) and e.strip()]
     hint_block = ""
