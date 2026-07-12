@@ -104,6 +104,15 @@ def run(
     existing["claims"] = existing.get("claims", []) + new_claims
     metadata = existing.setdefault("metadata", {})
     metadata["claims_count"] = len(existing["claims"])
+    metadata["threads_processed"] = metadata.get("threads_processed", 0) + len(recovered)
+    prior_scrub = metadata.get("scrub") or {}
+    metadata["scrub"] = {
+        "claims_count": len(existing["claims"]),
+        "total_redactions": prior_scrub.get("total_redactions", 0)
+        + scrub_summary["total_redactions"],
+        "pii_review_claims": prior_scrub.get("pii_review_claims", 0)
+        + scrub_summary["pii_review_claims"],
+    }
     write_json_file(existing, output_path)
 
     audit_path = Path(audit_dir) / "claims_audit.json"
