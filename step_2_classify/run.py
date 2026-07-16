@@ -10,6 +10,7 @@ Output: ``data/threads_classified.json``.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -78,9 +79,11 @@ def _parse_classify_result(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _classify_error(reason: str) -> dict[str, Any]:
+def _classify_error(
+    reason: str, is_knowledge_bearing: bool | None = False
+) -> dict[str, Any]:
     return {
-        "is_knowledge_bearing": False,
+        "is_knowledge_bearing": is_knowledge_bearing,
         "topic_tags": [],
         "emergent_tags": [],
         "entities": [],
@@ -96,11 +99,15 @@ def classify_from_parsed(data: Any) -> dict[str, Any]:
     """
 
     if data is None:
-        return _classify_error("classification_error: no parseable response")
+        return _classify_error(
+            "classification_error: no parseable response", is_knowledge_bearing=None
+        )
     try:
         return _parse_classify_result(data)
     except Exception as exc:  # noqa: BLE001 - keep the batch going
-        return _classify_error(f"classification_error: {exc}")
+        return _classify_error(
+            f"classification_error: {exc}", is_knowledge_bearing=None
+        )
 
 
 def classify_thread(thread: dict[str, Any], llm: LLMClient) -> dict[str, Any]:
@@ -110,7 +117,45 @@ def classify_thread(thread: dict[str, Any], llm: LLMClient) -> dict[str, Any]:
         result = llm.complete_json(CLASSIFY_SYSTEM, prompt, task="classify")
         return _parse_classify_result(result)
     except Exception as exc:  # noqa: BLE001 - keep the batch going
-        return _classify_error(f"classification_error: {exc}")
+        return _classify_error(
+            f"classification_error: {exc}", is_knowledge_bearing=None
+        )
+
+
+def classify_threads(
+    pending_llm: list[tuple[dict[str, Any], str]],
+    llm: LLMClient,
+    use_batch: bool,
+    logger: logging.Logger,
+) -> dict[str, dict[str, Any]]:
+    """Classify prepared ``(thread, prompt)`` pairs; return ``{thread_id: record}``."""
+
+    results: dict[str, dict[str, Any]] = {}
+    if not pending_llm:
+        return results
+
+    if use_batch and llm.supports_batch():
+        logger.info(f"Classify: submitting {len(pending_llm)} requests via batch API...")
+        requests = [
+            BatchRequest(
+                request_id=thread["thread_id"],
+                system=CLASSIFY_SYSTEM,
+                user=prompt,
+                task="classify",
+            )
+            for thread, prompt in pending_llm
+        ]
+        parsed = llm.complete_batch_json(requests)
+        for thread, _ in pending_llm:
+            results[thread["thread_id"]] = classify_from_parsed(
+                parsed.get(thread["thread_id"])
+            )
+    else:
+        if use_batch:
+            logger.info("Classify: batch not supported for this provider; using sync API.")
+        for thread, _ in pending_llm:
+            results[thread["thread_id"]] = classify_thread(thread, llm)
+    return results
 
 
 def run(
@@ -119,16 +164,9 @@ def run(
     llm: LLMClient | None = None,
     min_messages: int = 3,
     min_senders: int = 2,
-    max_threads: int | None = None,
-    topic_filter: str | None = None,
     use_batch: bool = False,
 ) -> dict[str, Any]:
-    """Classify all threads and write ``threads_classified.json``.
-
-    ``max_threads`` limits how many candidate threads are sent to the LLM
-    (handy for a pilot). ``topic_filter`` keeps only threads whose heuristic
-    keyword text mentions the given substring (pilot on one topic).
-    """
+    """Classify all threads and write ``threads_classified.json``."""
 
     logger = setup_step_logging(STEP_2)
     llm = LLMClient.for_stage("classify", logger=logger) if llm is None else llm
@@ -164,18 +202,6 @@ def run(
             classified.append(record)
             continue
 
-        if topic_filter and topic_filter.lower() not in "\n".join(
-            (m.get("content") or "") for m in thread["messages"]
-        ).lower():
-            record.update(_classify_error("outside_topic_filter"))
-            classified.append(record)
-            continue
-
-        if max_threads is not None and sent_to_llm >= max_threads:
-            record.update(_classify_error("skipped_max_threads"))
-            classified.append(record)
-            continue
-
         rendered, _ = render_thread_for_llm(thread)
         prompt = build_classify_prompt(rendered)
         pending_llm.append((thread, prompt))
@@ -183,28 +209,9 @@ def run(
         classified.append(record)
         sent_to_llm += 1
 
-    if pending_llm:
-        if use_batch and llm.supports_batch():
-            logger.info(f"Classify: submitting {len(pending_llm)} requests via batch API...")
-            requests = [
-                BatchRequest(
-                    request_id=thread["thread_id"],
-                    system=CLASSIFY_SYSTEM,
-                    user=prompt,
-                    task="classify",
-                )
-                for thread, prompt in pending_llm
-            ]
-            parsed = llm.complete_batch_json(requests)
-            for (thread, _), record_idx in zip(pending_llm, pending_indices):
-                classified[record_idx].update(
-                    classify_from_parsed(parsed.get(thread["thread_id"]))
-                )
-        else:
-            if use_batch:
-                logger.info("Classify: batch not supported for this provider; using sync API.")
-            for (thread, _), record_idx in zip(pending_llm, pending_indices):
-                classified[record_idx].update(classify_thread(thread, llm))
+    results = classify_threads(pending_llm, llm, use_batch, logger)
+    for (thread, _), record_idx in zip(pending_llm, pending_indices):
+        classified[record_idx].update(results[thread["thread_id"]])
 
     kept = [r for r in classified if r["is_knowledge_bearing"]]
     output = {

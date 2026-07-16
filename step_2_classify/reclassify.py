@@ -22,12 +22,10 @@ from utils.paths import (
     STEP_2,
 )
 from step_2_classify.run import (
-    CLASSIFY_SYSTEM,
     build_classify_prompt,
-    classify_from_parsed,
-    classify_thread,
+    classify_threads,
 )
-from utils.llm_client import BatchRequest, LLMClient
+from utils.llm_client import LLMClient
 from utils.logging_setup import setup_step_logging
 from utils.threads_io import load_threads, render_thread_for_llm
 
@@ -80,7 +78,6 @@ def run(
     threads_path: Path | str = EDITED_THREADS_PATH,
     classified_path: Path | str = EDITED_CLASSIFIED_PATH,
     llm: LLMClient | None = None,
-    max_threads: int | None = None,
     use_batch: bool = True,
 ) -> dict[str, Any]:
     """Re-classify edited threads, preserving manual ``is_knowledge_bearing: false``."""
@@ -122,10 +119,6 @@ def run(
             skipped += 1
             continue
 
-        if max_threads is not None and sent_to_llm >= max_threads:
-            output_records.append(record)
-            continue
-
         rendered, _ = render_thread_for_llm(thread)
         prompt = build_classify_prompt(rendered)
         pending_llm.append((thread, prompt))
@@ -133,28 +126,9 @@ def run(
         output_records.append(record)
         sent_to_llm += 1
 
-    if pending_llm:
-        if use_batch and llm.supports_batch():
-            logger.info(f"Reclassify: submitting {len(pending_llm)} requests via batch API...")
-            requests = [
-                BatchRequest(
-                    request_id=thread["thread_id"],
-                    system=CLASSIFY_SYSTEM,
-                    user=prompt,
-                    task="classify",
-                )
-                for thread, prompt in pending_llm
-            ]
-            parsed = llm.complete_batch_json(requests)
-            for (thread, _), record_idx in zip(pending_llm, pending_indices):
-                output_records[record_idx].update(
-                    classify_from_parsed(parsed.get(thread["thread_id"]))
-                )
-        else:
-            if use_batch:
-                logger.info("Reclassify: batch not supported for this provider; using sync API.")
-            for (thread, _), record_idx in zip(pending_llm, pending_indices):
-                output_records[record_idx].update(classify_thread(thread, llm))
+    results = classify_threads(pending_llm, llm, use_batch, logger)
+    for (thread, _), record_idx in zip(pending_llm, pending_indices):
+        output_records[record_idx].update(results[thread["thread_id"]])
 
     metadata = dict(classified_payload.get("metadata") or {})
     metadata.update(
