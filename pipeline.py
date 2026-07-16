@@ -13,10 +13,10 @@ Runs steps in order:
 
 Human gates (web UIs, no CLI):
     step 1 — thread review: ``python -m step_1_threads_split.review``
-    step 3 — PII review: ``uvicorn step_3_extract.reviewer.server:app``
+    step 3 — PII review: ``python -m step_3_extract.reviewer``
     step 4 — entity review: ``python -m step_4_entities.reviewer``
     step 5 — aggregate review: ``python -m step_5_aggregate.reviewer``
-    step 6 — plan review: ``uvicorn step_6_plan.reviewer.server:app``
+    step 6 — plan review: ``python -m step_6_plan.reviewer``
 """
 
 from __future__ import annotations
@@ -57,7 +57,6 @@ def _stage_clients(logger: logging.Logger) -> dict[str, LLMClient]:
 
 
 def run(
-    pilot_topic: str | None = None,
     use_embeddings: bool = True,
     *,
     use_batch: bool = False,
@@ -81,9 +80,7 @@ def run(
 
     logger = setup_step_logging(STEP_3)
     logger.info("[4] Extracting claims...")
-    e_meta = extract(
-        llm=clients["extract"], topic_filter=pilot_topic, use_batch=use_batch
-    )
+    e_meta = extract(llm=clients["extract"], use_batch=use_batch)
     logger.info(
         f"    {e_meta['claims_count']} claims; "
         f"redactions: {e_meta['scrub']['total_redactions']}, "
@@ -91,7 +88,7 @@ def run(
     )
     logger.info(
         "    -> Review claims via "
-        "`uvicorn step_3_extract.reviewer.server:app` before aggregate."
+        "`python -m step_3_extract.reviewer` before aggregate."
     )
 
     logger = setup_step_logging(STEP_4)
@@ -125,7 +122,7 @@ def run(
     )
     logger.info(
         "    -> Edit plan via "
-        "`uvicorn step_6_plan.reviewer.server:app` before generate."
+        "`python -m step_6_plan.reviewer` before generate."
     )
 
     logger = setup_step_logging(STEP_7)

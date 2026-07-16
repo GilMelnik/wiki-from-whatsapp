@@ -180,14 +180,10 @@ def build_extract_prompt(
     )
 
 
-def _knowledge_bearing_ids(
-    classified: dict[str, Any], topic_filter: str | None
-) -> set[str]:
+def _knowledge_bearing_ids(classified: dict[str, Any]) -> set[str]:
     ids: set[str] = set()
     for record in classified["threads"]:
         if not record.get("is_knowledge_bearing"):
-            continue
-        if topic_filter and topic_filter not in (record.get("topic_tags") or []):
             continue
         ids.add(record["thread_id"])
     return ids
@@ -364,15 +360,9 @@ def run(
     output_path: Path | str = ORIGINAL_CLAIMS_PATH,
     audit_dir: Path | str = AUDIT_DIR,
     llm: LLMClient | None = None,
-    topic_filter: str | None = None,
-    max_threads: int | None = None,
     use_batch: bool = True,
 ) -> dict[str, Any]:
-    """Extract claims from knowledge-bearing threads.
-
-    ``topic_filter`` restricts to threads tagged with a single topic id (pilot).
-    ``max_threads`` caps how many threads are processed.
-    """
+    """Extract claims from knowledge-bearing threads."""
 
     logger = setup_step_logging(STEP_3)
     llm = LLMClient.for_stage("extract", logger=logger) if llm is None else llm
@@ -384,7 +374,7 @@ def run(
 
     with Path(classified_path).open(encoding="utf-8") as f:
         classified = json.load(f)
-    keep_ids = _knowledge_bearing_ids(classified, topic_filter)
+    keep_ids = _knowledge_bearing_ids(classified)
 
     pending_llm: list[tuple[dict[str, Any], str, list[dict[str, Any]]]] = []
     processed = 0
@@ -393,8 +383,6 @@ def run(
         thread_id = record["thread_id"]
         if thread_id not in keep_ids:
             continue
-        if max_threads is not None and processed >= max_threads:
-            break
         thread = threads_by_id[thread_id]
         rendered, line_meta = render_thread_for_llm(thread)
         if rendered:
@@ -423,7 +411,6 @@ def run(
                 "threads_processed": processed,
                 "claims_count": len(published_claims),
                 "scrub": scrub_summary,
-                "topic_filter": topic_filter,
                 "provider": llm.provider,
                 "model": llm.model,
                 "batch_mode": use_batch and llm.supports_batch(),

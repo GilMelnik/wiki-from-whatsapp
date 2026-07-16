@@ -66,7 +66,7 @@ def run(
     llm.set_logger(logger)
     threads_by_id = {t["thread_id"]: t for t in load_threads(input_path)["threads"]}
     classified = _load_json(Path(classified_path))
-    keep_ids = _knowledge_bearing_ids(classified, None)
+    keep_ids = _knowledge_bearing_ids(classified)
 
     existing = _load_json(output_path)
     saved_ids = {claim["thread_id"] for claim in existing.get("claims", [])}
