@@ -12,20 +12,21 @@ npm run build
 
 Output: `step_6_plan/reviewer/static/`.
 
-## Run (no CLI — use uvicorn)
+## Run
 
 Requires `data/claims_aggregated.json` and `data/wiki_plan.json` from steps 5–6.
 
 ```bash
-uvicorn step_6_plan.reviewer.server:app --host 127.0.0.1 --port 8767
+python -m step_6_plan.reviewer
 ```
 
-Create edited copies:
+If port 8767 is already in use, the previous listener is stopped automatically.
+Pass `--no-kill-port` to disable that, or `--port` for a different port.
 
-```python
-from utils.paths import init_aggregated_edited, init_plan_edited
-init_plan_edited()
-init_aggregated_edited()
+Create edited copies from pipeline output:
+
+```bash
+python -m step_6_plan.reviewer --init-edited
 ```
 
 Steps 7–8 prefer edited plan/aggregated files when present.
