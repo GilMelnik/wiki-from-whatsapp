@@ -171,20 +171,6 @@ def _normalize_plan(raw: dict[str, Any], topics: dict[str, Any]) -> dict[str, An
     return {"pages": pages_out, "links": links_out}
 
 
-def load_plan(
-    path: Path | str,
-    topics: dict[str, Any],
-    *,
-    min_claims: int = 1,
-) -> dict[str, Any]:
-    plan_path = Path(path)
-    if not plan_path.exists():
-        return identity_plan(topics, min_claims=min_claims)
-    with plan_path.open(encoding="utf-8") as f:
-        raw = json.load(f)
-    return _normalize_plan(raw, topics)
-
-
 def page_titles(plan: dict[str, Any]) -> dict[str, str]:
     return {p["id"]: p["title"] for p in plan.get("pages", [])}
 
@@ -205,7 +191,6 @@ def run(
     aggregated_path: Path | str = ORIGINAL_AGGREGATED_PATH,
     output_path: Path | str = ORIGINAL_PLAN_PATH,
     llm: LLMClient | None = None,
-    min_claims: int = 1,
     use_batch: bool = False,
     *,
     skip_agent: bool = False,
@@ -216,7 +201,7 @@ def run(
         topics = json.load(f)["topics"]
 
     if skip_agent:
-        plan = identity_plan(topics, min_claims=min_claims)
+        plan = identity_plan(topics)
         write_json_file(plan, Path(output_path))
         return {
             "page_count": len(plan["pages"]),
@@ -268,4 +253,4 @@ def pages_by_category(plan: dict[str, Any]) -> dict[str, list[tuple[str, str]]]:
 
 
 if __name__ == "__main__":
-    run(use_batch=True)
+    run(use_batch=True, skip_agent=True)

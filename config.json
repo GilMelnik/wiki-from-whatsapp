@@ -9,7 +9,7 @@
     "stages": {
       "classify": {"provider": "gemini", "model": "gemini-3.1-flash-lite", "thinking_param": "minimal"},
       "extract": {"provider": "gemini", "model": "gemini-3.5-flash", "thinking_param": "low"},
-      "plan": {"provider": "gemini", "model": "gemini-3.5-flash", "thinking_param": "medium"},
+      "plan": {"provider": "anthropic", "model": "claude-sonnet-5", "thinking_param": "medium"},
       "generate": {"provider": "anthropic", "model": "claude-sonnet-5", "thinking_param": "high"},
       "research": {"provider": "gemini", "model": "gemini-3.5-flash", "thinking_param": "high"}
     },
