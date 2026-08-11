@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from step_0_preprocessing.models import Message
+from step_1_threads_split.message import Message
 from step_1_threads_split.assigner import ThreadAssigner
 from step_1_threads_split.embedding.embedding import Embedder, load_message_embeddings
 from step_1_threads_split.models import Thread, ThreadConfig

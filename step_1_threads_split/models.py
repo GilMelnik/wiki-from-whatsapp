@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Sequence
 import numpy as np
 
 if TYPE_CHECKING:
-    from step_0_preprocessing.models import Message
+    from step_1_threads_split.message import Message
 
 
 @dataclass

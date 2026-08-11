@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from step_0_preprocessing.models import Message
+from step_1_threads_split.message import Message
 from step_1_threads_split.assigner import ThreadAssigner
 from step_1_threads_split.models import ScoredCandidate, Thread, ThreadConfig
 from step_1_threads_split.scoring import ThreadScorer, social_score

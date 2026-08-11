@@ -6,7 +6,7 @@ from typing import Callable, Sequence, TypeVar
 
 import numpy as np
 
-from step_0_preprocessing.models import Message
+from step_1_threads_split.message import Message
 from step_1_threads_split.embedding.embedding import cosine_similarity
 from step_1_threads_split.models import ScoredCandidate, Thread, ThreadConfig
 from step_1_threads_split.tf_idf.tfidf import TfidfCorpus, TokenizedMessages, tfidf_cosine_similarity

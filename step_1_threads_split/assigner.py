@@ -7,7 +7,7 @@ from typing import Any, Sequence
 
 import numpy as np
 
-from step_0_preprocessing.models import Message
+from step_1_threads_split.message import Message
 from step_1_threads_split.models import ScoredCandidate, Thread, ThreadConfig
 from step_1_threads_split.scoring import ThreadScorer
 

@@ -8,7 +8,7 @@ from collections import Counter
 from pathlib import Path
 
 from utils.logging_setup import setup_step_logging
-from utils.paths import CHAT_ANDROID_PATH, STEP_0
+from utils.paths import CHAT_ANDROID_PATH, SHARED
 
 SENTIMENT_PATH = Path(__file__).with_name("reaction_sentiment.json")
 
@@ -30,7 +30,7 @@ def reaction_counts(chat_path: Path) -> Counter[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    logger = setup_step_logging(STEP_0)
+    logger = setup_step_logging(SHARED)
     chat_path = Path(argv[1]) if argv and len(argv) > 1 else CHAT_ANDROID_PATH
     counts = reaction_counts(chat_path)
     with SENTIMENT_PATH.open(encoding="utf-8") as f:

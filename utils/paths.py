@@ -14,7 +14,6 @@ from pathlib import Path
 
 from utils.config import DATA_DIR
 
-STEP_0 = "step_0_preprocessing"
 STEP_1 = "step_1_threads_split"
 STEP_2 = "step_2_classify"
 STEP_3 = "step_3_extract"
@@ -37,15 +36,9 @@ class Artifact:
     edited: Path
 
 
-# --------------------------------------------------------------- step 0 inputs
-CHAT_TXT_PATH = step_path(STEP_0, "_chat.txt")
-CHAT_OLD_TXT_PATH = step_path(STEP_0, "_chat_old.txt")
-CHATS_FROM_PHONE_DIR = step_path(STEP_0, "chats_from_phone")
-CHAT_ANDROID_PATH = step_path(STEP_0, "chats_from_phone", "chat_android.json")
-MESSAGES_PATH = step_path(STEP_0, "messages.json")
-MESSAGES_OLD_PATH = step_path(STEP_0, "messages_old.json")
-MESSAGES_COMBINED_PATH = step_path(STEP_0, "messages_combined.json")
-SENDER_ID_TO_NICKNAME_PATH = step_path(STEP_0, "sender_id_to_nickname.json")
+# ------------------------------------------------- input (from the scraper)
+# Produced by the whatsapp-group-scraper crypt15 exporter; copy it here.
+CHAT_ANDROID_PATH = DATA_DIR / "chat_android.json"
 
 # ------------------------------------------------------- step 1 threads_split
 TFIDF_CORPUS_PATH = step_path(STEP_1, "tfidf_corpus.json")

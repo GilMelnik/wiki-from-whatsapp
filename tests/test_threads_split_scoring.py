@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 import numpy as np
 
-from step_0_preprocessing.models import Message
+from step_1_threads_split.message import Message
 from step_1_threads_split.models import Thread, ThreadConfig
 from step_1_threads_split.scoring import ThreadScorer
 from step_1_threads_split.tf_idf.tfidf import TokenizedMessages, TfidfCorpus

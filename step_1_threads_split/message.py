@@ -1,13 +1,32 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 
-from step_0_preprocessing.parse_messages import normalize_content
+UNICODE_MARKS = re.compile(r"[\u200e\u200f\u202a-\u202e\u2066-\u2069]")
+OMITTED_MARKERS = re.compile(
+    r"[\u200e\u200f]?(?:<\s*)?(?:image|video|audio|sticker|document|gif|media)\s+omitted(?:\s*>)?",
+    re.IGNORECASE,
+)
+EDITED_MARKER = re.compile(
+    r"[\u200e\u200f]?<\s*This message was edited\s*>?", re.IGNORECASE
+)
+
+
+def clean_text(text: str) -> str:
+    return UNICODE_MARKS.sub("", text).replace("\u202f", " ").strip()
+
+
+def normalize_content(content: str) -> str:
+    content = UNICODE_MARKS.sub("", content)
+    content = EDITED_MARKER.sub("", content)
+    content = OMITTED_MARKERS.sub("", content)
+    return content.strip()
 
 
 def parse_android_datetime(date_str: str, time_str: str) -> datetime:
-    """Parse DD/MM/YYYY date and HH:MM time from Android phone export."""
+    """Parse DD/MM/YYYY date and HH:MM time from the Android crypt15 export."""
     day, month, year = date_str.split("/")
     hour, minute = time_str.split(":")
     return datetime(int(year), int(month), int(day), int(hour), int(minute))
