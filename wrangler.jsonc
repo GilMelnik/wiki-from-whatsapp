@@ -1,0 +1,6 @@
+{
+  "name": "gaysurrogacy",
+  "compatibility_date": "2026-11-07",
+  "assets": { "directory": "./site", "not_found_handling": "404-page" },
+  "routes": [{ "pattern": "gaysurrogacy.co.il", "custom_domain": true }]
+}
