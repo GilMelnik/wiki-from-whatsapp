@@ -43,5 +43,28 @@
       "string": "string",
       "transliteration": "transliteration"
     }
-  }
+  },
+  "input": {
+    "cutoff_date": "2026-09-01",
+    "export_filename": "chat_android.json",
+    "updates_dir": "updates"
+  },
+  "embedding": {
+    "provider": "gemini",
+    "model": "gemini-embedding-001",
+    "output_dimensionality": 768
+  },
+  "classifier": {},
+  "threads": {},
+  "aggregate": {},
+  "plan": {
+    "max_pages": 30
+  },
+  "pages": {},
+  "review": {},
+  "site": {
+    "url": "https://gaysurrogacy.co.il/",
+    "coffee_url": "https://buymeacoffee.com/gilmelnik"
+  },
+  "update": {}
 }
