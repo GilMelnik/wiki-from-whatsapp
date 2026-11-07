@@ -238,3 +238,5 @@ web/thread-tagger/node_modules/
 web/pii-reviewer/node_modules/
 web/plan-reviewer/node_modules/
 web/entity-reviewer/node_modules/
+# Orchestration runtime state
+.claude/orchestration/tasks/
