@@ -47,6 +47,8 @@ TFIDF_CORPUS_PATH = step_path(STEP_1, "tfidf_corpus.json")
 TFIDF_TOKENS_PATH = step_path(STEP_1, "tfidf_tokens.json")
 MESSAGE_EMBEDDINGS_PATH = step_path(STEP_1, "message_embeddings.json")
 MESSAGE_QUERY_EMBEDDINGS_PATH = step_path(STEP_1, "message_query_embeddings.json")
+# Hand-tagged gold clustering, frozen by ``step_1_threads_split.evaluate --freeze-gold``.
+GOLD_THREADS_PATH = step_path(STEP_1, "gold_threads.json")
 
 # ------------------------------------------------------- reviewed artifacts
 THREADS = Artifact(
