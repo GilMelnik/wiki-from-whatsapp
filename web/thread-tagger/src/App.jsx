@@ -7,12 +7,17 @@ import {
   fetchThreads,
   mergeThreads,
   moveMessages,
+  moveMessagesByIds,
   splitThread,
   updateClassification,
 } from "./api";
 import ClassificationPanel from "./components/ClassificationPanel";
 import GoldBar from "./components/GoldBar";
 import { useGoldWindows } from "./goldWindows";
+import ChronoViewer from "./messages/ChronoViewer";
+import SelectionBar from "./messages/SelectionBar";
+import ViewToggle from "./messages/ViewToggle";
+import { useChronoMode } from "./useChronoMode";
 import MergeDialog from "./components/MergeDialog";
 import MessageViewer from "./components/MessageViewer";
 import MoveDialog from "./components/MoveDialog";
@@ -436,6 +441,38 @@ export default function App() {
     await afterMutation(result.target_id);
   };
 
+  const views = useChronoMode({
+    threadData,
+    gold,
+    listItems,
+    selectedIndices,
+    setSelectedIndices,
+    dialogsOpen: mergeOpen || splitOpen || moveOpen,
+    onError: setToast,
+  });
+  const threadTag = (id) => views.colors.peek(id);
+
+  // Chronological view: one atomic server call, whatever threads the messages come from.
+  const handleMoveIds = async (messageIds, targetId) => {
+    try {
+      const result = await moveMessagesByIds({ message_ids: messageIds, target_id: targetId });
+      views.pin(result.target_id);
+      setRecent(
+        addRecent({
+          thread_id: result.target_id,
+          kind: result.created ? "new" : "move",
+          related_ids: [result.target_id, ...result.removed_ids],
+          label: `${messageIds.length} הודעות הועברו`,
+        })
+      );
+      const removed = result.removed_ids.length ? `; ${result.removed_ids.join(", ")} התרוקנה ונמחקה` : "";
+      setToast(`${messageIds.length} הודעות הועברו ל-${result.target_id}${removed}`);
+      await afterMutation(result.target_id);
+    } catch (e) {
+      setToast(`ההעברה נכשלה ולא שינתה דבר: ${e.message}`);
+    }
+  };
+
   const neighbors = threadData?.neighbors;
 
   return (
@@ -535,6 +572,7 @@ export default function App() {
             highlightIds={highlightIds}
             splitHighlightIds={splitHighlightIds}
             hasClassification={hasClassification}
+            threadTag={threadTag}
           />
         </aside>
 
@@ -551,7 +589,10 @@ export default function App() {
             onSelect={handleSplitSelect}
             onDismiss={() => setSplitResult(null)}
           />
-          <div className="flex items-center gap-2 px-4 py-2 border-b bg-white text-sm shrink-0">
+          <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b bg-white text-sm shrink-0">
+            <ViewToggle view={views.view} onChange={views.setView} />
+            <SelectionBar count={views.count} onClear={views.clearAll} />
+            <span className="text-slate-400">|</span>
             <span className="text-slate-500">כרונולוגיה:</span>
             <button
               type="button"
@@ -588,6 +629,18 @@ export default function App() {
               הבא →
             </button>
           </div>
+          {views.chrono ? (
+            <ChronoViewer
+              threads={views.threads}
+              colors={views.colors}
+              currentId={selectedId}
+              onSelectThread={handleSelect}
+              selection={views.selection}
+              onMove={handleMoveIds}
+              inWindowIds={views.inWindowIds}
+              goldSpan={views.goldSpan}
+            />
+          ) : (
           <MessageViewer
             thread={threadData?.thread}
             context={threadData?.context}
@@ -597,7 +650,9 @@ export default function App() {
             onNavigateToThread={handleSelect}
             isSplitPart={isSplitPart}
             gold={threadData?.gold}
+            threadTag={threadTag}
           />
+          )}
         </main>
 
         <ResizeHandle
@@ -672,16 +727,18 @@ export default function App() {
       <SplitDialog
         open={splitOpen}
         onClose={() => setSplitOpen(false)}
-        thread={threadData?.thread}
-        selectedIndices={selectedIndices}
+        thread={views.dialog?.thread ?? threadData?.thread}
+        selectedIndices={views.dialog?.indices ?? selectedIndices}
         onConfirm={handleSplit}
+        blockedReason={views.dialog?.splitReason}
       />
       <MoveDialog
         open={moveOpen}
         onClose={() => setMoveOpen(false)}
-        sourceId={selectedId}
-        selectedIndices={selectedIndices}
+        sourceId={views.dialog?.sourceId ?? selectedId}
+        selectedIndices={views.dialog?.indices ?? selectedIndices}
         onConfirm={handleMove}
+        blockedReason={views.dialog?.moveReason}
         suggestions={moveSuggestions}
       />
     </div>

@@ -1,5 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef } from "react";
 import GoldDivider from "./GoldDivider";
+import QuoteBlock from "../messages/QuoteBlock";
+import ThreadTag from "../messages/ThreadTag";
 import {
   buildQuoteGraph,
   findQuotedIndex,
@@ -11,33 +13,6 @@ const threadScrollPositions = new Map();
 function formatTime(iso) {
   if (!iso) return "";
   return iso.replace("T", " ").slice(0, 16);
-}
-
-function QuoteBlock({ quote, quotedIndex, onJumpToQuote }) {
-  return (
-    <div className="mb-2 pr-3 border-r-4 border-slate-300 bg-slate-50 rounded-r px-2 py-1.5 text-xs">
-      <div className="text-slate-500 mb-0.5 flex items-center gap-2 flex-wrap">
-        <span className="font-medium">ציטוט</span>
-        {quote.sender && <span>· {quote.sender}</span>}
-        {quotedIndex != null && onJumpToQuote && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onJumpToQuote(quotedIndex);
-            }}
-            className="text-blue-600 hover:underline"
-          >
-            → [m{quotedIndex}]
-          </button>
-        )}
-      </div>
-      <div className="text-slate-600 whitespace-pre-wrap break-words line-clamp-4">
-        {quote.text}
-      </div>
-    </div>
-  );
 }
 
 function buildDisplaySections(thread, context) {
@@ -141,6 +116,7 @@ export default function MessageViewer({
   onNavigateToThread,
   isSplitPart,
   gold,
+  threadTag,
 }) {
   const scrollRef = useRef(null);
   const goldIds = useMemo(() => (gold ? new Set(gold.in_window_ids) : null), [gold]);
@@ -275,6 +251,7 @@ export default function MessageViewer({
               id={section.isCurrent ? `thread-anchor-${section.threadId}` : undefined}
               className={`sticky top-0 z-10 flex items-center gap-2 px-2 py-1.5 rounded border-2 text-xs ${sectionHeaderClass(section)}`}
             >
+              <ThreadTag info={threadTag?.(section.threadId)} />
               <span className="font-medium">{sectionLabel(section)}</span>
               <span className="font-mono">{section.threadId}</span>
               <span className="text-slate-500">

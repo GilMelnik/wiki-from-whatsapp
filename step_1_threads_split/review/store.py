@@ -17,6 +17,7 @@ from step_1_threads_split.review.models import FilterKind, SortKind, SortOrder, 
 from step_1_threads_split.review.operations import (
     classification_from_thread,
     merge_threads,
+    move_message_ids,
     move_messages,
     patch_classification,
     split_by_mode,
@@ -391,6 +392,15 @@ class ThreadStore:
         )
         self._apply_structural(new_threads, new_classifications)
         self.save()
+
+    def move_ids(self, message_ids: list[str], target_id: str | None) -> dict[str, Any]:
+        """Move messages by WhatsApp id into ``target_id`` (``None``: a new thread); one save."""
+        new_threads, new_classifications, target, created, removed = move_message_ids(
+            self.threads, self._classifications, message_ids, target_id
+        )
+        self._apply_structural(new_threads, new_classifications)
+        self.save()
+        return {"target_id": target, "created": created, "removed_ids": removed}
 
     def _apply_structural(
         self,

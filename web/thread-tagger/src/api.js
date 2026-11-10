@@ -72,3 +72,15 @@ export function setGoldWindowDone(index, done) {
     body: JSON.stringify({ done }),
   });
 }
+
+export function fetchGoldWindowThreads(index, include = []) {
+  const q = new URLSearchParams(include.map((id) => ["include", id]));
+  return request(`/api/gold/windows/${index}/threads?${q}`);
+}
+
+export function moveMessagesByIds(body) {
+  return request("/api/threads/move-by-ids", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}

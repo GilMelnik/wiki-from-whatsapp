@@ -27,6 +27,7 @@ export default function MoveDialog({
   selectedIndices,
   onConfirm,
   suggestions,
+  blockedReason,
 }) {
   const [targetId, setTargetId] = useState("");
   const [position, setPosition] = useState("append");
@@ -182,6 +183,7 @@ export default function MoveDialog({
           </label>
         </div>
 
+        {blockedReason && <p className="text-amber-700 text-sm mb-2">{blockedReason}</p>}
         {error && <p className="text-red-600 text-sm mb-2">{error}</p>}
 
         <div className="flex gap-2 justify-end">
@@ -190,7 +192,7 @@ export default function MoveDialog({
           </button>
           <button
             type="button"
-            disabled={loading}
+            disabled={loading || Boolean(blockedReason)}
             onClick={handleSubmit}
             className="px-4 py-2 text-sm bg-blue-600 text-white rounded disabled:opacity-50"
           >
