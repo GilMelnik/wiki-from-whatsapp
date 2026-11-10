@@ -52,6 +52,11 @@ class SplitRequest(BaseModel):
     message_indices: list[int] = Field(min_length=1)
 
 
+class MoveByIdsRequest(BaseModel):
+    message_ids: list[str] = Field(min_length=1)
+    target_id: str | None = None
+
+
 class GoldDoneUpdate(BaseModel):
     done: bool
 
@@ -192,6 +197,25 @@ def gold_windows() -> list[dict[str, Any]]:
     return store.gold.summaries(store.threads)
 
 
+@app.get("/api/gold/windows/{index}/threads")
+def gold_window_threads(index: int, include: list[str] = Query([])) -> dict[str, Any]:
+    """Every thread of window ``index`` with its messages, in window order (chronological view).
+
+    ``include`` names extra threads to append (those that exist), e.g. a thread the user just
+    moved out-of-window messages into, so they do not vanish from the view.
+    """
+    store = get_store()
+    ids = [thread_id for thread_id, _ in _window_members(store, index)]
+    ids += [thread_id for thread_id in dict.fromkeys(include) if thread_id not in ids]
+    threads = [thread for thread in map(store.get_thread, ids) if thread is not None]
+    return {
+        "index": index,
+        **_gold_window(store, index).to_dict(),
+        "threads": threads,
+        "in_window_ids": store.gold.in_window_ids(threads, index),
+    }
+
+
 @app.post("/api/gold/windows/{index}/done")
 def set_gold_window_done(index: int, body: GoldDoneUpdate) -> dict[str, Any]:
     store = get_store()
@@ -297,6 +321,17 @@ def move_messages(body: MoveMessagesRequest) -> dict[str, Any]:
     else:
         result["source_removed"] = body.source_id
     return result
+
+
+@app.post("/api/threads/move-by-ids")
+def move_messages_by_ids(body: MoveByIdsRequest) -> dict[str, Any]:
+    """Move messages named by WhatsApp id from any threads; ``target_id=None`` → a new thread."""
+    store = get_store()
+    try:
+        result = store.move_ids(body.message_ids, body.target_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {**result, "target": store.get_thread(result["target_id"])}
 
 
 def mount_static() -> None:

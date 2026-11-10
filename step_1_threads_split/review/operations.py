@@ -402,3 +402,99 @@ def move_messages(
             new_classifications[tid] = classification_from_thread(thread, cls)
 
     return new_threads, new_classifications
+
+
+def move_message_ids(
+    threads: list[dict[str, Any]],
+    classifications: dict[str, dict[str, Any]],
+    message_ids: list[str],
+    target_id: str | None,
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]], str, bool, list[str]]:
+    """Move messages, named by WhatsApp id, from any threads into ``target_id`` in one step.
+
+    The messages need not be contiguous nor come from one thread. ``target_id=None`` moves
+    them into a new thread split off the thread of the earliest selected message (or, when
+    that thread is selected whole, into that thread). Messages already in the target stay.
+    Source threads left empty are removed. Returns ``(threads, classifications, target_id,
+    created, removed_ids)``; nothing is changed when a ``ValueError`` is raised.
+    """
+    wanted = list(dict.fromkeys(message_ids))
+    if not wanted:
+        raise ValueError("message_ids must not be empty")
+    owner: dict[str, str] = {}
+    moment: dict[str, str] = {}
+    for thread in threads:
+        for message in thread.get("messages") or []:
+            if message.get("id"):
+                owner[message["id"]] = thread["thread_id"]
+                moment[message["id"]] = message.get("datetime", "")
+    missing = [wa_id for wa_id in wanted if wa_id not in owner]
+    if missing:
+        raise ValueError(f"unknown message ids: {missing[:5]}")
+    if target_id is not None and target_id not in {t["thread_id"] for t in threads}:
+        raise ValueError(f"unknown target thread id: {target_id}")
+
+    by_source: dict[str, set[str]] = {}
+    for wa_id in sorted(wanted, key=lambda wa_id: moment[wa_id]):
+        by_source.setdefault(owner[wa_id], set()).add(wa_id)
+    created = False
+    if target_id is None:
+        first = next(iter(by_source))
+        first_thread = next(t for t in threads if t["thread_id"] == first)
+        positions = [
+            i for i, m in enumerate(first_thread["messages"]) if m.get("id") in by_source[first]
+        ]
+        if len(positions) == len(first_thread["messages"]):
+            target_id = first
+        else:
+            threads, classifications, target_id, _ = extract_messages_to_new_thread(
+                threads, classifications, first, positions
+            )
+            created = True
+        del by_source[first]
+    else:
+        by_source.pop(target_id, None)
+    if not by_source and not created:
+        raise ValueError(f"the selected messages are already all in {target_id}")
+
+    moving: list[tuple[dict[str, Any], Any]] = []
+    new_threads: list[dict[str, Any]] = []
+    new_classifications = dict(classifications)
+    removed: list[str] = []
+    for thread in threads:
+        selected = by_source.get(thread["thread_id"])
+        if not selected:
+            new_threads.append(thread)
+            continue
+        source = deepcopy(thread)
+        ids = source.get("message_ids") or list(range(len(source["messages"])))
+        pairs = list(zip(source["messages"], ids, strict=False))
+        moving.extend(pair for pair in pairs if pair[0].get("id") in selected)
+        kept = [pair for pair in pairs if pair[0].get("id") not in selected]
+        if not kept:
+            new_classifications.pop(source["thread_id"], None)
+            removed.append(source["thread_id"])
+            continue
+        source["messages"] = [m for m, _ in kept]
+        source["message_ids"] = [mid for _, mid in kept]
+        recompute_thread_stats(source)
+        new_classifications[source["thread_id"]] = classification_from_thread(
+            source, new_classifications.get(source["thread_id"], {})
+        )
+        new_threads.append(source)
+
+    for index, thread in enumerate(new_threads):
+        if thread["thread_id"] != target_id:
+            continue
+        target = deepcopy(thread)
+        ids = target.get("message_ids") or list(range(len(target["messages"])))
+        combined = list(zip(target["messages"], ids, strict=False)) + moving
+        combined.sort(key=lambda pair: pair[0].get("datetime", ""))
+        target["messages"] = [m for m, _ in combined]
+        target["message_ids"] = [mid for _, mid in combined]
+        recompute_thread_stats(target)
+        new_classifications[target_id] = classification_from_thread(
+            target, new_classifications.get(target_id, {})
+        )
+        new_threads[index] = target
+    return new_threads, new_classifications, target_id, created, removed
