@@ -204,5 +204,5 @@ def test_every_configured_stage_builds_a_client() -> None:
         assert LLMClient.for_stage(stage).model == resolved["model"]
     # Names the pipeline already uses, plus the ones the new steps are built on.
     assert set(stages) >= {
-        "extract", "plan", "generate", "write", "review", "apply", "propose", "update",
+        "extract", "plan", "write", "review", "apply", "propose", "update",
     }

@@ -196,7 +196,7 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
         ArtifactNode.from_pair(
             "assignments", "שיוך קבוצות לדפים", ASSIGNMENTS, STEP_6_ASSIGN, ("groups", "plan")
         ),
-        ArtifactNode.from_pair("pages", "דפי הויקי", WIKI_PAGES, STEP_7, ("claims", "plan")),
+        ArtifactNode.from_pair("pages", "דפי הויקי", WIKI_PAGES, STEP_7, ("groups", "plan", "assignments")),
         # The published site (docs/ + mkdocs.yml); its index file stands for the whole folder.
         ArtifactNode(
             "site", "האתר", DOCS_DIR / WIKI_INDEX_FILE, step=STEP_9, upstream=("plan", "pages")
