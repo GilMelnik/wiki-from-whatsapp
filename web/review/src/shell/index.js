@@ -11,6 +11,7 @@ export { useArtifactStatus, useTools } from "./serverState.js";
 export { useLatest } from "./latest.js";
 export { useResource } from "./useResource.js";
 export { useJobs } from "./jobs.js";
+export { JOB_STATE_LABELS } from "./jobState.js";
 
 // Frame and building blocks
 export { Layout } from "./Layout.jsx";
@@ -18,6 +19,7 @@ export { Panel } from "./Panel.jsx";
 export { ItemList } from "./ItemList.jsx";
 export { Pager } from "./Pager.jsx";
 export { pageStart, usePagedSelection } from "./pagedSelection.js";
+export { pickState, setPicked, togglePicked, usePicking } from "./picking.js";
 export { Select } from "./Select.jsx";
 export { PanelState } from "./states.jsx";
 export { Dialog } from "./Dialog.jsx";
@@ -29,6 +31,7 @@ export { JobLog, useStepRun } from "./JobControls.jsx";
 // Text, formatting, keyboard, remembered state
 export { Bidi, Ltr } from "./text.jsx";
 export { formatBytes, formatCount, formatDateTime, formatRelative } from "./format.js";
+export { STANCES, stanceOf } from "./stance.js";
 export { useNow } from "./useNow.js";
 export { useShortcuts } from "./useShortcuts.js";
 export { useStoredState } from "./storage.js";

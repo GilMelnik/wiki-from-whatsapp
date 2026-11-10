@@ -28,4 +28,7 @@ test("plain keys are ignored while typing unless the binding opts in", () => {
   assert.equal(isTypingTarget({ tagName: "TEXTAREA" }), true);
   assert.equal(isTypingTarget({ tagName: "DIV", isContentEditable: true }), true);
   assert.equal(isTypingTarget({ tagName: "BUTTON" }), false);
+  assert.equal(isTypingTarget({ tagName: "INPUT", type: "text" }), true);
+  assert.equal(isTypingTarget({ tagName: "INPUT", type: "checkbox" }), false); // a ticked box
+  assert.equal(isTypingTarget({ tagName: "INPUT", type: "radio" }), false);
 });
