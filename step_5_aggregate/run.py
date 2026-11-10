@@ -19,9 +19,11 @@ canonical entity ids). A run starts from the CURRENT EDITED groups, takes remove
 moves a changed claim out only when its stance now opposes a fellow member, places new
 claims exactly as above (a re-run and a fresh run follow the same rule), applies new or
 changed manual must-links (``MANUAL_AGGREGATIONS_PATH``), drops empty groups and recomputes
-every derived field of every group. Membership, ids, ``merged_from`` and a manual
-representative (``representative_manual``) are never re-derived, so a reviewer's merge,
-split, move or representative choice survives. Nothing is written when nothing changed.
+every derived field of every group. Membership, ids, ``merged_from``, a manual
+representative (``representative_manual``) and manual contradiction links
+(``contradicts_manual`` / ``contradicts_rejected``) are never re-derived, so a reviewer's
+merge, split, move, representative or link choice survives; top-level keys of the edited file
+other than ``groups`` / ``metadata`` (the reviewer's ``not_same`` list) are carried over. Nothing is written when nothing changed.
 ``--rebuild`` regroups from scratch after backing up the edited file.
 
 Output (``claims_aggregated.json`` == ``claims_aggregated_edited.json`` after a run)::
@@ -29,7 +31,8 @@ Output (``claims_aggregated.json`` == ``claims_aggregated_edited.json`` after a 
     {"groups": [{group_id, claim_text, representative_claim_id, stance, member_claim_ids,
        entities, entity_names, supporter_count, opposer_count, first_date, last_date,
        by_month: {"YYYY-MM": {supporters, opposers}}, thread_count, contradicts,
-       merged_from?, representative_manual?}],
+       merged_from?, representative_manual?, contradicts_manual?, contradicts_rejected?}],
+     "not_same"?: [{id, claims_a, claims_b, group_ids, source, at}],   (groups reviewer)
      "metadata": {source, inputs, must_links, params, embedding_model, git_commit, run,
        group_count, multi_member_group_count, claim_count, groups_with_contradictions}}
 """
