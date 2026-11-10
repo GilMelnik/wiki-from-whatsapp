@@ -30,13 +30,27 @@
     "enable_web_search": null
   },
   "entities": {
-    "similarity_threshold": 0.88,
+    "similarity_threshold": 0.8,
     "min_skeleton_len": 3,
     "sample_claims_per_member": 12,
     "prefix_similarity": 0.93,
-    "topic_guard_cap": 0.5,
+    "guard_min_context": 0.05,
+    "guard_cap": 0.5,
     "short_name_max_chars": 8,
-    "distance_method": "string_plus_transliteration_v2",
+    "entity_id_prefix": "e",
+    "entity_id_digits": 4,
+    "analyzer": {
+      "model": "dicta-il/dictabert-joint",
+      "batch_size": 4,
+      "device": null,
+      "min_free_gpu_mb": 2048,
+      "fingerprint_chars": 12
+    },
+    "merge_method": "multi_signal_v3_context_guard",
+    "eval": {
+      "reviewed": "/mnt/SSD/coding/backup_data_wiki_from_whatsapp/2026_11_07_data/step_4_entities/entities_edited.json",
+      "base_fraction": 0.8
+    },
     "disallowed_entity_pos": [
       "VERB", "ADV", "ADP", "AUX", "CCONJ", "SCONJ", "DET", "PRON", "PART", "INTJ", "PUNCT"
     ],

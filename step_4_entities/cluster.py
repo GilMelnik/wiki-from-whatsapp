@@ -1,120 +1,45 @@
-"""Cluster distinct entity records into suggested canonical entities."""
+"""Group member records (entity strings) into suggested canonical entities."""
 
 from __future__ import annotations
 
 import json
 from collections import defaultdict
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import numpy as np
+from sklearn.cluster import AgglomerativeClustering
 
+from step_4_entities.mentions import Word
 from step_4_entities.normalize import normalize_name
 from step_4_entities.pair_index import EntityPairIndex
-from utils.config import ENTITIES_CONFIG
-from utils.json_io import write_json_file
-from utils.paths import (
-    ENTITIES_SEED_PATH,
-    ENTITY_DISTANCE_MATRIX_PATH,
-    ENTITY_DISTANCE_META_PATH,
-)
+from step_4_entities.records import new_entity
 
 
-def _load_seed_index(
-    seed_path: Path | str = ENTITIES_SEED_PATH,
-) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
-    """Load seed file and return ``normalized name -> seed_id``, ``seed_id -> entry``."""
+def load_seed_index(seed_path: Path) -> tuple[dict[str, str], dict[str, dict[str, Any]]]:
+    """Curated seed file -> (``normalized alias -> seed id``, ``seed id -> entry``)."""
 
-    path = Path(seed_path)
-    if not path.is_file():
+    if not seed_path.is_file():
         return {}, {}
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(seed_path.read_text(encoding="utf-8"))
     entries = (data.get("entities") or []) if isinstance(data, dict) else (data or [])
-
     norm_to_seed: dict[str, str] = {}
     seed_by_id: dict[str, dict[str, Any]] = {}
     for idx, entry in enumerate(entries):
-        seed_id = entry.get("id") or f"seed{idx:03d}"
+        seed_id = entry.get("id") or f"seed{idx}"
         seed_by_id[seed_id] = entry
-        names = [entry.get("canonical", ""), *(entry.get("aliases") or [])]
-        for nm in names:
-            norm = normalize_name(nm)
+        for name in [entry.get("canonical", ""), *(entry.get("aliases") or [])]:
+            norm = normalize_name(name)
             if norm:
                 norm_to_seed.setdefault(norm, seed_id)
     return norm_to_seed, seed_by_id
 
 
-def _entity_distance_matrix_metadata(
-    source_path: Path,
-    names: list[str],
-    *,
-    signature: str = "",
-) -> dict[str, Any]:
-    return {
-        "source": str(source_path.resolve()),
-        "entity_count": len(names),
-        "entity_names": names,
-        "distance_method": ENTITIES_CONFIG["distance_method"],
-        "min_skeleton_len": ENTITIES_CONFIG["min_skeleton_len"],
-        "signal_signature": signature,
-    }
-
-
-def _entity_distance_matrix_need_rebuild(
-    meta_path: Path,
-    matrix_path: Path,
-    expected: dict[str, Any],
-) -> bool:
-    if not meta_path.exists() or not matrix_path.exists():
-        return True
-    with meta_path.open(encoding="utf-8") as f:
-        stored = json.load(f).get("metadata", {})
-    return stored != expected
-
-
-def ensure_entity_distance_matrix(
-    entities_or_index: list[dict[str, Any]] | EntityPairIndex,
-    source_path: Path | str,
-    *,
-    matrix_path: Path | str = ENTITY_DISTANCE_MATRIX_PATH,
-    meta_path: Path | str = ENTITY_DISTANCE_META_PATH,
-    seed_groups: list[str | None] | None = None,
-) -> np.ndarray:
-    """Build or load the cached entity distance matrix."""
-
-    if isinstance(entities_or_index, EntityPairIndex):
-        index = entities_or_index
-    else:
-        index = EntityPairIndex(entities_or_index, seed_groups)
-
-    source = Path(source_path).resolve()
-    matrix_output = Path(matrix_path)
-    meta_output = Path(meta_path)
-    signature = index.signal_signature()
-    expected_meta = _entity_distance_matrix_metadata(
-        source, index.names(), signature=signature
-    )
-
-    if not _entity_distance_matrix_need_rebuild(
-        meta_output, matrix_output, expected_meta
-    ):
-        return np.load(matrix_output)
-
-    dist = index.distance_matrix()
-    matrix_output.parent.mkdir(parents=True, exist_ok=True)
-    np.save(matrix_output, dist)
-    write_json_file({"metadata": expected_meta}, meta_output)
-    return dist
-
-
-def _cluster_labels(dist: np.ndarray, *, similarity_threshold: float) -> list[int]:
+def _cluster_labels(dist: np.ndarray, similarity_threshold: float) -> list[int]:
     n = dist.shape[0]
-    if n == 0:
-        return []
-    if n == 1:
-        return [0]
-    from sklearn.cluster import AgglomerativeClustering
-
+    if n < 2:
+        return list(range(n))
     labels = AgglomerativeClustering(
         n_clusters=None,
         distance_threshold=1.0 - similarity_threshold,
@@ -124,156 +49,103 @@ def _cluster_labels(dist: np.ndarray, *, similarity_threshold: float) -> list[in
     return labels.tolist()
 
 
-def _cluster_cohesion(members: list[int], dist: np.ndarray) -> float:
-    """Worst (largest) pairwise distance turned into a similarity score."""
+def _cohesion(indices: list[int], dist: np.ndarray) -> float:
+    """Worst (largest) pairwise distance in a cluster, as a similarity."""
 
-    if len(members) < 2:
+    if len(indices) < 2:
         return 1.0
-    diameter = max(dist[i, j] for i in members for j in members if i < j)
+    diameter = max(dist[i, j] for i in indices for j in indices if i < j)
     return round(1.0 - float(diameter), 4)
 
 
-def _union_contacts(
-    members: list[dict[str, Any]], key: str = "contacts"
-) -> dict[str, list[str]]:
-    out: dict[str, set[str]] = {"email": set(), "phone": set(), "website": set()}
-    for member in members:
-        for kind, values in (member.get(key) or {}).items():
-            out.setdefault(kind, set()).update(values)
-    return {kind: sorted(values) for kind, values in out.items()}
+class EntityClusterer:
+    """Scores and groups entity strings with one threshold, seed file and claim analysis."""
 
+    def __init__(
+        self,
+        analysis: dict[str, list[Word]],
+        *,
+        similarity_threshold: float,
+        seed_path: Path,
+    ) -> None:
+        self.analysis = analysis
+        self.similarity_threshold = similarity_threshold
+        self.norm_to_seed, self.seed_by_id = load_seed_index(seed_path)
 
-def _empty_contacts() -> dict[str, list[str]]:
-    return {"email": [], "phone": [], "website": []}
-
-
-def build_entity(
-    entity_id: str,
-    member_entities: list[dict[str, Any]],
-    *,
-    seed_entry: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """Assemble one canonical-entity record from its member name records."""
-
-    members = sorted(member_entities, key=lambda e: e["count"], reverse=True)
-    member_names = {m["name"] for m in members}
-    canonical_name = members[0]["name"]
-    topics: set[str] = set()
-    for member in members:
-        topics.update(member.get("topics") or [])
-
-    if seed_entry:
-        seed_canonical = seed_entry.get("canonical")
-        # Only adopt the seed name when it is one of the clustered members, so the
-        # reviewer's recompute (which keys canonical off aliases) stays consistent.
-        if seed_canonical in member_names:
-            canonical_name = seed_canonical
-        topics.update(seed_entry.get("topics") or [])
-
-    confident = _union_contacts(members, "contacts")
-    uncertain = _union_contacts(members, "contacts_uncertain")
-    uncertain = {
-        kind: sorted(set(uncertain[kind]) - set(confident.get(kind, [])))
-        for kind in uncertain
-    }
-
-    entity: dict[str, Any] = {
-        "entity_id": entity_id,
-        "canonical_name": canonical_name,
-        "status": "suggested",
-        "aliases": [m["name"] for m in members],
-        "members": [
-            {
-                "name": m["name"],
-                "claim_ids": m.get("claim_ids"),
-                "count": m["count"],
-                "sample_claim_ids": m["sample_claim_ids"],
-                "topics": m["topics"],
-                "contacts": m["contacts"],
-                "contacts_uncertain": m.get("contacts_uncertain") or _empty_contacts(),
-            }
-            for m in members
-        ],
-        "contacts": confident,
-        "contacts_uncertain": uncertain,
-        "topics": sorted(topics),
-        "merge_signals": [],
-        "score": 1.0,
-    }
-    if seed_entry and seed_entry.get("type"):
-        entity["type"] = seed_entry["type"]
-    return entity
-
-
-def cluster_entities(
-    entities: list[dict[str, Any]],
-    source_path: Path | str,
-    *,
-    similarity_threshold: float = ENTITIES_CONFIG["similarity_threshold"],
-    matrix_path: Path | str = ENTITY_DISTANCE_MATRIX_PATH,
-    meta_path: Path | str = ENTITY_DISTANCE_META_PATH,
-    seed_path: Path | str = ENTITIES_SEED_PATH,
-) -> list[dict[str, Any]]:
-    """Group distinct entity records into suggested canonical entities."""
-
-    norm_to_seed, seed_by_id = _load_seed_index(seed_path)
-    seed_groups = [norm_to_seed.get(e["normalized"]) for e in entities]
-    index = EntityPairIndex(entities, seed_groups)
-
-    dist = ensure_entity_distance_matrix(
-        index,
-        source_path,
-        matrix_path=matrix_path,
-        meta_path=meta_path,
-    )
-    labels = _cluster_labels(dist, similarity_threshold=similarity_threshold)
-
-    grouped: dict[int, list[int]] = defaultdict(list)
-    for idx, label in enumerate(labels):
-        grouped[label].append(idx)
-
-    # Which signals fired inside each cluster, and which near-identical short names
-    # the topic guard held apart (surfaced for manual review as "ambiguous").
-    cluster_signals: dict[int, set[str]] = defaultdict(set)
-    guarded_pairs: list[tuple[int, int]] = []
-    n = len(entities)
-    for i in range(n):
-        for j in range(i + 1, n):
-            sim, signals, guarded = index.pair_signals(i, j)
-            if labels[i] == labels[j] and sim >= similarity_threshold:
-                cluster_signals[labels[i]].update(signals)
-            if guarded and labels[i] != labels[j]:
-                guarded_pairs.append((i, j))
-
-    label_to_entity: dict[int, dict[str, Any]] = {}
-    out_entities: list[dict[str, Any]] = []
-    for n_idx, (label, indices) in enumerate(sorted(grouped.items())):
-        seed_id = next(
-            (seed_groups[i] for i in indices if seed_groups[i] is not None), None
+    def index(self, members: list[dict[str, Any]]) -> EntityPairIndex:
+        seeds = [self.norm_to_seed.get(normalize_name(m["name"])) for m in members]
+        return EntityPairIndex(
+            members,
+            self.analysis,
+            similarity_threshold=self.similarity_threshold,
+            seed_groups=seeds,
         )
-        entity = build_entity(
-            f"e{n_idx:04d}",
-            [entities[i] for i in indices],
-            seed_entry=seed_by_id.get(seed_id) if seed_id else None,
+
+    def _seeded(self, entity: dict[str, Any], seed_ids: set[str]) -> None:
+        """Adopt the seed's canonical name (when it is a member) and type."""
+
+        for seed_id in sorted(seed_ids):
+            entry = self.seed_by_id[seed_id]
+            if entry.get("canonical") in entity["aliases"]:
+                entity["canonical_name"] = entry["canonical"]
+            if entry.get("type"):
+                entity["type"] = entry["type"]
+
+    def cluster(
+        self, members: list[dict[str, Any]], allocate_id: Callable[[], str]
+    ) -> list[dict[str, Any]]:
+        """Complete-linkage clusters of ``members`` as new entities, most-claimed first."""
+
+        if not members:
+            return []
+        # Complete linkage breaks distance ties by input order, so fix the order here (most
+        # claims first, as v1 did): measured on the reviewed backup, an alphabetical order
+        # loses 18 of 182 correct pairs.
+        members = sorted(members, key=lambda m: (-m["count"], m["name"]))
+        index = self.index(members)
+        dist, held = index.distance_matrix()
+        labels = _cluster_labels(dist, self.similarity_threshold)
+        grouped: dict[int, list[int]] = defaultdict(list)
+        for idx, label in enumerate(labels):
+            grouped[label].append(idx)
+
+        def total(indices: list[int]) -> int:
+            return sum(members[i]["count"] for i in indices)
+
+        entities: list[dict[str, Any]] = []
+        entity_of: dict[int, dict[str, Any]] = {}
+        for indices in sorted(grouped.values(), key=lambda ix: (-total(ix), min(ix))):
+            signals: set[str] = set()
+            for a in indices:
+                for b in indices:
+                    if a < b:
+                        sim, fired, _ = index.pair_signals(a, b)
+                        if sim >= self.similarity_threshold:
+                            signals |= fired
+            entity = new_entity(
+                allocate_id(),
+                [members[i] for i in indices],
+                merge_signals=sorted(signals),
+                score=_cohesion(indices, dist),
+            )
+            self._seeded(entity, {s for i in indices if (s := index.seed_groups[i])})
+            entities.append(entity)
+            for i in indices:
+                entity_of[i] = entity
+
+        # Each look-alike pair the context guard held apart flags both entities for review.
+        for i, j in held:
+            if entity_of[i] is not entity_of[j]:
+                flag_conflict(entity_of[i], entity_of[j])
+        return entities
+
+
+def flag_conflict(a: dict[str, Any], b: dict[str, Any]) -> None:
+    """Mark two entities ``ambiguous`` and name each other in ``conflict_with``."""
+
+    for entity, other in ((a, b), (b, a)):
+        if entity.get("status", "suggested") == "suggested":
+            entity["status"] = "ambiguous"
+        entity["conflict_with"] = sorted(
+            {*(entity.get("conflict_with") or []), other["canonical_name"]}
         )
-        entity["score"] = _cluster_cohesion(indices, dist)
-        if len(indices) > 1:
-            entity["merge_signals"] = sorted(cluster_signals.get(label, set()))
-        label_to_entity[label] = entity
-        out_entities.append(entity)
-
-    # Homonym guard: each held-apart pair flags both entities as ambiguous and
-    # records the conflicting canonical name for the reviewer.
-    for i, j in guarded_pairs:
-        ent_i = label_to_entity[labels[i]]
-        ent_j = label_to_entity[labels[j]]
-        for ent, other in ((ent_i, ent_j), (ent_j, ent_i)):
-            ent["status"] = "ambiguous"
-            conflicts = set(ent.get("conflict_with") or [])
-            conflicts.add(other["canonical_name"])
-            ent["conflict_with"] = sorted(conflicts)
-
-    out_entities.sort(
-        key=lambda e: sum(m["count"] for m in e["members"]), reverse=True
-    )
-    return out_entities

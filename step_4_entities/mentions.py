@@ -25,6 +25,7 @@ Word = dict[str, Any]
 # A surface match is rejected only when every matched word is one of these clearly
 # non-entity parts of speech (built once from config for O(1) membership checks).
 _DISALLOWED_ENTITY_POS = frozenset(ENTITIES_CONFIG["disallowed_entity_pos"])
+_ANALYZER_CONFIG = ENTITIES_CONFIG["analyzer"]
 
 
 @runtime_checkable
@@ -57,19 +58,22 @@ class SimpleAnalyzer:
 
 
 class DictaAnalyzer:
-    """Production analyzer wrapping the shared ``HebrewTokenizer`` (dictabert-joint).
+    """Production analyzer wrapping ``HebrewTokenizer`` (dictabert-joint).
 
-    ponytail: a small batch keeps the lex head's vocab argsort from OOMing a modest
-    GPU. If matching ever needs more throughput, set ``CUDA_VISIBLE_DEVICES=`` to
-    run on CPU, or raise ``batch_size`` on a larger card.
+    Model, batch size, device and the free-GPU-memory floor come from ``entities.analyzer``
+    in ``config.json``; the model only loads on first use (a cache miss).
     """
 
-    def __init__(self, tokenizer: Any = None, **kwargs: Any) -> None:
+    def __init__(self, tokenizer: Any = None) -> None:
         if tokenizer is None:
-            from step_1_threads_split.tf_idf.hebrew_tokenizer import HebrewTokenizer
+            from step_4_entities.hebrew_tokenizer import HebrewTokenizer
 
-            kwargs.setdefault("batch_size", 8)
-            tokenizer = HebrewTokenizer(**kwargs)
+            tokenizer = HebrewTokenizer(
+                model_name=_ANALYZER_CONFIG["model"],
+                batch_size=_ANALYZER_CONFIG["batch_size"],
+                device=_ANALYZER_CONFIG["device"],
+                min_free_gpu_mb=_ANALYZER_CONFIG["min_free_gpu_mb"],
+            )
         self._tokenizer = tokenizer
 
     @property
@@ -178,14 +182,8 @@ def analyze_claims(
     return out
 
 
-def _signature(claims: list[dict[str, Any]], model_name: str) -> str:
-    payload = sorted(
-        [c.get("claim_id"), c.get("claim_text") or ""]
-        for c in claims
-        if c.get("claim_id")
-    )
-    blob = json.dumps([model_name, payload], ensure_ascii=False, sort_keys=True)
-    return hashlib.sha1(blob.encode("utf-8")).hexdigest()
+def _text_fingerprint(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()[: _ANALYZER_CONFIG["fingerprint_chars"]]
 
 
 def build_or_load_analysis(
@@ -195,27 +193,73 @@ def build_or_load_analysis(
     cache_path: Path | str = ENTITY_ANALYSIS_PATH,
     source_path: Path | str | None = None,
 ) -> dict[str, list[Word]]:
-    """Build the per-claim analysis or load it from ``cache_path`` when fresh."""
+    """Per-claim analysis, reusing the cache entry of every claim whose text is unchanged.
+
+    Only new or edited claim texts are analyzed (the cache is per claim, keyed by a text
+    fingerprint and the model name), so an incremental run analyzes only its new claims.
+    The cache is rewritten, pruned to ``claims``, whenever something was added or dropped.
+    """
 
     cache = Path(cache_path)
-    signature = _signature(claims, analyzer.model_name)
+    cached: dict[str, list[Word]] = {}
+    fingerprints: dict[str, str] = {}
     if cache.is_file():
         try:
             data = json.loads(cache.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
-            data = None
-        if isinstance(data, dict) and data.get("metadata", {}).get("signature") == signature:
-            return data["analysis"]
+            data = {}
+        if data.get("metadata", {}).get("model") == analyzer.model_name:
+            cached = data.get("analysis") or {}
+            fingerprints = data.get("fingerprints") or {}
 
-    analysis = analyze_claims(claims, analyzer)
-    payload = {
-        "metadata": {
-            "signature": signature,
-            "model": analyzer.model_name,
-            "source": str(source_path) if source_path is not None else None,
-            "claim_count": len(analysis),
-        },
-        "analysis": analysis,
+    current = {
+        c["claim_id"]: _text_fingerprint(c.get("claim_text") or "")
+        for c in claims
+        if c.get("claim_id")
     }
-    write_json_file(payload, cache)
+    missing = [
+        c
+        for c in claims
+        if c.get("claim_id")
+        and (fingerprints.get(c["claim_id"]) != current[c["claim_id"]] or c["claim_id"] not in cached)
+    ]
+    analysis = {cid: cached[cid] for cid in current if cid in cached}
+    analysis.update(analyze_claims(missing, analyzer) if missing else {})
+    if missing or set(cached) != set(current):
+        write_json_file(
+            {
+                "metadata": {
+                    "model": analyzer.model_name,
+                    "source": str(source_path) if source_path is not None else None,
+                    "claim_count": len(analysis),
+                },
+                "fingerprints": current,
+                "analysis": analysis,
+            },
+            cache,
+        )
     return analysis
+
+
+class MentionIndex:
+    """Find which analyzed claims mention a name, without scanning every claim.
+
+    Claims are indexed by the normalized core of each word; a name is only matched (with
+    ``find_mentions``) against claims containing its first word.
+    """
+
+    def __init__(self, analysis: dict[str, list[Word]]) -> None:
+        self._analysis = analysis
+        self._by_core: dict[str, set[str]] = {}
+        for claim_id, words in analysis.items():
+            for word in words:
+                core = normalize_token(word.get("core") or "")
+                if core:
+                    self._by_core.setdefault(core, set()).add(claim_id)
+
+    def claims_mentioning(self, name: str) -> set[str]:
+        name_words = _name_words(name)
+        if not name_words:
+            return set()
+        candidates = self._by_core.get(name_words[0], set())
+        return {c for c in candidates if find_mentions(self._analysis[c], name)}

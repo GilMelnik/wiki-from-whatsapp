@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -17,6 +16,7 @@ from step_4_entities.mentions import (
     analyze_claims,
     build_or_load_analysis,
 )
+from step_4_entities.records import allocate_entity_id, claim_entity_index
 from step_4_entities.reviewer.store.aggregations import AggregationsMixin
 from step_4_entities.reviewer.store.claims import ClaimsMixin
 from step_4_entities.reviewer.store.mutations import MutationsMixin
@@ -145,12 +145,8 @@ class EntityStore(ClaimsMixin, ViewsMixin, MutationsMixin, AggregationsMixin):
         raise KeyError(f"unknown entity: {entity_id}")
 
     def _new_entity_id(self) -> str:
-        nums = [
-            int(m.group(1))
-            for e in self.entities
-            if (m := re.fullmatch(r"e(\d+)", e["entity_id"]))
-        ]
-        return f"e{(max(nums) + 1) if nums else 0:04d}"
+        assert self._data is not None
+        return allocate_entity_id(self._data)
 
     # --- persistence ----------------------------------------------------
 
@@ -180,6 +176,11 @@ class EntityStore(ClaimsMixin, ViewsMixin, MutationsMixin, AggregationsMixin):
         meta["edited_by"] = "entity_reviewer"
         meta["edited_at"] = datetime.now().isoformat(timespec="seconds")
         meta["entity_count"] = len(self.entities)
+        self._data["claim_entities"] = claim_entity_index(
+            self.entities,
+            deleted_claims=self._deleted_claims,
+            member_claims=self._claim_ids_for_member,
+        )
         if self._entities_override is None:
             write_json_file(self._data, EDITED_ENTITIES_PATH)
             self._entities_source = EDITED_ENTITIES_PATH
