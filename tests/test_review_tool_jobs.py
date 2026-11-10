@@ -123,12 +123,15 @@ def the_job(runner: JobRunner, job_id: str) -> Job:
 # --------------------------------------------------------------------------- registry
 
 
-def test_served_registry_matches_the_graph_and_marks_steps_2_and_3_safe() -> None:
+def test_served_registry_matches_the_graph_and_safe_steps_can_run() -> None:
     steps = {step.key: step for step in SERVED_STEPS.steps}
     for step in steps.values():
         assert GRAPH.node(step.spec.produces).step == step.key
+    # More steps join this set as they are migrated to incremental runs; these two were first.
     safe = {key for key, step in steps.items() if step.spec.incremental_safe}
-    assert safe == {"step_2_classify", "step_3_extract"}
+    assert {"step_2_classify", "step_3_extract"} <= safe
+    for key in safe:
+        assert steps[key].command()[1] == "-m"
     assert steps["step_3_extract"].spec.paid
     assert steps["step_2_classify"].command()[1:] == ["-m", "step_2_classify.run"]
     assert steps["step_2_classify"].command(rebuild=True)[-1] == "--rebuild"
