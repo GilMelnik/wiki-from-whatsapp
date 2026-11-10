@@ -10,6 +10,7 @@ from review_tool.artifacts import GRAPH, ArtifactGraph, ArtifactNode, ArtifactSt
 from review_tool.events import ARTIFACT_CHANGED
 from review_tool.watcher import ArtifactWatcher
 from tests.review_tool_support import build_graph, new_bus, write_file
+from utils.file_lock import file_lock
 from utils.json_io import write_json_file
 
 DEBOUNCE = 0.3
@@ -46,9 +47,11 @@ def test_unknown_key_error_names_the_known_keys(tmp_path: Path) -> None:
 def test_default_graph_is_the_pipeline_in_order() -> None:
     keys = [node.key for node in GRAPH.nodes]
     assert keys == [
-        "export", "threads", "classified", "claims", "entities", "groups", "plan", "pages",
+        "export", "threads", "gold_threads", "classified", "claims", "entities", "groups",
+        "plan", "pages",
     ]  # fmt: skip
     assert GRAPH.node("export").edited is None
+    assert (GRAPH.node("gold_threads").step, GRAPH.node("gold_threads").upstream) == (None, ())
     assert GRAPH.node("claims").upstream == ("threads", "classified")
     assert GRAPH.node("claims").original.name == "claims.json"
     assert GRAPH.node("claims").edited.name == "claims_edited.json"
@@ -195,3 +198,29 @@ def test_node_added_after_start_is_watched_without_a_false_event(tmp_path: Path)
     write_json_file({"pages": 1}, tmp_path / "plan.json")
     watcher.poll_once(102.0)
     assert [event["key"] for event in watcher.poll_once(103.0)] == ["plan"]
+
+
+def test_lock_sidecars_and_temp_files_are_not_changes(tmp_path: Path) -> None:
+    write_file(tmp_path / "threads.json", {"n": 1})
+    watcher = make_watcher(build_graph(tmp_path))
+    with file_lock(tmp_path / "threads.json"):  # leaves threads.json.lock behind
+        (tmp_path / ".threads.json.tmp-123-abcd").write_text("{", encoding="utf-8")
+    assert watcher.poll_once(100.0) == []
+    assert watcher.poll_once(101.0) == []
+
+
+def test_reconciled_write_of_both_files_across_polls_is_one_event(tmp_path: Path) -> None:
+    """``utils.reconcile`` writes the edited file, then the original, under one lock."""
+    original, edited = tmp_path / "threads.json", tmp_path / "threads_edited.json"
+    write_file(original, {"n": 1})
+    write_file(edited, {"n": 1})
+    watcher = make_watcher(build_graph(tmp_path))
+
+    with file_lock(original), file_lock(edited):
+        write_json_file({"n": 2}, edited)
+        assert watcher.poll_once(100.0) == []  # a poll lands between the two writes
+        write_json_file({"n": 2}, original)
+    assert watcher.poll_once(100.4) == []  # the artifact changed again: debounce restarts
+    (event,) = watcher.poll_once(101.0)
+    assert (event["key"], event["payload"]) == ("threads", {"files": ["original", "edited"]})
+    assert watcher.poll_once(102.0) == []

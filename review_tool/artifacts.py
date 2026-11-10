@@ -23,6 +23,7 @@ from utils.paths import (
     CLAIMS,
     CLASSIFIED,
     ENTITIES,
+    GOLD_THREADS_PATH,
     PLAN,
     STEP_1,
     STEP_2,
@@ -171,6 +172,8 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
     return (
         ArtifactNode("export", "ייצוא הצ'אט", CHAT_ANDROID_PATH),
         ArtifactNode.from_pair("threads", "שיחות", THREADS, STEP_1, ("export",)),
+        # Hand-tagged, frozen on purpose (``evaluate --freeze-gold``): no step, never stale.
+        ArtifactNode("gold_threads", "שיחות זהב (תיוג ידני)", GOLD_THREADS_PATH),
         ArtifactNode.from_pair("classified", "סיווג שיחות", CLASSIFIED, STEP_2, ("threads",)),
         ArtifactNode.from_pair("claims", "טענות", CLAIMS, STEP_3, ("threads", "classified")),
         ArtifactNode.from_pair("entities", "ישויות", ENTITIES, STEP_4, ("claims",)),

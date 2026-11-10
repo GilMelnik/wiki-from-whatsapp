@@ -1,9 +1,14 @@
 """Poll the artifact files and announce every change, whoever made it.
 
 The watcher is the single source of ``artifact_changed``: a tool saving a file and a pipeline
-step run in a terminal look the same to it. A change is announced once the file has stopped
-changing for the debounce period, so a file that is written in several steps (a copy, a
-non-atomic write) produces one event.
+step run in a terminal look the same to it. Only the artifact files themselves are polled, so
+the lock sidecars (``X.json.lock``) and the temp files of an atomic write (``.X.json.tmp-*``)
+never produce an event.
+
+Changes are debounced per artifact, not per file: an artifact is announced once all of its
+files (original and edited) have stopped changing for the debounce period. A step that writes
+both files under one lock (``utils.reconcile.write_reconciled``), an atomic replace, or a file
+written in several chunks each produce one event.
 """
 
 from __future__ import annotations
@@ -12,19 +17,21 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
-from review_tool.artifacts import ArtifactGraph
+from review_tool.artifacts import ArtifactGraph, ArtifactNode
 from review_tool.events import ARTIFACT_CHANGED, EventBus
 from review_tool.fs import FileStamp, stamp
 
 logger = logging.getLogger(__name__)
 
+# The stamps of one artifact's files, by role ("original", "edited").
+Stamps = dict[str, FileStamp | None]
+
 
 @dataclass(frozen=True)
 class _Pending:
-    stamp: FileStamp | None
+    stamps: Stamps
     since: float
 
 
@@ -41,54 +48,52 @@ class ArtifactWatcher:
         self._bus = bus
         self._interval_seconds = interval_seconds
         self._debounce_seconds = debounce_seconds
-        self._announced: dict[Path, FileStamp | None] = {}
-        self._pending: dict[Path, _Pending] = {}
+        self._announced: dict[str, Stamps] = {}
+        self._pending: dict[str, _Pending] = {}
         self.poll_once(time.monotonic())  # baseline: the current state is not a change
 
     def poll_once(self, now: float) -> list[dict[str, Any]]:
-        """Compare every artifact file with its last announced state at monotonic time ``now``.
+        """Compare every artifact with its last announced state at monotonic time ``now``.
 
-        Returns the events published by this call: one ``artifact_changed`` per artifact key,
-        with ``payload.files`` naming the roles (``original`` / ``edited``) that settled.
+        Returns the events published by this call: one ``artifact_changed`` per settled
+        artifact, with ``payload.files`` naming the roles (``original`` / ``edited``) that
+        differ from what was announced before.
         """
-        settled: dict[str, list[str]] = {}
+        events = []
         for node in self._graph.nodes:
-            for role, path in node.files.items():
-                if self._settled(path, now):
-                    settled.setdefault(node.key, []).append(role)
-        return [
-            self._bus.publish(ARTIFACT_CHANGED, key=key, payload={"files": roles})
-            for key, roles in settled.items()
-        ]
+            roles = self._settled_roles(node, now)
+            if roles:
+                payload = {"files": roles}
+                events.append(self._bus.publish(ARTIFACT_CHANGED, key=node.key, payload=payload))
+        return events
 
-    def _settled(self, path: Path, now: float) -> bool:
-        current = stamp(path)
-        if path not in self._announced:  # first sight of this file: baseline, no event
-            self._announced[path] = current
-            return False
-        if current == self._announced[path]:
-            self._pending.pop(path, None)
-            return False
-        pending = self._pending.get(path)
-        if pending is None or pending.stamp != current:
-            self._pending[path] = _Pending(current, now)
-            return False
+    def _settled_roles(self, node: ArtifactNode, now: float) -> list[str]:
+        current = {role: stamp(path) for role, path in node.files.items()}
+        announced = self._announced.get(node.key)
+        if announced is None:  # first sight of this node (also one added later): baseline
+            self._announced[node.key] = current
+            return []
+        if current == announced:
+            self._pending.pop(node.key, None)
+            return []
+        pending = self._pending.get(node.key)
+        if pending is None or pending.stamps != current:
+            self._pending[node.key] = _Pending(current, now)
+            return []
         if now - pending.since < self._debounce_seconds:
-            return False
-        self._announced[path] = current
-        del self._pending[path]
-        return True
+            return []
+        self._announced[node.key] = current
+        del self._pending[node.key]
+        return [role for role in current if current[role] != announced.get(role)]
 
     async def run(self) -> None:
         """Poll until cancelled."""
-        logger.info(
-            f"Watching {len(self._announced)} artifact files every {self._interval_seconds}s"
-        )
+        logger.info(f"Watching {len(self._announced)} artifacts every {self._interval_seconds}s")
         while True:
             await asyncio.sleep(self._interval_seconds)
             try:
                 events = self.poll_once(time.monotonic())
-            except OSError as exc:  # e.g. a permission problem; keep watching the rest
+            except OSError as exc:  # e.g. a permission problem; keep watching
                 logger.error(f"Could not check the artifact files: {exc!r}")
                 continue
             for event in events:
