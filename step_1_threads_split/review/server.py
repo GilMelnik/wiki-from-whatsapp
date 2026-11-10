@@ -8,6 +8,7 @@ from typing import Any, Literal
 from fastapi import HTTPException, Query
 from pydantic import BaseModel, Field
 
+from step_1_threads_split.gold import Window
 from step_1_threads_split.review.models import FilterKind, SortKind, SortOrder
 from step_1_threads_split.review.stats import compute_stats
 from step_1_threads_split.review.store import ThreadStore
@@ -49,6 +50,23 @@ class SplitRequest(BaseModel):
     source_id: str
     mode: Literal["sparse", "range"]
     message_indices: list[int] = Field(min_length=1)
+
+
+class GoldDoneUpdate(BaseModel):
+    done: bool
+
+
+def _gold_window(store: ThreadStore, index: int) -> Window:
+    try:
+        return store.gold.window(index)
+    except IndexError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+def _window_members(store: ThreadStore, index: int) -> list[tuple[str, int]]:
+    """``(thread_id, messages in window)`` of gold window ``index``, in window order."""
+    _gold_window(store, index)
+    return store.gold.members(store.threads)[index]
 
 
 class MoveMessagesRequest(BaseModel):
@@ -99,8 +117,16 @@ def list_threads(
     duration_min: float | None = None,
     duration_max: float | None = None,
     start_month: str | None = None,
+    window: int | None = Query(None, ge=0),
 ) -> dict[str, Any]:
     store = get_store()
+    if window is not None:
+        # Gold mode: every thread of the window, in window order; other filters do not apply.
+        items = [
+            {**store._enrich(store.get_thread(thread_id)), "in_window": count}
+            for thread_id, count in _window_members(store, window)
+        ]
+        return {"items": items, "total": len(items), "offset": 0, "limit": len(items)}
     items, total = store.list_enriched(
         filter_kind=filter,
         sort=sort,
@@ -124,6 +150,7 @@ def get_thread(
     filter: FilterKind = Query("useless"),
     sort: SortKind = Query("num_messages"),
     order: SortOrder = Query("desc"),
+    window: int | None = Query(None, ge=0),
 ) -> dict[str, Any]:
     store = get_store()
     thread = store.get_thread(thread_id)
@@ -132,14 +159,45 @@ def get_thread(
     classification = store.get_classification(thread_id)
     enriched = store._enrich(thread)
     neighbors = store.neighbors(thread_id)
-    return {
+    context = store.message_context(thread_id)
+    result = {
         "thread": thread,
         "classification": classification,
         "enriched": enriched,
         "neighbors": neighbors,
         "queue": store.queue_neighbors(thread_id, filter, sort, order),
-        "context": store.message_context(thread_id),
+        "context": context,
     }
+    if window is not None:
+        ids = [member for member, _ in _window_members(store, window)]
+        position = ids.index(thread_id) if thread_id in ids else None
+        result["queue"] = {
+            "prev_in_queue": ids[position - 1] if position else None,
+            "next_in_queue": (
+                ids[position + 1] if position is not None and position + 1 < len(ids) else None
+            ),
+        }
+        shown = [thread, context["prev"], context["next"], *context["family"]]
+        result["gold"] = {
+            "index": window,
+            **_gold_window(store, window).to_dict(),
+            "in_window_ids": store.gold.in_window_ids([t for t in shown if t], window),
+        }
+    return result
+
+
+@app.get("/api/gold/windows")
+def gold_windows() -> list[dict[str, Any]]:
+    store = get_store()
+    return store.gold.summaries(store.threads)
+
+
+@app.post("/api/gold/windows/{index}/done")
+def set_gold_window_done(index: int, body: GoldDoneUpdate) -> dict[str, Any]:
+    store = get_store()
+    _gold_window(store, index)
+    store.gold.set_done(index, body.done)
+    return store.gold.summaries(store.threads)[index]
 
 
 @app.get("/api/stats")

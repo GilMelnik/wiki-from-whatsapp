@@ -12,6 +12,7 @@ from typing import Any
 
 from utils.json_io import write_json_file
 
+from step_1_threads_split.review.gold_windows import GoldWindows
 from step_1_threads_split.review.models import FilterKind, SortKind, SortOrder, default_classification
 from step_1_threads_split.review.operations import (
     classification_from_thread,
@@ -54,6 +55,7 @@ class ThreadStore:
         self._loaded = False
         self._source_threads_path = resolve_threads_path()
         self._source_classified_path = resolve_classified_path()
+        self.gold = GoldWindows.from_config()
 
     @property
     def has_classification(self) -> bool:
