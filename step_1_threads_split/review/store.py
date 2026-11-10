@@ -322,6 +322,13 @@ class ThreadStore:
         thread = self._threads_by_id[thread_id]
         record = classification_from_thread(thread, record)
         self._classifications[thread_id] = record
+        # The record is a copy: put it into the payload that ``save`` writes, or the edit is lost.
+        saved = self._classified_payload["threads"]
+        positions = [i for i, r in enumerate(saved) if r["thread_id"] == thread_id]
+        if positions:
+            saved[positions[0]] = record
+        else:
+            saved.append(record)
         self.save()
         return record
 

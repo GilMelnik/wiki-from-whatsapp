@@ -72,7 +72,7 @@ def run(
 
     logger = setup_step_logging(STEP_2)
     logger.info("[3] Classifying threads...")
-    c_meta = classify(llm=clients["classify"], use_batch=use_batch)
+    c_meta = classify()
     logger.info(
         f"    {c_meta['knowledge_bearing_count']} knowledge-bearing of "
         f"{c_meta['thread_count']} threads"

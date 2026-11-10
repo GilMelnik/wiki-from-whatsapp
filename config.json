@@ -116,6 +116,28 @@
       "min_threads": 2
     }
   },
+  "classify": {
+    "classifier_stage": "knowledge",
+    "question_language": "en",
+    "questions": {
+      "he": "השיחה הזו, מקבוצת וואטסאפ על פונדקאות לגייז, נושאת ידע מועיל לחברי הקבוצה שכדאי לשמור: המלצות, חוויות אישיות, מידע משפטי, כספי או רפואי, השוואת ספקים (סוכנויות, מרפאות, עורכי דין) או השוואת מדינות. רכילות, לוגיסטיקה מקומית, מכירת חפצים, ויכוחים לא רלוונטיים וצ'יטצ'אט חברתי אינם נחשבים ידע.",
+      "en": "This conversation, from a WhatsApp group about surrogacy for gay men, carries knowledge that is useful to the group's members and worth keeping: recommendations, personal experiences, legal, financial or medical information, or comparisons of providers (agencies, clinics, lawyers) or of countries. Gossip, local logistics, selling items, off-topic arguments and social small talk do not count as knowledge."
+    },
+    "threshold": 0.18,
+    "min_messages": 3,
+    "min_senders": 2,
+    "eval_backup_dir": "/mnt/SSD/coding/backup_data_wiki_from_whatsapp/2026_11_07_data",
+    "eval_reason_groups": {
+      "failed_call": "classification_error",
+      "heuristic": "filtered_by_heuristic",
+      "manual": "manual_"
+    },
+    "eval_fallback_sample": 150,
+    "eval_seed": 0,
+    "eval_recall_targets": [0.95, 0.98],
+    "eval_size_buckets": [3, 6, 11, 21, 51],
+    "eval_bootstrap": 1000
+  },
   "aggregate": {},
   "plan": {
     "max_pages": 30
