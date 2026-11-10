@@ -156,23 +156,45 @@ def test_batch_items_carry_cache_control_like_sync_calls(
     }
 
 
+class _FakeStream:
+    """Stands in for ``messages.stream(...)``: records the params, replays a message."""
+
+    def __init__(self, message: SimpleNamespace) -> None:
+        self.message = message
+        self.params: dict[str, Any] = {}
+
+    def __call__(self, **params: Any) -> "_FakeStream":
+        self.params = params
+        return self
+
+    def __enter__(self) -> "_FakeStream":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+    def get_final_message(self) -> SimpleNamespace:
+        return self.message
+
+
 def test_generate_raises_on_refusal_instead_of_returning_text() -> None:
     provider = _provider("low")
     provider._client = SimpleNamespace(
-        messages=SimpleNamespace(create=lambda **params: _message("", "refusal"))
+        messages=SimpleNamespace(stream=_FakeStream(_message("", "refusal")))
     )
 
     with pytest.raises(RuntimeError, match="category=bio"):
         provider.generate("sys", "usr")
 
 
-def test_generate_reads_text_blocks_by_type() -> None:
+def test_generate_streams_and_reads_text_blocks_by_type() -> None:
     provider = _provider("low")
-    provider._client = SimpleNamespace(
-        messages=SimpleNamespace(create=lambda **params: _message("hello"))
-    )
+    stream = _FakeStream(_message("hello"))
+    provider._client = SimpleNamespace(messages=SimpleNamespace(stream=stream))
 
     assert provider.generate("sys", "usr") == ("hello", False)
+    assert stream.params["model"] == "claude-sonnet-5-5"
+    assert stream.params["output_config"] == {"effort": "low"}
 
 
 def test_every_configured_stage_builds_a_client() -> None:

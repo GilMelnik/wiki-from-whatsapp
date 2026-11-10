@@ -1,7 +1,9 @@
 """Anthropic providers.
 
 ``AnthropicProvider`` (chat): prompt caching (cache_control), structured output,
-and the batch API. Reasoning effort is set via ``output_config.effort`` (the
+and the batch API. Sync calls are streamed (``messages.stream`` ->
+``get_final_message``), so ``max_tokens`` may go up to the model's output limit
+without tripping the SDK's non-streaming timeout guard. Reasoning effort is set via ``output_config.effort`` (the
 shared ``thinking_param``; when unset the model default applies — ``medium`` on
 Opus 5.5 and Haiku 5.5, ``high`` on Sonnet 5.5). ``thinking`` itself is never
 sent: the 5.x models think adaptively by default and Opus 5.5 / Sonnet 5.5
@@ -103,9 +105,10 @@ class AnthropicProvider(LLMProvider):
     ) -> tuple[str, bool]:
         if self._client is None:
             self._client = anthropic.Anthropic()
-        message = self._client.messages.create(
+        with self._client.messages.stream(
             **self._message_params(system, user, response_schema)
-        )
+        ) as stream:
+            message = stream.get_final_message()
         self._log_cache_usage([message.usage])
         refusal = _refusal(message)
         if refusal:
