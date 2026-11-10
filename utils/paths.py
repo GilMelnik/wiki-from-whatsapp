@@ -98,14 +98,12 @@ AUDIT_PATH = AUDIT_DIR / "claims_audit.json"
 ENTITIES_SEED_PATH = step_path(STEP_4, "entities_seed.json")
 ENTITY_ANALYSIS_PATH = step_path(STEP_4, "entity_claim_analysis.json")
 # Manual claim aggregations created in the entity reviewer (no pipeline original);
-# consumed by step 5 to force-merge the grouped claims.
+# step 5 treats each one as a must-link: its claims end up in one group.
 MANUAL_AGGREGATIONS_PATH = step_path(STEP_4, "claim_aggregations.json")
 
 # ------------------------------------------------------------ step 5 aggregate
-CLAIM_QUERY_EMBEDDINGS_PATH = step_path(STEP_5, "claim_query_embeddings.json")
-CLAIM_PASSAGE_EMBEDDINGS_PATH = step_path(STEP_5, "claim_passage_embeddings.json")
-CLAIM_DISTANCE_MATRIX_PATH = step_path(STEP_5, "claim_distance_matrix.npy")
-CLAIM_DISTANCE_META_PATH = step_path(STEP_5, "claim_distance_matrix.json")
+# The measurement's private working folder (``python -m step_5_aggregate.evaluate``).
+AGGREGATE_EVAL_DIR = step_path(STEP_5, "eval")
 
 # ------------------------------------------------------------------- shared
 BACKUPS_DIR = step_path(SHARED, "backups")

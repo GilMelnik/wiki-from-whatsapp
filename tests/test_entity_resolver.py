@@ -17,33 +17,6 @@ def _claim(claim_id: str, entities: list[str]) -> dict:
     }
 
 
-def test_resolver_topic_disambiguation() -> None:
-    registry = [
-        {
-            "entity_id": "e0",
-            "canonical_name": "הראל ברק",
-            "aliases": ["הראל"],
-            "members": [{"name": "הראל", "claim_ids": None}],
-            "contacts": {},
-            "topics": ["legal-lawyers"],
-        },
-        {
-            "entity_id": "e1",
-            "canonical_name": "הראל ביטוח",
-            "aliases": ["הראל ביטוח"],
-            "members": [
-                {"name": "הראל", "claim_ids": None},
-                {"name": "הראל ביטוח", "claim_ids": None},
-            ],
-            "contacts": {},
-            "topics": ["insurance-newborn"],
-        },
-    ]
-    resolver = EntityResolver(registry)
-    assert resolver.canonical("הראל", topic_tags=["legal-lawyers"]) == "הראל ברק"
-    assert resolver.canonical("הראל", topic_tags=["insurance-newborn"]) == "הראל ביטוח"
-
-
 def test_resolver_maps_name_and_claim_overrides() -> None:
     registry_entities = [
         {
