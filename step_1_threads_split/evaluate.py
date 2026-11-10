@@ -9,8 +9,9 @@ format and the C1 format score identically.
 
 - no mode flag: score ``--pred`` (default: the original threads file) against ``--gold``;
 - ``--suggest-windows [N] [--hours H] [--seed S]``: propose windows to tag;
-- ``--freeze-gold [--add | --force]``: build the gold file from ``threads_edited.json``
-  and ``config.json`` ``threads.gold_windows``.
+- ``--freeze-gold [--add | --force] [--done-only]``: build the gold file from
+  ``threads_edited.json`` and ``config.json`` ``threads.gold_windows``; ``--done-only``
+  keeps only the windows marked done in the thread tagger (``gold_progress.json``).
 
 Each mode logs one markdown report (console and step log file).
 """
@@ -36,11 +37,13 @@ from step_1_threads_split.gold import (
     load_gold,
     message_moment,
 )
+from step_1_threads_split.review.gold_windows import GoldProgress
 from utils.config import PROJECT_ROOT, section
 from utils.logging_setup import setup_step_logging
 from utils.paths import (
     BACKUPS_DIR,
     EDITED_THREADS_PATH,
+    GOLD_PROGRESS_PATH,
     GOLD_THREADS_PATH,
     ORIGINAL_THREADS_PATH,
     STEP_1,
@@ -268,6 +271,22 @@ def _configured_windows() -> list[Window]:
     return [Window.from_dict(raw) for raw in THREADS_CONFIG["gold_windows"]]
 
 
+def _done_windows() -> list[Window]:
+    """The configured windows the user marked done in the thread tagger."""
+    configured = _configured_windows()
+    done = GoldProgress(GOLD_PROGRESS_PATH).done_windows()
+    chosen = [window for window in configured if window in done]
+    if not chosen:
+        raise ValueError(
+            f"none of the {len(configured)} configured gold windows is marked done in "
+            f"{GOLD_PROGRESS_PATH}; mark windows done in the thread tagger first"
+        )
+    for window in configured:
+        if window not in done:
+            logger.info(f"--done-only: skipping gold window {window} (not marked done)")
+    return chosen
+
+
 def _suggest_report(args: argparse.Namespace) -> str:
     defaults = THREADS_CONFIG["gold_suggest"]
     taken = _configured_windows()
@@ -300,7 +319,7 @@ def _freeze_report(args: argparse.Namespace) -> str:
     frozen_before = {window["start"] for window in kept}
     gold = freeze_gold(
         load_threads(EDITED_THREADS_PATH)["threads"],
-        _configured_windows(),
+        _done_windows() if args.done_only else _configured_windows(),
         args.gold,
         BACKUPS_DIR,
         str(EDITED_THREADS_PATH),
@@ -383,9 +402,14 @@ def main(argv: Sequence[str] | None = None) -> None:
         action="store_true",
         help="with --freeze-gold: rebuild an existing gold file from scratch",
     )
+    parser.add_argument(
+        "--done-only",
+        action="store_true",
+        help="with --freeze-gold: freeze only the windows marked done in the thread tagger",
+    )
     args = parser.parse_args(argv)
-    if (args.add or args.force) and not args.freeze_gold:
-        parser.error("--add and --force only apply to --freeze-gold")
+    if (args.add or args.force or args.done_only) and not args.freeze_gold:
+        parser.error("--add, --force and --done-only only apply to --freeze-gold")
     if args.add and args.force:
         parser.error("--add and --force are mutually exclusive")
     if args.freeze_gold and args.suggest_windows is not None:
