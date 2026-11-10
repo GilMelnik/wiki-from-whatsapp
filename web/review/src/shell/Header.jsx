@@ -1,6 +1,7 @@
 import { APP_TITLE } from "./config.js";
 import { OPEN, RECONNECTING } from "./eventChannel.js";
 import { useConnection } from "./events.js";
+import { JobIndicator } from "./JobControls.jsx";
 import { ToolLink } from "./navigation.jsx";
 
 const CONNECTION = {
@@ -55,6 +56,7 @@ export function Header({ tools, currentId, onHelp }) {
         })}
       </nav>
       <ConnectionIndicator />
+      <JobIndicator />
       <button type="button" className="btn btn-sm" title="קיצורי מקלדת (?)" onClick={onHelp}>
         ?
       </button>

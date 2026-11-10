@@ -13,12 +13,14 @@ import {
 } from "@shell";
 import { ArtifactDetail } from "./ArtifactDetail.jsx";
 import { ArtifactRow } from "./ArtifactRow.jsx";
+import { StepPanel } from "./StepPanel.jsx";
 import { ToolsPanel } from "./ToolsPanel.jsx";
 
 // Pipeline status: every artifact in pipeline order (list), the selected one's files,
-// staleness and metadata (main), and the tools that read or write it (side). Everything
-// follows the files on disk live: the shell refetches GET /api/artifacts on every
-// `artifact_changed`, and the detail is watched by its artifact key.
+// staleness and metadata (main), the step that produces it with its run buttons and last
+// run, and the tools that read or write it (side). Everything follows the files on disk
+// live: the shell refetches GET /api/artifacts on every `artifact_changed`, and the detail
+// is watched by its artifact key.
 
 const ID = "status";
 const api = createApi(ID);
@@ -81,7 +83,12 @@ function StatusTool({ tool }) {
           onSelect={setSelectedKey}
         />
       }
-      side={<ToolsPanel artifact={artifact} />}
+      side={
+        <div className="flex min-h-0 flex-1 flex-col divide-y divide-slate-200">
+          <StepPanel artifact={artifact} />
+          <ToolsPanel artifact={artifact} />
+        </div>
+      }
       listWidth={{ initial: 320 }}
       sideWidth={{ initial: 300 }}
     />
