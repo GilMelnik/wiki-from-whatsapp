@@ -237,3 +237,7 @@ thread_tagger/static/*
 web/*/node_modules/
 # Orchestration runtime state
 .claude/orchestration/tasks/
+
+# MCP Worker (worker/): npm packages and wrangler's local dev state
+worker/node_modules/
+.wrangler/
