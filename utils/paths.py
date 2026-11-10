@@ -49,6 +49,8 @@ MESSAGE_EMBEDDINGS_PATH = step_path(STEP_1, "message_embeddings.json")
 MESSAGE_QUERY_EMBEDDINGS_PATH = step_path(STEP_1, "message_query_embeddings.json")
 # Hand-tagged gold clustering, frozen by ``step_1_threads_split.evaluate --freeze-gold``.
 GOLD_THREADS_PATH = step_path(STEP_1, "gold_threads.json")
+# Which gold windows the user marked as done in the thread tagger's gold mode.
+GOLD_PROGRESS_PATH = step_path(STEP_1, "gold_progress.json")
 
 # ------------------------------------------------------- reviewed artifacts
 THREADS = Artifact(

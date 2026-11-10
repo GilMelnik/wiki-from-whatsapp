@@ -11,6 +11,8 @@ import {
   updateClassification,
 } from "./api";
 import ClassificationPanel from "./components/ClassificationPanel";
+import GoldBar from "./components/GoldBar";
+import { useGoldWindows } from "./goldWindows";
 import MergeDialog from "./components/MergeDialog";
 import MessageViewer from "./components/MessageViewer";
 import MoveDialog from "./components/MoveDialog";
@@ -62,6 +64,7 @@ function listParams(state) {
     limit: "200",
     offset: "0",
   };
+  if (state.window != null) p.window = String(state.window);
   if (state.bucketFilter) {
     const bf = state.bucketFilter;
     if (bf.chart === "num_messages") {
@@ -152,7 +155,9 @@ export default function App() {
     setSideWidth(clampSideWidth(width));
   }, []);
 
-  const queueParams = { filter, sort, order };
+  const gold = useGoldWindows(setToast);
+  const queueParams =
+    gold.index === null ? { filter, sort, order } : { filter, sort, order, window: gold.index };
 
   const messages = threadData?.thread?.messages || [];
   const quoteGraph = useMemo(
@@ -192,11 +197,16 @@ export default function App() {
     };
   }, [threadData, selectedId, recent]);
 
+  const listRequest = useRef(0);
   const refreshList = useCallback(async () => {
-    const data = await fetchThreads(listParams({ filter, sort, order, bucketFilter }));
+    const request = ++listRequest.current;
+    const data = await fetchThreads(
+      listParams({ filter, sort, order, bucketFilter, window: gold.index })
+    );
+    if (request !== listRequest.current) return; // a newer list request superseded this one
     setListItems(data.items);
     setListTotal(data.total);
-  }, [filter, sort, order, bucketFilter]);
+  }, [filter, sort, order, bucketFilter, gold.index]);
 
   const refreshStats = useCallback(async () => {
     const data = await fetchStats(filter);
@@ -210,7 +220,7 @@ export default function App() {
       setThreadData(data);
       setSelectedIndices(new Set());
     },
-    [filter, sort, order]
+    [filter, sort, order, gold.index]
   );
 
   useEffect(() => {
@@ -228,14 +238,24 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!meta) return;
+    if (!meta || !gold.ready) return;
     refreshList().catch((e) => setToast(e.message));
     refreshStats().catch((e) => setToast(e.message));
-  }, [meta, refreshList, refreshStats]);
+  }, [meta, gold.ready, refreshList, refreshStats]);
 
   useEffect(() => {
     if (selectedId) loadThread(selectedId).catch((e) => setToast(e.message));
   }, [selectedId, loadThread]);
+
+  // Window counts follow every edit; a newly chosen window opens its first thread.
+  useEffect(() => {
+    gold.refresh();
+  }, [listItems, gold.refresh]);
+
+  useEffect(() => {
+    const ids = gold.current?.thread_ids;
+    if (ids?.length && !ids.includes(selectedId)) setSelectedId(ids[0]);
+  }, [gold.current?.start]);
 
   useEffect(() => {
     if (!toast) return;
@@ -361,7 +381,7 @@ export default function App() {
     setToast(`נוצרה שיחה ${focusId}`);
 
     const listData = await fetchThreads(
-      listParams({ filter: "all", sort, order, bucketFilter })
+      listParams({ filter: "all", sort, order, bucketFilter, window: gold.index })
     );
     setListItems(listData.items);
     setListTotal(listData.total);
@@ -490,6 +510,7 @@ export default function App() {
           <span className="text-sm text-emerald-700 mr-auto">{toast}</span>
         )}
       </header>
+      <GoldBar gold={gold} />
 
       <div ref={layoutRef} className="flex-1 flex overflow-hidden min-h-0">
         <aside
@@ -575,6 +596,7 @@ export default function App() {
             onRangeSelect={handleRangeSelect}
             onNavigateToThread={handleSelect}
             isSplitPart={isSplitPart}
+            gold={threadData?.gold}
           />
         </main>
 

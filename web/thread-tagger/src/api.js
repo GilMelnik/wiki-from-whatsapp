@@ -61,3 +61,14 @@ export function moveMessages(body) {
     body: JSON.stringify(body),
   });
 }
+
+export function fetchGoldWindows() {
+  return request("/api/gold/windows");
+}
+
+export function setGoldWindowDone(index, done) {
+  return request(`/api/gold/windows/${index}/done`, {
+    method: "POST",
+    body: JSON.stringify({ done }),
+  });
+}
