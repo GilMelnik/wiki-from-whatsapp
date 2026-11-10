@@ -20,6 +20,8 @@ STEP_3 = "step_3_extract"
 STEP_4 = "step_4_entities"
 STEP_5 = "step_5_aggregate"
 STEP_6 = "step_6_plan"
+# The assignment step's id in the review tool's step registry; it writes into STEP_6's folder.
+STEP_6_ASSIGN = "step_6_assign"
 STEP_7 = "step_7_write_pages"
 STEP_9 = "step_9_site"
 SHARED = "shared"
@@ -71,6 +73,10 @@ AGGREGATED = Artifact(
 )
 PLAN = Artifact(
     step_path(STEP_6, "wiki_plan.json"), step_path(STEP_6, "wiki_plan_edited.json")
+)
+# Which claim groups go on which page and carry which labels (contract C8).
+ASSIGNMENTS = Artifact(
+    step_path(STEP_6, "assignments.json"), step_path(STEP_6, "assignments_edited.json")
 )
 WIKI_PAGES = Artifact(
     step_path(STEP_7, "wiki_pages.json"), step_path(STEP_7, "wiki_pages_edited.json")
