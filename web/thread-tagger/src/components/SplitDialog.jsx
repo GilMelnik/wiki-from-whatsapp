@@ -10,6 +10,7 @@ export default function SplitDialog({
   thread,
   selectedIndices,
   onConfirm,
+  blockedReason,
 }) {
   const [mode, setMode] = useState("sparse");
   const [loading, setLoading] = useState(false);
@@ -84,6 +85,7 @@ export default function SplitDialog({
           </label>
         </div>
 
+        {blockedReason && <p className="text-amber-700 text-sm mb-2">{blockedReason}</p>}
         {error && <p className="text-red-600 text-sm mb-2">{error}</p>}
 
         <div className="flex gap-2 justify-end">
@@ -92,7 +94,7 @@ export default function SplitDialog({
           </button>
           <button
             type="button"
-            disabled={loading || selectedIndices.size === 0}
+            disabled={loading || selectedIndices.size === 0 || Boolean(blockedReason)}
             onClick={handleSubmit}
             className="px-4 py-2 text-sm bg-blue-600 text-white rounded disabled:opacity-50"
           >

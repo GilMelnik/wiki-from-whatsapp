@@ -1,4 +1,5 @@
 import { formatMinute } from "../goldWindows";
+import ThreadTag from "../messages/ThreadTag";
 import { kindLabel } from "../recentHistory";
 
 const BADGE_STYLES = {
@@ -17,6 +18,7 @@ export default function ThreadList({
   highlightIds,
   splitHighlightIds,
   hasClassification = true,
+  threadTag,
 }) {
   return (
     <div className="flex-1 overflow-y-auto">
@@ -56,6 +58,7 @@ export default function ThreadList({
                     </span>
                   )}
                   <span>{item.thread_id}</span>
+                  <ThreadTag info={threadTag?.(item.thread_id)} />
                 </div>
                 <div className="text-xs text-slate-500 flex gap-2 flex-wrap">
                   <span>{item.num_messages} הודעות</span>
