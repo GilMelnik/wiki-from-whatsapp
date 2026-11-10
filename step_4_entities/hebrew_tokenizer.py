@@ -1,11 +1,21 @@
+"""dictabert-joint morphology for Hebrew text (moved here from step 1's TF-IDF code).
+
+The GPU is shared with other work on a modest card: ``device=None`` picks CUDA only when at
+least ``min_free_gpu_mb`` is free, and a CUDA out-of-memory error halves the batch (down to
+one text) and finally moves the model to the CPU instead of failing.
+"""
+
 from __future__ import annotations
 
+import logging
 import re
 from typing import TYPE_CHECKING, Any, Sequence
 
 if TYPE_CHECKING:
     import torch
     from transformers import PreTrainedModel, PreTrainedTokenizerBase
+
+logger = logging.getLogger(__name__)
 
 _SPECIAL_TOKENS = {"[CLS]", "[SEP]"}
 _KEEP_TOKEN_RE = re.compile(r"[\u0590-\u05FFa-zA-Z0-9]")
@@ -37,13 +47,18 @@ def _cuda_device_is_supported() -> bool:
     return f"sm_{major}0" in arch_list
 
 
-def _resolve_device(device_arg: str | None) -> "torch.device":
+def _resolve_device(device_arg: str | None, min_free_gpu_mb: int) -> "torch.device":
     import torch
 
     if device_arg is not None:
         return torch.device(device_arg)
     if _cuda_device_is_supported():
-        return torch.device("cuda")
+        free_mb = torch.cuda.mem_get_info()[0] // (1024 * 1024)
+        if free_mb >= min_free_gpu_mb:
+            return torch.device("cuda")
+        logger.warning(
+            f"Only {free_mb} MB free on the GPU (< {min_free_gpu_mb} MB): using the CPU"
+        )
     return torch.device("cpu")
 
 
@@ -54,10 +69,12 @@ class HebrewTokenizer:
         batch_size: int = 32,
         device: str | None = None,
         model_kwargs: dict[str, Any] | None = None,
+        min_free_gpu_mb: int = 0,
     ) -> None:
         self.model_name = model_name
         self.batch_size = batch_size
         self._device_arg = device
+        self._min_free_gpu_mb = min_free_gpu_mb
         self._model_kwargs = model_kwargs or {}
         self._tokenizer = None
         self._model = None
@@ -66,7 +83,7 @@ class HebrewTokenizer:
     @property
     def device(self) -> "torch.device":
         if self._device is None:
-            self._device = _resolve_device(self._device_arg)
+            self._device = _resolve_device(self._device_arg, self._min_free_gpu_mb)
         return self._device
 
     @property
@@ -112,18 +129,38 @@ class HebrewTokenizer:
         if not non_empty_texts:
             return results
 
-        for start in range(0, len(non_empty_texts), self.batch_size):
-            batch_texts = non_empty_texts[start : start + self.batch_size]
-            batch_indices = non_empty_indices[start : start + self.batch_size]
-            predictions = self.model.predict(
-                batch_texts,
-                self.tokenizer,
-                output_style="json",
-            )
-            for local_idx, global_idx in enumerate(batch_indices):
-                results[global_idx] = self._tokens_from_prediction(predictions[local_idx])
+        predictions = self._predict(non_empty_texts)
+        for global_idx, prediction in zip(non_empty_indices, predictions):
+            results[global_idx] = self._tokens_from_prediction(prediction)
 
         return results
+
+    def _predict(self, texts: Sequence[str]) -> list[Any]:
+        """Model predictions in batches, backing off on CUDA out-of-memory errors."""
+
+        import torch
+
+        size = max(1, self.batch_size)
+        out: list[Any] = []
+        start = 0
+        while start < len(texts):
+            chunk = list(texts[start : start + size])
+            try:
+                out.extend(self.model.predict(chunk, self.tokenizer, output_style="json"))
+            except torch.cuda.OutOfMemoryError:
+                torch.cuda.empty_cache()
+                if size > 1:
+                    size //= 2
+                    logger.warning(f"CUDA out of memory: retrying with batch size {size}")
+                elif self.device.type == "cuda":
+                    logger.warning("CUDA out of memory at batch size 1: moving to the CPU")
+                    self._device = torch.device("cpu")
+                    self.model.to(self._device)
+                else:
+                    raise
+                continue
+            start += len(chunk)
+        return out
 
     def _tokens_from_prediction(self, prediction: Any) -> list[str]:
         if isinstance(prediction, dict) and "tokens" in prediction:
@@ -170,16 +207,9 @@ class HebrewTokenizer:
         if not non_empty_texts:
             return results
 
-        for start in range(0, len(non_empty_texts), self.batch_size):
-            batch_texts = non_empty_texts[start : start + self.batch_size]
-            batch_indices = non_empty_indices[start : start + self.batch_size]
-            predictions = self.model.predict(
-                batch_texts,
-                self.tokenizer,
-                output_style="json",
-            )
-            for local_idx, global_idx in enumerate(batch_indices):
-                results[global_idx] = self._words_from_prediction(predictions[local_idx])
+        predictions = self._predict(non_empty_texts)
+        for global_idx, prediction in zip(non_empty_indices, predictions):
+            results[global_idx] = self._words_from_prediction(prediction)
 
         return results
 
