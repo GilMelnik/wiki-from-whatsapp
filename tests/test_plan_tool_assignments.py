@@ -143,6 +143,7 @@ def test_overview_counts_pages_labels_and_findings(setup: AssignSetup) -> None:
     assert [(f["label_id"], f["finding"]) for f in summary["label_findings"]] == [
         ("usa", "large"), ("georgia", "few")]
     assert summary["proposals"] == {"pending": 3, "accepted": 0, "rejected": 0}
+    assert summary["thresholds"] == {"page": 0.5, "label": 0.7}  # the step's own rules
 
 
 def test_groups_newer_than_the_plan_are_counted(setup: AssignSetup) -> None:

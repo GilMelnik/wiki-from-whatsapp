@@ -3,10 +3,9 @@ import { percent, titleOf } from "./plan.js";
 
 // One claim group in an assignment list: its text, stance, support, last date, labels, the
 // classifier's probability for this page / label, where else it is, a mark for groups the
-// owner pinned by hand and for ids the next assignment run will change. Clicking the row
-// (or its box) picks it for a bulk move.
-
-const UNSURE_BELOW = 0.5;
+// owner pinned by hand and for ids the next assignment run will change. A probability under
+// the step's own bar (its decision rules, from the server) is marked. Clicking the row (or its
+// box) picks it for a bulk move.
 
 function quoted(overview, id) {
   return `„${titleOf(overview, id)}”`;
@@ -48,6 +47,8 @@ function Waiting({ row }) {
 
 export function GroupRow({ row, overview, scope, itemId, picked, onToggle }) {
   const stance = stanceOf(row.stance);
+  const thresholds = overview.assignments?.thresholds ?? {};
+  const bar = scope === "label" ? thresholds.label : thresholds.page;
   const labels = (row.labels ?? []).filter((id) => !(scope === "label" && id === itemId));
   const pickable = Boolean(row.record);
   return (
@@ -69,7 +70,7 @@ export function GroupRow({ row, overview, scope, itemId, picked, onToggle }) {
         <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
           {row.certainty !== null && row.certainty !== undefined && (
             <span
-              className={`badge ${row.certainty < UNSURE_BELOW ? "badge-amber" : "badge-slate"}`}
+              className={`badge ${row.certainty < bar ? "badge-amber" : "badge-slate"}`}
               title={scope === "unplaced" ? "ההסתברות הגבוהה ביותר שהמסווג נתן לדף כלשהו" : "ההסתברות שהמסווג נתן"}
             >
               {percent(row.certainty)}

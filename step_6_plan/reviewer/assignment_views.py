@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from step_6_plan.assign_rules import apply_plan_edit
+from step_6_plan.assign_rules import ASSIGN_CONFIG, apply_plan_edit
 from step_6_plan.model import PLAN_CONFIG, iter_nodes
 from step_6_plan.operations import PlanEdit
 from step_6_plan.reviewer.assignments import MANUAL, followed
@@ -189,6 +189,9 @@ class AssignmentView:
             "labels": labels,
             "label_findings": self.label_findings(labels),
             "proposals": statuses,
+            # Below these the classifier was unsure (the step's own decision rules).
+            "thresholds": {"page": ASSIGN_CONFIG["confident_probability"],
+                           "label": ASSIGN_CONFIG["label_probability"]},
         }
 
     # --- proposals ----------------------------------------------------------------
