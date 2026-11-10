@@ -68,6 +68,14 @@
       "similarity": "task: sentence similarity | query: {text}",
       "query": "task: search result | query: {text}",
       "document": "title: none | text: {text}"
+    },
+    "ab": {
+      "backup_dir": "/mnt/SSD/coding/backup_data_wiki_from_whatsapp/2026_11_07_data",
+      "models": ["gemini-embedding-001", "gemini-embedding-2"],
+      "pairs": 500,
+      "seed": 0,
+      "recall_target": 0.9,
+      "local_text_prefix": {"e5": "query: "}
     }
   },
   "classifier": {},
