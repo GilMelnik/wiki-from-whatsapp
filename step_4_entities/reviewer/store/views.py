@@ -165,7 +165,11 @@ class ViewsMixin:
             "member_index": index,
             "is_canonical": member["name"] == entity.get("canonical_name"),
             "claim_count": len(member.get("claim_ids") or []),
-            "excluded_claim_ids": member.get("excluded_claim_ids") or [],
+            "excluded_claims": [
+                {"claim_id": claim_id, "claim_text": self.text_of(claim_id)}
+                for claim_id in member.get("excluded_claim_ids") or []
+                if claim_id not in self.deleted_claims
+            ],
             "contacts": member.get("contacts") or {},
             "contacts_uncertain": member.get("contacts_uncertain") or {},
             "attached_by": member.get("attached_by"),

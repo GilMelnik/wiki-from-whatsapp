@@ -132,7 +132,9 @@ class ClaimRequest(BaseModel):
 class EntitiesTool:
     NAME = "entities"
     TITLE = "איחוד ישויות"
-    READS = (CLAIMS_KEY, ENTITIES_KEY, AGGREGATIONS_KEY)
+    READS = (CLAIMS_KEY, ENTITIES_KEY)
+    # The claim aggregations file is the tool's own (created by the first claim group), so it
+    # is not a read the frame reports as missing; the store still loads and follows it.
     WRITES = (ENTITIES_KEY, AGGREGATIONS_KEY)
 
     def __init__(
@@ -155,7 +157,7 @@ class EntitiesTool:
         # The analysis cache is watched too: a step-4 run that re-analyzed claims is picked up.
         self._handle: StoreHandle[EntityStore] = StoreHandle(
             factory,
-            (*graph.files(*self.READS), analysis_path),
+            (*graph.files(*self.READS, AGGREGATIONS_KEY), analysis_path),
             lock_paths=graph.files(*self.WRITES),
             lock_timeout=lock_timeout,
         )

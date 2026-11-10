@@ -93,10 +93,11 @@ def test_move_copy_exclude_and_include_claims(tool: EntitiesSetup) -> None:
     assert tool.saved_entity("e0003")["members"][0]["claim_ids"] == [DS2]
     tool.post("/entities/e0000/claims/exclude", {"name": "David Shield", "claim_ids": [DS5, DS6]})
     member = tool.member("e0000", "David Shield")
-    assert member["excluded_claim_ids"] == [DS5, DS6]
+    assert [c["claim_id"] for c in member["excluded_claims"]] == [DS5, DS6]
     assert [c["claim_id"] for c in member["claims"]["claims"]] == [DS1]
     tool.post("/entities/e0000/claims/include", {"name": "David Shield", "claim_ids": [DS6]})
-    assert tool.member("e0000", "David Shield")["excluded_claim_ids"] == [DS5]
+    excluded = tool.member("e0000", "David Shield")["excluded_claims"]
+    assert excluded == [{"claim_id": DS5, "claim_text": "David Shield is great"}]
     saved = tool.saved()
     consistent(saved)
     assert saved["claim_entities"][DS5] == ["e0001"]  # excluded from David Shield, ORM stays
