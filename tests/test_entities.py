@@ -10,8 +10,10 @@ from pathlib import Path
 from step_4_entities.cluster import EntityClusterer
 from step_4_entities.collect import ClaimCorpus, collect_entities
 from step_4_entities.mentions import (
+    Analyzer,
     MentionIndex,
     SimpleAnalyzer,
+    Word,
     analyze_claims,
     build_or_load_analysis,
     find_mentions,
@@ -40,7 +42,7 @@ class FakeAnalyzer:
         self._pos = pos or {}
         self._ner = ner or set()
 
-    def analyze_batch(self, texts):
+    def analyze_batch(self, texts: Sequence[str]) -> list[list[Word]]:
         return [
             [
                 {
@@ -57,7 +59,7 @@ class FakeAnalyzer:
         ]
 
 
-def _words(text: str, analyzer=None):
+def _words(text: str, analyzer: Analyzer | None = None) -> list[Word]:
     analyzer = analyzer or SimpleAnalyzer()
     return analyze_claims([{"claim_id": "c", "claim_text": text}], analyzer)["c"]
 
@@ -267,6 +269,45 @@ def test_seed_must_links_aliases(tmp_path: Path) -> None:
     assert ent["canonical_name"] == "Acme Agency"
     assert ent["type"] == "agency"
     assert "seed" in ent["merge_signals"]
+    assert ent["status"] == "suggested"
+
+
+def test_seed_status_applies_only_to_a_group_made_of_that_seed(tmp_path: Path) -> None:
+    seed_path = tmp_path / "seed.json"
+    seed_path.write_text(
+        json.dumps(
+            {
+                "entities": [
+                    {
+                        "id": "acme",
+                        "canonical": "Acme Agency",
+                        "aliases": ["Acme Agency", "אקמי"],
+                        "status": "accepted",
+                    },
+                    {
+                        "id": "zenith",
+                        "canonical": "Zenith Clinic",
+                        "aliases": ["Zenith Clinic"],
+                        "status": "accepted",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    claims = [
+        _claim("t1-c0", ["Acme Agency"]),
+        _claim("t2-c0", ["אקמי"]),
+        _claim("t3-c0", ["Zenith Clinic"]),
+        # Not in the seed, but a spelling variant that clusters with the seeded name.
+        _claim("t4-c0", ["Zenith Clinics"]),
+    ]
+    entities = _cluster(claims, tmp_path, seed_path=seed_path)
+
+    assert _entity_with(entities, "Acme Agency")["status"] == "accepted"
+    zenith = _entity_with(entities, "Zenith Clinic")
+    assert _cluster_of(entities, "Zenith Clinics") == zenith["entity_id"]
+    assert zenith["status"] == "suggested"
 
 
 def test_transliteration_skeleton_aligns_across_scripts() -> None:

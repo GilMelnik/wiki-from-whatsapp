@@ -81,15 +81,26 @@ class EntityClusterer:
             seed_groups=seeds,
         )
 
-    def _seeded(self, entity: dict[str, Any], seed_ids: set[str]) -> None:
-        """Adopt the seed's canonical name (when it is a member) and type."""
+    def _seeded(self, entity: dict[str, Any], member_seeds: list[str | None]) -> None:
+        """Adopt the seed's canonical name (when it is a member), type and reviewed status.
 
+        ``member_seeds`` holds the seed id of each member (``None`` for an unseeded name). A
+        seed entry may carry a ``status`` the user already decided (``accepted``); the entity
+        takes it only when every member comes from that one entry, so a group that also
+        gathered other names still shows up for review.
+        """
+
+        seed_ids = {seed_id for seed_id in member_seeds if seed_id}
         for seed_id in sorted(seed_ids):
             entry = self.seed_by_id[seed_id]
             if entry.get("canonical") in entity["aliases"]:
                 entity["canonical_name"] = entry["canonical"]
             if entry.get("type"):
                 entity["type"] = entry["type"]
+        if len(seed_ids) == 1 and all(member_seeds):
+            status = self.seed_by_id[next(iter(seed_ids))].get("status")
+            if status:
+                entity["status"] = status
 
     def cluster(
         self, members: list[dict[str, Any]], allocate_id: Callable[[], str]
@@ -128,7 +139,7 @@ class EntityClusterer:
                 merge_signals=sorted(signals),
                 score=_cohesion(indices, dist),
             )
-            self._seeded(entity, {s for i in indices if (s := index.seed_groups[i])})
+            self._seeded(entity, [index.seed_groups[i] for i in indices])
             entities.append(entity)
             for i in indices:
                 entity_of[i] = entity
