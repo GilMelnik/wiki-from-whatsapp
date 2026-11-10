@@ -1,11 +1,13 @@
-import { Dialog } from "@shell";
+import { Dialog, formatCount } from "@shell";
 import { usePreview } from "./api.js";
+import { assignmentLines } from "./assign.js";
 import { consequenceLines } from "./plan.js";
 
 // The dialog of every structural change. While the owner fills in the form, the server runs
 // the operation as a dry run and the dialog shows what it would mean downstream (what
-// disappears, what is redirected, whose claims are classified again) or, verbatim, which
-// plan rules it would break. Confirm is possible only after a successful dry run; it saves
+// disappears, what is redirected, whose claims are classified again, and once step 6b has
+// run how many claim groups the next assignment run redirects, asks again or takes off a
+// deleted page) or, verbatim, which plan rules it would break. Confirm is possible only after a successful dry run; it saves
 // through `onConfirm(op)` (throws → the error stays in the dialog).
 
 const LINE_TONES = {
@@ -27,7 +29,7 @@ export function Consequences({ preview, error, pending, overview }) {
   }
   return (
     <ul className={`space-y-1 ${pending ? "opacity-60" : ""}`}>
-      {consequenceLines(preview.edit, overview).map((line) => (
+      {[...consequenceLines(preview.edit, overview), ...assignmentLines(preview.assignments, overview, formatCount)].map((line) => (
         <li key={line.text} className={`rounded border p-2 ${LINE_TONES[line.tone]}`}>
           {line.text}
         </li>

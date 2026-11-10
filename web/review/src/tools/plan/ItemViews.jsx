@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { Bidi, formatCount, Ltr, Panel } from "@shell";
+import { GROUPS_TAB } from "./assign.js";
+import { ItemGroups, ItemTabs } from "./AssignmentViews.jsx";
 import { ChangeBadge, MergedFrom, Warnings } from "./bits.jsx";
 import { EditableText } from "./fields.jsx";
 import { KindField } from "./FormDialogs.jsx";
 import { nodeById, pathTitles, titleOf } from "./plan.js";
 
 // Main column for a category (its texts and what it holds) and for a label (its texts and
-// kind). Titles and descriptions save at once; nothing here changes where claims go.
+// kind, or in the second tab the claim groups that carry it). Titles and descriptions save at
+// once; moving groups pins them (see GroupTable).
 
 export function CategoryView({ overview, nodeId, saving, on }) {
   const node = nodeById(overview, nodeId);
@@ -106,9 +109,9 @@ function KindEditor({ overview, label, saving, onSave }) {
   );
 }
 
-export function LabelView({ overview, labelId, saving, on }) {
+export function LabelView({ overview, labelId, saving, tab, groups, on }) {
   const label = overview.labels[labelId];
-  const sameKind = overview.label_kinds.find(({ kind }) => kind === label.kind)?.label_ids ?? [];
+  const count = overview.assignments?.labels?.[labelId];
   return (
     <Panel
       title={<Bidi>{label.title_he}</Bidi>}
@@ -122,28 +125,42 @@ export function LabelView({ overview, labelId, saving, on }) {
       }
     >
       <div className="space-y-6 p-4 text-sm">
-        <Warnings overview={overview} id={labelId} onSelect={on.select} />
-        <EditableText label="כותרת" value={label.title_he} disabled={saving} onSave={(title) => on.rename(labelId, title)} />
-        <EditableText
-          label="תיאור: מתי טענה מקבלת את התווית"
-          value={label.description}
-          multiline
-          disabled={saving}
-          onSave={(text) => on.edit(labelId, { description: text })}
-        />
-        <KindEditor overview={overview} label={label} saving={saving} onSave={(kind) => on.edit(labelId, { kind })} />
-        <MergedFrom ids={label.merged_from} />
-        <section>
-          <h3 className="section-title">תוויות מאותו סוג</h3>
-          <p className="flex flex-wrap gap-1">
-            {sameKind.map((id) => (
-              <button key={id} type="button" className={`badge ${id === labelId ? "badge-sky" : "badge-slate hover:bg-slate-200"}`} onClick={() => on.select(id)}>
-                <Bidi>{titleOf(overview, id)}</Bidi>
-              </button>
-            ))}
-          </p>
-        </section>
+        <ItemTabs count={count} tab={tab} onChange={on.showTab} />
+        {tab === GROUPS_TAB ? (
+          <ItemGroups scope="label" itemId={labelId} groups={groups} />
+        ) : (
+          <LabelDetails overview={overview} label={label} labelId={labelId} saving={saving} on={on} />
+        )}
       </div>
     </Panel>
+  );
+}
+
+function LabelDetails({ overview, label, labelId, saving, on }) {
+  const sameKind = overview.label_kinds.find(({ kind }) => kind === label.kind)?.label_ids ?? [];
+  return (
+    <>
+      <Warnings overview={overview} id={labelId} onSelect={on.select} />
+      <EditableText label="כותרת" value={label.title_he} disabled={saving} onSave={(title) => on.rename(labelId, title)} />
+      <EditableText
+        label="תיאור: מתי טענה מקבלת את התווית"
+        value={label.description}
+        multiline
+        disabled={saving}
+        onSave={(text) => on.edit(labelId, { description: text })}
+      />
+      <KindEditor overview={overview} label={label} saving={saving} onSave={(kind) => on.edit(labelId, { kind })} />
+      <MergedFrom ids={label.merged_from} />
+      <section>
+        <h3 className="section-title">תוויות מאותו סוג</h3>
+        <p className="flex flex-wrap gap-1">
+          {sameKind.map((id) => (
+            <button key={id} type="button" className={`badge ${id === labelId ? "badge-sky" : "badge-slate hover:bg-slate-200"}`} onClick={() => on.select(id)}>
+              <Bidi>{titleOf(overview, id)}</Bidi>
+            </button>
+          ))}
+        </p>
+      </section>
+    </>
   );
 }

@@ -2,6 +2,7 @@
 // send, and the Hebrew wording of what a change means downstream. The server decides what is
 // allowed (every operation is validated there); these only shape requests and texts.
 
+export const TOOL_ID = "plan";
 export const OVERVIEW_ID = "__overview";
 export const TREE_VIEW = "tree";
 export const LABELS_VIEW = "labels";

@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import { Bidi, formatCount, Ltr, Panel, PanelState, useResource } from "@shell";
 import { api, pagePath } from "./api.js";
+import { GROUPS_TAB } from "./assign.js";
+import { ItemGroups, ItemTabs } from "./AssignmentViews.jsx";
 import { ChangeBadge, MergedFrom, Warnings } from "./bits.jsx";
 import { EditableText, TextArea } from "./fields.jsx";
 import { aliasesToText, pathTitles, textToAliases } from "./plan.js";
 
-// Main column for a page. The scope is the star: a large editor, with the evidence to judge
-// it right next to it, the page's example claim groups (their text, from the groups file)
-// and the coverage numbers of the planning run. Saving a scope goes through a dialog that
-// says the page's claims will be classified again.
+// Main column for a page, in two tabs. Details: the scope is the star, a large editor, with
+// the evidence to judge it right next to it, the page's example claim groups (their text,
+// from the groups file) and the coverage numbers of the planning run; saving a scope goes
+// through a dialog that says the page's claims will be classified again. Claim groups: what
+// the assignment step put on the page, least certain first, to check and move.
 
 function ScopeEditor({ page, saving, scopeRef, onSave }) {
   const [draft, setDraft] = useState(page.scope);
@@ -136,9 +139,10 @@ function Examples({ examples, groupsAvailable }) {
   );
 }
 
-export function PageView({ overview, pageId, saving, reads, scopeRef, on }) {
+export function PageView({ overview, pageId, saving, reads, scopeRef, tab, groups, on }) {
   const page = overview.pages[pageId];
   const detail = useResource(() => api.get(pagePath(pageId)), [pageId], { watch: reads });
+  const sizes = overview.assignments?.pages?.[pageId];
   return (
     <Panel
       title={<Bidi>{page.title_he}</Bidi>}
@@ -152,31 +156,44 @@ export function PageView({ overview, pageId, saving, reads, scopeRef, on }) {
       }
     >
       <div className="space-y-6 p-4 text-sm">
-        <Warnings overview={overview} id={pageId} onSelect={on.select} />
-        <div className="grid gap-6 xl:grid-cols-5">
-          <div className="space-y-6 xl:col-span-3">
-            <ScopeEditor key={pageId} page={page} saving={saving} scopeRef={scopeRef} onSave={(scope) => on.editScope(pageId, scope)} />
-            <EditableText label="כותרת" value={page.title_he} disabled={saving} onSave={(title) => on.rename(pageId, title)} />
-            <EditableText label="תיאור קצר (מוצג בניווט)" value={page.description} disabled={saving} onSave={(text) => on.edit(pageId, { description: text })} />
-            <AliasesEditor key={pageId} page={page} saving={saving} onSave={(aliases) => on.edit(pageId, { aliases })} />
-            <MergedFrom ids={page.merged_from} />
-          </div>
-          <div className="space-y-6 xl:col-span-2">
-            <section>
-              <h3 className="section-title">בדיקת הכיסוי</h3>
-              <PanelState loading={detail.loading} error={detail.error} hasData={Boolean(detail.data)} onRetry={detail.reload}>
-                <CoverageCard coverage={detail.data?.coverage} report={overview.coverage} />
-              </PanelState>
-            </section>
-            <section>
-              <h3 className="section-title">קבוצות טענות לדוגמה</h3>
-              <PanelState loading={detail.loading} error={detail.error} hasData={Boolean(detail.data)} onRetry={detail.reload}>
-                <Examples examples={detail.data?.examples ?? []} groupsAvailable={overview.groups_available} />
-              </PanelState>
-            </section>
-          </div>
-        </div>
+        <ItemTabs count={sizes?.all} tab={tab} onChange={on.showTab} />
+        {tab === GROUPS_TAB ? (
+          <ItemGroups scope="page" itemId={pageId} groups={groups} />
+        ) : (
+          <PageDetails overview={overview} page={page} pageId={pageId} detail={detail} saving={saving} scopeRef={scopeRef} on={on} />
+        )}
       </div>
     </Panel>
+  );
+}
+
+function PageDetails({ overview, page, pageId, detail, saving, scopeRef, on }) {
+  return (
+    <>
+      <Warnings overview={overview} id={pageId} onSelect={on.select} />
+      <div className="grid gap-6 xl:grid-cols-5">
+        <div className="space-y-6 xl:col-span-3">
+          <ScopeEditor key={pageId} page={page} saving={saving} scopeRef={scopeRef} onSave={(scope) => on.editScope(pageId, scope)} />
+          <EditableText label="כותרת" value={page.title_he} disabled={saving} onSave={(title) => on.rename(pageId, title)} />
+          <EditableText label="תיאור קצר (מוצג בניווט)" value={page.description} disabled={saving} onSave={(text) => on.edit(pageId, { description: text })} />
+          <AliasesEditor key={pageId} page={page} saving={saving} onSave={(aliases) => on.edit(pageId, { aliases })} />
+          <MergedFrom ids={page.merged_from} />
+        </div>
+        <div className="space-y-6 xl:col-span-2">
+          <section>
+            <h3 className="section-title">בדיקת הכיסוי</h3>
+            <PanelState loading={detail.loading} error={detail.error} hasData={Boolean(detail.data)} onRetry={detail.reload}>
+              <CoverageCard coverage={detail.data?.coverage} report={overview.coverage} />
+            </PanelState>
+          </section>
+          <section>
+            <h3 className="section-title">קבוצות טענות לדוגמה</h3>
+            <PanelState loading={detail.loading} error={detail.error} hasData={Boolean(detail.data)} onRetry={detail.reload}>
+              <Examples examples={detail.data?.examples ?? []} groupsAvailable={overview.groups_available} />
+            </PanelState>
+          </section>
+        </div>
+      </div>
+    </>
   );
 }

@@ -1,12 +1,16 @@
 import { useState } from "react";
 import { Bidi, formatCount, formatDateTime, Ltr, Panel, PanelState, useResource } from "@shell";
 import { api } from "./api.js";
+import { groupCount, UNPLACED_ID } from "./assign.js";
+import { AssignmentSummary } from "./AssignmentViews.jsx";
 import { Warnings } from "./bits.jsx";
 import { percent } from "./plan.js";
 
 // Main column when the plan itself is selected: why the model built it this way, the page
-// budget and the depth of each branch, every warning, the coverage check (with the sampled
-// claims that fit no page: candidates for a new page) and what changed since the proposal.
+// budget and the depth of each branch, every warning, where step 6b put the claim groups
+// (and which labels look too narrow or too broad), the coverage check of the planning run
+// (with its sampled claims that fit no page; it describes the model's proposal, so it stays
+// separate from the real list of groups on no page) and what changed since the proposal.
 
 function Budget({ overview }) {
   const { budget, branches } = overview;
@@ -71,11 +75,19 @@ function Unplaced({ reads }) {
   );
 }
 
-function Coverage({ coverage, reads }) {
+function Coverage({ coverage, unplaced, reads, onSelect }) {
   const [open, setOpen] = useState(false);
   if (!coverage) return <p className="text-slate-400">אין דוח כיסוי (הוא נוצר כשהתוכנית מתוכננת).</p>;
   return (
     <div className="space-y-2">
+      {unplaced !== null && (
+        <p className="rounded bg-slate-50 p-2 text-xs text-slate-600">
+          הבדיקה הזו מתארת את הדגימה של התכנון. הרשימה האמיתית אחרי שלב השיוך:{" "}
+          <button type="button" className="badge badge-amber" onClick={() => onSelect(UNPLACED_ID)}>
+            {groupCount(unplaced, formatCount)} בלי דף
+          </button>
+        </p>
+      )}
       <p>
         המסווג הזול שיבץ {formatCount(coverage.sample_size)} קבוצות מתוך {formatCount(coverage.total_groups)} לפי
         הכותרות והתחומים בלבד: <b>{percent(coverage.confident_share)}</b> בביטחון,{" "}
@@ -150,12 +162,16 @@ export function Overview({ overview, reads, on }) {
         )}
         <Budget overview={overview} />
         <section>
+          <h3 className="section-title">שיוך הקבוצות לדפים (שלב 6ב)</h3>
+          <AssignmentSummary overview={overview} onSelect={on.select} />
+        </section>
+        <section>
           <h3 className="section-title">אזהרות ({formatCount(overview.warnings.length)})</h3>
           {overview.warnings.length === 0 ? <p className="text-slate-500">אין אזהרות.</p> : <Warnings overview={overview} warnings={overview.warnings} onSelect={on.select} />}
         </section>
         <section>
-          <h3 className="section-title">בדיקת הכיסוי</h3>
-          <Coverage coverage={overview.coverage} reads={reads} />
+          <h3 className="section-title">בדיקת הכיסוי של התכנון</h3>
+          <Coverage coverage={overview.coverage} unplaced={overview.assignments?.counts?.unplaced ?? null} reads={reads} onSelect={on.select} />
         </section>
         <section>
           <h3 className="section-title">שינויים מאז ההצעה</h3>
