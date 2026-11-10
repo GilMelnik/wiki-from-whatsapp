@@ -17,6 +17,8 @@ export { Layout } from "./Layout.jsx";
 export { Panel } from "./Panel.jsx";
 export { ItemList } from "./ItemList.jsx";
 export { Pager } from "./Pager.jsx";
+export { pageStart, usePagedSelection } from "./pagedSelection.js";
+export { Select } from "./Select.jsx";
 export { PanelState } from "./states.jsx";
 export { Dialog } from "./Dialog.jsx";
 export { useToast } from "./Toast.jsx";

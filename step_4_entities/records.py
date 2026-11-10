@@ -147,18 +147,41 @@ def new_entity(entity_id: str, members: list[dict[str, Any]], **fields: Any) -> 
     return entity
 
 
-def allocate_entity_id(payload: dict[str, Any]) -> str:
-    """Next never-used entity id; the high-water mark lives in ``metadata``."""
+def highest_entity_number(payload: Mapping[str, Any]) -> int:
+    """The highest entity number ever used: the persisted high-water mark or a present id."""
 
-    meta = payload.setdefault("metadata", {})
     numbers = [
         int(m.group(1))
         for e in payload.get("entities") or []
         if (m := _ID_RE.fullmatch(str(e.get("entity_id"))))
     ]
-    number = max([int(meta.get("last_entity_number", -1)), *numbers]) + 1
-    meta["last_entity_number"] = number
+    return max([int((payload.get("metadata") or {}).get("last_entity_number", -1)), *numbers])
+
+
+def allocate_entity_id(payload: dict[str, Any]) -> str:
+    """Next never-used entity id; the high-water mark lives in ``metadata``."""
+
+    number = highest_entity_number(payload) + 1
+    payload.setdefault("metadata", {})["last_entity_number"] = number
     return f"{_ID_PREFIX}{number:0{_ID_DIGITS}d}"
+
+
+def member_names(payload: Mapping[str, Any]) -> set[str]:
+    """Every entity string some member of the payload carries."""
+
+    return {m["name"] for e in payload.get("entities") or [] for m in e.get("members") or []}
+
+
+def entity_counts(payload: Mapping[str, Any]) -> dict[str, int]:
+    """The size counters ``metadata`` keeps next to the entities."""
+
+    entities = payload.get("entities") or []
+    return {
+        "distinct_entity_count": len(member_names(payload)),
+        "entity_count": len(entities),
+        "multi_member_count": sum(1 for e in entities if len(e.get("members") or []) > 1),
+        "ambiguous_count": sum(1 for e in entities if e.get("status") == "ambiguous"),
+    }
 
 
 def explicit_member_claims(member: Mapping[str, Any]) -> list[str]:

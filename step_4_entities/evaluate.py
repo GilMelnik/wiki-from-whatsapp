@@ -27,10 +27,9 @@ from pathlib import Path
 from typing import Any
 
 from step_4_entities.collect import load_claims_for_entities, tagged_names
-from step_4_entities.records import explicit_member_claims
-from step_4_entities.reviewer.store import EntityStore
+from step_4_entities.records import explicit_member_claims, member_names
+from step_4_entities.reviewer.store import EntityStore, EntityView
 from step_4_entities.run import run
-from step_4_entities.update import member_names
 from utils.config import ENTITIES_CONFIG
 from utils.embedding_ab import _git_commit
 from utils.logging_setup import setup_step_logging
@@ -122,9 +121,14 @@ class IncrementalExperiment:
         return run(claims_path=path, artifact=artifact, analysis_path=cache)
 
     def _store(self) -> EntityStore:
-        store = EntityStore(entities_path=self.artifact.edited, claims_path=self.work / "base_claims.json")
-        store.load()
-        return store
+        return EntityStore(
+            self.artifact.original,
+            self.artifact.edited,
+            self.work / "base_claims.json",
+            self.work / "base_claims_edited.json",
+            self.work / "claim_aggregations.json",
+            self.work / f"{self.artifact.original.stem}_analysis.json",
+        )
 
     def _edit(self) -> None:
         """A handful of reviewer edits chosen from the reviewed entities (deterministic)."""
@@ -144,7 +148,7 @@ class IncrementalExperiment:
         target, source = next((pair for pair in owners.values() if len(pair) == 2))[:2]
         merged = target["aliases"] + source["aliases"]
         store.merge(source["entity_id"], target["entity_id"])
-        store.set_status(target["entity_id"], "accepted")
+        store.set_status(target["entity_id"], "accepted", EntityView())
         used |= {target["entity_id"], source["entity_id"]}
         self.expect["merge"] = (target["entity_id"], merged)
 
@@ -154,15 +158,17 @@ class IncrementalExperiment:
         )
         majority = gold.get(impure["members"][0]["name"])
         moving = [m["name"] for m in impure["members"] if gold.get(m["name"]) != majority]
-        split = store.move_member(impure["entity_id"], moving[0])
+        before = {e["entity_id"] for e in store.entities}
+        store.move_member(impure["entity_id"], moving[0], None)
+        split_id = next(e["entity_id"] for e in store.entities if e["entity_id"] not in before)
         for name in moving[1:]:
-            store.move_member(impure["entity_id"], name, target_entity_id=split["entity_id"])
-        used |= {impure["entity_id"], split["entity_id"]}
-        self.expect["split"] = (impure["entity_id"], split["entity_id"], moving)
+            store.move_member(impure["entity_id"], name, split_id)
+        used |= {impure["entity_id"], split_id}
+        self.expect["split"] = (impure["entity_id"], split_id, moving)
 
         renamed = next(e for e in by_size if free(e))
         new_name = f"{renamed['canonical_name']} (renamed)"
-        store.rename_entity(renamed["entity_id"], new_name)
+        store.rename(renamed["entity_id"], new_name)
         used.add(renamed["entity_id"])
         self.expect["rename"] = (renamed["entity_id"], new_name)
 
@@ -176,7 +182,7 @@ class IncrementalExperiment:
         unc = next(e for e in by_size if free(e) and any((e.get("contacts_uncertain") or {}).values()))
         kind = next(k for k, v in unc["contacts_uncertain"].items() if v)
         value = unc["contacts_uncertain"][kind][0]
-        store.resolve_uncertain_contact(unc["entity_id"], kind=kind, value=value, action="reject")
+        store.resolve_contact(unc["entity_id"], kind, value, "reject")
         used.add(unc["entity_id"])
         self.expect["reject"] = (unc["entity_id"], kind, value)
 
@@ -190,7 +196,7 @@ class IncrementalExperiment:
             e for e in reversed(by_size)
             if free(e) and len(e["members"]) == 1 and e["members"][0]["name"] in later
         )
-        store.delete_entity(doomed["entity_id"])
+        store.delete_entity(doomed["entity_id"], EntityView())
         self.expect["delete"] = doomed["members"][0]["name"]
 
     def _check(self, state: dict[str, Any], before: dict[str, Any]) -> dict[str, Any]:

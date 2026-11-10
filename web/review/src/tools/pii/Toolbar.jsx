@@ -1,22 +1,7 @@
-import { formatCount, Ltr } from "@shell";
+import { formatCount, Ltr, Select } from "@shell";
 import { FILTERS, ORDERS, SORTS, STATUS, typeCounts } from "./review.js";
 
 // Toolbar: which claims are listed and in what order, the review counters and the file read.
-
-function Select({ label, value, options, onChange }) {
-  return (
-    <label className="flex items-center gap-1">
-      {label}
-      <select className="field" value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
 
 function Counters({ summary }) {
   if (!summary) return null;

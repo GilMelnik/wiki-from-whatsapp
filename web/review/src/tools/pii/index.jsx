@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import {
   createApi,
   ItemList,
   Layout,
   Pager,
   PanelState,
+  usePagedSelection,
   useResource,
   useShortcuts,
   useStoredState,
@@ -13,7 +14,7 @@ import {
 import { ClaimDetail } from "./ClaimDetail.jsx";
 import { ClaimRow } from "./ClaimRow.jsx";
 import { DecisionPanel } from "./DecisionPanel.jsx";
-import { DECISION_TOASTS, PAGE_SIZE, pageStart, toggleMark } from "./review.js";
+import { DECISION_TOASTS, PAGE_SIZE, toggleMark } from "./review.js";
 import { Toolbar } from "./Toolbar.jsx";
 
 // PII review: every claim whose phone numbers or emails step 3 scrubbed (list, paged by the
@@ -37,7 +38,6 @@ function PiiTool({ tool }) {
   const [choice, setChoice] = useState({ claimId: null, marks: [] });
   const [lastDecided, setLastDecided] = useState(null);
   const [saving, setSaving] = useState(false);
-  const selectFirstOnLoad = useRef(false);
   const view = { filter, sort, order };
 
   const summary = useResource(() => api.get("/summary"), [], { watch: tool.reads });
@@ -54,35 +54,26 @@ function PiiTool({ tool }) {
 
   const items = list.data?.items ?? [];
   const claim = detail.data?.claim;
-  const position = detail.data?.queue.position;
+  const queue = detail.data?.queue;
   const chosen = claim && choice.claimId === claim.claim_id ? choice.marks : [];
-  // The selected claim left this view (decided elsewhere, removed by a step re-run, filter
-  // changed): select the first listed claim instead.
-  const lost = detail.error?.status === 404 || position === null;
-
-  useEffect(() => {
-    if (list.loading || !list.data) return;
-    if (selectFirstOnLoad.current || !selectedId || lost) {
-      selectFirstOnLoad.current = false;
-      const first = items[0]?.claim_id ?? null;
-      if (first !== selectedId) setSelectedId(first);
-    }
-  }, [list.data, list.loading, selectedId, lost]);
-
-  // The list shows the page that holds the selected claim (it may have moved after a decision).
-  useEffect(() => {
-    if (position === null || position === undefined) return;
-    const start = pageStart(position, PAGE_SIZE);
-    if (start !== offset) setOffset(start);
-  }, [position]);
+  // The list shows the page of the selected claim (it may have moved after a decision); a
+  // claim that left the view (decided elsewhere, removed by a step re-run, filter changed)
+  // gives way to the first listed claim.
+  const goToPage = usePagedSelection({
+    list,
+    getKey: (item) => item.claim_id,
+    selectedKey: selectedId,
+    onSelect: setSelectedId,
+    position: queue?.position,
+    lost: detail.error?.status === 404 || queue?.position === null,
+    offset,
+    setOffset,
+    pageSize: PAGE_SIZE,
+  });
 
   const changeView = (setter) => (value) => {
     setter(value);
     setOffset(0);
-  };
-  const goToPage = (nextOffset) => {
-    selectFirstOnLoad.current = true;
-    setOffset(nextOffset);
   };
 
   const toggle = (index) => {
@@ -150,6 +141,8 @@ function PiiTool({ tool }) {
         selectedKey={selectedId}
         onSelect={setSelectedId}
         total={list.data?.total}
+        prevKey={queue?.prev_id}
+        nextKey={queue?.next_id}
         header={<Pager offset={offset} limit={PAGE_SIZE} total={list.data?.total ?? 0} onChange={goToPage} />}
         renderItem={(item) => <ClaimRow claim={item} />}
       />

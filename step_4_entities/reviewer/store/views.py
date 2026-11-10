@@ -1,279 +1,215 @@
-"""Read views, queue and stats for the entity store."""
+"""Read views of the entity store: summary, list page, queue, entity detail, member claims."""
 
 from __future__ import annotations
 
 from collections import Counter
 from typing import Any
 
-from utils.config import ENTITIES_CONFIG
 from step_4_entities.reviewer.store.helpers import (
-    SortKind,
-    SortOrder,
-    _member_total,
+    EntityView,
+    attached_members,
+    contact_count,
+    member_total,
 )
+from utils.config import ENTITIES_CONFIG
+
+PAGE_SIZE = ENTITIES_CONFIG["sample_claims_per_member"]
+
+_SORT_KEYS = {
+    "count": lambda item: item["total_count"],
+    "size": lambda item: item["member_count"],
+    "score": lambda item: item["score"] or 0,
+    "id": lambda item: item["entity_id"],
+    "name": lambda item: item["canonical_name"].casefold(),
+}
+
+
+def _matches(item: dict[str, Any], view: EntityView) -> bool:
+    if view.status != "all" and item["status"] != view.status:
+        return False
+    if view.flag == "attached" and not item["attached_count"]:
+        return False
+    if view.flag == "conflict" and not item["conflict_count"]:
+        return False
+    if view.flag == "uncertain" and not item["uncertain_count"]:
+        return False
+    if view.flag == "multi" and item["member_count"] < 2:
+        return False
+    needle = view.query.strip().casefold()
+    if not needle:
+        return True
+    names = [item["canonical_name"], *item["aliases"]]
+    return item["entity_id"] == needle or any(needle in name.casefold() for name in names)
 
 
 class ViewsMixin:
-    """Read-only entity/member/claim views served to the reviewer UI.
+    """Relies on ``EntityStore``: ``entities``, ``claims``, ``aggregations``, ``annotator``,
+    ``deleted_claims``, ``deleted_names``, ``source``, ``edited_path``, ``find``,
+    ``member_of`` and ``text_of``."""
 
-    Relies on ``EntityStore`` attributes: ``entities``, ``_claims_by_id``,
-    ``_agg_by_claim``, ``_agg_by_rep``, ``_find_entity``, plus the
-    ``ClaimsMixin`` helpers (``_claim_ids_for_member``,
-    ``_other_entities_in_claim``, ``_related_entities_in_claim``,
-    ``_claim_highlights``).
-    """
-
-    # --- read views -----------------------------------------------------
-
-    def _enrich(self, entity: dict[str, Any]) -> dict[str, Any]:
+    def list_item(self, entity: dict[str, Any]) -> dict[str, Any]:
         return {
             "entity_id": entity["entity_id"],
-            "canonical_name": entity.get("canonical_name", ""),
+            "canonical_name": entity.get("canonical_name") or "",
             "status": entity.get("status", "suggested"),
+            "type": entity.get("type"),
             "member_count": len(entity.get("members") or []),
-            "total_count": _member_total(entity),
+            "total_count": member_total(entity),
             "aliases": entity.get("aliases") or [],
-            "contacts": entity.get("contacts") or {},
-            "contacts_uncertain": entity.get("contacts_uncertain") or {},
-            "contacts_manual": bool(entity.get("contacts_manual")),
-            "merge_signals": entity.get("merge_signals") or [],
-            "conflict_with": entity.get("conflict_with") or [],
             "score": entity.get("score"),
+            "attached_count": len(attached_members(entity)),
+            "conflict_count": len(entity.get("conflict_with") or []),
+            "uncertain_count": contact_count(entity.get("contacts_uncertain")),
         }
 
-    def _sorted_entities(
-        self,
-        *,
-        status: str | None = None,
-        size_min: int | None = None,
-        query: str | None = None,
-        sort: SortKind = "count",
-        order: SortOrder = "desc",
-    ) -> list[dict[str, Any]]:
-        items = [self._enrich(e) for e in self.entities]
-        if status:
-            items = [i for i in items if i["status"] == status]
-        if size_min is not None:
-            items = [i for i in items if i["member_count"] >= size_min]
-        if query:
-            needle = query.strip().lower()
-            items = [
-                i
-                for i in items
-                if needle in i["canonical_name"].lower()
-                or any(needle in a.lower() for a in i["aliases"])
-            ]
-        reverse = order == "desc"
-        key = {
-            "count": lambda i: i["total_count"],
-            "size": lambda i: i["member_count"],
-            "score": lambda i: i["score"] or 0,
-        }[sort]
-        items.sort(key=key, reverse=reverse)
+    def _view_items(self, view: EntityView) -> list[dict[str, Any]]:
+        """The list items of the view, in its order (ties by id, so pages are stable)."""
+
+        items = [item for e in self.entities if _matches(item := self.list_item(e), view)]
+        items.sort(key=lambda item: item["entity_id"])
+        items.sort(key=_SORT_KEYS[view.sort], reverse=view.order == "desc")
         return items
 
-    def list_entities(
-        self,
-        *,
-        status: str | None = None,
-        size_min: int | None = None,
-        query: str | None = None,
-        sort: SortKind = "count",
-        order: SortOrder = "desc",
-        offset: int = 0,
-        limit: int = 100,
-    ) -> tuple[list[dict[str, Any]], int]:
-        items = self._sorted_entities(
-            status=status, size_min=size_min, query=query, sort=sort, order=order
-        )
-        return items[offset : offset + limit], len(items)
+    def view_ids(self, view: EntityView) -> list[str]:
+        return [item["entity_id"] for item in self._view_items(view)]
 
-    def _is_hidden_by_aggregation(self, claim_id: str) -> bool:
-        """A non-representative member of an aggregation is folded away."""
-
-        group = self._agg_by_claim.get(claim_id)
-        return group is not None and group.get("representative") != claim_id
-
-    def _visible_claim_ids(self, claim_ids: list[str]) -> list[str]:
-        return [c for c in claim_ids if not self._is_hidden_by_aggregation(c)]
-
-    def _aggregation_view(self, claim_id: str) -> dict[str, Any] | None:
-        group = self._agg_by_rep.get(claim_id)
-        if group is None:
-            return None
-        ids = group.get("claim_ids") or []
+    def page(self, view: EntityView, offset: int, limit: int) -> dict[str, Any]:
+        items = self._view_items(view)
         return {
-            "id": group["id"],
-            "representative": group.get("representative"),
-            "count": len(ids),
-            "members": [
-                {
-                    "claim_id": cid,
-                    "claim_text": (self._claims_by_id.get(cid) or {}).get(
-                        "claim_text", ""
-                    ),
-                }
-                for cid in ids
-            ],
-        }
-
-    def _enrich_claim(
-        self,
-        claim_id: str,
-        member_name: str,
-        *,
-        entity_id: str,
-        entity_names: set[str],
-    ) -> dict[str, Any] | None:
-        claim = self._claims_by_id.get(claim_id)
-        if claim is None:
-            return None
-        other_entities = self._other_entities_in_claim(
-            claim,
-            current_entity_id=entity_id,
-            current_names=entity_names,
-        )
-        return {
-            "claim_id": claim_id,
-            "claim_text": claim.get("claim_text", ""),
-            "stance": claim.get("stance"),
-            "thread_id": claim.get("thread_id"),
-            "highlights": self._claim_highlights(
-                claim,
-                member_name,
-                current_entity_id=entity_id,
-                current_names=entity_names,
-            ),
-            "other_entities": other_entities,
-            "related_entities": self._related_entities_in_claim(
-                claim,
-                current_entity_id=entity_id,
-                current_names=entity_names,
-                mentioned_entity_ids={o["entity_id"] for o in other_entities},
-            ),
-            "aggregation": self._aggregation_view(claim_id),
-        }
-
-    def _member_view(
-        self,
-        member: dict[str, Any],
-        member_index: int,
-        *,
-        entity_id: str,
-        entity_names: set[str],
-    ) -> dict[str, Any]:
-        name = member["name"]
-        claim_ids = self._visible_claim_ids(self._claim_ids_for_member(member))
-        samples: list[dict[str, Any]] = []
-        for claim_id in claim_ids[: ENTITIES_CONFIG["sample_claims_per_member"]]:
-            enriched = self._enrich_claim(
-                claim_id, name, entity_id=entity_id, entity_names=entity_names
-            )
-            if enriched is not None:
-                samples.append(enriched)
-        return {
-            "name": name,
-            "member_index": member_index,
-            "count": len(claim_ids),
-            "claim_ids": member.get("claim_ids"),
-            "excluded_claim_ids": member.get("excluded_claim_ids") or [],
-            "contacts": member.get("contacts") or {},
-            "sample_claims": samples,
-        }
-
-    def member_claims(
-        self,
-        entity_id: str,
-        name: str,
-        *,
-        offset: int = 0,
-        limit: int | None = None,
-    ) -> dict[str, Any]:
-        """One page of a member's visible claims (Req 1 pagination; default page size from
-        ``entities.sample_claims_per_member``)."""
-
-        if limit is None:
-            limit = ENTITIES_CONFIG["sample_claims_per_member"]
-
-        entity, _ = self._find_entity(entity_id)
-        member = next(
-            (m for m in entity.get("members") or [] if m["name"] == name), None
-        )
-        if member is None:
-            raise ValueError(f"name not a member of this entity: {name}")
-        entity_names = set(entity.get("aliases") or [])
-        canonical = entity.get("canonical_name")
-        if canonical:
-            entity_names.add(canonical)
-        claim_ids = self._visible_claim_ids(self._claim_ids_for_member(member))
-        claims: list[dict[str, Any]] = []
-        for claim_id in claim_ids[offset : offset + limit]:
-            enriched = self._enrich_claim(
-                claim_id, name, entity_id=entity_id, entity_names=entity_names
-            )
-            if enriched is not None:
-                claims.append(enriched)
-        return {
-            "name": name,
-            "count": len(claim_ids),
+            "items": items[offset : offset + limit],
+            "total": len(items),
             "offset": offset,
             "limit": limit,
-            "claims": claims,
         }
 
-    def get_entity(
-        self,
-        entity_id: str,
-        *,
-        status: str | None = None,
-        size_min: int | None = None,
-        query: str | None = None,
-        sort: SortKind = "count",
-        order: SortOrder = "desc",
-    ) -> dict[str, Any]:
-        entity, _ = self._find_entity(entity_id)
-        detail = self._enrich(entity)
-        entity_names = set(entity.get("aliases") or [])
-        canonical = entity.get("canonical_name")
-        if canonical:
-            entity_names.add(canonical)
-        detail["members"] = [
-            self._member_view(
-                m, idx, entity_id=entity_id, entity_names=entity_names
-            )
-            for idx, m in enumerate(entity.get("members") or [])
-        ]
-        items = self._sorted_entities(
-            status=status, size_min=size_min, query=query, sort=sort, order=order
-        )
-        ids = [i["entity_id"] for i in items]
-        try:
-            pos = ids.index(entity_id)
-        except ValueError:
-            pos = -1
+    def queue(self, entity_id: str, view: EntityView) -> dict[str, Any]:
+        """Where the entity sits in the view (``position`` None when the view does not show it)."""
+
+        ids = self.view_ids(view)
+        if entity_id not in ids:
+            return {"position": None, "total": len(ids), "prev_id": None, "next_id": None}
+        pos = ids.index(entity_id)
         return {
-            "entity": detail,
-            "queue": {
-                "prev_id": ids[pos - 1] if pos > 0 else None,
-                "next_id": ids[pos + 1] if 0 <= pos < len(ids) - 1 else None,
-                "position": pos + 1 if pos >= 0 else None,
-                "total": len(ids),
-            },
+            "position": pos,
+            "total": len(ids),
+            "prev_id": ids[pos - 1] if pos > 0 else None,
+            "next_id": ids[pos + 1] if pos + 1 < len(ids) else None,
         }
 
-    def stats(self) -> dict[str, Any]:
-        statuses: Counter[str] = Counter()
-        sizes: Counter[int] = Counter()
-        for entity in self.entities:
-            statuses[entity.get("status", "suggested")] += 1
-            sizes[len(entity.get("members") or [])] += 1
+    def next_after_removal(self, ids_before: list[str], entity_id: str) -> str | None:
+        """The entity to show once ``entity_id`` left the view: the one now in its place."""
+
+        if entity_id not in ids_before:
+            return ids_before[0] if ids_before else None
+        pos = ids_before.index(entity_id)
+        existing = {e["entity_id"] for e in self.entities}
+        rest = [i for i in ids_before if i != entity_id and i in existing]
+        return rest[min(pos, len(rest) - 1)] if rest else None
+
+    def summary(self) -> dict[str, Any]:
+        statuses = Counter(e.get("status", "suggested") for e in self.entities)
         return {
+            "file": self.source.name,
+            "edited_exists": self.edited_path.is_file(),
             "entity_count": len(self.entities),
-            "multi_member_count": sum(
-                1 for e in self.entities if len(e.get("members") or []) > 1
-            ),
+            "multi_member_count": sum(1 for e in self.entities if len(e.get("members") or []) > 1),
             "by_status": dict(statuses),
-            "size_histogram": [
-                {"size": size, "count": sizes[size]} for size in sorted(sizes)
+            "attached_members": sum(len(attached_members(e)) for e in self.entities),
+            "attached_entities": sum(1 for e in self.entities if attached_members(e)),
+            "conflict_entities": sum(1 for e in self.entities if e.get("conflict_with")),
+            "uncertain_entities": sum(
+                1 for e in self.entities if contact_count(e.get("contacts_uncertain"))
+            ),
+            "deleted_names": len(self.deleted_names),
+            "deleted_claims": len(self.deleted_claims),
+            "aggregations": len(self.aggregations.groups),
+            "analysis": self.claims.analysis_counts,
+        }
+
+    # --- detail ------------------------------------------------------------
+
+    def _visible_claims(self, member: dict[str, Any]) -> list[str]:
+        excluded = set(member.get("excluded_claim_ids") or [])
+        return [
+            c
+            for c in member.get("claim_ids") or []
+            if c not in excluded
+            and c not in self.deleted_claims
+            and not self.aggregations.is_hidden(c)
+        ]
+
+    def _claims_page(
+        self, entity: dict[str, Any], member: dict[str, Any], offset: int, limit: int
+    ) -> dict[str, Any]:
+        own = {*(entity.get("aliases") or []), entity.get("canonical_name") or ""}
+        ids = self._visible_claims(member)
+        claims = []
+        for claim_id in ids[offset : offset + limit]:
+            view = self.annotator.annotate(claim_id, member["name"], entity["entity_id"], own)
+            if view is not None:
+                view["aggregation"] = self.aggregations.view(claim_id, self.text_of)
+                claims.append(view)
+        return {"count": len(ids), "offset": offset, "limit": limit, "claims": claims}
+
+    def _member_view(
+        self, entity: dict[str, Any], member: dict[str, Any], index: int
+    ) -> dict[str, Any]:
+        entity_id = entity["entity_id"]
+        also_in = [
+            {"entity_id": other, "canonical_name": self.annotator.canonical.get(other, "")}
+            for other in self.annotator.holders.get(member["name"], [])
+            if other != entity_id
+        ]
+        return {
+            "name": member["name"],
+            "member_index": index,
+            "is_canonical": member["name"] == entity.get("canonical_name"),
+            "claim_count": len(member.get("claim_ids") or []),
+            "excluded_claims": [
+                {"claim_id": claim_id, "claim_text": self.text_of(claim_id)}
+                for claim_id in member.get("excluded_claim_ids") or []
+                if claim_id not in self.deleted_claims
+            ],
+            "contacts": member.get("contacts") or {},
+            "contacts_uncertain": member.get("contacts_uncertain") or {},
+            "attached_by": member.get("attached_by"),
+            "also_in": also_in,
+            "claims": self._claims_page(entity, member, 0, PAGE_SIZE),
+        }
+
+    def detail(self, entity_id: str, view: EntityView) -> dict[str, Any]:
+        entity = self.find(entity_id)
+        conflicts = [self.annotator.ref(name) for name in entity.get("conflict_with") or []]
+        detail = {
+            **self.list_item(entity),
+            "canonical_manual": bool(entity.get("canonical_manual")),
+            "contacts": entity.get("contacts") or {},
+            "contacts_uncertain": entity.get("contacts_uncertain") or {},
+            "contacts_rejected": entity.get("contacts_rejected") or {},
+            "contacts_manual": bool(entity.get("contacts_manual")),
+            "merge_signals": entity.get("merge_signals") or [],
+            "conflicts": conflicts,
+            "members": [
+                self._member_view(entity, member, index)
+                for index, member in enumerate(entity.get("members") or [])
             ],
         }
+        return {"entity": detail, "queue": self.queue(entity_id, view), "page_size": PAGE_SIZE}
+
+    def member_claims(
+        self, entity_id: str, name: str, offset: int, limit: int | None = None
+    ) -> dict[str, Any]:
+        """One page of a member's visible claims (default page size: the detail's)."""
+
+        entity = self.find(entity_id)
+        member = self.member_of(entity, name)
+        return {"name": name, **self._claims_page(entity, member, offset, limit or PAGE_SIZE)}
+
+    def deleted_names_view(self) -> dict[str, Any]:
+        """Names of deleted entities (step 4 never brings them back) and their claim counts."""
+
+        names = [
+            {"name": name, "claim_count": len(self.claims.claims_for(name) - self.deleted_claims)}
+            for name in sorted(self.deleted_names)
+        ]
+        return {"names": names}

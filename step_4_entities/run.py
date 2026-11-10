@@ -40,7 +40,8 @@ from typing import Any
 from step_4_entities.cluster import EntityClusterer
 from step_4_entities.collect import ClaimCorpus, load_claims_for_entities, tagged_names
 from step_4_entities.mentions import Analyzer, DictaAnalyzer, build_or_load_analysis
-from step_4_entities.update import EntityUpdate, member_names
+from step_4_entities.records import entity_counts, member_names
+from step_4_entities.update import EntityUpdate
 from utils.config import ENTITIES_CONFIG
 from utils.embedding_ab import _git_commit
 from utils.logging_setup import setup_step_logging
@@ -76,16 +77,6 @@ def _read(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
 
 
-def _counts(state: dict[str, Any]) -> dict[str, int]:
-    entities = state.get("entities") or []
-    return {
-        "distinct_entity_count": len(member_names(state)),
-        "entity_count": len(entities),
-        "multi_member_count": sum(1 for e in entities if len(e.get("members") or []) > 1),
-        "ambiguous_count": sum(1 for e in entities if e.get("status") == "ambiguous"),
-    }
-
-
 def _metadata(
     state: dict[str, Any], inputs: dict[str, str], source: Path, stats: dict[str, int]
 ) -> dict[str, Any]:
@@ -97,7 +88,7 @@ def _metadata(
         "analyzer_model": ENTITIES_CONFIG["analyzer"]["model"],
         "git_commit": _git_commit(),
         "last_entity_number": state.get("metadata", {}).get("last_entity_number", -1),
-        **_counts(state),
+        **entity_counts(state),
     }
 
 
@@ -147,7 +138,7 @@ def run(
     affected = [*diff.new, *diff.changed, *diff.removed]
     if not affected and previous and not rebuild:
         logger.info(f"Entities: {len(inputs)} claims unchanged; nothing to do")
-        return {"claims_processed": 0, **_counts(state), "backup": None}
+        return {"claims_processed": 0, **entity_counts(state), "backup": None}
 
     analysis = build_or_load_analysis(
         claims, analyzer or DictaAnalyzer(), cache_path=analysis_path, source_path=resolved
@@ -176,7 +167,7 @@ def run(
         f"{meta['ambiguous_count']} ambiguous) from {meta['distinct_entity_count']} strings; "
         f"run {stats}; commit {meta['git_commit']}; params {meta['params']}"
     )
-    return {**stats, **_counts(state), "backup": str(backup) if backup else None}
+    return {**stats, **entity_counts(state), "backup": str(backup) if backup else None}
 
 
 def main(argv: list[str] | None = None) -> None:

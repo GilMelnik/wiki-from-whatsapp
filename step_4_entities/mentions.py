@@ -113,7 +113,9 @@ def _attach_offsets(text: str, words: list[Word]) -> list[Word]:
     return words
 
 
-def _name_words(name: str) -> list[str]:
+def name_words(name: str) -> list[str]:
+    """The normalized words of an entity name, as ``find_mentions`` matches them."""
+
     return [t for t in (normalize_token(w) for w in name.split()) if t]
 
 
@@ -144,15 +146,15 @@ def _window_ok(window: list[Word], *, single_hebrew: bool) -> bool:
 def find_mentions(words: list[Word], name: str) -> list[list[int]]:
     """Char spans where ``name`` appears as a whole-word run of cores in ``words``."""
 
-    name_words = _name_words(name)
-    if not name_words or not words:
+    wanted = name_words(name)
+    if not wanted or not words:
         return []
     cores = [normalize_token(word.get("core") or "") for word in words]
-    span_len = len(name_words)
+    span_len = len(wanted)
     single_hebrew = span_len == 1 and _is_hebrew(name)
     spans: list[list[int]] = []
     for i in range(len(words) - span_len + 1):
-        if cores[i : i + span_len] != name_words:
+        if cores[i : i + span_len] != wanted:
             continue
         window = words[i : i + span_len]
         if not _window_ok(window, single_hebrew=single_hebrew):
@@ -182,6 +184,43 @@ def _text_fingerprint(text: str) -> str:
     return hashlib.sha1(text.encode("utf-8")).hexdigest()[: _ANALYZER_CONFIG["fingerprint_chars"]]
 
 
+def read_analysis_cache(
+    cache_path: Path | str, model: str | None = None
+) -> tuple[dict[str, list[Word]], dict[str, str]]:
+    """The cached ``{claim_id: words}`` and text fingerprints (empty when unreadable or, with
+    ``model``, when the cache was built by another model)."""
+
+    cache = Path(cache_path)
+    if not cache.is_file():
+        return {}, {}
+    try:
+        data = json.loads(cache.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}, {}
+    if model is not None and data.get("metadata", {}).get("model") != model:
+        return {}, {}
+    return data.get("analysis") or {}, data.get("fingerprints") or {}
+
+
+def split_cached(
+    claims: list[dict[str, Any]], cached: dict[str, list[Word]], fingerprints: dict[str, str]
+) -> tuple[dict[str, list[Word]], list[dict[str, Any]]]:
+    """Cache entries still valid for ``claims`` (same text), and the claims without one."""
+
+    analysis: dict[str, list[Word]] = {}
+    missing: list[dict[str, Any]] = []
+    for claim in claims:
+        claim_id = claim.get("claim_id")
+        if not claim_id:
+            continue
+        valid = fingerprints.get(claim_id) == _text_fingerprint(claim.get("claim_text") or "")
+        if valid and claim_id in cached:
+            analysis[claim_id] = cached[claim_id]
+        else:
+            missing.append(claim)
+    return analysis, missing
+
+
 def build_or_load_analysis(
     claims: list[dict[str, Any]],
     analyzer: Analyzer,
@@ -196,32 +235,10 @@ def build_or_load_analysis(
     The cache is rewritten, pruned to ``claims``, whenever something was added or dropped.
     """
 
-    cache = Path(cache_path)
-    cached: dict[str, list[Word]] = {}
-    fingerprints: dict[str, str] = {}
-    if cache.is_file():
-        try:
-            data = json.loads(cache.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            data = {}
-        if data.get("metadata", {}).get("model") == analyzer.model_name:
-            cached = data.get("analysis") or {}
-            fingerprints = data.get("fingerprints") or {}
-
-    current = {
-        c["claim_id"]: _text_fingerprint(c.get("claim_text") or "")
-        for c in claims
-        if c.get("claim_id")
-    }
-    missing = [
-        c
-        for c in claims
-        if c.get("claim_id")
-        and (fingerprints.get(c["claim_id"]) != current[c["claim_id"]] or c["claim_id"] not in cached)
-    ]
-    analysis = {cid: cached[cid] for cid in current if cid in cached}
+    cached, fingerprints = read_analysis_cache(cache_path, analyzer.model_name)
+    analysis, missing = split_cached(claims, cached, fingerprints)
     analysis.update(analyze_claims(missing, analyzer) if missing else {})
-    if missing or set(cached) != set(current):
+    if missing or set(cached) != set(analysis):
         write_json_file(
             {
                 "metadata": {
@@ -229,10 +246,14 @@ def build_or_load_analysis(
                     "source": str(source_path) if source_path is not None else None,
                     "claim_count": len(analysis),
                 },
-                "fingerprints": current,
+                "fingerprints": {
+                    c["claim_id"]: _text_fingerprint(c.get("claim_text") or "")
+                    for c in claims
+                    if c.get("claim_id")
+                },
                 "analysis": analysis,
             },
-            cache,
+            Path(cache_path),
         )
     return analysis
 
@@ -254,8 +275,8 @@ class MentionIndex:
                     self._by_core.setdefault(core, set()).add(claim_id)
 
     def claims_mentioning(self, name: str) -> set[str]:
-        name_words = _name_words(name)
-        if not name_words:
+        wanted = name_words(name)
+        if not wanted:
             return set()
-        candidates = self._by_core.get(name_words[0], set())
+        candidates = self._by_core.get(wanted[0], set())
         return {c for c in candidates if find_mentions(self._analysis[c], name)}
