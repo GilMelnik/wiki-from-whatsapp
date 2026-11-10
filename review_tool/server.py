@@ -22,7 +22,10 @@ class ReviewServer(uvicorn.Server):
         # log_config=None: uvicorn's loggers propagate to the handlers of utils.logging_setup.
         super().__init__(
             uvicorn.Config(
-                app, log_config=None, timeout_graceful_shutdown=shutdown_timeout_seconds
+                app,
+                log_config=None,
+                ws="none",
+                timeout_graceful_shutdown=shutdown_timeout_seconds,
             )
         )
         self._bus = bus
