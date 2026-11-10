@@ -22,6 +22,7 @@ from utils.paths import (
     CHAT_ANDROID_PATH,
     CLAIMS,
     CLASSIFIED,
+    DOCS_DIR,
     ENTITIES,
     GOLD_THREADS_PATH,
     MANUAL_AGGREGATIONS_PATH,
@@ -33,7 +34,9 @@ from utils.paths import (
     STEP_5,
     STEP_6,
     STEP_7,
+    STEP_9,
     THREADS,
+    WIKI_INDEX_FILE,
     WIKI_PAGES,
     Artifact,
 )
@@ -189,6 +192,10 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
         ),
         ArtifactNode.from_pair("plan", "תוכנית הויקי", PLAN, STEP_6, ("groups",)),
         ArtifactNode.from_pair("pages", "דפי הויקי", WIKI_PAGES, STEP_7, ("claims", "plan")),
+        # The published site (docs/ + mkdocs.yml); its index file stands for the whole folder.
+        ArtifactNode(
+            "site", "האתר", DOCS_DIR / WIKI_INDEX_FILE, step=STEP_9, upstream=("plan", "pages")
+        ),
     )
 
 

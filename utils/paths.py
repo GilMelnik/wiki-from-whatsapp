@@ -12,7 +12,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from utils.config import DATA_DIR, section
+from utils.config import DATA_DIR, PROJECT_ROOT, section
 
 STEP_1 = "step_1_threads_split"
 STEP_2 = "step_2_classify"
@@ -108,6 +108,13 @@ AGGREGATE_EVAL_DIR = step_path(STEP_5, "eval")
 # ---------------------------------------------------------------- step 6 plan
 # The coverage check of the last planning run (not part of the plan itself).
 PLAN_COVERAGE_PATH = step_path(STEP_6, "coverage_report.json")
+
+# ---------------------------------------------------------------- step 9 site
+# The published site lives in the repository, not under data_dir: step 9 owns ``docs/`` and
+# writes ``mkdocs.yml``; ``docs/wiki_index.json`` is the MCP index (contract C11).
+DOCS_DIR = PROJECT_ROOT / section("site")["docs_dir"]
+MKDOCS_PATH = PROJECT_ROOT / section("site")["mkdocs_file"]
+WIKI_INDEX_FILE = section("mcp")["index_file"]
 
 # ------------------------------------------------------------------- shared
 BACKUPS_DIR = step_path(SHARED, "backups")
