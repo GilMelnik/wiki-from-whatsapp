@@ -8,7 +8,7 @@ Runs steps in order:
     5. aggregate -> data/claims_aggregated.json (claim groups, contract C6)
     6. plan      -> data/wiki_plan.json (contract C7; planned once, then curated by hand)
     7. write pages -> data/wiki_pages.json (agentic, mini-batch over claims)
-    9. site      -> mkdocs.yml
+    9. site      -> docs/ (pages, label pages, wiki_index.json) + mkdocs.yml
 
 Human gates (web UIs, no CLI):
     step 1 — thread review: ``python -m step_1_threads_split.review``
@@ -126,9 +126,10 @@ def run(
     )
 
     logger = setup_step_logging(STEP_9)
-    logger.info("[9] Writing site config...")
+    logger.info("[9] Building the site (docs/, mkdocs.yml, wiki_index.json)...")
     s_meta = site()
-    nav_src = "plan" if s_meta.get("plan_nav") else "taxonomy"
     logger.info(
-        f"    {s_meta['config_path']} ({s_meta['page_count']} pages in docs/, nav: {nav_src})"
+        f"    {s_meta['published']} pages, {s_meta['labels']} label pages -> "
+        f"{s_meta['docs_dir']} ({len(s_meta['written'])} written, {len(s_meta['removed'])} "
+        f"removed; issues: {s_meta['issue_counts'] or 'none'})"
     )

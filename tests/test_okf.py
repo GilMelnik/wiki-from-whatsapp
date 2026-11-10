@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 from step_9_site.run import build_config
-from utils.config import PROJECT_ROOT, section
+from utils.config import section
 from utils.okf import KEY_ORDER, build_front_matter, parse_page, render_page, validate_front_matter
 from utils.wiki_links import WikiLink, find_wiki_links, replace_wiki_links
 
@@ -247,10 +247,9 @@ def _build_site(tmp_path: Path, pages: dict[str, str]) -> Path:
     docs.mkdir()
     for name, text in pages.items():
         (docs / name).write_text(text, encoding="utf-8")
-    config = build_config(docs, tmp_path / "no_plan.json")
-    config["theme"]["custom_dir"] = str(PROJECT_ROOT / section("site")["custom_dir"])
-    config["extra_css"] = []
     config_path = tmp_path / "mkdocs.yml"
+    config = build_config([{name: name} for name in pages], docs_dir=docs, mkdocs_path=config_path)
+    config["extra_css"] = []
     config_path.write_text(yaml.safe_dump(config, allow_unicode=True, sort_keys=False), encoding="utf-8")
     out = tmp_path / "out"
     result = subprocess.run(

@@ -11,36 +11,36 @@ import yaml
 from step_9_site.run import build_config
 from utils.config import PROJECT_ROOT, section
 
+COFFEE_KEYS = ("coffee_text", "coffee_link_text", "coffee_url")
+
 
 def _write_site(tmp_path: Path) -> tuple[Path, dict]:
     docs = tmp_path / "docs"
     docs.mkdir()
     (docs / "index.md").write_text("# בית\n\nשלום\n", encoding="utf-8")
     (docs / "page.md").write_text("# עמוד\n\nתוכן\n", encoding="utf-8")
-    config = build_config(docs, tmp_path / "no_plan.json")
-    config["theme"]["custom_dir"] = str(PROJECT_ROOT / section("site")["custom_dir"])
+    config_path = tmp_path / "mkdocs.yml"
+    nav = [{"בית": "index.md"}, {"עמוד": "page.md"}]
+    config = build_config(nav, docs_dir=docs, mkdocs_path=config_path)
     config["extra_css"] = []
-    return tmp_path / "mkdocs.yml", config
+    return config_path, config
 
 
 def test_build_config_has_site_url_and_footer_extra(tmp_path: Path) -> None:
-    config = build_config(tmp_path, tmp_path / "no_plan.json")
+    config = build_config([], docs_dir=PROJECT_ROOT / "docs", mkdocs_path=PROJECT_ROOT / "mkdocs.yml")
     site = section("site")
     assert config["site_url"] == site["url"]
     assert config["theme"]["custom_dir"] == site["custom_dir"]
     assert (PROJECT_ROOT / site["custom_dir"] / "main.html").is_file()
-    assert config["extra"] == {
-        "coffee_text": site["coffee_text"],
-        "coffee_link_text": site["coffee_link_text"],
-        "coffee_url": site["coffee_url"],
-    }
+    assert {key: config["extra"][key] for key in COFFEE_KEYS} == {key: site[key] for key in COFFEE_KEYS}
 
 
 def test_committed_mkdocs_yml_matches_generator() -> None:
     committed = yaml.safe_load((PROJECT_ROOT / "mkdocs.yml").read_text(encoding="utf-8"))
-    generated = build_config(PROJECT_ROOT / "docs")
-    for key in ("site_url", "extra"):
-        assert committed[key] == generated[key]
+    generated = build_config([], docs_dir=PROJECT_ROOT / "docs", mkdocs_path=PROJECT_ROOT / "mkdocs.yml")
+    assert committed["site_url"] == generated["site_url"]
+    for key in COFFEE_KEYS:
+        assert committed["extra"][key] == generated["extra"][key]
     assert committed["theme"]["custom_dir"] == generated["theme"]["custom_dir"]
 
 

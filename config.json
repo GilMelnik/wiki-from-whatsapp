@@ -250,7 +250,71 @@
     "coffee_url": "https://buymeacoffee.com/gilmelnik",
     "coffee_text": "אחזקת האתר והאחסון שלו עולים כסף. קפה אני כבר שותה מספיק — אבל התינוק שלי שוב איבד מוצץ.",
     "coffee_link_text": "אפשר לקנות לו חדש 🍼",
-    "custom_dir": "overrides"
+    "custom_dir": "overrides",
+    "docs_dir": "docs",
+    "mkdocs_file": "mkdocs.yml",
+    "keep": ["stylesheets"],
+    "labels_dir": "labels",
+    "home_nav_title": "בית",
+    "home_intro": "!!! info \"אודות\"\n    ויקי זה מסכם ידע שנאסף בקבוצת וואטסאפ קהילתית. כל המידע אנונימי ומשקף דעות של חברי הקבוצה - אינו תחליף לייעוץ מקצועי.",
+    "labels_nav_title": "תגיות",
+    "label_pages_heading": "דפים עם התגית",
+    "label_kind_titles": {
+      "country": "מדינות",
+      "us-state": "מדינות בארה\"ב",
+      "family-situation": "מצב משפחתי",
+      "context": "הקשר",
+      "content-type": "סוג תוכן",
+      "topic": "נושאים"
+    },
+    "redirect_text": "הדף הזה אוחד לתוך",
+    "hebrew_search": {
+      "enabled": true,
+      "field": "variants",
+      "boost": 0.5
+    },
+    "mkdocs": {
+      "site_name": "ויקי פונדקאות לגייז",
+      "site_description": "ידע קהילתי אנונימי על תהליכי פונדקאות",
+      "theme": {
+        "name": "material",
+        "language": "he",
+        "direction": "rtl",
+        "features": [
+          "navigation.sections",
+          "navigation.top",
+          "navigation.indexes",
+          "search.highlight",
+          "search.suggest",
+          "content.code.copy"
+        ],
+        "palette": [
+          {
+            "scheme": "default",
+            "primary": "teal",
+            "accent": "teal",
+            "toggle": {"icon": "material/weather-night", "name": "עבור למצב כהה"}
+          },
+          {
+            "scheme": "slate",
+            "primary": "teal",
+            "accent": "teal",
+            "toggle": {"icon": "material/weather-sunny", "name": "עבור למצב בהיר"}
+          }
+        ]
+      },
+      "plugins": [{"search": {"lang": "he"}}],
+      "markdown_extensions": [
+        "admonition",
+        "md_in_html",
+        "pymdownx.details",
+        "pymdownx.superfences",
+        "attr_list",
+        "tables",
+        "toc",
+        "footnotes"
+      ]
+    }
   },
   "mcp": {
     "route": "/mcp",
