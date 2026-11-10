@@ -1,461 +1,322 @@
-"""Load, edit, and persist aggregated claim clusters for manual review."""
+"""The claim groups under review: loaded from disk, edited by hand, saved to the edited file.
+
+What may be edited follows step 5's rules (C6, task-22 "For task 34"): only membership and the
+manual fields. ``groups`` is never reordered (list order = creation order). A merge keeps the
+older group (earlier in the list), unions the members and records the other id and its own
+``merged_from`` in the survivor's ``merged_from``. A split appends a new group whose id is
+``allocate_group_id(oldest claim of the part, used_group_ids(groups))``. A move moves one claim
+id between ``member_claim_ids`` lists (a source left empty counts as merged into the target).
+A representative choice sets ``representative_claim_id`` + ``representative_manual``. Manual
+contradiction links live in ``contradicts_manual`` / ``contradicts_rejected``.
+
+After every edit the derived fields of the touched groups are recomputed with step 5's own
+``GroupDeriver``, and every group's ``contradicts`` with ``link_contradictions``, so the numbers
+shown are those the next run would write. "Not the same" decisions are kept in the top-level
+``not_same`` list of the edited file (claim ids of both sides; a split records one too, so the
+parts are not suggested again); step 5 re-runs carry top-level keys over untouched.
+
+Nothing here calls a paid API: vectors come from the embedding cache (``suggestions``). Edits
+need every touched member's claim and vector; when step 5 has not run on the current claims
+yet, an edit is refused with a hint to run it.
+"""
 
 from __future__ import annotations
 
 import json
-import shutil
-from datetime import datetime
+from collections.abc import Iterable, Sequence
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
-from step_5_aggregate.resolver import apply_entity_resolution, load_entity_resolver
-from step_5_aggregate.reviewer.helpers import (
-    _cluster_size_histogram,
-    _enrich_group,
-    _recompute_topic_stats,
-    group_key,
+from review_tool.artifacts import ArtifactNode
+from step_5_aggregate.derive import GroupDeriver, link_contradictions
+from step_5_aggregate.groups import Group, allocate_group_id, claim_order, used_group_ids
+from step_5_aggregate.inputs import load_inputs
+from step_5_aggregate.reviewer.suggestions import (
+    CandidatePairs,
+    EmbeddingsMissing,
+    Suggestion,
+    cached_vectors,
+    rank_suggestions,
+    rejected_pairs,
 )
-from step_5_aggregate.run import (
-    _load_audit_records,
-    build_merged_claim,
-)
+from step_5_aggregate.reviewer.views import GroupViews
+from step_5_aggregate.similarity import ClaimScorer
 from utils.json_io import write_json_file
-from utils.paths import (
-    AUDIT_PATH,
-    BACKUPS_DIR,
-    EDITED_AGGREGATED_PATH,
-    ORIGINAL_AGGREGATED_PATH,
-    init_aggregated_edited,
-    resolve_claims_path,
-)
-from utils.taxonomy import category_title
 
-SortKind = Literal["support", "size"]
-SortOrder = Literal["asc", "desc"]
+NOT_SAME_KEY = "not_same"
+LINK_KEYS = ("contradicts_manual", "contradicts_rejected")
 
 
-class AggregateStore:
+class GroupNotFound(Exception):
+    """No group (or decision) has this id (any more)."""
+
+
+class EditConflict(Exception):
+    """The edit does not fit the current groups; the message says why (Hebrew, for the UI)."""
+
+
+def _read(path: Path) -> dict[str, Any]:
+    with path.open(encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _set_or_drop(group: Group, key: str, ids: Iterable[str]) -> None:
+    """Store ``ids`` (deduplicated, in order) under ``key``; an empty list removes the key."""
+
+    kept = list(dict.fromkeys(ids))
+    if kept:
+        group[key] = kept
+    else:
+        group.pop(key, None)
+
+
+class GroupsStore:
+    """The groups file (edited copy if present), step 5's inputs, vectors and suggestions."""
+
     def __init__(
-        self,
-        *,
-        aggregated_path: Path | str | None = None,
-        claims_path: Path | str | None = None,
-        audit_path: Path | str | None = None,
+        self, groups: ArtifactNode, claims: ArtifactNode, entities: ArtifactNode, audit_path: Path
     ) -> None:
-        self._aggregated_override = (
-            Path(aggregated_path) if aggregated_path is not None else None
-        )
-        self._claims_override = Path(claims_path) if claims_path is not None else None
-        self._audit_path = Path(audit_path) if audit_path is not None else AUDIT_PATH
-        self._aggregated: dict[str, Any] | None = None
-        self._claims_by_id: dict[str, dict[str, Any]] = {}
-        self._audit_by_id: dict[str, dict[str, Any]] = {}
-        self._aggregated_source = ORIGINAL_AGGREGATED_PATH
-        self._backup_done = False
-        self._loaded = False
-
-    def load(self) -> None:
-        if self._aggregated_override is None:
-            init_aggregated_edited()
-
-        if self._aggregated_override is not None:
-            self._aggregated_source = self._aggregated_override
-            if not self._aggregated_source.is_file():
-                raise FileNotFoundError(
-                    f"Aggregated file not found: {self._aggregated_source}"
-                )
-        else:
-            self._aggregated_source = (
-                EDITED_AGGREGATED_PATH
-                if EDITED_AGGREGATED_PATH.exists()
-                else ORIGINAL_AGGREGATED_PATH
+        self.edited = groups.edited
+        self.source = groups.effective
+        if not self.source.is_file():
+            raise FileNotFoundError(
+                f"אין עדיין קבוצות טענות ({self.source.name}): הריצו את שלב 5 ואז טענו מחדש"
             )
-
-        with self._aggregated_source.open(encoding="utf-8") as f:
-            self._aggregated = json.load(f)
-
-        claims_path = (
-            self._claims_override
-            if self._claims_override is not None
-            else resolve_claims_path()
-        )
-        with claims_path.open(encoding="utf-8") as f:
-            claims_payload = json.load(f)
-        claims = claims_payload.get("claims") or []
-
-        apply_entity_resolution(claims, load_entity_resolver())
-
-        self._claims_by_id = {c["claim_id"]: c for c in claims}
-        self._audit_by_id = _load_audit_records(self._audit_path)
-        self._loaded = True
-
-    @property
-    def loaded(self) -> bool:
-        return self._loaded
-
-    @property
-    def topics(self) -> dict[str, Any]:
-        assert self._aggregated is not None
-        return self._aggregated["topics"]
-
-    def _find_group(
-        self, topic_id: str, group_key_val: str
-    ) -> tuple[dict[str, Any], dict[str, Any], int]:
-        topic = self.topics.get(topic_id)
-        if topic is None:
-            raise KeyError(f"unknown topic: {topic_id}")
-        merged_claims = topic.get("merged_claims") or []
-        for idx, merged in enumerate(merged_claims):
-            if group_key(merged) == group_key_val:
-                return topic, merged, idx
-        raise KeyError(f"group not found in topic {topic_id}: {group_key_val}")
-
-    def _member_rows(
-        self, merged: dict[str, Any]
-    ) -> list[dict[str, Any]]:
-        rep_text = merged.get("claim_text", "")
-        rows: list[dict[str, Any]] = []
-        for claim_id in merged.get("source_claim_ids") or []:
-            source = self._claims_by_id.get(claim_id, {})
-            text = source.get("claim_text") or ""
-            rows.append(
-                {
-                    "source_claim_id": claim_id,
-                    "claim_text": text,
-                    "stance": source.get("stance"),
-                    "thread_id": source.get("thread_id"),
-                    "support_count": source.get("support_count"),
-                    "is_representative": text == rep_text,
-                }
+        claims_file = claims.effective
+        if not claims_file.is_file():
+            raise FileNotFoundError(
+                f"קובץ הטענות {claims_file.name} חסר: הריצו את שלב 3 ואז את שלב 5"
             )
-        return rows
-
-    def _sorted_groups(
-        self,
-        topic_id: str,
-        *,
-        size_min: int | None = None,
-        size_max: int | None = None,
-        sort: SortKind = "support",
-        order: SortOrder = "desc",
-    ) -> list[dict[str, Any]]:
-        topic = self.topics.get(topic_id)
-        if topic is None:
-            raise KeyError(f"unknown topic: {topic_id}")
-        items = [_enrich_group(m, topic_id) for m in topic.get("merged_claims") or []]
-        if size_min is not None:
-            items = [i for i in items if (i["endorsement_count"] or 1) >= size_min]
-        if size_max is not None:
-            items = [i for i in items if (i["endorsement_count"] or 1) <= size_max]
-        reverse = order == "desc"
-        if sort == "size":
-            items.sort(key=lambda i: i["endorsement_count"] or 1, reverse=reverse)
-        else:
-            items.sort(key=lambda i: i["support_count"] or 0, reverse=reverse)
-        return items
-
-    def _group_matches_size(
-        self,
-        merged: dict[str, Any],
-        *,
-        size_min: int | None,
-        size_max: int | None,
-    ) -> bool:
-        size = merged.get("endorsement_count") or 1
-        if size_min is not None and size < size_min:
-            return False
-        if size_max is not None and size > size_max:
-            return False
-        return True
-
-    def list_topics(
-        self,
-        *,
-        size_min: int | None = None,
-        size_max: int | None = None,
-    ) -> list[dict[str, Any]]:
-        out: list[dict[str, Any]] = []
-        filtered = size_min is not None or size_max is not None
-        for topic_id, topic in sorted(self.topics.items()):
-            if filtered:
-                group_count = len(
-                    self._sorted_groups(
-                        topic_id, size_min=size_min, size_max=size_max
-                    )
-                )
-                if group_count == 0:
-                    continue
-            else:
-                group_count = len(topic.get("merged_claims") or [])
-            out.append(
-                {
-                    "id": topic_id,
-                    "title": topic.get("title", topic_id),
-                    "category": topic.get("category", "emergent"),
-                    "category_title": topic.get("category_title")
-                    or category_title(topic.get("category", "emergent")),
-                    "claim_count": topic.get("claim_count", 0),
-                    "group_count": group_count,
-                }
-            )
-        return out
-
-    def list_groups(
-        self,
-        topic_id: str,
-        *,
-        size_min: int | None = None,
-        size_max: int | None = None,
-        sort: SortKind = "support",
-        order: SortOrder = "desc",
-        offset: int = 0,
-        limit: int = 50,
-    ) -> tuple[list[dict[str, Any]], int]:
-        items = self._sorted_groups(
-            topic_id,
-            size_min=size_min,
-            size_max=size_max,
-            sort=sort,
-            order=order,
-        )
-        total = len(items)
-        return items[offset : offset + limit], total
-
-    def get_group(
-        self,
-        topic_id: str,
-        group_key_val: str,
-        *,
-        size_min: int | None = None,
-        size_max: int | None = None,
-        sort: SortKind = "support",
-        order: SortOrder = "desc",
-    ) -> dict[str, Any]:
-        _, merged, _ = self._find_group(topic_id, group_key_val)
-        if not self._group_matches_size(
-            merged, size_min=size_min, size_max=size_max
-        ):
-            raise KeyError(
-                f"group {group_key_val} does not match size filter "
-                f"({size_min}-{size_max})"
-            )
-        items = self._sorted_groups(
-            topic_id,
-            size_min=size_min,
-            size_max=size_max,
-            sort=sort,
-            order=order,
-        )
-        keys = [i["key"] for i in items]
+        self.payload = _read(self.source)
+        self.groups: list[Group] = self.payload.setdefault("groups", [])
+        self.not_same: list[dict[str, Any]] = self.payload.setdefault(NOT_SAME_KEY, [])
+        self.inputs = load_inputs(claims_file, entities.effective, audit_path)
+        texts = [str(c.get("claim_text") or "") for c in self.inputs.claims.values()]
+        self.scorer: ClaimScorer | None = None
+        self.candidates: CandidatePairs | None = None
+        self.missing_embeddings = 0
         try:
-            pos = keys.index(group_key_val)
-        except ValueError:
-            pos = -1
-        prev_key = keys[pos - 1] if pos > 0 else None
-        next_key = keys[pos + 1] if 0 <= pos < len(keys) - 1 else None
-        enriched = _enrich_group(merged, topic_id)
-        enriched["members"] = self._member_rows(merged)
-        enriched["variants"] = merged.get("variants") or []
-        return {
-            "group": enriched,
-            "queue": {
-                "prev_key": prev_key,
-                "next_key": next_key,
-                "position": pos + 1 if pos >= 0 else None,
-                "total": len(keys),
-            },
-        }
-
-    def stats(self) -> dict[str, Any]:
-        all_sizes: list[int] = []
-        by_topic: list[dict[str, Any]] = []
-        for topic_id, topic in sorted(self.topics.items()):
-            merged = topic.get("merged_claims") or []
-            sizes = [m.get("endorsement_count") or 1 for m in merged]
-            all_sizes.extend(sizes)
-            by_topic.append(
-                {
-                    "id": topic_id,
-                    "title": topic.get("title", topic_id),
-                    "group_count": len(merged),
-                    "source_claim_count": sum(sizes),
-                    "singleton_count": sum(1 for s in sizes if s == 1),
-                    "cluster_size": _cluster_size_histogram(sizes),
-                }
-            )
-        max_observed = max(all_sizes) if all_sizes else 1
-        return {
-            "topic_count": len(self.topics),
-            "group_count": len(all_sizes),
-            "source_claim_count": sum(all_sizes),
-            "singleton_count": sum(1 for s in all_sizes if s == 1),
-            "max_cluster_size": max_observed,
-            "cluster_size": _cluster_size_histogram(all_sizes),
-            "by_topic": by_topic,
-        }
-
-    def set_representative(
-        self, topic_id: str, group_key_val: str, source_claim_id: str
-    ) -> dict[str, Any]:
-        topic, merged, _ = self._find_group(topic_id, group_key_val)
-        ids = merged.get("source_claim_ids") or []
-        if source_claim_id not in ids:
-            raise ValueError(f"claim not in group: {source_claim_id}")
-        source = self._claims_by_id.get(source_claim_id)
-        if source is None:
-            raise KeyError(f"unknown source claim: {source_claim_id}")
-        merged["claim_text"] = source["claim_text"]
-        _recompute_topic_stats(topic)
-        self.save()
-        return self.get_group(topic_id, group_key_val)["group"]
-
-    def move_member(
-        self,
-        topic_id: str,
-        group_key_val: str,
-        *,
-        source_claim_id: str,
-        target_group_key: str,
-    ) -> dict[str, Any]:
-        if group_key_val == target_group_key:
-            raise ValueError("source and target group are the same")
-
-        topic = self.topics[topic_id]
-        merged_claims = topic.get("merged_claims") or []
-
-        source_merged: dict[str, Any] | None = None
-        source_idx = -1
-        target_merged: dict[str, Any] | None = None
-        target_idx = -1
-        for idx, merged in enumerate(merged_claims):
-            key = group_key(merged)
-            if key == group_key_val:
-                source_merged = merged
-                source_idx = idx
-            if key == target_group_key:
-                target_merged = merged
-                target_idx = idx
-
-        if source_merged is None:
-            raise KeyError(f"group not found: {group_key_val}")
-        if target_merged is None:
-            raise KeyError(f"target group not found: {target_group_key}")
-
-        ids = source_merged.get("source_claim_ids") or []
-        if source_claim_id not in ids:
-            raise ValueError(f"claim not in source group: {source_claim_id}")
-
-        moving = self._claims_by_id.get(source_claim_id)
-        if moving is None:
-            raise KeyError(f"unknown source claim: {source_claim_id}")
-
-        remaining_ids = [i for i in ids if i != source_claim_id]
-        if not remaining_ids:
-            merged_claims.pop(source_idx)
-            if source_idx < target_idx:
-                target_idx -= 1
+            vectors = cached_vectors(texts)
+        except EmbeddingsMissing as exc:
+            self.missing_embeddings = exc.count
         else:
-            remaining_claims = [self._claims_by_id[i] for i in remaining_ids]
-            rep_text = source_merged.get("claim_text")
-            if moving["claim_text"] == rep_text:
-                rep_text = remaining_claims[0]["claim_text"]
-            merged_claims[source_idx] = build_merged_claim(
-                remaining_claims,
-                self._audit_by_id,
-                claim_text=rep_text,
+            self.scorer = ClaimScorer(self.inputs.claims, self.inputs.claim_entities, vectors)
+            self.candidates = CandidatePairs(self.inputs, self.scorer)
+        self.views = GroupViews(self)
+        self._reindex()
+
+    # ------------------------------------------------------------------ indices
+
+    def _reindex(self) -> None:
+        self.by_id: dict[str, Group] = {g["group_id"]: g for g in self.groups}
+        self.position = {g["group_id"]: k for k, g in enumerate(self.groups)}
+        self.group_of = {c: g["group_id"] for g in self.groups for c in g["member_claim_ids"]}
+        self.holder = {
+            old: g["group_id"] for g in self.groups for old in g.get("merged_from") or []
+        }
+        self.suggestions: list[Suggestion] = (
+            rank_suggestions(self.groups, self.candidates, rejected_pairs(self.not_same))
+            if self.candidates is not None
+            else []
+        )
+        self.partners: dict[str, list[Suggestion]] = {}
+        for suggestion in self.suggestions:
+            for gid in (suggestion.a, suggestion.b):
+                self.partners.setdefault(gid, []).append(suggestion)
+
+    def group(self, group_id: str) -> Group:
+        group = self.by_id.get(group_id)
+        if group is not None:
+            return group
+        if group_id in self.holder:
+            raise GroupNotFound(f"הקבוצה {group_id} מוזגה לתוך {self.holder[group_id]}")
+        raise GroupNotFound(f"אין קבוצה {group_id}")
+
+    # ------------------------------------------------------------------ saving
+
+    def _require_editable(self, groups: Iterable[Group]) -> ClaimScorer:
+        if self.scorer is None:
+            raise EditConflict(
+                f"ל-{self.missing_embeddings} טענות אין עדיין וקטור: הריצו את שלב 5 לפני עריכה"
             )
+        unknown = [
+            c for g in groups for c in g["member_claim_ids"] if c not in self.inputs.claims
+        ]
+        if unknown:
+            raise EditConflict(
+                f"בקבוצה יש טענה שכבר אינה בקובץ הטענות ({unknown[0]}): הריצו את שלב 5 לפני עריכה"
+            )
+        return self.scorer
 
-        target_ids = list(target_merged.get("source_claim_ids") or [])
-        target_ids.append(source_claim_id)
-        target_claims = [self._claims_by_id[i] for i in target_ids]
-        merged_claims[target_idx] = build_merged_claim(
-            target_claims,
-            self._audit_by_id,
-            claim_text=target_merged.get("claim_text"),
-        )
+    def _save(self, touched: Sequence[str], scorer: ClaimScorer) -> None:
+        """Recompute the touched groups and every contradiction link, then write the edited
+        file (created by the first edit) and rebuild the indices and suggestions."""
 
-        topic["merged_claims"] = merged_claims
-        _recompute_topic_stats(topic)
-        self.save()
-        new_key = group_key(merged_claims[target_idx])
-        return self.get_group(topic_id, new_key)["group"]
+        deriver = GroupDeriver(self.inputs, scorer)
+        position = {g["group_id"]: k for k, g in enumerate(self.groups)}
+        for gid in dict.fromkeys(touched):
+            if gid in position:
+                self.groups[position[gid]] = deriver.refresh(self.groups[position[gid]])
+        link_contradictions(self.groups, scorer)
+        if not self.not_same:
+            self.payload.pop(NOT_SAME_KEY, None)
+        write_json_file(self.payload, self.edited)
+        self.payload.setdefault(NOT_SAME_KEY, self.not_same)
+        self.source = self.edited
+        self._reindex()
 
-    def split_cluster(
-        self,
-        topic_id: str,
-        group_key_val: str,
-        *,
-        source_claim_ids: list[str],
-    ) -> dict[str, Any]:
-        if not source_claim_ids:
-            raise ValueError("source_claim_ids must not be empty")
+    @staticmethod
+    def _absorb(survivor: Group, other: Group) -> None:
+        """``other``'s merge history and manual links move to ``survivor`` (not its members)."""
 
-        topic, merged, idx = self._find_group(topic_id, group_key_val)
-        all_ids = set(merged.get("source_claim_ids") or [])
-        split_set = set(source_claim_ids)
-        if not split_set.issubset(all_ids):
-            raise ValueError("source_claim_ids must be subset of group members")
-        remain_ids = [i for i in merged.get("source_claim_ids") or [] if i not in split_set]
-        if not remain_ids:
-            raise ValueError("split would empty the original group")
-        if len(split_set) == len(all_ids):
-            raise ValueError("split must leave at least one member in original group")
+        survivor["merged_from"] = [
+            *(survivor.get("merged_from") or []),
+            other["group_id"],
+            *(other.get("merged_from") or []),
+        ]
+        own = {survivor["group_id"], *survivor["merged_from"]}
+        for key in LINK_KEYS:
+            ids = [*(survivor.get(key) or []), *(other.get(key) or [])]
+            _set_or_drop(survivor, key, (gid for gid in ids if gid not in own))
 
-        remain_claims = [self._claims_by_id[i] for i in remain_ids]
-        split_claims = [self._claims_by_id[i] for i in source_claim_ids]
+    # ------------------------------------------------------------------ edits
 
-        rep_text = merged.get("claim_text")
-        if rep_text in {c["claim_text"] for c in split_claims}:
-            rep_text = remain_claims[0]["claim_text"]
+    def merge(self, group_ids: Sequence[str]) -> dict[str, Any]:
+        """Merge the groups into the oldest of them; returns its detail and the ids merged."""
 
-        merged_claims = topic.get("merged_claims") or []
-        merged_claims[idx] = build_merged_claim(
-            remain_claims,
-            self._audit_by_id,
-            claim_text=rep_text,
-        )
-        new_group = build_merged_claim(split_claims, self._audit_by_id)
-        merged_claims.append(new_group)
-        topic["merged_claims"] = merged_claims
-        _recompute_topic_stats(topic)
-        self.save()
+        ids = list(dict.fromkeys(group_ids))
+        if len(ids) < 2:
+            raise EditConflict("למיזוג צריך לפחות שתי קבוצות שונות")
+        groups = sorted((self.group(gid) for gid in ids), key=lambda g: self.position[g["group_id"]])
+        scorer = self._require_editable(groups)
+        survivor, others = groups[0], groups[1:]
+        for other in others:
+            survivor["member_claim_ids"] = [*survivor["member_claim_ids"], *other["member_claim_ids"]]
+            self._absorb(survivor, other)
+        gone = {id(g) for g in others}
+        self.groups[:] = [g for g in self.groups if id(g) not in gone]
+        self._save([survivor["group_id"]], scorer)
         return {
-            "original": self.get_group(topic_id, group_key(merged_claims[idx]))["group"],
-            "new": self.get_group(topic_id, group_key(new_group))["group"],
+            "group_id": survivor["group_id"],
+            "merged": [g["group_id"] for g in others],
+            "group": self.views.group_detail(survivor["group_id"]),
         }
 
-    def _ensure_backup(self) -> None:
-        if self._backup_done:
-            return
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backups_dir = (
-            BACKUPS_DIR
-            if self._aggregated_override is None
-            else self._aggregated_override.parent / BACKUPS_DIR.name
-        )
-        backups_dir.mkdir(parents=True, exist_ok=True)
-        if self._aggregated_source.exists():
-            dest = backups_dir / f"{self._aggregated_source.stem}_{ts}{self._aggregated_source.suffix}"
-            shutil.copy2(self._aggregated_source, dest)
-        self._backup_done = True
+    def split(self, group_id: str, claim_ids: Sequence[str]) -> dict[str, Any]:
+        """Move ``claim_ids`` out of the group into a new group appended at the end."""
 
-    def save(self) -> None:
-        assert self._aggregated is not None
-        self._ensure_backup()
-        meta = self._aggregated.setdefault("metadata", {})
-        meta["edited_by"] = "aggregate_reviewer"
-        meta["edited_at"] = datetime.now().isoformat(timespec="seconds")
-        if self._aggregated_override is None:
-            write_json_file(self._aggregated, EDITED_AGGREGATED_PATH)
-            self._aggregated_source = EDITED_AGGREGATED_PATH
+        group = self.group(group_id)
+        members = group["member_claim_ids"]
+        part_set = set(claim_ids)
+        if not part_set:
+            raise EditConflict("בחרו את הטענות שיעברו לקבוצה החדשה")
+        if not part_set <= set(members):
+            raise EditConflict(f"לא כל הטענות שנבחרו שייכות לקבוצה {group_id}")
+        if part_set == set(members):
+            raise EditConflict("פיצול חייב להשאיר לפחות טענה אחת בקבוצה המקורית")
+        scorer = self._require_editable([group])
+        part = claim_order(self.inputs.claims, part_set)
+        new_id = allocate_group_id(part[0], used_group_ids(self.groups))
+        group["member_claim_ids"] = [c for c in members if c not in part_set]
+        self.groups.append({"group_id": new_id, "member_claim_ids": part})
+        self._record_not_same(group["member_claim_ids"], part, [group_id, new_id], "split")
+        self._save([group_id, new_id], scorer)
+        return {
+            "group_id": group_id,
+            "new_group_id": new_id,
+            "group": self.views.group_detail(group_id),
+        }
+
+    def move(self, group_id: str, claim_id: str, target_id: str) -> dict[str, Any]:
+        """Move one claim into another group; a group left empty counts as merged into it."""
+
+        source, target = self.group(group_id), self.group(target_id)
+        if source is target:
+            raise EditConflict("הטענה כבר בקבוצה הזו")
+        if claim_id not in source["member_claim_ids"]:
+            raise EditConflict(f"הטענה {claim_id} אינה בקבוצה {group_id}")
+        scorer = self._require_editable([source, target])
+        source["member_claim_ids"] = [c for c in source["member_claim_ids"] if c != claim_id]
+        target["member_claim_ids"] = [*target["member_claim_ids"], claim_id]
+        emptied = not source["member_claim_ids"]
+        if emptied:
+            self._absorb(target, source)
+            self.groups.remove(source)
+        self._save([target_id] if emptied else [group_id, target_id], scorer)
+        return {
+            "group_id": None if emptied else group_id,
+            "target_id": target_id,
+            "group": self.views.group_detail(target_id),
+        }
+
+    def set_representative(self, group_id: str, claim_id: str | None) -> dict[str, Any]:
+        """Choose the claim whose text represents the group; ``None`` = automatic again."""
+
+        group = self.group(group_id)
+        if claim_id is not None and claim_id not in group["member_claim_ids"]:
+            raise EditConflict(f"הטענה {claim_id} אינה בקבוצה {group_id}")
+        scorer = self._require_editable([group])
+        if claim_id is None:
+            group.pop("representative_manual", None)
         else:
-            write_json_file(self._aggregated, self._aggregated_source)
+            group["representative_claim_id"] = claim_id
+            group["representative_manual"] = True
+        self._save([group_id], scorer)
+        return {"group_id": group_id, "group": self.views.group_detail(group_id)}
 
-    def meta(self) -> dict[str, Any]:
-        s = self.stats()
-        return {
-            "aggregated_path": str(self._aggregated_source),
-            "topic_count": s["topic_count"],
-            "group_count": s["group_count"],
-            "source_claim_count": s["source_claim_count"],
+    def set_contradiction(self, group_id: str, other_id: str, linked: bool) -> dict[str, Any]:
+        """Add a missing contradiction link or remove a wrong one (both groups, symmetric)."""
+
+        group, other = self.group(group_id), self.group(other_id)
+        if group is other:
+            raise EditConflict("קבוצה אינה יכולה לסתור את עצמה")
+        scorer = self._require_editable([])
+        add, drop = LINK_KEYS if linked else reversed(LINK_KEYS)
+        for one, two in ((group, other), (other, group)):
+            _set_or_drop(one, drop, (gid for gid in one.get(drop) or [] if gid != two["group_id"]))
+            _set_or_drop(one, add, [*(one.get(add) or []), two["group_id"]])
+        self._save([], scorer)
+        return {"group_id": group_id, "group": self.views.group_detail(group_id)}
+
+    def _record_not_same(
+        self, claims_a: Sequence[str], claims_b: Sequence[str], group_ids: list[str], source: str
+    ) -> dict[str, Any]:
+        record = {
+            "id": max((int(r.get("id") or 0) for r in self.not_same), default=0) + 1,
+            "claims_a": list(claims_a),
+            "claims_b": list(claims_b),
+            "group_ids": group_ids,
+            "source": source,
+            "at": _now(),
         }
+        self.not_same.append(record)
+        return record
+
+    def mark_not_same(self, a: str, b: str) -> dict[str, Any]:
+        """Remember that two groups say different things: never suggest them together again."""
+
+        first, second = self.group(a), self.group(b)
+        if first is second:
+            raise EditConflict("אלו אותה קבוצה")
+        scorer = self._require_editable([])
+        record = self._record_not_same(
+            first["member_claim_ids"], second["member_claim_ids"], [a, b], "suggestion"
+        )
+        self._save([], scorer)
+        return {"record": record}
+
+    def remove_not_same(self, record_id: int) -> dict[str, Any]:
+        """Forget one "not the same" decision (undo)."""
+
+        record = next((r for r in self.not_same if r.get("id") == record_id), None)
+        if record is None:
+            raise GroupNotFound(f"אין החלטת \"לא אותו דבר\" מספר {record_id}")
+        scorer = self._require_editable([])
+        self.not_same.remove(record)
+        self._save([], scorer)
+        return {"record": record}

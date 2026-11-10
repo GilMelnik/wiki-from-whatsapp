@@ -14,7 +14,7 @@ Human gates (web UIs, no CLI):
     step 1 — thread review: ``python -m step_1_threads_split.review``
     step 3 — PII review: ``python -m review_tool --tool pii``
     step 4 — entity review: ``python -m review_tool --tool entities``
-    step 5 — aggregate review: ``python -m step_5_aggregate.reviewer``
+    step 5 — claim-group review: ``python -m review_tool --tool groups``
     step 6 — plan review: rebuilt by task 35a on ``step_6_plan.operations``
 """
 

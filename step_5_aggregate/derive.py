@@ -21,6 +21,9 @@ from step_5_aggregate.inputs import StepInputs
 from step_5_aggregate.similarity import AGGREGATE_CONFIG, ClaimScorer
 
 _SIDES = ("supporters", "opposers")
+# What a reviewer sets by hand and a run keeps (besides id and members); see ``refresh`` and
+# ``link_contradictions``.
+MANUAL_KEYS = ("merged_from", "representative_manual", "contradicts_manual", "contradicts_rejected")
 
 
 def _sides(events: Iterable[tuple[str, str, str]]) -> dict[str, int]:
@@ -84,8 +87,8 @@ class GroupDeriver:
         return max(members, key=key)
 
     def refresh(self, group: Group) -> Group:
-        """A new dict with the group's kept fields (id, members, manual representative,
-        merged_from) and freshly derived ones, in the C6 key order (``contradicts`` is left
+        """A new dict with the group's kept fields (id, members, ``MANUAL_KEYS``) and freshly
+        derived ones, in the C6 key order (``contradicts`` is left
         empty for ``link_contradictions``)."""
 
         claims = self.inputs.claims
@@ -112,7 +115,7 @@ class GroupDeriver:
             "thread_count": len({claims[m].get("thread_id") for m in members}),
             "contradicts": [],
         }
-        for key in ("merged_from", "representative_manual"):
+        for key in MANUAL_KEYS:
             if group.get(key):
                 out[key] = group[key]
         return out
@@ -125,6 +128,10 @@ def link_contradictions(groups: list[Group], scorer: ClaimScorer) -> int:
     stances, mention a common canonical entity and reach
     ``aggregate.contradiction_threshold`` cosine. Embeddings cannot tell "X is great" from
     "X is bad" well, so this is kept to stance-opposed pairs only, and conservative.
+
+    A reviewer's overrides then apply, both symmetric: ``contradicts_manual`` (group ids) adds
+    links, ``contradicts_rejected`` removes links. An id that was merged away stands for the
+    group that holds it in ``merged_from``; an id no group holds any more is ignored.
     """
 
     bar = float(AGGREGATE_CONFIG["contradiction_threshold"])
@@ -144,6 +151,27 @@ def link_contradictions(groups: list[Group], scorer: ClaimScorer) -> int:
             if not same_group and scorer.shares_entity(row, scorer.row[other]):
                 links[group_of[claim_id]].add(group_of[other])
                 links[group_of[other]].add(group_of[claim_id])
+    _apply_overrides(groups, links)
     for group in groups:
         group["contradicts"] = sorted(links[group["group_id"]])
     return sum(len(v) for v in links.values()) // 2
+
+
+def _apply_overrides(groups: list[Group], links: dict[str, set[str]]) -> None:
+    """Add the manual links, then drop the rejected ones (see ``link_contradictions``)."""
+
+    holder = {
+        gid: g["group_id"] for g in groups for gid in (g["group_id"], *(g.get("merged_from") or []))
+    }
+    for key, add in (("contradicts_manual", True), ("contradicts_rejected", False)):
+        for group in groups:
+            own = group["group_id"]
+            for other in group.get(key) or []:
+                target = holder.get(other)
+                if target is None or target == own:
+                    continue
+                for a, b in ((own, target), (target, own)):
+                    if add:
+                        links[a].add(b)
+                    else:
+                        links[a].discard(b)

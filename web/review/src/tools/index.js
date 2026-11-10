@@ -3,7 +3,8 @@
 // Python `ToolSpec.name`) and add one import line here.
 
 import entities from "./entities/index.jsx";
+import groups from "./groups/index.jsx";
 import pii from "./pii/index.jsx";
 import status from "./status/index.jsx";
 
-export const TOOLS = [status, pii, entities];
+export const TOOLS = [status, pii, entities, groups];
