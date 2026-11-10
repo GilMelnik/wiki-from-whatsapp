@@ -94,7 +94,7 @@ export function Dialog({
         </h2>
         <div className="min-h-0 flex-1 overflow-y-auto text-sm">{children}</div>
         {error && (
-          <p role="alert" dir="auto" className="mt-3 text-sm text-rose-700">
+          <p role="alert" dir="auto" className="mt-3 whitespace-pre-line text-sm text-rose-700">
             {error}
           </p>
         )}

@@ -25,6 +25,7 @@ from step_6_plan.model import (
     check_plan,
     find_node,
     iter_nodes,
+    live_ids,
     sync_pages,
 )
 
@@ -261,11 +262,12 @@ def split_page(
     scope: str,
     aliases: Mapping[str, Sequence[str]] | None = None,
     parent_id: str | None = None,
+    original_scope: str | None = None,
 ) -> PlanEdit:
     """Carve a new page out of ``page_id``. The new page goes right after the original (or at
     the end of category ``parent_id``); the original keeps its id, and its groups must be
-    classified again between the two (``reassign``). Narrow the original's scope with
-    ``edit`` in the same review step."""
+    classified again between the two (``reassign``). ``original_scope`` narrows the
+    original's scope in the same edit (else narrow it with ``edit`` afterwards)."""
 
     if kind_of(plan, page_id) != "page":
         raise PlanError([f"{page_id!r} is not a page"])
@@ -278,7 +280,33 @@ def split_page(
         plan, new_page_id, parent_id=parent_id or original_parent, title_he=title_he,
         description=description, scope=scope, aliases=aliases, position=position,
     )
-    return PlanEdit(added.plan, created=(new_page_id,), reassign=(page_id,))
+    new = added.plan
+    if original_scope is not None:
+        new = edit(new, page_id, {"scope": original_scope}).plan
+    return PlanEdit(new, created=(new_page_id,), reassign=(page_id,))
+
+
+def change_id(plan: dict[str, Any], item_id: str, new_id: str) -> PlanEdit:
+    """Give a page, category or label a better id: the item keeps everything else (place,
+    texts, examples) under ``new_id``, and the old id is retired for good. For a page or a
+    label the old id joins its ``merged_from``, so groups and links follow the redirect
+    (nothing needs classifying again); a category's old id goes to ``retired_ids``."""
+
+    new = copy.deepcopy(plan)
+    kind = kind_of(new, item_id)
+    if new_id in live_ids(new):
+        raise PlanError([f"id {new_id!r} is already in use"])
+    if kind != "label":
+        find_node(new, item_id)[0]["id"] = new_id
+    if kind == "node":
+        _retire(new, item_id)
+        return _done(new, created=(new_id,))
+    key = "pages" if kind == "page" else "labels"
+    item = new[key][item_id]
+    absorbed = item.get("merged_from") or []
+    item["merged_from"] = _union(absorbed, [item_id])
+    new[key] = {new_id if k == item_id else k: v for k, v in new[key].items()}
+    return _done(new, created=(new_id,), redirects={old: new_id for old in (item_id, *absorbed)})
 
 
 def move(

@@ -205,10 +205,6 @@ def init_claims_edited() -> Path | None:
         ) from exc
 
 
-def init_plan_edited() -> Path | None:
-    return init_edited(PLAN, required=False)
-
-
 def init_aggregated_edited() -> Path | None:
     try:
         return init_edited(AGGREGATED, required=True)

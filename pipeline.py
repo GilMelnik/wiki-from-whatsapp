@@ -15,7 +15,7 @@ Human gates (web UIs, no CLI):
     step 3 — PII review: ``python -m review_tool --tool pii``
     step 4 — entity review: ``python -m review_tool --tool entities``
     step 5 — claim-group review: ``python -m review_tool --tool groups``
-    step 6 — plan review: rebuilt by task 35a on ``step_6_plan.operations``
+    step 6 — plan review: ``python -m review_tool --tool plan``
 """
 
 from __future__ import annotations
@@ -112,7 +112,7 @@ def run(
         f"    {p_meta['page_count']} pages, {p_meta['label_count']} labels "
         f"-> {p_meta['plan_path']} ({p_meta['model_calls']} model calls)"
     )
-    logger.info("    -> Review the plan in the plan review tool before writing pages.")
+    logger.info("    -> Review the plan (python -m review_tool --tool plan) before writing pages.")
 
     logger = setup_step_logging(STEP_7)
     logger.info("[7] Writing wiki pages (agentic, mini-batch)...")
