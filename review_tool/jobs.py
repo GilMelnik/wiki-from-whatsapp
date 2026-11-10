@@ -11,7 +11,9 @@ artifact the step produces):
   is the index of the first of them in the job's whole output
 - ``job_finished`` ``payload`` = the final job summary
 
-At most one job runs per produced artifact. The runner only ever signals the process group of a
+At most one job runs per produced artifact, and a step does not start while a step that
+produces one of its inputs is running (it would read the inputs before they are updated). The
+runner only ever signals the process group of a
 child it started itself and has not reaped yet: a cancel sends SIGINT (the step's ``finally``
 blocks and file locks unwind), then SIGKILL after ``review.jobs.stop_timeout_seconds``.
 ``shutdown()`` does the same for every running job when the server stops.
@@ -174,6 +176,13 @@ class JobRunner:
             if running is not None:
                 raise JobRefused(
                     409, f'"{running.step.spec.title}" כבר רץ ומעדכן את אותו הקובץ.'
+                )
+            feeding = next(filter(None, map(self._running_for, step.upstream)), None)
+            if feeding is not None:
+                raise JobRefused(
+                    409,
+                    f'"{feeding.step.spec.title}" רץ כעת ומעדכן קובץ ש"{spec.title}" קורא; '
+                    "הריצו אותו אחרי שההרצה תסתיים.",
                 )
             job = Job(step, rebuild, self._spawn(step, rebuild), self._settings.log_lines)
             self._jobs[job.id] = job

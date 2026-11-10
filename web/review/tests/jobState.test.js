@@ -53,6 +53,14 @@ test("a running job replaces the notice; writers are told saves are blocked", ()
   assert.match(writer.text, /חסומה/);
 });
 
+test("while the step that feeds it runs, the notice waits instead of offering a run", () => {
+  const feeding = { id: "j0", title: "שלב 1", produces: "threads", state: RUNNING };
+  const notice = artifactNotice({ artifact: classified, byKey, step: safeStep, feeding });
+  assert.equal(notice.action, LOG_ACTION);
+  assert.equal(notice.jobId, "j0");
+  assert.match(notice.text, /"שלב 1" רץ כעת ומעדכן את "שיחות"/);
+});
+
 test("a run that failed after the change keeps a danger notice with the log", () => {
   const latest = { id: "j2", state: FAILED, exit_code: 1, started_at: "2026-11-10T10:05:00.000+00:00" };
   const notice = artifactNotice({ artifact: classified, byKey, step: safeStep, latest });

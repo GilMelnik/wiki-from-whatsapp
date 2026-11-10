@@ -49,10 +49,11 @@ STEP_SPECS: tuple[StepSpec, ...] = (
 
 @dataclass(frozen=True)
 class Step:
-    """A registry row resolved against the artifact graph."""
+    """A registry row resolved against the artifact graph (``upstream``: what the step reads)."""
 
     key: str
     spec: StepSpec
+    upstream: tuple[str, ...]
 
     def command(self, *, rebuild: bool = False) -> list[str]:
         """The subprocess command: this interpreter, ``-m <module>``, optionally ``--rebuild``."""
@@ -102,7 +103,7 @@ class StepRegistry:
             raise ValueError(
                 f"step {node.step!r} is marked incremental_safe but has no module to run"
             )
-        return Step(node.step, spec)
+        return Step(node.step, spec, node.upstream)
 
     @property
     def steps(self) -> tuple[Step, ...]:

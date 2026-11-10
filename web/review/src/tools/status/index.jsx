@@ -85,8 +85,12 @@ function StatusTool({ tool }) {
       }
       side={
         <div className="flex min-h-0 flex-1 flex-col divide-y divide-slate-200">
-          <StepPanel artifact={artifact} />
-          <ToolsPanel artifact={artifact} />
+          <div className="flex min-h-0 flex-[2] flex-col">
+            <StepPanel artifact={artifact} />
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <ToolsPanel artifact={artifact} />
+          </div>
         </div>
       }
       listWidth={{ initial: 320 }}

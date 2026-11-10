@@ -10,6 +10,7 @@ import { useStepRun } from "./JobControls.jsx";
 //   incremental-safe yet);
 // - a step is rewriting an artifact it reads or writes → "running", saves blocked (the server
 //   answers 423), log one click away;
+// - a step is rewriting one of its inputs → wait for it (no run button yet);
 // - the last run since the change failed → the banner stays, with the log.
 
 function ArtifactBanner({ artifactKey, writes }) {
@@ -17,11 +18,13 @@ function ArtifactBanner({ artifactKey, writes }) {
   const { stepsByArtifact, latestByStep, runningByArtifact } = useJobs();
   const run = useStepRun();
   const step = stepsByArtifact[artifactKey];
+  const artifact = byKey[artifactKey];
   const notice = artifactNotice({
-    artifact: byKey[artifactKey],
+    artifact,
     byKey,
     step,
     running: runningByArtifact[artifactKey],
+    feeding: artifact?.upstream.map((key) => runningByArtifact[key]).find(Boolean),
     latest: step ? latestByStep[step.key] : undefined,
     writes,
   });

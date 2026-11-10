@@ -248,6 +248,27 @@ def test_one_job_per_artifact(runner: JobRunner, fake_step: Callable[..., None])
     assert finished(runner, runner.run_step("step_3")["id"])["state"] == SUCCEEDED
 
 
+def test_a_step_waits_for_the_step_that_feeds_it(
+    tmp_path: Path, bus: RecordingBus, fake_step: Callable[..., None]
+) -> None:
+    graph = build_graph(tmp_path)
+    registry = StepRegistry(
+        (
+            StepSpec("threads", "Threads step", FAKE_STEP, incremental_safe=True),
+            StepSpec("claims", "Claims step", FAKE_STEP, incremental_safe=True),
+        ),
+        graph,
+    )
+    runner = JobRunner(registry, bus, cwd=PROJECT_ROOT, data_dir=tmp_path, settings=JOB_SETTINGS)
+    fake_step(target=tmp_path / "threads.json", hold=60)
+    job_id = runner.run_step("step_1")["id"]
+    with pytest.raises(JobRefused) as refused:
+        runner.run_step("step_3")
+    assert refused.value.status == 409 and "Threads step" in refused.value.detail
+    runner.shutdown()
+    assert runner.job(job_id)["state"] == CANCELLED
+
+
 def test_steps_that_are_not_incremental_safe_are_refused(runner: JobRunner) -> None:
     with pytest.raises(JobRefused) as refused:
         runner.run_step("step_1")

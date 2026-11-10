@@ -66,10 +66,11 @@ function newestInputChange(artifact, byKey) {
 }
 
 /**
- * The notice for one artifact a tool reads (`reads`) and/or writes (`writes`), or null.
- * Returns {tone, text, action: RUN_ACTION | LOG_ACTION | null, actionLabel, jobId?}.
+ * The notice for one artifact a tool reads and/or writes (`writes`), or null. `running`: the
+ * job rewriting it; `feeding`: a running job that rewrites one of its inputs; `latest`: the
+ * newest job of its step. Returns {tone, text, action: RUN_ACTION | LOG_ACTION | null, actionLabel, jobId?}.
  */
-export function artifactNotice({ artifact, byKey, step, running, latest, writes }) {
+export function artifactNotice({ artifact, byKey, step, running, feeding, latest, writes }) {
   if (!artifact) return null;
   if (running) {
     const effect = writes
@@ -85,6 +86,15 @@ export function artifactNotice({ artifact, byKey, step, running, latest, writes 
   }
   if (!step || artifact.stale_because.length === 0) return null;
   const stale = `${changedInputs(artifact, byKey)} אחרי ש"${artifact.title}" נוצר, ולכן מה שמוצג כאן עוד לא משקף את השינוי.`;
+  if (feeding) {
+    return {
+      tone: "info",
+      text: `${stale} "${feeding.title}" רץ כעת ומעדכן את "${byKey[feeding.produces]?.title ?? feeding.produces}"; אחרי שיסתיים אפשר יהיה להריץ את "${step.title}".`,
+      action: LOG_ACTION,
+      actionLabel: "יומן ההרצה",
+      jobId: feeding.id,
+    };
+  }
   const failedSinceChange =
     latest?.state === FAILED && Date.parse(latest.started_at) >= newestInputChange(artifact, byKey);
   if (failedSinceChange) {
