@@ -24,6 +24,7 @@ from utils.paths import (
     CLASSIFIED,
     ENTITIES,
     GOLD_THREADS_PATH,
+    MANUAL_AGGREGATIONS_PATH,
     PLAN,
     STEP_1,
     STEP_2,
@@ -177,8 +178,14 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
         ArtifactNode.from_pair("classified", "סיווג שיחות", CLASSIFIED, STEP_2, ("threads",)),
         ArtifactNode.from_pair("claims", "טענות", CLAIMS, STEP_3, ("threads", "classified")),
         ArtifactNode.from_pair("entities", "ישויות", ENTITIES, STEP_4, ("claims",)),
+        # Near-duplicate claims the owner groups by hand in the entity reviewer: no step.
+        ArtifactNode("claim_aggregations", "איחוד טענות ידני", MANUAL_AGGREGATIONS_PATH),
         ArtifactNode.from_pair(
-            "groups", "קבוצות טענות", AGGREGATED, STEP_5, ("claims", "entities")
+            "groups",
+            "קבוצות טענות",
+            AGGREGATED,
+            STEP_5,
+            ("claims", "entities", "claim_aggregations"),
         ),
         ArtifactNode.from_pair("plan", "תוכנית הויקי", PLAN, STEP_6, ("groups",)),
         ArtifactNode.from_pair("pages", "דפי הויקי", WIKI_PAGES, STEP_7, ("claims", "plan")),

@@ -200,16 +200,6 @@ def init_plan_edited() -> Path | None:
     return init_edited(PLAN, required=False)
 
 
-def init_entities_edited() -> Path | None:
-    try:
-        return init_edited(ENTITIES, required=True)
-    except FileNotFoundError as exc:
-        raise FileNotFoundError(
-            f"Cannot create {EDITED_ENTITIES_PATH}: "
-            f"{ORIGINAL_ENTITIES_PATH} not found. Run entities first."
-        ) from exc
-
-
 def init_aggregated_edited() -> Path | None:
     try:
         return init_edited(AGGREGATED, required=True)

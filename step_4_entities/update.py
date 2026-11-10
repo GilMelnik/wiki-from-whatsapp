@@ -33,6 +33,7 @@ from step_4_entities.records import (
     CONTACT_KINDS,
     allocate_entity_id,
     claim_entity_index,
+    member_names,
     refresh_entity,
 )
 
@@ -50,10 +51,6 @@ def entity_score(scores: list[Score]) -> float:
     """
 
     return min(sim for sim, _, _ in scores)
-
-
-def member_names(payload: dict[str, Any]) -> set[str]:
-    return {m["name"] for e in payload.get("entities") or [] for m in e.get("members") or []}
 
 
 class EntityUpdate:

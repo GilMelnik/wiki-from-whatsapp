@@ -20,18 +20,20 @@ from utils.paths import ORIGINAL_CLAIMS_PATH, resolve_claims_path
 
 def load_claims_for_entities(
     claims_path: Path | str | None = None,
+    original_path: Path = ORIGINAL_CLAIMS_PATH,
 ) -> tuple[list[dict[str, Any]], Path, dict[str, dict[str, Any]] | None]:
-    """Load claims for entity collection, with original contact trail when edited."""
+    """Load claims for entity collection, with the original contact trail when edited.
+
+    ``claims_path`` defaults to the reviewed claims when they exist; ``original_path`` is the
+    pipeline-original claims file whose redaction trail backs up the contacts.
+    """
 
     resolved = Path(claims_path) if claims_path is not None else resolve_claims_path()
     with resolved.open(encoding="utf-8") as f:
         claims = json.load(f)["claims"]
     original_by_id: dict[str, dict[str, Any]] | None = None
-    if (
-        resolved.resolve() != ORIGINAL_CLAIMS_PATH.resolve()
-        and ORIGINAL_CLAIMS_PATH.is_file()
-    ):
-        with ORIGINAL_CLAIMS_PATH.open(encoding="utf-8") as f:
+    if resolved.resolve() != original_path.resolve() and original_path.is_file():
+        with original_path.open(encoding="utf-8") as f:
             original_by_id = {
                 c["claim_id"]: c for c in json.load(f).get("claims") or []
             }
@@ -70,6 +72,11 @@ class ClaimCorpus:
         """Every tagged name, most-tagged first (ties by name, for a stable order)."""
 
         return sorted(self._tagged, key=lambda n: (-len(self._tagged[n]), n))
+
+    def tagged_claims(self, name: str) -> set[str]:
+        """Only the claims whose ``entities`` list this name (no text mentions)."""
+
+        return set(self._tagged.get(name, set()))
 
     def claims_for(self, name: str, within: Collection[str] | None = None) -> set[str]:
         ids = self._tagged.get(name, set()) | self._mentions.claims_mentioning(name)

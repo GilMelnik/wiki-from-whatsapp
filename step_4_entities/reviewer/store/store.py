@@ -1,197 +1,118 @@
-"""Load, edit, and persist suggested entity clusters for manual review."""
+"""Load, edit and persist step 4's entities for the owner's review.
+
+The store is built from disk in one go (a ``StoreHandle`` factory) and reads the edited
+entities when they exist, else the original; the first change creates the edited copy. It
+writes ONLY ``entities_edited.json`` and the manual claim aggregations file, and every save
+keeps what step 5 reads consistent: ``claim_entities`` (claim -> canonical entity ids), the id
+high-water mark ``metadata.last_entity_number``, ``deleted_claims`` and ``deleted_names``.
+New ids come from ``records.allocate_entity_id``; entities are refreshed with
+``records.refresh_entity``, which keeps the manual flags (``canonical_manual``,
+``contacts_manual``, ``contacts_rejected``).
+
+Members whose ``claim_ids`` is ``null`` (old files: "every claim naming it") get their claims
+listed on load, so every edit works on explicit claim lists.
+"""
 
 from __future__ import annotations
 
 import json
-import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from step_4_entities.collect import load_claims_for_entities
-from step_4_entities.mentions import (
-    Analyzer,
-    SimpleAnalyzer,
-    Word,
-    analyze_claims,
-    build_or_load_analysis,
+from step_4_entities.records import (
+    claim_entity_index,
+    entity_counts,
+    highest_entity_number,
 )
-from step_4_entities.records import allocate_entity_id, claim_entity_index
-from step_4_entities.reviewer.store.aggregations import AggregationsMixin
-from step_4_entities.reviewer.store.claims import ClaimsMixin
-from step_4_entities.reviewer.store.mutations import MutationsMixin
+from step_4_entities.reviewer.store.aggregations import EDITOR, ClaimAggregations
+from step_4_entities.reviewer.store.claims import ClaimLookup
+from step_4_entities.reviewer.store.edits import EditsMixin
+from step_4_entities.reviewer.store.helpers import EntityNotFound
+from step_4_entities.reviewer.store.highlights import ClaimAnnotator
+from step_4_entities.reviewer.store.members import MembersMixin
 from step_4_entities.reviewer.store.views import ViewsMixin
 from utils.json_io import write_json_file
-from utils.paths import (
-    BACKUPS_DIR,
-    EDITED_ENTITIES_PATH,
-    MANUAL_AGGREGATIONS_PATH,
-    ORIGINAL_ENTITIES_PATH,
-    init_entities_edited,
-    resolve_claims_path,
-)
 
 
-class EntityStore(ClaimsMixin, ViewsMixin, MutationsMixin, AggregationsMixin):
+class EntityStore(ViewsMixin, EditsMixin, MembersMixin):
     def __init__(
         self,
-        *,
-        entities_path: Path | str | None = None,
-        claims_path: Path | str | None = None,
-        analyzer: Analyzer | None = None,
-        analysis_cache_path: Path | str | None = None,
-        aggregations_path: Path | str | None = None,
+        entities_original: Path,
+        entities_edited: Path,
+        claims_original: Path,
+        claims_edited: Path,
+        aggregations_path: Path,
+        analysis_path: Path,
     ) -> None:
-        self._entities_override = (
-            Path(entities_path) if entities_path is not None else None
-        )
-        self._claims_override = Path(claims_path) if claims_path is not None else None
-        self._aggregations_path = (
-            Path(aggregations_path)
-            if aggregations_path is not None
-            else MANUAL_AGGREGATIONS_PATH
-        )
-        # Model-free default keeps direct/test instantiation offline; the web server
-        # injects a DictaAnalyzer + shared cache so highlighting matches the pipeline.
-        self._analyzer: Analyzer = analyzer or SimpleAnalyzer()
-        self._analysis_cache_path = analysis_cache_path
-        self._analysis: dict[str, list[Word]] = {}
-        self._data: dict[str, Any] | None = None
-        self._claims_by_id: dict[str, dict[str, Any]] = {}
-        self._original_by_id: dict[str, dict[str, Any]] = {}
-        self._claim_ids_by_name: dict[str, list[str]] = {}
-        self._alias_to_entity: dict[str, str] = {}
-        self._entity_color_index: dict[str, int] = {}
-        self._entities_source = ORIGINAL_ENTITIES_PATH
-        self._backup_done = False
-        self._loaded = False
-        # Manual claim aggregations: groups of near-duplicate claims the reviewer
-        # marks so step 5 force-merges them under one chosen representative.
-        self._aggregations: list[dict[str, Any]] = []
-        self._agg_by_claim: dict[str, dict[str, Any]] = {}
-        self._agg_by_rep: dict[str, dict[str, Any]] = {}
-        # Claims hard-deleted in the reviewer: persisted on the entities payload
-        # and filtered out everywhere (display + step 5).
-        self._deleted_claims: set[str] = set()
-
-    def load(self) -> None:
-        if self._entities_override is None:
-            init_entities_edited()
-        if self._entities_override is not None:
-            self._entities_source = self._entities_override
-            if not self._entities_source.is_file():
-                raise FileNotFoundError(
-                    f"Entities file not found: {self._entities_source}"
-                )
-        else:
-            self._entities_source = (
-                EDITED_ENTITIES_PATH
-                if EDITED_ENTITIES_PATH.exists()
-                else ORIGINAL_ENTITIES_PATH
-            )
-        with self._entities_source.open(encoding="utf-8") as f:
-            self._data = json.load(f)
-        self._deleted_claims = set(self._data.get("deleted_claims") or [])
-
-        claims_path = (
-            self._claims_override
-            if self._claims_override is not None
-            else resolve_claims_path()
-        )
-        claims, resolved_claims, original_by_id = load_claims_for_entities(claims_path)
-        self._claims_by_id = {c["claim_id"]: c for c in claims}
-        self._original_by_id = original_by_id or {}
-        for claim in claims:
-            for name in claim.get("entities") or []:
-                self._claim_ids_by_name.setdefault(name, []).append(claim["claim_id"])
-        if self._analysis_cache_path is not None:
-            self._analysis = build_or_load_analysis(
-                claims,
-                self._analyzer,
-                cache_path=self._analysis_cache_path,
-                source_path=resolved_claims,
-            )
-        else:
-            self._analysis = analyze_claims(claims, self._analyzer)
-        self._rebuild_alias_index()
-        self._load_aggregations()
-        self._loaded = True
-
-    def _rebuild_alias_index(self) -> None:
-        self._alias_to_entity = {}
-        self._entity_color_index = {}
-        for idx, entity in enumerate(self.entities):
-            entity_id = entity["entity_id"]
-            self._entity_color_index[entity_id] = idx
-            for alias in entity.get("aliases") or []:
-                self._alias_to_entity.setdefault(alias, entity_id)
-            canonical = entity.get("canonical_name")
-            if canonical:
-                self._alias_to_entity.setdefault(canonical, entity_id)
-
-    @property
-    def loaded(self) -> bool:
-        return self._loaded
+        self.edited_path = entities_edited
+        self.source = entities_edited if entities_edited.is_file() else entities_original
+        if not self.source.is_file():
+            raise FileNotFoundError(f"{entities_original} does not exist: run step 4 first")
+        self.payload: dict[str, Any] = json.loads(self.source.read_text(encoding="utf-8"))
+        self.payload.setdefault("entities", [])
+        claims_path = claims_edited if claims_edited.is_file() else claims_original
+        self.claims = ClaimLookup(claims_path, claims_original, analysis_path)
+        self.aggregations = ClaimAggregations(aggregations_path)
+        self.deleted_claims: set[str] = set(self.payload.get("deleted_claims") or [])
+        self.deleted_names: set[str] = set(self.payload.get("deleted_names") or [])
+        for entity in self.entities:
+            for member in entity.get("members") or []:
+                if member.get("claim_ids") is None:
+                    ids = self.claims.claims_for(member["name"]) - self.deleted_claims
+                    member["claim_ids"] = sorted(ids)
+        self._annotator: ClaimAnnotator | None = None
 
     @property
     def entities(self) -> list[dict[str, Any]]:
-        assert self._data is not None
-        return self._data["entities"]
+        return self.payload["entities"]
 
-    def _find_entity(self, entity_id: str) -> tuple[dict[str, Any], int]:
-        for idx, entity in enumerate(self.entities):
+    @property
+    def annotator(self) -> ClaimAnnotator:
+        if self._annotator is None:
+            self._annotator = ClaimAnnotator(self.entities, self.claims)
+        return self._annotator
+
+    def find(self, entity_id: str) -> dict[str, Any]:
+        for entity in self.entities:
             if entity["entity_id"] == entity_id:
-                return entity, idx
-        raise KeyError(f"unknown entity: {entity_id}")
+                return entity
+        raise EntityNotFound(f"הישות {entity_id} לא קיימת (אולי מוזגה או נמחקה)")
 
-    def _new_entity_id(self) -> str:
-        assert self._data is not None
-        return allocate_entity_id(self._data)
+    def member_of(self, entity: dict[str, Any], name: str) -> dict[str, Any]:
+        for member in entity.get("members") or []:
+            if member["name"] == name:
+                return member
+        raise EntityNotFound(f'השם "{name}" כבר לא שייך לישות {entity["entity_id"]}')
 
-    # --- persistence ----------------------------------------------------
+    def text_of(self, claim_id: str) -> str:
+        return (self.claims.claim(claim_id) or {}).get("claim_text", "")
 
-    def _ensure_backup(self) -> None:
-        if self._backup_done:
-            return
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backups_dir = (
-            BACKUPS_DIR
-            if self._entities_override is None
-            else self._entities_override.parent / BACKUPS_DIR.name
-        )
-        backups_dir.mkdir(parents=True, exist_ok=True)
-        if self._entities_source.exists():
-            dest = (
-                backups_dir
-                / f"{self._entities_source.stem}_{ts}{self._entities_source.suffix}"
-            )
-            shutil.copy2(self._entities_source, dest)
-        self._backup_done = True
+    def claim_usable(self, claim_id: str) -> bool:
+        return self.claims.claim(claim_id) is not None and claim_id not in self.deleted_claims
 
     def save(self) -> None:
-        assert self._data is not None
-        self._ensure_backup()
-        self._rebuild_alias_index()
-        meta = self._data.setdefault("metadata", {})
-        meta["edited_by"] = "entity_reviewer"
-        meta["edited_at"] = datetime.now().isoformat(timespec="seconds")
-        meta["entity_count"] = len(self.entities)
-        self._data["claim_entities"] = claim_entity_index(
-            self.entities,
-            deleted_claims=self._deleted_claims,
-            member_claims=self._claim_ids_for_member,
-        )
-        if self._entities_override is None:
-            write_json_file(self._data, EDITED_ENTITIES_PATH)
-            self._entities_source = EDITED_ENTITIES_PATH
-        else:
-            write_json_file(self._data, self._entities_source)
+        """Write the edited entities with everything step 5 reads brought up to date."""
 
-    def meta(self) -> dict[str, Any]:
-        s = self.stats()
-        return {
-            "entities_path": str(self._entities_source),
-            "entity_count": s["entity_count"],
-            "multi_member_count": s["multi_member_count"],
-            "by_status": s["by_status"],
-        }
+        payload = self.payload
+        meta = payload.setdefault("metadata", {})
+        meta["last_entity_number"] = highest_entity_number(payload)
+        payload["claim_entities"] = claim_entity_index(
+            self.entities, deleted_claims=self.deleted_claims
+        )
+        for key, values in (
+            ("deleted_claims", self.deleted_claims),
+            ("deleted_names", self.deleted_names),
+        ):
+            if values:
+                payload[key] = sorted(values)
+            else:
+                payload.pop(key, None)
+        meta.update(
+            entity_counts(payload),
+            edited_by=EDITOR,
+            edited_at=datetime.now().isoformat(timespec="seconds"),
+        )
+        write_json_file(payload, self.edited_path)
+        self.source = self.edited_path
+        self._annotator = None
