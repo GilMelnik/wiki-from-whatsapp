@@ -255,7 +255,7 @@
     "write": {"stage": "write", "max_output_tokens": 64000},
     "update": {"stage": "update", "max_output_tokens": 64000, "rewrite_changed_share": 0.5},
     "concurrency": 4,
-    "min_cited_share": 0.6,
+    "min_cited_share": 0.85,
     "max_entities": 30,
     "default_relation": "see_also",
     "labels": {"min_groups": 3, "min_page_share": 0.2, "min_label_share": 0.2, "min_lift": 2.0},

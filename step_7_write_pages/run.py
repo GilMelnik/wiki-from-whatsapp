@@ -46,6 +46,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import anthropic
+
 from step_6_plan.run import AnthropicTokenCounter, TokenCounter
 from step_7_write_pages.front_matter import LabelRule, page_front_matter
 from step_7_write_pages.inputs import (
@@ -155,6 +157,9 @@ class PagesRun:
         if share > UPDATE_CONFIG["rewrite_changed_share"]:
             self.logger.info(f"{page_id}: {share:.0%} of its groups changed; rewriting in full")
             return Job(page_id, "write", context, state)
+        if source is not None and source != old_page:
+            self.logger.info(f"{page_id}: its manual edit is the starting text of this update (the "
+                             "reconcile line lists it as superseded; the edit is carried over)")
         return Job(page_id, "update", context, state, source or old_page, delta)
 
     def _call(self, writer: PageWriter, job: Job) -> PageText:
@@ -172,7 +177,7 @@ class PagesRun:
             for page_id, future in futures.items():
                 try:
                     texts[page_id] = future.result()
-                except (RuntimeError, ValueError, OSError) as exc:
+                except (anthropic.APIError, RuntimeError, ValueError, OSError) as exc:
                     self.failed[page_id] = repr(exc)
                     self.logger.error(f"{page_id}: writing failed, old text kept: {exc!r}")
         return texts
