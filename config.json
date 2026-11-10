@@ -9,7 +9,6 @@
     "stages": {
       "extract": {"provider": "anthropic", "model": "claude-sonnet-5-5", "thinking_param": "low"},
       "plan": {"provider": "anthropic", "model": "claude-opus-5-5", "thinking_param": "high"},
-      "generate": {"provider": "anthropic", "model": "claude-sonnet-5-5", "thinking_param": "high"},
       "write": {"provider": "anthropic", "model": "claude-sonnet-5-5", "thinking_param": "high"},
       "review": {"provider": "anthropic", "model": "claude-opus-5-5", "thinking_param": "high"},
       "apply": {"provider": "anthropic", "model": "claude-sonnet-5-5", "thinking_param": "medium"},
@@ -249,7 +248,22 @@
     "dir": "rtl",
     "statuses": ["draft", "stable", "deprecated"],
     "default_status": "stable",
-    "stale_after_days": 180
+    "stale_after_days": 180,
+    "generated_by": "wiki-from-whatsapp",
+    "source_resource_prefix": "claim-group:",
+    "prompt_version": 1,
+    "write": {"stage": "write", "max_output_tokens": 64000},
+    "update": {"stage": "update", "max_output_tokens": 64000, "rewrite_changed_share": 0.5},
+    "concurrency": 4,
+    "min_cited_share": 0.6,
+    "max_entities": 30,
+    "default_relation": "see_also",
+    "labels": {"min_groups": 3, "min_page_share": 0.2, "min_label_share": 0.2, "min_lift": 2.0},
+    "hebrew_months": [
+      "ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני",
+      "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"
+    ],
+    "footnote": {"said_in": "נאמר ב{when}", "said_between": "נאמר בין {first} ל{last}"}
   },
   "review": {
     "host": "127.0.0.1",

@@ -1,302 +1,357 @@
-"""Step 7: build community-insight pages with an agentic, mini-batch loop.
+"""Step 7: write the wiki's pages (contract C9) from the plan, the claim groups and their pages.
 
-Instead of consuming the aggregate step, this reads the published claims, the
-entity registry, and the PRIVATE supporter audit directly. Each claim is routed
-to *every* page its ``topic_tags`` map to (so a multi-topic claim can influence
-all relevant pages), and those per-page claims are fed to the LLM one mini-batch
-at a time. A claim may back several statements, counted fully in each; ``PageStore``
-recomputes a statement's support by unioning supporter identities across its
-deduped claim_ids, so a claim is never counted twice within a single statement.
-For each batch the agent sees the current page content plus the new
-claims (with canonical entities, supporter counts, stance, dates) and emits JSON
-actions that write/update statements or evolve the page catalog.
+How it works, in plain words: for every page of the reviewed plan (C7) the step collects the
+claim groups assigned to it (C8, ``step_7_write_pages.inputs``) and asks the ``write`` stage
+(Sonnet 5.5) for the whole article in one call: readable Hebrew prose grounded in those
+groups, both sides wherever members disagree, newer claims weighted higher and said so in
+the text, and Wikipedia-style links to other pages and labels (``prompts``). Code then
+enforces what must not be left to the model (``checks``): only the page's own groups are
+cited, only planned pages and labels are linked, disputed groups are cited and enough of
+the page's groups are used (one retry that names the problems, then repair); the footnote
+definitions and the OKF front matter are written in code (``front_matter``).
 
-The agent's tools (a provider-agnostic JSON-action protocol, no SDK function
-calling):
+Re-runs (C14) work per page. ``metadata.pages[page_id]`` keeps a fingerprint of the writer
+(model + ``pages.prompt_version``), of the page's plan fields and of every group record, and
+``input_fingerprint`` combines them:
+- unchanged page -> its text is untouched, including a manual edit in the edited file (only
+  code-owned front matter such as the breadcrumb or the labels is brought up to date);
+- page not written yet, or a new writer -> full write;
+- groups or plan fields changed -> UPDATE call (stage ``update``) from the current EFFECTIVE
+  page (owner edits included) + the new / changed / removed groups; "no change needed" keeps
+  the text and ``generated.at``; above ``pages.update.rewrite_changed_share`` a full rewrite;
+- a page that left the plan, or has no groups any more, is dropped.
+Pages are written through ``utils.reconcile`` once per run (front matter and fingerprint are
+refresh keys, so a kept manual edit gets current front matter). A crash costs nothing on the
+re-run: prompts are deterministic and answers are in the LLM disk cache. Nothing is written
+when nothing changed, unless an input file is newer than the output (the review tool's stale
+notice then clears).
 
-- ``upsert_statement`` — write or update a statement; attaching more claim_ids to
-  an existing statement is how repeated support is accrued without duplicates.
-- ``new_page`` / ``split_page`` — evolve the page catalog.
-- ``add_link`` / ``set_related`` — linkage between pages.
-- ``read_page`` — request another page's content; the loop re-prompts the same
-  batch with that content (bounded).
+    python -m step_7_write_pages.run [--rebuild] [--only PAGE_ID ...] [--estimate]
 
-Every statement must cite ``claim_ids``; supporter counts are recomputed in code
-(``PageStore``) by unioning supporter identities from the audit. The LLM never
-sees identities. Output: ``data/wiki_pages.json``.
+Output: ``wiki_pages.json`` (C9) ``{pages: {page_id: {front_matter, body_md,
+input_fingerprint}}, metadata: {sources, inputs, pages, as_of, models, config, git_commit,
+generated_at, run, summary}}``.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
-from collections import defaultdict
+from collections import Counter
+from collections.abc import Collection, Mapping
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from step_5_aggregate.resolver import EntityResolver, load_entity_resolver
-from step_7_write_pages.prompts import (
-    COMMUNITY_ACTIONS_SCHEMA,
-    COMMUNITY_AGENT_SYSTEM,
-    build_batch_prompt,
+from step_6_plan.run import AnthropicTokenCounter, TokenCounter
+from step_7_write_pages.front_matter import LabelRule, page_front_matter
+from step_7_write_pages.inputs import (
+    PAGES_CONFIG,
+    Corpus,
+    PageContext,
+    input_fingerprint,
+    page_state,
+    writer_fingerprint,
 )
-from step_7_write_pages.store import PageStore
-from utils.json_io import write_json_file
-from utils.llm_client import LLMClient
+from step_7_write_pages.prompts import update_prompt, write_prompt
+from step_7_write_pages.writer import GroupDelta, PageText, PageWriter, changed_share, current_text
+from utils.embedding_ab import _git_commit
+from utils.llm_client import LLMClient, _flatten
 from utils.logging_setup import setup_step_logging
-from utils.paths import (
-    STEP_7,
-    WIKI_PAGES,
-    resolve_claims_path,
-    resolve_plan_path,
-)
-from utils.support import load_audit_records
-from utils.taxonomy import all_pages, get_page
+from utils.paths import STEP_7, WIKI_PAGES, Artifact
+from utils.reconcile import diff_inputs, load_previous, write_reconciled
 
-DEFAULT_BATCH_SIZE = 15
-DEFAULT_MAX_READS = 3
-OVERVIEW_PAGE_ID = "overview"
-
-def _apply_actions(
-    store: PageStore,
-    current_page_id: str,
-    actions: list[dict[str, Any]],
-) -> None:
-    for action in actions:
-        if not isinstance(action, dict):
-            continue
-        kind = action.get("type")
-        if kind == "upsert_statement":
-            store.upsert_statement(
-                action.get("page_id") or current_page_id,
-                action.get("section"),
-                action.get("statement_id"),
-                action.get("text"),
-                action.get("claim_ids"),
-            )
-        elif kind == "new_page":
-            store.ensure_page(
-                action.get("id"),
-                title=action.get("title"),
-                category=action.get("category") or "emergent",
-                parent=action.get("parent"),
-            )
-        elif kind == "split_page":
-            origin = str(action.get("from") or "").strip()
-            for target in action.get("into") or []:
-                if not isinstance(target, dict):
-                    continue
-                new_page = store.ensure_page(
-                    target.get("id"),
-                    title=target.get("title"),
-                    category=target.get("category") or "emergent",
-                )
-                if new_page and origin in store.pages:
-                    store.add_link(origin, new_page["id"], action.get("reason", ""))
-        elif kind == "add_link":
-            store.add_link(
-                action.get("from"), action.get("to"), action.get("reason", "")
-            )
-        elif kind == "set_related":
-            store.set_related(action.get("page_id"), action.get("related_pages"))
+WRITE_CONFIG = PAGES_CONFIG["write"]
+UPDATE_CONFIG = PAGES_CONFIG["update"]
+REFRESH_KEYS = ("front_matter", "input_fingerprint")
+COMPARED_METADATA = ("inputs", "pages")
 
 
-def _run_batch(
-    llm: LLMClient,
-    store: PageStore,
-    page_id: str,
-    claims: list[dict[str, Any]],
-    resolver: EntityResolver | None,
-    max_reads: int,
-    logger: logging.Logger,
-) -> None:
-    extra_pages = ""
-    for _ in range(max_reads + 1):
-        prompt = build_batch_prompt(store, page_id, claims, resolver, extra_pages)
-        try:
-            data = llm.complete_json(
-                COMMUNITY_AGENT_SYSTEM,
-                prompt,
-                task="community_agent",
-                response_schema=COMMUNITY_ACTIONS_SCHEMA,
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(f"Community: batch for {page_id} failed: {exc}")
-            return
-        actions = data.get("actions") if isinstance(data, dict) else None
-        actions = [a for a in (actions or []) if isinstance(a, dict)]
-        reads = [
-            str(a.get("id") or "").strip()
-            for a in actions
-            if a.get("type") == "read_page"
-        ]
-        reads = [r for r in reads if r and r in store.pages]
-        if reads:
-            logger.info(f"{page_id}: agent requested read_page {reads}; re-prompting")
-            # Don't write yet — show requested pages and let the agent re-decide
-            # with that context. Avoids double-applying writes across re-prompts.
-            extra_pages = "\n\n".join(
-                json.dumps(store.page_view(rid), ensure_ascii=False, indent=2)
-                for rid in reads
-            )
-            continue
-        _apply_actions(store, page_id, actions)
-        return
+def _now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _load_seed(
-    plan_path: Path | str | None,
-) -> tuple[list[dict[str, Any]], dict[str, str]]:
-    """Seed page catalog from the (edited) plan, falling back to the taxonomy."""
-
-    path = Path(plan_path) if plan_path is not None else resolve_plan_path()
-    pages: list[dict[str, Any]] = []
-    if path.exists():
-        with path.open(encoding="utf-8") as f:
-            for page in json.load(f).get("pages") or []:
-                if isinstance(page, dict) and page.get("id"):
-                    pages.append(
-                        {
-                            "id": page["id"],
-                            "title": page.get("title", page["id"]),
-                            "category": page.get("category", "emergent"),
-                            "source_tags": page.get("source_tags") or [page["id"]],
-                            "parent": page.get("parent"),
-                        }
-                    )
-    if not pages:
-        pages = [
-            {
-                "id": tp.id,
-                "title": tp.title_he,
-                "category": tp.category,
-                "source_tags": [tp.id],
-                "parent": tp.parent,
-            }
-            for tp in all_pages()
-        ]
-
-    tag_to_page: dict[str, str] = {}
-    for page in pages:
-        for tag in page["source_tags"] or [page["id"]]:
-            tag_to_page.setdefault(tag, page["id"])
-        tag_to_page.setdefault(page["id"], page["id"])
-    return pages, tag_to_page
+def _read(path: Path) -> dict[str, Any] | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path} is not valid JSON: {exc}") from exc
 
 
-def _related_pages(claim: dict[str, Any], tag_to_page: dict[str, str]) -> list[str]:
-    """Every page this claim's topic_tags map to (mapped page or emergent tag)."""
+@dataclass
+class Job:
+    """What happens to one page in this run: ``write``, ``update`` or ``keep``."""
 
-    pages: list[str] = []
-    for tag in claim.get("topic_tags") or []:
-        page_id = tag_to_page.get(tag, tag)
-        if page_id and page_id not in pages:
-            pages.append(page_id)
-    return pages or [OVERVIEW_PAGE_ID]
+    page_id: str
+    mode: str
+    context: PageContext
+    state: dict[str, Any]
+    source: dict[str, Any] | None = None   # the effective page (owner edits included)
+    delta: GroupDelta | None = None
+
+
+class PagesRun:
+    """One run of the step over the current inputs and the stored pages."""
+
+    def __init__(self, corpus: Corpus, previous: Mapping[str, Any], effective: Mapping[str, Any],
+                 *, model: str, rebuild: bool, only: Collection[str] | None,
+                 logger: logging.Logger) -> None:
+        self.corpus = corpus
+        self.model = model
+        self.writer = writer_fingerprint(model)
+        self.logger = logger
+        self.rebuild = rebuild
+        self.scope = None if only is None else set(only)
+        self.old_pages: dict[str, Any] = dict(previous.get("pages") or {})
+        meta = previous.get("metadata") or {}
+        self.old_inputs: dict[str, str] = dict(meta.get("inputs") or {})
+        self.old_states: dict[str, Any] = dict(meta.get("pages") or {})
+        self.effective = effective
+        self.labels = LabelRule(corpus, list(corpus.plan["pages"]))
+        self.stats: Counter[str] = Counter()
+        self.carried: dict[str, Any] = {}
+        self.jobs: list[Job] = []
+        self.failed: dict[str, str] = {}
+
+    def plan(self) -> list[Job]:
+        """Decide what happens to every planned page (see the module docstring)."""
+        catalogue = self.corpus.catalogue()
+        for page_id in self.corpus.plan["pages"]:
+            old_page = self.old_pages.get(page_id)
+            if self.scope is not None and page_id not in self.scope:
+                if old_page is not None:
+                    self.carried[page_id] = old_page
+                continue
+            context = self.corpus.context(page_id, catalogue)
+            if context is None:
+                self.stats["no_groups"] += 1
+                self.logger.info(f"{page_id}: no claim groups on this page; not written"
+                                 + (" (its old text is dropped)" if old_page else ""))
+                continue
+            self.jobs.append(self._job(page_id, context, old_page))
+        dropped = sorted(set(self.old_pages) - set(self.corpus.plan["pages"]))
+        if dropped:
+            self.logger.info(f"Pages no longer in the plan, dropped: {dropped}")
+        self.stats["dropped"] += len(dropped)
+        return self.jobs
+
+    def _job(self, page_id: str, context: PageContext, old_page: dict[str, Any] | None) -> Job:
+        state = page_state(context, self.writer)
+        old_state = self.old_states.get(page_id)
+        source = self.effective.get(page_id, old_page)
+        if self.rebuild or old_page is None or old_state is None or old_state["writer"] != self.writer:
+            return Job(page_id, "write", context, state)
+        if all(state[key] == old_state[key] for key in ("brief", "groups")):
+            return Job(page_id, "keep", context, {**old_state, **state}, source or old_page)
+        diff = diff_inputs(old_state["groups"], state["groups"])
+        delta = GroupDelta(diff.new, diff.changed, diff.removed,
+                           brief_changed=state["brief"] != old_state["brief"])
+        share = changed_share(delta, len(context.records))
+        if share > UPDATE_CONFIG["rewrite_changed_share"]:
+            self.logger.info(f"{page_id}: {share:.0%} of its groups changed; rewriting in full")
+            return Job(page_id, "write", context, state)
+        return Job(page_id, "update", context, state, source or old_page, delta)
+
+    def _call(self, writer: PageWriter, job: Job) -> PageText:
+        if job.mode == "write":
+            return writer.write(job.context)
+        return writer.update(job.context, current_text(job.source), job.delta)
+
+    def write(self, writer: PageWriter) -> dict[str, PageText]:
+        """Run the model calls of every ``write`` / ``update`` job (a failed page is logged
+        and keeps its old text, so the next run tries again)."""
+        due = [job for job in self.jobs if job.mode != "keep"]
+        texts: dict[str, PageText] = {}
+        with ThreadPoolExecutor(max_workers=PAGES_CONFIG["concurrency"]) as pool:
+            futures = {job.page_id: pool.submit(self._call, writer, job) for job in due}
+            for page_id, future in futures.items():
+                try:
+                    texts[page_id] = future.result()
+                except (RuntimeError, ValueError, OSError) as exc:
+                    self.failed[page_id] = repr(exc)
+                    self.logger.error(f"{page_id}: writing failed, old text kept: {exc!r}")
+        return texts
+
+    def estimate(self, count_tokens: TokenCounter) -> dict[str, Any]:
+        """Input tokens of every call this run would make (no writing call)."""
+        rows = []
+        for job in self.jobs:
+            if job.mode == "keep":
+                continue
+            if job.mode == "write":
+                system, user = write_prompt(job.context)
+            else:
+                system, user = update_prompt(job.context, current_text(job.source),
+                                             new=job.delta.new, changed=job.delta.changed,
+                                             removed=job.delta.removed,
+                                             brief_changed=job.delta.brief_changed)
+            tokens = count_tokens(system, _flatten(user))
+            rows.append({"page": job.page_id, "mode": job.mode, "groups": len(job.context.records),
+                         "input_tokens": tokens})
+            self.logger.info(f"estimate {job.mode:6} {job.page_id}: {len(job.context.records)} "
+                             f"groups, {tokens} input tokens")
+        total = sum(row["input_tokens"] for row in rows)
+        self.logger.info(f"estimate: {len(rows)} calls (+ retries), {total} input tokens; "
+                         f"{sum(1 for job in self.jobs if job.mode == 'keep')} pages untouched")
+        return {"estimate": rows, "input_tokens": total, "written": False,
+                "modes": dict(Counter(job.mode for job in self.jobs))}
+
+    # ----------------------------------------------------------------- payload
+
+    def _item(self, job: Job, *, body: str, summary: str, questions: list[str],
+              related: list[dict[str, str]], generated_at: str) -> dict[str, Any]:
+        front_matter = page_front_matter(
+            job.context, self.corpus.plan, body=body, summary=summary, questions=questions,
+            related=related, labels=self.labels(job.page_id), model=self.model,
+            generated_at=generated_at)
+        return {"front_matter": front_matter, "body_md": body,
+                "input_fingerprint": input_fingerprint(job.state)}
+
+    def _from_text(self, job: Job, text: PageText) -> dict[str, Any]:
+        source = job.source
+        same = source is not None and text.body == source["body_md"] and all(
+            source["front_matter"].get(key, default) == value for key, value, default in (
+                ("summary", text.summary, ""), ("questions", text.questions, []),
+                ("related", text.related, [])))
+        generated_at = source["front_matter"]["generated"]["at"] if same else _now()
+        return self._item(job, body=text.body, summary=text.summary, questions=text.questions,
+                          related=text.related, generated_at=generated_at)
+
+    def _kept(self, job: Job) -> dict[str, Any]:
+        """An unchanged page: the step's own body, front matter rebuilt from the effective
+        page (its citations and model-owned fields), ``generated.at`` unchanged."""
+        source = current_text(job.source)
+        item = self._item(
+            job, body=job.source["body_md"], summary=source["summary"],
+            questions=source["questions"],
+            related=[{"slug": r["page_id"], "relation": r["relation"]} for r in source["related"]],
+            generated_at=job.source["front_matter"]["generated"]["at"])
+        return {**item, "body_md": self.old_pages[job.page_id]["body_md"]}
+
+    def payload(self, texts: Mapping[str, PageText], sources: tuple[Path, ...],
+                models: Mapping[str, str]) -> dict[str, Any]:
+        pages: dict[str, Any] = dict(self.carried)
+        states = {pid: self.old_states[pid] for pid in self.carried if pid in self.old_states}
+        for job in self.jobs:
+            if job.mode == "keep":
+                pages[job.page_id] = self._kept(job)
+                states[job.page_id] = job.state
+            elif job.page_id in texts:
+                text = texts[job.page_id]
+                pages[job.page_id] = self._from_text(job, text)
+                states[job.page_id] = {**job.state, "mode": job.mode, "report": text.report}
+                self.stats["no_change" if not text.changed else job.mode] += 1
+            elif job.page_id in self.old_pages and job.page_id in self.old_states:
+                pages[job.page_id] = self.old_pages[job.page_id]
+                states[job.page_id] = self.old_states[job.page_id]
+        order = [pid for pid in self.corpus.plan["pages"] if pid in pages]
+        pages = {pid: pages[pid] for pid in order}
+        states = {pid: states[pid] for pid in order if pid in states}
+        inputs = {pid: input_fingerprint(states[pid]) for pid in states}
+        self.stats["kept"] = sum(1 for job in self.jobs if job.mode == "keep") + len(self.carried)
+        reports = [s["report"] for s in states.values() if "report" in s]
+        return {
+            "pages": pages,
+            "metadata": {
+                "sources": {name: str(path) for name, path in zip(("groups", "plan", "assignments"), sources)},
+                "inputs": inputs,
+                "pages": states,
+                "as_of": self.corpus.as_of,
+                "models": dict(models),
+                "config": PAGES_CONFIG,
+                "git_commit": _git_commit(),
+                "generated_at": _now(),
+                "run": {**self.stats, "failed": self.failed,
+                        "skipped_groups": len(self.corpus.skipped)},
+                "summary": {
+                    "pages": len(pages),
+                    "cited_share": {pid: s["report"]["cited_share"] for pid, s in states.items()
+                                    if "report" in s},
+                    "uncited_required": sum(len(r["uncited_required"]) for r in reports),
+                },
+            },
+        }
+
+
+def _unchanged(payload: Mapping[str, Any], before: Mapping[str, Any], original: Path,
+               inputs: tuple[Path, ...]) -> bool:
+    """Same pages and per-page state as before, and the output is not older than its inputs."""
+    old_meta = before.get("metadata") or {}
+    newest_input = max(path.stat().st_mtime_ns for path in inputs)
+    return (original.is_file() and original.stat().st_mtime_ns >= newest_input
+            and payload["pages"] == before.get("pages")
+            and all(payload["metadata"][key] == old_meta.get(key) for key in COMPARED_METADATA))
 
 
 def run(
     *,
+    aggregated_path: Path | None = None,
+    plan_path: Path | None = None,
+    assignments_path: Path | None = None,
+    artifact: Artifact = WIKI_PAGES,
+    only: Collection[str] | None = None,
+    rebuild: bool = False,
+    estimate: bool = False,
     llm: LLMClient | None = None,
-    claims_path: Path | str | None = None,
-    plan_path: Path | str | None = None,
-    output_path: Path | str | None = None,
-    batch_size: int = DEFAULT_BATCH_SIZE,
-    max_reads: int = DEFAULT_MAX_READS,
+    update_llm: LLMClient | None = None,
+    count_tokens: TokenCounter | None = None,
 ) -> dict[str, Any]:
+    """Write, update or keep every planned page; see the module docstring.
+
+    Inputs default to the effective (edited) groups, plan and assignments. ``only``: work on
+    these page ids only (every other page stays as it is). ``rebuild``: write every page (in
+    ``only``) in full; without ``only`` the edited file is backed up and replaced.
+    ``estimate``: no writing call; returns the input tokens of every call the run would make.
+    ``llm`` / ``update_llm`` default to the ``pages.write`` / ``pages.update`` stages.
+    Returns the run counters (``write``, ``update``, ``no_change``, ``kept``, ``dropped``,
+    ``no_groups``, ``failed``, ``skipped_groups``), ``summary``, ``written`` and ``backup``.
+    """
     logger = setup_step_logging(STEP_7)
-    llm = LLMClient.for_stage("generate", logger=logger) if llm is None else llm
-    llm.set_logger(logger)
+    corpus = Corpus.load(aggregated_path, plan_path, assignments_path)
+    if corpus.skipped:
+        logger.warning(f"{len(corpus.skipped)} claim groups have no assignment record (run the "
+                       "assignment step); they are on no page this run")
+    llm = llm or LLMClient.for_stage(WRITE_CONFIG["stage"], logger=logger,
+                                     max_tokens=WRITE_CONFIG["max_output_tokens"])
+    update_llm = update_llm or LLMClient.for_stage(UPDATE_CONFIG["stage"], logger=logger,
+                                                   max_tokens=UPDATE_CONFIG["max_output_tokens"])
+    full_rebuild = rebuild and only is None
+    previous = {} if full_rebuild else load_previous(artifact)
+    edited = None if full_rebuild else _read(artifact.edited)
+    effective = (edited or previous).get("pages") or {}
+    job = PagesRun(corpus, previous, effective, model=llm.model, rebuild=rebuild, only=only,
+                   logger=logger)
+    job.plan()
+    if estimate:
+        return job.estimate(count_tokens or AnthropicTokenCounter(llm.model))
+    texts = job.write(PageWriter(llm, update_llm, corpus.plan, logger))
+    payload = job.payload(texts, corpus.sources, {"write": llm.model, "update": update_llm.model})
+    result = {**payload["metadata"]["run"], "summary": payload["metadata"]["summary"], "backup": None}
+    if not full_rebuild and _unchanged(payload, previous, artifact.original, corpus.sources):
+        logger.info(f"Pages unchanged ({len(payload['pages'])} pages); nothing written")
+        return {**result, "written": False}
+    report = write_reconciled(artifact, payload, items_key="pages", id_key=None,
+                              refresh_keys=REFRESH_KEYS, rebuild=full_rebuild)
+    logger.info(f"Pages written: {len(payload['pages'])} pages; run {payload['metadata']['run']}; "
+                f"backup {report.backup}")
+    return {**result, "written": True, "backup": str(report.backup) if report.backup else None}
 
-    claims_file = Path(claims_path) if claims_path is not None else resolve_claims_path()
-    with claims_file.open(encoding="utf-8") as f:
-        claims = json.load(f)["claims"]
-    claims_by_id = {c["claim_id"]: c for c in claims}
 
-    audit_by_id = load_audit_records()
-    resolver = load_entity_resolver()
-    seed_pages, tag_to_page = _load_seed(plan_path)
-
-    store = PageStore(claims_by_id, audit_by_id)
-    for page in seed_pages:
-        store.ensure_page(
-            page["id"],
-            title=page["title"],
-            category=page["category"],
-            parent=page.get("parent"),
-            source_tags=page.get("source_tags"),
-        )
-    store.ensure_page(OVERVIEW_PAGE_ID, title="סקירה כללית", category="start")
-
-    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    seen: dict[str, set[str]] = defaultdict(set)
-    for claim in claims:
-        for page_id in _related_pages(claim, tag_to_page):
-            seed = get_page(page_id)
-            store.ensure_page(
-                page_id,
-                title=seed.title_he if seed else None,
-                category=seed.category if seed else "emergent",
-            )
-            if claim["claim_id"] not in seen[page_id]:
-                seen[page_id].add(claim["claim_id"])
-                grouped[page_id].append(claim)
-
-    out_path = Path(output_path) if output_path is not None else WIKI_PAGES.original
-
-    total_batches = sum(
-        -(-len(page_claims) // batch_size) for page_claims in grouped.values()
-    )
-    logger.info(
-        f"Community: {len(claims)} claims across {len(grouped)} pages "
-        f"-> {total_batches} batches ({llm.provider}/{llm.model})"
-    )
-
-    batch_count = 0
-    for page_id, page_claims in grouped.items():
-        page_batches = -(-len(page_claims) // batch_size)
-        logger.info(f"{page_id}: {len(page_claims)} claims in {page_batches} batch(es)")
-        for start in range(0, len(page_claims), batch_size):
-            batch = page_claims[start : start + batch_size]
-            batch_count += 1
-            before = store.statement_count()
-            _run_batch(llm, store, page_id, batch, resolver, max_reads, logger)
-            after = store.statement_count()
-            logger.info(
-                f"[{batch_count}/{total_batches}] {page_id}: "
-                f"{len(batch)} claims -> +{after - before} statements ({after} total)"
-            )
-            # Persist after each batch so progress survives interruptions.
-            # ponytail: re-runs reprocess all batches (LLM cache makes this cheap);
-            # no skip-completed-batch resume logic.
-            write_json_file(
-                store.to_payload(
-                    metadata={
-                        "source_claims": str(claims_file),
-                        "provider": llm.provider,
-                        "model": llm.model,
-                        "batches": batch_count,
-                    }
-                ),
-                out_path,
-            )
-
-    logger.info(
-        f"Community: done - {len(store.pages)} pages, {store.statement_count()} "
-        f"statements, {len(store.links)} links, {batch_count} batches"
-    )
-
-    return {
-        "pages": len(store.pages),
-        "statements": store.statement_count(),
-        "links": len(store.links),
-        "batches": batch_count,
-        "claims": len(claims),
-        "output_path": str(out_path),
-        "provider": llm.provider,
-        "model": llm.model,
-    }
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Step 7: write the wiki pages (C9).")
+    parser.add_argument("--rebuild", action="store_true",
+                        help="write every page in full (after backing up the edited file)")
+    parser.add_argument("--only", nargs="+", metavar="PAGE_ID", help="work on these pages only")
+    parser.add_argument("--estimate", action="store_true",
+                        help="count the input tokens of the calls a run would make; write nothing")
+    args = parser.parse_args(argv)
+    run(rebuild=args.rebuild, only=args.only, estimate=args.estimate)
 
 
 if __name__ == "__main__":
-    run()
+    main()
