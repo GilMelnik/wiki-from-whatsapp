@@ -121,8 +121,8 @@
       "en": "This conversation, from a WhatsApp group about surrogacy for gay men, carries knowledge that is useful to the group's members and worth keeping: recommendations, personal experiences, legal, financial or medical information, or comparisons of providers (agencies, clinics, lawyers) or of countries. Gossip, local logistics, selling items, off-topic arguments and social small talk do not count as knowledge."
     },
     "threshold": 0.18,
-    "min_messages": 3,
-    "min_senders": 2,
+    "min_messages": 1,
+    "min_senders": 1,
     "eval_backup_dir": "/mnt/SSD/coding/backup_data_wiki_from_whatsapp/2026_11_07_data",
     "eval_reason_groups": {
       "failed_call": "classification_error",

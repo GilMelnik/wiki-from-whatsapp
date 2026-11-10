@@ -124,7 +124,11 @@ def test_output_follows_c2(provider: _FakeProvider) -> None:
     assert not step.CLASSIFIED.edited.exists()
 
 
-def test_heuristic_rejects_without_asking(provider: _FakeProvider) -> None:
+def test_heuristic_rejects_without_asking(
+    provider: _FakeProvider, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(step.CLASSIFY_CONFIG, "min_messages", 3)
+    monkeypatch.setitem(step.CLASSIFY_CONFIG, "min_senders", 2)
     _write_threads(KNOWLEDGE, TOO_SHORT, MONOLOGUE)
     step.run()
 
