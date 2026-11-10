@@ -27,7 +27,9 @@ def plan_graph(root: Path) -> ArtifactGraph:
         ArtifactNode("groups", "Groups", root / "groups.json", root / "groups_edited.json",
                      "step_5", ()),
         ArtifactNode("plan", "Plan", root / "plan.json", root / "plan_edited.json", "step_6",
-                     ("groups",)),
+                     ("groups",), curated=True),
+        ArtifactNode("assignments", "Assignments", root / "assignments.json",
+                     root / "assignments_edited.json", "step_6b", ("groups", "plan")),
     ])
 
 
@@ -93,7 +95,7 @@ def children(overview: dict[str, Any], node_id: str) -> list[str]:
 
 def test_tool_is_hosted_by_the_server() -> None:
     spec = next(spec for spec in TOOL_SPECS if spec.name == "plan")
-    assert spec.reads == ("plan", "groups") and spec.writes == ("plan",)
+    assert spec.reads == ("plan", "groups") and spec.writes == ("plan", "assignments")
 
 
 def test_missing_plan_still_registers_and_answers_409(tmp_path: Path) -> None:
@@ -345,7 +347,7 @@ def test_undo_is_refused_after_an_outside_change(setup: PlanSetup) -> None:
     write_json_file(rewritten, setup.edited)
     assert setup.get("/plan")["undo"] is None
     detail = setup.post("/undo", status=409)["detail"]
-    assert "השתנתה מחוץ לכלי" in detail
+    assert "השתנו מחוץ לכלי" in detail
     assert setup.saved()["pages"]["hospital"]["scope"] == "תכנון מחדש"
 
 
