@@ -10,6 +10,7 @@ export { useArtifactChange, useConnection, useEvents } from "./events.js";
 export { useArtifactStatus, useTools } from "./serverState.js";
 export { useLatest } from "./latest.js";
 export { useResource } from "./useResource.js";
+export { useJobs } from "./jobs.js";
 
 // Frame and building blocks
 export { Layout } from "./Layout.jsx";
@@ -20,6 +21,7 @@ export { Dialog } from "./Dialog.jsx";
 export { useToast } from "./Toast.jsx";
 export { useBanner } from "./Banner.jsx";
 export { ToolLink } from "./navigation.jsx";
+export { JobLog, useStepRun } from "./JobControls.jsx";
 
 // Text, formatting, keyboard, remembered state
 export { Bidi, Ltr } from "./text.jsx";

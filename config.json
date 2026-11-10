@@ -173,7 +173,14 @@
     "shutdown_timeout_seconds": 3,
     "dev_origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
     "web_dist": "web/review/dist",
-    "log_folder": "review_tool"
+    "log_folder": "review_tool",
+    "jobs": {
+      "log_lines": 500,
+      "progress_interval_seconds": 0.25,
+      "stop_timeout_seconds": 10.0,
+      "history_limit": 20,
+      "highlight_patterns": ["manual edits now only in the backup"]
+    }
   },
   "site": {
     "url": "https://gaysurrogacy.co.il/",

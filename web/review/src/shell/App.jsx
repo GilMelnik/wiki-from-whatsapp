@@ -5,9 +5,11 @@ import { ErrorBoundary } from "./ErrorBoundary.jsx";
 import { RECONNECTING } from "./eventChannel.js";
 import { useConnection } from "./events.js";
 import { Header } from "./Header.jsx";
+import { JobHost } from "./JobControls.jsx";
 import { navigateToTool, ToolLink, useToolId } from "./navigation.jsx";
 import { useArtifactStatus, useTools } from "./serverState.js";
 import { ShortcutHelp } from "./ShortcutHelp.jsx";
+import { StaleBanners } from "./StaleBanners.jsx";
 import { ToastProvider } from "./Toast.jsx";
 import { useShortcuts } from "./useShortcuts.js";
 
@@ -108,6 +110,8 @@ function Frame({ tools }) {
     <div className="flex h-screen flex-col">
       <Header tools={titled} currentId={toolId} onHelp={() => setHelpOpen(true)} />
       <BannerSlot />
+      <StaleBanners tool={tool} />
+      <JobHost />
       <ErrorBoundary key={toolId}>
         {Component ? <Component tool={tool} /> : toolId && <UnknownTool toolId={toolId} tools={titled} />}
       </ErrorBoundary>
