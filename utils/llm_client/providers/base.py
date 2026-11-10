@@ -21,6 +21,9 @@ class LLMProvider(ABC):
     name: str = ""
     supports_batch: bool = False
     supports_grounded: bool = False
+    # Whether requests carry ``temperature``. The client keys its response cache
+    # on temperature only when this is True: Anthropic and Gemini both omit it.
+    sends_temperature: bool = False
 
     def __init__(
         self,

@@ -7,9 +7,8 @@ torch>=2.0.0
 # Wiki generation pipeline
 python-dotenv>=1.0.0
 mkdocs-material>=9.5.0
-# LLM providers (lazy-imported; install only the one you use)
-anthropic>=0.40.0
-openai>=1.40.0
+# LLM providers (all imported by utils.llm_client.providers)
+anthropic==0.109.1
 google-genai>=0.3.0
 
 pyyaml

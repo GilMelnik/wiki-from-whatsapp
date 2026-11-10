@@ -61,10 +61,12 @@ class BatchRequest:
     ``response_schema`` (a JSON Schema dict) turns on provider structured output
     so the response is guaranteed to be schema-valid JSON — used with models
     whose reasoning would otherwise leak into or truncate a free-form reply.
+    ``system`` / ``user`` accept ``CacheSegment`` lists exactly like the sync
+    calls: Anthropic turns ``cache=True`` segments into prompt-cache breakpoints.
     """
 
     request_id: str
-    system: str
-    user: str
+    system: PromptInput
+    user: PromptInput
     task: str = ""
     response_schema: dict[str, Any] | None = None

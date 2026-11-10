@@ -7,7 +7,6 @@ import logging
 from utils.llm_client.providers.anthropic import AnthropicProvider
 from utils.llm_client.providers.base import LLMProvider
 from utils.llm_client.providers.gemini import GeminiProvider
-from utils.llm_client.providers.openai import OpenAIProvider
 
 
 def create_provider(
@@ -21,7 +20,7 @@ def create_provider(
 ) -> LLMProvider:
     registry: dict[str, type[LLMProvider]] = {
         provider_object.name: provider_object
-        for provider_object in (AnthropicProvider, GeminiProvider, OpenAIProvider)
+        for provider_object in (AnthropicProvider, GeminiProvider)
     }
 
     try:
