@@ -7,6 +7,7 @@ Runs steps in order:
     4b. entities -> data/entities.json
     5. aggregate -> data/claims_aggregated.json (claim groups, contract C6)
     6. plan      -> data/wiki_plan.json (contract C7; planned once, then curated by hand)
+    6b. assign   -> data/assignments.json (contract C8; groups on pages + labels, proposals)
     7. write pages -> data/wiki_pages.json (agentic, mini-batch over claims)
     9. site      -> mkdocs.yml
 
@@ -26,6 +27,7 @@ from step_2_classify.run import run as classify
 from step_3_extract.run import run as extract
 from step_4_entities.run import run as resolve_entities
 from step_5_aggregate.run import run as aggregate
+from step_6_plan.assign import run as assign
 from step_6_plan.run import run as plan
 from step_7_write_pages.run import run as write_pages
 from step_9_site.run import run as site
@@ -113,6 +115,16 @@ def run(
         f"-> {p_meta['plan_path']} ({p_meta['model_calls']} model calls)"
     )
     logger.info("    -> Review the plan in the plan review tool before writing pages.")
+
+    logger.info("[6b] Assigning claim groups to pages and labels...")
+    as_meta = assign()
+    counts = as_meta["summary"]
+    logger.info(
+        f"    {counts['group_count']} groups: {counts['unplaced']} unplaced, "
+        f"{counts['two_pages']} on two pages, {counts['manual']} manual "
+        f"({as_meta['classifier_requests']} classifier requests, "
+        f"{as_meta['proposal_calls']} proposal calls)"
+    )
 
     logger = setup_step_logging(STEP_7)
     logger.info("[7] Writing wiki pages (agentic, mini-batch)...")

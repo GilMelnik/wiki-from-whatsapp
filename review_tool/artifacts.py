@@ -19,6 +19,7 @@ from pathlib import Path
 from review_tool.fs import FileStamp, stamp
 from utils.paths import (
     AGGREGATED,
+    ASSIGNMENTS,
     CHAT_ANDROID_PATH,
     CLAIMS,
     CLASSIFIED,
@@ -32,6 +33,7 @@ from utils.paths import (
     STEP_4,
     STEP_5,
     STEP_6,
+    STEP_6_ASSIGN,
     STEP_7,
     THREADS,
     WIKI_PAGES,
@@ -188,6 +190,9 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
             ("claims", "entities", "claim_aggregations"),
         ),
         ArtifactNode.from_pair("plan", "תוכנית הויקי", PLAN, STEP_6, ("groups",)),
+        ArtifactNode.from_pair(
+            "assignments", "שיוך קבוצות לדפים", ASSIGNMENTS, STEP_6_ASSIGN, ("groups", "plan")
+        ),
         ArtifactNode.from_pair("pages", "דפי הויקי", WIKI_PAGES, STEP_7, ("claims", "plan")),
     )
 
