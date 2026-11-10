@@ -55,7 +55,8 @@ class AggregateStore:
         self._loaded = False
 
     def load(self) -> None:
-        init_aggregated_edited()
+        if self._aggregated_override is None:
+            init_aggregated_edited()
 
         if self._aggregated_override is not None:
             self._aggregated_source = self._aggregated_override
@@ -427,9 +428,14 @@ class AggregateStore:
         if self._backup_done:
             return
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
+        backups_dir = (
+            BACKUPS_DIR
+            if self._aggregated_override is None
+            else self._aggregated_override.parent / BACKUPS_DIR.name
+        )
+        backups_dir.mkdir(parents=True, exist_ok=True)
         if self._aggregated_source.exists():
-            dest = BACKUPS_DIR / f"{self._aggregated_source.stem}_{ts}{self._aggregated_source.suffix}"
+            dest = backups_dir / f"{self._aggregated_source.stem}_{ts}{self._aggregated_source.suffix}"
             shutil.copy2(self._aggregated_source, dest)
         self._backup_done = True
 
