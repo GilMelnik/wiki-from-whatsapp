@@ -1,10 +1,12 @@
 site_name: ויקי פונדקאות לגייז
+site_url: https://gaysurrogacy.co.il/
 site_description: ידע קהילתי אנונימי על תהליכי פונדקאות
 docs_dir: docs
 theme:
   name: material
   language: he
   direction: rtl
+  custom_dir: overrides
   features:
   - navigation.sections
   - navigation.top
@@ -36,7 +38,61 @@ markdown_extensions:
 - attr_list
 - tables
 - toc
+extra:
+  coffee_text: אחזקת האתר והאחסון שלו עולים כסף. קפה אני כבר שותה מספיק — אבל התינוק
+    שלי שוב איבד מוצץ.
+  coffee_link_text: אפשר לקנות לו חדש 🍼
+  coffee_url: https://buymeacoffee.com/gilmelnik
 extra_css:
 - stylesheets/hebrew.css
 nav:
 - בית: index.md
+- מבוא והתחלה:
+  - סקירה כללית והתחלת תהליך: overview.md
+- לפי מדינה:
+  - ארצות הברית: usa.md
+  - ארצות הברית - קליפורניה: usa-california.md
+  - ארצות הברית - מדינות מומלצות משפטית: usa-states-legal.md
+  - ישראל: israel.md
+  - קולומביה: colombia.md
+  - ארגנטינה: argentina.md
+  - ארמניה: armenia.md
+  - מקסיקו: mexico.md
+  - גאורגיה: georgia.md
+  - קפריסין: cyprus.md
+  - קנדה: canada.md
+- סוכנויות וספקים:
+  - תמוז (Tammuz): tamuz.md
+  - ORM: orm.md
+  - גאיה (Gaya): gaya.md
+  - בייביבלום (Babybloom): babybloom.md
+  - סורמום (Surmom): surmom.md
+  - Ivy Fertility Israel (Ivy): ivy.md
+  - איך בוחרים סוכנות: choosing-agency.md
+  - סוכנויות וספקים נוספים: providers-other.md
+- היבטים משפטיים:
+  - הורות, צו הורות ותעודת לידה: legal-parentage.md
+  - אזרחות, דרכון ורישום: legal-citizenship.md
+  - עורכי דין: legal-lawyers.md
+  - חוזים והסכמים: legal-contracts.md
+  - נישואין: legal-marriage.md
+  - חזרה ארצה עם התינוק: bringing-baby-home.md
+- גיור ויהדות:
+  - גיור: conversion.md
+- כסף תשלומים, המרות והעברות:
+  - העברה והמרת כספים: money-transfers.md
+  - עלויות התהליך: money-costs.md
+- שלבי התהליך:
+  - תרומת ביציות ובחירת תורמת: egg-donor.md
+  - בחירת פונדקאית והתנהלות מולה: surrogate.md
+  - הפריה והחזרת עוברים (IVF): ivf.md
+  - הריון ומעקב: pregnancy.md
+  - לידה והשבועות הראשונים: birth.md
+  - טיסות, לוגיסטיקת נסיעות עם תינוק: travel-with-baby.md
+- רפואה ומרפאות:
+  - מרפאות וצוות רפואי: clinics.md
+- הורות ותינוקות:
+  - ספרים ותכנים לילדים: books-and-media.md
+  - תמ"ל ואכילת תינוק: baby-formula.md
+  - ציוד לתינוקות: baby-gear.md
+  - התפתחות התינוק וקורסי הכנה: baby-development.md

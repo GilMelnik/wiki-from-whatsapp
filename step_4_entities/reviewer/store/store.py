@@ -75,7 +75,8 @@ class EntityStore(ClaimsMixin, ViewsMixin, MutationsMixin, AggregationsMixin):
         self._deleted_claims: set[str] = set()
 
     def load(self) -> None:
-        init_entities_edited()
+        if self._entities_override is None:
+            init_entities_edited()
         if self._entities_override is not None:
             self._entities_source = self._entities_override
             if not self._entities_source.is_file():
@@ -157,10 +158,15 @@ class EntityStore(ClaimsMixin, ViewsMixin, MutationsMixin, AggregationsMixin):
         if self._backup_done:
             return
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
+        backups_dir = (
+            BACKUPS_DIR
+            if self._entities_override is None
+            else self._entities_override.parent / BACKUPS_DIR.name
+        )
+        backups_dir.mkdir(parents=True, exist_ok=True)
         if self._entities_source.exists():
             dest = (
-                BACKUPS_DIR
+                backups_dir
                 / f"{self._entities_source.stem}_{ts}{self._entities_source.suffix}"
             )
             shutil.copy2(self._entities_source, dest)
