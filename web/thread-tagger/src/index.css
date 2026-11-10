@@ -77,3 +77,16 @@ body.panel-resize-active .panel-resize-handle {
 .thread-msg-split {
   @apply bg-violet-50 border-violet-400 border-r-[5px] border-r-violet-600 text-violet-950 hover:bg-violet-100 cursor-pointer;
 }
+
+/* Gold-window mode: messages inside the selected window vs. outside it. */
+.gold-in {
+  @apply border-l-[5px] border-l-yellow-500;
+}
+
+.gold-out {
+  @apply opacity-40 hover:opacity-90;
+}
+
+.gold-out.message-selected {
+  @apply opacity-90;
+}

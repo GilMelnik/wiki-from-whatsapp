@@ -1,3 +1,4 @@
+import { formatMinute } from "../goldWindows";
 import { kindLabel } from "../recentHistory";
 
 const BADGE_STYLES = {
@@ -59,7 +60,16 @@ export default function ThreadList({
                 <div className="text-xs text-slate-500 flex gap-2 flex-wrap">
                   <span>{item.num_messages} הודעות</span>
                   <span>{item.num_unique_senders} משתתפים</span>
-                  <span>{item.start_time?.slice(0, 10)}</span>
+                  {item.in_window == null ? (
+                    <span>{item.start_time?.slice(0, 10)}</span>
+                  ) : (
+                    <>
+                      <span>{formatMinute(item.start_time)}</span>
+                      <span className="text-yellow-800 font-medium">
+                        {item.in_window} מתוך {item.num_messages} בחלון
+                      </span>
+                    </>
+                  )}
                 </div>
               {!hasClassification && (
                 <span className="text-xs text-slate-400">ללא סיווג</span>

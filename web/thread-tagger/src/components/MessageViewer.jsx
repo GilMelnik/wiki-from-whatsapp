@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef } from "react";
+import GoldDivider from "./GoldDivider";
 import {
   buildQuoteGraph,
   findQuotedIndex,
@@ -139,8 +140,10 @@ export default function MessageViewer({
   onRangeSelect,
   onNavigateToThread,
   isSplitPart,
+  gold,
 }) {
   const scrollRef = useRef(null);
+  const goldIds = useMemo(() => (gold ? new Set(gold.in_window_ids) : null), [gold]);
   const activeThreadIdRef = useRef(null);
   const anchorScrolledRef = useRef(null);
 
@@ -200,13 +203,14 @@ export default function MessageViewer({
         scrollRef.current.scrollTop = saved;
         return;
       }
-      const anchor = document.getElementById(`thread-anchor-${id}`);
+      const goldStart = document.getElementById(`gold-start-${id}`);
+      const anchor = goldStart || document.getElementById(`thread-anchor-${id}`);
       if (anchor) {
-        anchor.scrollIntoView({ block: "start" });
+        anchor.scrollIntoView({ block: goldStart ? "center" : "start" });
         anchorScrolledRef.current = id;
       }
     });
-  }, [thread?.thread_id, messages.length]);
+  }, [thread?.thread_id, messages.length, goldIds]);
 
   const activate = useCallback(
     (index, shiftKey) => {
@@ -276,6 +280,11 @@ export default function MessageViewer({
               <span className="text-slate-500">
                 {section.messages.length} הודעות
               </span>
+              {goldIds && (
+                <span className="text-yellow-800">
+                  {section.messages.filter((m) => goldIds.has(m.id)).length} בחלון
+                </span>
+              )}
               {!section.isCurrent && onNavigateToThread && (
                 <button
                   type="button"
@@ -298,11 +307,22 @@ export default function MessageViewer({
                 : [];
               const msgKey = `${section.threadId}-${msg.id || index}-${msg.datetime}`;
 
-              const baseClasses = messageClass(section, selected);
+              const inWindow = goldIds ? goldIds.has(msg.id) : null;
+              const goldClass = goldIds ? (inWindow ? " gold-in" : " gold-out") : "";
+              const crossesWindowEdge =
+                goldIds && index > 0 && inWindow !== goldIds.has(section.messages[index - 1].id);
+              const baseClasses = messageClass(section, selected) + goldClass;
 
               return (
+                <Fragment key={msgKey}>
+                {crossesWindowEdge && (
+                  <GoldDivider
+                    id={section.isCurrent && inWindow ? `gold-start-${section.threadId}` : undefined}
+                    entering={inWindow}
+                    gold={gold}
+                  />
+                )}
                 <div
-                  key={msgKey}
                   id={
                     section.isCurrent
                       ? `msg-${section.threadId}-${index}`
@@ -377,6 +397,7 @@ export default function MessageViewer({
                     )}
                   </div>
                 </div>
+                </Fragment>
               );
             })}
           </div>
