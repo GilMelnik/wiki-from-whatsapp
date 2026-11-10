@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { pageStart } from "../src/shell/pagedSelection.js";
 import {
   dateRange,
   marksToRestore,
-  pageStart,
   restoreLabel,
   toggleMark,
   typeCounts,

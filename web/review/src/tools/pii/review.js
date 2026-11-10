@@ -47,11 +47,6 @@ export function typeLabel(type) {
   return TYPE_LABELS[type] ?? type;
 }
 
-/** First index of the page that shows queue position `position`. */
-export function pageStart(position, pageSize) {
-  return Math.floor(position / pageSize) * pageSize;
-}
-
 /** The mark numbers chosen for restoring, with `index` switched on or off (kept sorted). */
 export function toggleMark(marks, index) {
   if (marks.includes(index)) return marks.filter((mark) => mark !== index);

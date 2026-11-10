@@ -9,21 +9,36 @@ import { useShortcuts } from "./useShortcuts.js";
 //     selectedKey={selectedId} onSelect={setSelectedId}
 //     total={page.total}                       // optional: "200 מתוך 2,710"
 //     header={<SortMenu />}                    // optional: shown next to the count
+//     prevKey={queue.prev_id} nextKey={queue.next_id}  // optional: neighbours off this page
 //     renderItem={(claim, { selected }) => <ClaimRow claim={claim} />}
 //   />
 //
 // j / k move the selection from anywhere on the page; the arrow keys do so while the list
-// has the focus (elsewhere they keep scrolling). The selected row is kept in view.
+// has the focus (elsewhere they keep scrolling). The selected row is kept in view. In a
+// server-paged list, `prevKey` / `nextKey` (the selected item's neighbours in the whole
+// queue) let j / k step over the page edge; see usePagedSelection for following the page.
 
 const ARROW_STEPS = { ArrowDown: 1, ArrowUp: -1 };
 
-export function ItemList({ items, getKey, selectedKey, onSelect, renderItem, total, header }) {
+export function ItemList({
+  items,
+  getKey,
+  selectedKey,
+  onSelect,
+  renderItem,
+  total,
+  header,
+  prevKey = null,
+  nextKey = null,
+}) {
   const listRef = useRef(null);
   const selectedRef = useRef(null);
   const index = items.findIndex((item) => getKey(item) === selectedKey);
 
   const move = (step) => {
     if (items.length === 0) return;
+    if (index !== -1 && index + step < 0 && prevKey) return onSelect(prevKey);
+    if (index !== -1 && index + step >= items.length && nextKey) return onSelect(nextKey);
     const target = index === -1 ? 0 : Math.min(items.length - 1, Math.max(0, index + step));
     onSelect(getKey(items[target]));
   };
