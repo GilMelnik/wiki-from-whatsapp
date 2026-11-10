@@ -1,234 +1,230 @@
-"""Step 3: filter noise threads and tag the rest by topic.
+"""Step 2: decide per thread whether it carries shared knowledge worth extracting (contract C2).
 
-A cheap heuristic pass first discards threads that cannot carry shared
-knowledge (too short, single participant). Each surviving thread is then sent
-to the LLM for a single classification call that decides whether it is
-knowledge-bearing and assigns multi-label topic tags from the taxonomy.
+A cheap heuristic first rejects threads that cannot hold shared knowledge (too few messages
+or senders). Every other thread gets one yes/no question from the ``Classifier`` of the
+``classify.classifier_stage`` stage; ``p_knowledge`` is its probability of "yes" and
+``is_knowledge_bearing = p_knowledge >= classify.threshold``.
 
-Output: ``data/threads_classified.json``.
+Output ``threads_classified.json`` (and its edited copy, if the user has one)::
+
+    {"threads": [{"thread_id", "passed_heuristic", "p_knowledge", "is_knowledge_bearing"}],
+     "metadata": {"inputs": {thread_id: fingerprint}, "classifier", "question", ...}}
+
+The step is incremental (contract C14): a thread is sent to the classifier only when it is new
+or its messages changed since the last run (or the classifier, question, threshold or heuristic
+changed); removed threads are dropped, and a manual label in the edited file survives for every
+thread whose output did not change. Only ``thread_id`` and ``messages[].{id, datetime, sender,
+content}`` are read, so the old threads file and the C1 format both work.
+
+``python -m step_2_classify.run [--rebuild] [--only THREAD_ID ...]``
 """
 
 from __future__ import annotations
 
+import argparse
 import logging
-from pathlib import Path
+from collections.abc import Iterable, Sequence
 from typing import Any
 
-from utils.json_io import write_json_file
-from utils.llm_client import BatchRequest, LLMClient
+from utils.config import section
+from utils.llm_client import Classifier, Question
 from utils.logging_setup import setup_step_logging
-from utils.paths import (
-    EDITED_THREADS_PATH,
-    ORIGINAL_CLASSIFIED_PATH,
-    ORIGINAL_THREADS_PATH,
-    STEP_2,
-    ensure_edited_workspace,
-)
-from utils.taxonomy import page_ids, taxonomy_tag_seed
-from utils.threads_io import (
-    load_threads,
-    render_thread_for_llm,
-)
+from utils.paths import CLASSIFIED, STEP_2, THREADS, resolve
+from utils.reconcile import diff_inputs, fingerprint, load_previous, write_reconciled
+from utils.threads_io import load_threads, render_thread_for_llm
 
-CLASSIFY_SYSTEM = (
-    "אתה עוזר שממיין שיחות מקבוצת וואטסאפ על פונדקאות לגייז. "
-    "המטרה היא לזהות שיחות הנושאות ידע מועיל (המלצות, חוויות, מידע משפטי/כספי/רפואי, "
-    "השוואת ספקים, מדינות) ולתייג אותן לפי נושאים. "
-    "שיחות שהן רכילות, לוגיסטיקה מקומית (\"מי גר ברמת גן\"), מכירת חפצים, ויכוחים לא רלוונטיים "
-    "או צ'יטצ'אט חברתי אינן נושאות ידע. "
-    "החזר אך ורק JSON תקין, ללא טקסט נוסף."
-)
+CLASSIFY_CONFIG = section("classify")
+MESSAGE_FIELDS = ("id", "datetime", "sender", "content")
 
 
-def build_classify_prompt(rendered: str) -> str:
-    return (
-        "נושאים מוצעים (נקודת התחלה — ניתן להוסיף מזהים חדשים):\n"
-        f"{taxonomy_tag_seed()}\n\n"
-        "סווג את השיחה הבאה והחזר JSON במבנה:\n"
-        "{\n"
-        '  "is_knowledge_bearing": true/false,\n'
-        '  "topic_tags": ["<מזהה נושא>", ...],\n'
-        '  "entities": ["<ספק/מדינה/מקום שהוזכרו>", ...],\n'
-        '  "reason": "<משפט קצר>"\n'
-        "}\n"
-        "אם השיחה אינה נושאת ידע, החזר topic_tags ריק.\n"
-        "אפשר להוסיף מזהה נושא חדש אם אף קיים אינו מתאים.\n\n"
-        "השיחה:\n"
-        f"{rendered}"
-    )
+def thread_state(thread: dict[str, Any]) -> str:
+    """Render the thread as the classifier sees it (anonymised senders, month, content).
 
-
-def heuristic_keep(thread: dict[str, Any], min_messages: int, min_senders: int) -> bool:
-    return (
-        thread.get("num_messages", 0) >= min_messages
-        and thread.get("num_unique_senders", 0) >= min_senders
-    )
-
-
-def _parse_classify_result(result: dict[str, Any]) -> dict[str, Any]:
-    known = set(page_ids())
-    raw_tags = result.get("topic_tags") or []
-    topic_tags = [t for t in raw_tags if isinstance(t, str)]
-    emergent = [t for t in topic_tags if t not in known]
-    return {
-        "is_knowledge_bearing": bool(result.get("is_knowledge_bearing")),
-        "topic_tags": topic_tags,
-        "emergent_tags": emergent,
-        "entities": result.get("entities") or [],
-        "reason": result.get("reason", ""),
-    }
-
-
-def _classify_error(
-    reason: str, is_knowledge_bearing: bool | None = False
-) -> dict[str, Any]:
-    return {
-        "is_knowledge_bearing": is_knowledge_bearing,
-        "topic_tags": [],
-        "emergent_tags": [],
-        "entities": [],
-        "reason": reason,
-    }
-
-
-def classify_from_parsed(data: Any) -> dict[str, Any]:
-    """Turn one (already-parsed) batch result into a classification record.
-
-    ``data is None`` means the batch item was unparseable even after retry
-    (logged by the client); we degrade to an error record so the batch survives.
+    Only the C1 fields every threads format has are used; reactions are left out on purpose,
+    so a new reaction neither changes the answer nor forces a new question.
     """
-
-    if data is None:
-        return _classify_error(
-            "classification_error: no parseable response", is_knowledge_bearing=None
-        )
-    try:
-        return _parse_classify_result(data)
-    except Exception as exc:  # noqa: BLE001 - keep the batch going
-        return _classify_error(
-            f"classification_error: {exc}", is_knowledge_bearing=None
-        )
+    messages = [{key: message.get(key) for key in MESSAGE_FIELDS} for message in thread["messages"]]
+    rendered, _ = render_thread_for_llm({"messages": messages})
+    return rendered
 
 
-def classify_thread(thread: dict[str, Any], llm: LLMClient) -> dict[str, Any]:
-    rendered, _ = render_thread_for_llm(thread)
-    prompt = build_classify_prompt(rendered)
-    try:
-        result = llm.complete_json(CLASSIFY_SYSTEM, prompt, task="classify")
-        return _parse_classify_result(result)
-    except Exception as exc:  # noqa: BLE001 - keep the batch going
-        return _classify_error(
-            f"classification_error: {exc}", is_knowledge_bearing=None
-        )
+class ThreadClassifier:
+    """The step-2 decision: heuristic pre-filter, one ``noul`` question, threshold."""
 
+    def __init__(
+        self,
+        classifier: Classifier,
+        question_text: str,
+        *,
+        threshold: float,
+        min_messages: int,
+        min_senders: int,
+    ) -> None:
+        self.classifier = classifier
+        self.question = Question(CLASSIFY_CONFIG["classifier_stage"], "noul", question_text)
+        self.threshold = threshold
+        self.min_messages = min_messages
+        self.min_senders = min_senders
 
-def classify_threads(
-    pending_llm: list[tuple[dict[str, Any], str]],
-    llm: LLMClient,
-    use_batch: bool,
-    logger: logging.Logger,
-) -> dict[str, dict[str, Any]]:
-    """Classify prepared ``(thread, prompt)`` pairs; return ``{thread_id: record}``."""
-
-    results: dict[str, dict[str, Any]] = {}
-    if not pending_llm:
-        return results
-
-    if use_batch and llm.supports_batch():
-        logger.info(f"Classify: submitting {len(pending_llm)} requests via batch API...")
-        requests = [
-            BatchRequest(
-                request_id=thread["thread_id"],
-                system=CLASSIFY_SYSTEM,
-                user=prompt,
-                task="classify",
+    @classmethod
+    def from_config(
+        cls,
+        logger: logging.Logger,
+        *,
+        language: str | None = None,
+        classifier: Classifier | None = None,
+    ) -> ThreadClassifier:
+        """Build it from ``config.json``; ``language`` picks a question other than the configured
+        one, ``classifier`` replaces the stage's classifier (both for the evaluation)."""
+        questions = CLASSIFY_CONFIG["questions"]
+        language = language or CLASSIFY_CONFIG["question_language"]
+        if language not in questions:
+            raise ValueError(
+                f"classify.questions has no {language!r} question; known: {sorted(questions)}"
             )
-            for thread, prompt in pending_llm
-        ]
-        parsed = llm.complete_batch_json(requests)
-        for thread, _ in pending_llm:
-            results[thread["thread_id"]] = classify_from_parsed(
-                parsed.get(thread["thread_id"])
-            )
-    else:
-        if use_batch:
-            logger.info("Classify: batch not supported for this provider; using sync API.")
-        for thread, _ in pending_llm:
-            results[thread["thread_id"]] = classify_thread(thread, llm)
-    return results
+        return cls(
+            classifier or Classifier.for_stage(CLASSIFY_CONFIG["classifier_stage"], logger=logger),
+            questions[language],
+            threshold=CLASSIFY_CONFIG["threshold"],
+            min_messages=CLASSIFY_CONFIG["min_messages"],
+            min_senders=CLASSIFY_CONFIG["min_senders"],
+        )
 
-
-def run(
-    input_path: Path | str = ORIGINAL_THREADS_PATH,
-    output_path: Path | str = ORIGINAL_CLASSIFIED_PATH,
-    llm: LLMClient | None = None,
-    min_messages: int = 3,
-    min_senders: int = 2,
-    use_batch: bool = False,
-) -> dict[str, Any]:
-    """Classify all threads and write ``threads_classified.json``."""
-
-    logger = setup_step_logging(STEP_2)
-    llm = LLMClient.for_stage("classify", logger=logger) if llm is None else llm
-    llm.set_logger(logger)
-    ensure_edited_workspace()
-
-    input_path = Path(input_path)
-    output_path = Path(output_path)
-    if input_path == ORIGINAL_THREADS_PATH and EDITED_THREADS_PATH.exists():
-        input_path = EDITED_THREADS_PATH
-
-    payload = load_threads(input_path)
-    threads = payload["threads"]
-
-    classified: list[dict[str, Any]] = []
-    pending_llm: list[tuple[dict[str, Any], str]] = []
-    pending_indices: list[int] = []
-    sent_to_llm = 0
-
-    for thread in threads:
-        kept_heuristic = heuristic_keep(thread, min_messages, min_senders)
-        record: dict[str, Any] = {
-            "thread_id": thread["thread_id"],
-            "start_time": thread["start_time"],
-            "last_time": thread["last_time"],
-            "num_messages": thread["num_messages"],
-            "num_unique_senders": thread["num_unique_senders"],
-            "passed_heuristic": kept_heuristic,
+    def settings(self) -> dict[str, Any]:
+        """Everything besides the thread itself that decides a record (stored in metadata)."""
+        return {
+            "classifier": {
+                "stage": self.question.id,
+                "provider": self.classifier.provider,
+                "model": self.classifier.model,
+            },
+            "question": self.question.text,
+            "threshold": self.threshold,
+            "heuristic": {"min_messages": self.min_messages, "min_senders": self.min_senders},
         }
 
-        if not kept_heuristic:
-            record.update(_classify_error("filtered_by_heuristic"))
-            classified.append(record)
-            continue
+    def fingerprint(self, thread: dict[str, Any]) -> str:
+        """Input fingerprint of one thread: its messages plus the decision settings."""
+        messages = [[message.get(key) for key in MESSAGE_FIELDS] for message in thread["messages"]]
+        return fingerprint({"messages": messages, **self.settings()})
 
-        rendered, _ = render_thread_for_llm(thread)
-        prompt = build_classify_prompt(rendered)
-        pending_llm.append((thread, prompt))
-        pending_indices.append(len(classified))
-        classified.append(record)
-        sent_to_llm += 1
+    def passes_heuristic(self, thread: dict[str, Any]) -> bool:
+        messages = thread["messages"]
+        senders = {message.get("sender") for message in messages}
+        return len(messages) >= self.min_messages and len(senders) >= self.min_senders
 
-    results = classify_threads(pending_llm, llm, use_batch, logger)
-    for (thread, _), record_idx in zip(pending_llm, pending_indices):
-        classified[record_idx].update(results[thread["thread_id"]])
+    def score(self, threads: Sequence[dict[str, Any]]) -> list[float]:
+        """P(yes) per thread, in order (cached and concurrent via ``classify_many``)."""
+        if not threads:
+            return []
+        items = [(thread_state(thread), [self.question]) for thread in threads]
+        answers = self.classifier.classify_many(items, task=STEP_2)
+        return [float(item_answers[0].probabilities) for item_answers in answers]
 
-    kept = [r for r in classified if r["is_knowledge_bearing"]]
-    output = {
-        "threads": classified,
-        "metadata": {
-            "source": str(Path(input_path)),
-            "thread_count": len(classified),
-            "classified_by_llm": sent_to_llm,
-            "knowledge_bearing_count": len(kept),
-            "provider": llm.provider,
-            "model": llm.model,
-            "batch_mode": use_batch and llm.supports_batch(),
-        },
+    def classify(self, threads: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+        """One C2 record per thread; heuristic-rejected threads never reach the classifier."""
+        passing = [thread for thread in threads if self.passes_heuristic(thread)]
+        scores = dict(zip((thread["thread_id"] for thread in passing), self.score(passing)))
+        records = []
+        for thread in threads:
+            p_knowledge = scores.get(thread["thread_id"])
+            records.append(
+                {
+                    "thread_id": thread["thread_id"],
+                    "passed_heuristic": p_knowledge is not None,
+                    "p_knowledge": p_knowledge,
+                    "is_knowledge_bearing": p_knowledge is not None
+                    and p_knowledge >= self.threshold,
+                }
+            )
+        return records
+
+
+def _threads_by_id(threads: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    by_id = {thread["thread_id"]: thread for thread in threads}
+    if len(by_id) != len(threads):
+        raise ValueError(f"{len(threads) - len(by_id)} duplicate thread_id(s) in the threads file")
+    return by_id
+
+
+def run(*, rebuild: bool = False, only: Iterable[str] | None = None) -> dict[str, Any]:
+    """Classify new and changed threads and reconcile ``threads_classified.json``.
+
+    ``rebuild=True`` re-asks every thread (answers still come from the classifier cache) and
+    replaces the edited copy after backing it up. ``only`` limits the classifier to those
+    thread ids; other threads keep their previous record (or stay absent) and their previous
+    fingerprint, so a later full run still picks them up. Returns the written metadata.
+    Raises ``ClassifierError`` (nothing written; answers so far stay cached) if a request fails.
+    """
+    if rebuild and only is not None:
+        raise ValueError("run(rebuild=True) regenerates every thread; it cannot take only=")
+    logger = setup_step_logging(STEP_2)
+    threads_path = resolve(THREADS)
+    threads = _threads_by_id(load_threads(threads_path)["threads"])
+    selected = set(threads) if only is None else set(only)
+    unknown = selected - set(threads)
+    if unknown:
+        raise ValueError(f"only= names threads not in {threads_path}: {sorted(unknown)}")
+
+    decider = ThreadClassifier.from_config(logger)
+    previous = {} if rebuild else load_previous(CLASSIFIED)
+    previous_inputs: dict[str, str] = previous.get("metadata", {}).get("inputs", {})
+    carried = {record["thread_id"]: record for record in previous.get("threads", [])}
+    current = {thread_id: decider.fingerprint(thread) for thread_id, thread in threads.items()}
+    diff = diff_inputs(previous_inputs, current)
+    stale = set(diff.new) | set(diff.changed) | (set(threads) - set(carried))
+    todo = [thread_id for thread_id in threads if thread_id in selected and thread_id in stale]
+    logger.info(
+        f"Classify {threads_path.name}: {len(threads)} threads; new={len(diff.new)}, "
+        f"changed={len(diff.changed)}, removed={len(diff.removed)}, "
+        f"unchanged={len(diff.unchanged)}; asking about {len(todo)}"
+    )
+
+    fresh = {record["thread_id"]: record for record in decider.classify([threads[t] for t in todo])}
+    records: list[dict[str, Any]] = []
+    inputs: dict[str, str] = {}
+    for thread_id in threads:
+        if thread_id in fresh:
+            records.append(fresh[thread_id])
+            inputs[thread_id] = current[thread_id]
+        elif thread_id in carried:
+            records.append(carried[thread_id])
+            if thread_id in previous_inputs:
+                inputs[thread_id] = previous_inputs[thread_id]
+
+    metadata = {
+        "inputs": inputs,
+        "source": str(threads_path),
+        **decider.settings(),
+        "thread_count": len(records),
+        "passed_heuristic_count": sum(record["passed_heuristic"] for record in records),
+        "knowledge_bearing_count": sum(record["is_knowledge_bearing"] for record in records),
+        "classified_count": len(todo),
     }
-    write_json_file(output, output_path)
-    actions = ensure_edited_workspace(classified_output=output_path)
-    if actions:
-        summary = ", ".join(f"{name} {action}" for name, action in actions.items())
-        logger.info(f"Review workspace: {summary}")
-    return output["metadata"]
+    report = write_reconciled(
+        CLASSIFIED,
+        {"threads": records, "metadata": metadata},
+        items_key="threads",
+        id_key="thread_id",
+        rebuild=rebuild,
+    )
+    logger.info(
+        f"Classify: {metadata['knowledge_bearing_count']} of {len(records)} threads "
+        f"knowledge-bearing; {report.changes.summary()}"
+    )
+    return metadata
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        prog="python -m step_2_classify.run",
+        description="Decide per thread whether it carries knowledge worth extracting.",
+    )
+    parser.add_argument("--rebuild", action="store_true", help="re-classify every thread")
+    parser.add_argument("--only", nargs="+", metavar="THREAD_ID", help="classify only these")
+    args = parser.parse_args(argv)
+    run(rebuild=args.rebuild, only=args.only)
+
+
+if __name__ == "__main__":
+    main()
