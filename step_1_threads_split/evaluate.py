@@ -332,8 +332,9 @@ def _evaluation_report(args: argparse.Namespace) -> str:
 def main(argv: Sequence[str] | None = None) -> None:
     defaults = THREADS_CONFIG["gold_suggest"]
     parser = argparse.ArgumentParser(
+        prog="python -m step_1_threads_split.evaluate",
         description="Score a thread split against the gold windows, freeze the gold file, "
-        "or propose windows to tag."
+        "or propose windows to tag.",
     )
     parser.add_argument(
         "--pred",
