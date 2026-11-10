@@ -61,7 +61,21 @@
     "max_pages": 30
   },
   "pages": {},
-  "review": {},
+  "review": {
+    "host": "127.0.0.1",
+    "port": 8780,
+    "port_search_limit": 20,
+    "health_timeout_seconds": 1.0,
+    "watch_interval_seconds": 0.5,
+    "watch_debounce_seconds": 0.3,
+    "lock_timeout_seconds": 10.0,
+    "sse_keepalive_seconds": 15.0,
+    "sse_queue_size": 256,
+    "shutdown_timeout_seconds": 3,
+    "dev_origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
+    "web_dist": "web/review/dist",
+    "log_folder": "review_tool"
+  },
   "site": {
     "url": "https://gaysurrogacy.co.il/",
     "coffee_url": "https://buymeacoffee.com/gilmelnik"
