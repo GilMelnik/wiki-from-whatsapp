@@ -1,17 +1,20 @@
-"""Prompt-caching layout checks: breakpoints land where intended and the
-reordered community prompt still flattens to text the mock/disk-cache can parse.
+"""Prompt-caching layout checks: breakpoints land where intended and the page writer's
+prompt still flattens to text the disk cache can key on.
 """
 
 from __future__ import annotations
 
-from step_7_write_pages.run import build_batch_prompt
-from step_7_write_pages.store import PageStore
+from pathlib import Path
+
+from step_7_write_pages.inputs import Corpus
+from step_7_write_pages.prompts import write_prompt
+from tests.pages_fixtures import PagesWorkspace
 from utils.llm_client import CacheSegment, _flatten, _to_blocks
 
 EPHEMERAL = {"type": "ephemeral"}
 
 
-def test_to_blocks_marks_cache_breakpoints():
+def test_to_blocks_marks_cache_breakpoints() -> None:
     # A plain string system prompt is auto-cached at its (only) block.
     assert _to_blocks("sys", cache_last=True) == [
         {"type": "text", "text": "sys", "cache_control": EPHEMERAL}
@@ -25,26 +28,16 @@ def test_to_blocks_marks_cache_breakpoints():
     assert "cache_control" not in blocks[1]  # variable tail is not
 
 
-def test_build_batch_prompt_layout_and_flatten():
-    claims = [
-        {
-            "claim_id": "t1-c1",
-            "stance": "positive",
-            "claim_text": "מדינה זו מתאימה.",
-            "topic_tags": ["usa"],
-        }
-    ]
-    store = PageStore({c["claim_id"]: c for c in claims}, {})
-    store.ensure_page("usa", title="ארהב", category="emergent")
+def test_write_prompt_layout_and_flatten(tmp_path: Path) -> None:
+    ws = PagesWorkspace(tmp_path)
+    corpus = Corpus.load(ws.groups_path, ws.plan_path, ws.assignments_path)
+    catalogue = corpus.catalogue()
+    first = write_prompt(corpus.context("agencies", catalogue))
+    second = write_prompt(corpus.context("costs", catalogue))
 
-    segments = build_batch_prompt(store, "usa", claims, resolver=None)
-
-    # Cached, almost-static catalog first; uncached per-call tail second.
+    # The cached, run-wide catalogue first; the page's own material in the uncached tail.
+    segments = first[1]
     assert [s.cache for s in segments] == [True, False]
-
+    assert first[0] == second[0] and segments[0] == second[1][0]  # identical cached prefix
     flat = _flatten(segments)
-    # Mock (_mock_community_agent) and the disk cache both key off the flat text,
-    # so the reorder must preserve these anchors.
-    assert "עמוד נוכחי:" in flat
-    assert "claim_id: t1-c1" in flat
-    assert "קטלוג עמודים" in flat
+    assert "<catalogue>" in flat and "id: agencies" in flat and "g-00000000 | main |" in flat
