@@ -79,7 +79,17 @@
     }
   },
   "classifier": {},
-  "threads": {},
+  "threads": {
+    "gold_windows": [],
+    "gold_suggest": {
+      "windows": 8,
+      "hours": 3,
+      "seed": 0,
+      "min_messages": 40,
+      "max_messages": 120,
+      "min_threads": 2
+    }
+  },
   "aggregate": {},
   "plan": {
     "max_pages": 30
