@@ -75,9 +75,11 @@ export function SuggestionsView({ tool, toolId, modeTabs, summary, onOpenGroup, 
     try {
       const result = await api.del(`/not-same/${lastNotSame.id}`);
       summary.setData(result.summary);
+      // Select the pair only once the reloaded list holds it again (else the list effect
+      // would replace the selection with the pair in its old place).
+      await list.reload();
       setSelectedKey(lastNotSame.key);
       setLastNotSame(null);
-      await list.reload();
       toast.success("ההחלטה בוטלה, הזוג יוצע שוב");
     } catch (error) {
       toast.error(error);
