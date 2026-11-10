@@ -39,6 +39,16 @@ def test_second_run_asks_nothing_and_writes_nothing(ws: Workspace) -> None:
     assert ws.artifact.edited.stat().st_mtime_ns == before
 
 
+def test_a_plan_edit_that_moves_nothing_still_refreshes_the_file(ws: Workspace) -> None:
+    before = ws.edited()["assignments"]
+    ws.write_plan(operations.edit(ws.plan(), "costs", {"aliases": {"he": ["מחיר"], "en": []}}).plan)
+    clf = FakeClassifier()
+    result = ws.run(clf)
+    assert clf.items == [] and result["written"] is True  # newer than the plan: not stale
+    assert ws.edited()["assignments"] == before
+    assert ws.run(FakeClassifier())["written"] is False
+
+
 def test_only_new_and_changed_groups_are_asked(ws: Workspace) -> None:
     groups = make_groups(13)
     groups[2]["claim_text"] = "Synthetic claim number 2 about topic 3, reworded."

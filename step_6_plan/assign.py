@@ -20,7 +20,8 @@ page; a new or re-worded label is asked of every group on its own. Records the o
 hand (``manual: true``) are never re-decided, only followed through merges and cleared of
 deleted ids (one that loses all its pages that way is asked again and reported). Proposals
 keep the owner's status; a group already named by a proposal, or already shown to the
-proposer, is not proposed again. Nothing is written when nothing changed.
+proposer, is not proposed again. Nothing is written when nothing changed (unless an input
+file is newer than the output, so the review tool's stale notice clears).
 
     python -m step_6_plan.assign [--rebuild] [--only GROUP_ID ...]
 
@@ -306,10 +307,17 @@ class AssignmentRun:
         }
 
 
-def _unchanged(payload: Mapping[str, Any], before: Mapping[str, Any]) -> bool:
+def _unchanged(payload: Mapping[str, Any], before: Mapping[str, Any], original: Path,
+               inputs: Sequence[Path]) -> bool:
+    """Nothing to write: same content as before, and the output is not older than its inputs
+    (the review tool's stale notice is mtime-based, so an edit that changes no assignment
+    still gets a fresh file)."""
+
     old_meta = before.get("metadata") or {}
-    return all(payload[key] == before.get(key) for key in COMPARED) and all(
-        payload["metadata"][key] == old_meta.get(key) for key in COMPARED_METADATA)
+    newest_input = max(path.stat().st_mtime_ns for path in inputs)
+    return (original.is_file() and original.stat().st_mtime_ns >= newest_input
+            and all(payload[key] == before.get(key) for key in COMPARED)
+            and all(payload["metadata"][key] == old_meta.get(key) for key in COMPARED_METADATA))
 
 
 def run(
@@ -349,7 +357,7 @@ def run(
     job.propose(llm)
     payload = job.payload(source, plan_source, classifier)
     result = {**job.stats, "summary": payload["metadata"]["summary"], "backup": None}
-    if not rebuild and _unchanged(payload, before):
+    if not rebuild and _unchanged(payload, before, artifact.original, (source, plan_source)):
         logger.info(f"Assignments unchanged ({len(job.records)} groups); nothing written")
         return {**result, "written": False}
     backup = guarded_write(artifact.edited, payload, backup=True)
