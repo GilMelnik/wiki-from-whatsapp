@@ -60,6 +60,8 @@ def backup(tmp_path: Path) -> Path:
          "entities": [], "stance": "factual"},
         {"claim_id": "thread-0009-c0", "thread_id": "thread-0009", "claim_text": "no thread",
          "entities": [], "stance": "factual"},
+        {"claim_id": "thread-0001-c4", "thread_id": "thread-0001", "claim_text": "uncited",
+         "entities": [], "stance": "neutral"},
     ]
     _write(_at(root, CLAIMS.edited), {"claims": old_claims, "metadata": {}})
     _write(_at(root, AUDIT_PATH), {"audit": [
@@ -68,6 +70,7 @@ def backup(tmp_path: Path) -> Path:
         {"claim_id": "thread-0001-c1", "raw_claim_text": "same", "local_message_ids": [1]},
         {"claim_id": "thread-0001-c2", "raw_claim_text": "same", "local_message_ids": [2, 7]},
         {"claim_id": "thread-0009-c0", "local_message_ids": [0]},
+        {"claim_id": "thread-0001-c4", "raw_claim_text": "uncited", "local_message_ids": []},
     ]})
     return root
 
@@ -75,7 +78,8 @@ def backup(tmp_path: Path) -> Path:
 def test_migrate_emits_c3_claims_and_audit(backup: Path, tmp_path: Path) -> None:
     out = tmp_path / "out"
     summary = migrate(backup, out)
-    assert summary["v1_claims"] == 5 and summary["c3_claims"] == 2
+    assert summary["v1_claims"] == 6 and summary["c3_claims"] == 3
+    assert summary["claims_without_evidence"] == 1
     assert summary["merged_duplicates"] == 1 and summary["skipped_no_audit"] == 1
     assert summary["skipped_no_thread"] == 1 and summary["evidence_ids_dropped"] == 1
     payload = json.loads(_at(out, CLAIMS.original).read_text("utf-8"))
@@ -90,6 +94,9 @@ def test_migrate_emits_c3_claims_and_audit(backup: Path, tmp_path: Path) -> None
     assert same["supporting_message_ids"] == ["WB", "WC"]
     assert payload["metadata"]["legacy_claim_ids"][same["claim_id"]] == [
         "thread-0001-c1", "thread-0001-c2"]
+    uncited = claims[claim_id_for("thread-0001", "uncited")]
+    assert uncited["supporting_message_ids"] == [] and uncited["supporter_count"] == 0
+    assert (uncited["first_date"], uncited["last_date"]) == ("2023-05-01", "2023-06-10")
     audit = json.loads(_at(out, AUDIT_PATH).read_text("utf-8"))["audit"]
     assert {r["claim_id"] for r in audit} == set(claims)
     assert {e["person"] for e in audit[0]["supporters"]} == {"u1", "u4"}

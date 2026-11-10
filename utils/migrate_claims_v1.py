@@ -13,7 +13,9 @@ dir is never written by accident.
 v1 audit ``local_message_ids`` index the thread's messages; they become WhatsApp ids. The
 claim id is computed from the text as the model extracted it (audit ``raw_claim_text``); the
 reviewed text of the claims file is kept as ``claim_text``. Identical texts in one thread
-collapse into one claim. ``metadata.legacy_claim_ids`` maps each new id to its v1 ids.
+collapse into one claim. ``metadata.legacy_claim_ids`` maps each new id to its v1 ids. A v1
+claim the old model did not tie to any message is kept with empty evidence, zero counts and
+its thread's date span (``metadata.migration.claims_without_evidence``).
 """
 
 from __future__ import annotations
@@ -120,8 +122,8 @@ def migrate(backup_dir: Path, out_dir: Path) -> dict[str, Any]:
         thread = with_export(threads[thread_id], export_index)
         job = ThreadClaims(thread)
         answer = _answer(old_claims, audit, threads[thread_id], job.refs, counts)
-        records = job.absorb(answer, [])
-        counts["skipped_no_evidence"] += job.ungrounded
+        records = job.absorb(answer, [], require_evidence=False)
+        counts["skipped_empty_text"] += job.ungrounded
         by_id = {r["claim_id"]: r for r in records}
         for old_claim, raw in zip(old_claims, answer["claims"]):
             record = by_id.get(claim_id_for(thread_id, raw["text"].strip()))
@@ -144,6 +146,7 @@ def migrate(backup_dir: Path, out_dir: Path) -> dict[str, Any]:
     counts["merged_duplicates"] = sum(len(ids) - 1 for ids in legacy.values())
     counts["threads"] = len(by_thread)
     counts["claims_with_opposing"] = sum(1 for c in claims if c["opposing_message_ids"])
+    counts["claims_without_evidence"] = sum(1 for c in claims if not c["supporting_message_ids"])
     summary = dict(counts)
     write_json_file(
         {

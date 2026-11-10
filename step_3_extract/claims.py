@@ -144,10 +144,16 @@ class ThreadClaims:
         ids = {self.refs[n - 1] for n in numbers if 1 <= n <= len(self.refs)}
         return ids & self.new_ids if only_new else ids
 
-    def absorb(self, data: Any, existing: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def absorb(
+        self, data: Any, existing: list[dict[str, Any]], *, require_evidence: bool = True
+    ) -> list[dict[str, Any]]:
         """Apply one model answer: ``existing`` (records, never re-texted) gain the evidence
         the answer gives them, new claims are appended. Returns records whose derived fields
         are still to be computed by ``finalize``. Raises ``OutputError`` on a malformed answer.
+
+        A new claim without supporting messages is dropped (counted in ``ungrounded``) unless
+        ``require_evidence`` is off, which only the v1 migration uses for claims the old model
+        did not cite.
         """
 
         update = bool(existing)
@@ -166,7 +172,11 @@ class ThreadClaims:
             text = raw["text"].strip()
             supporting = self._ids(raw["supporting"], only_new=False)
             opposing = self._ids(raw["opposing"], only_new=False) - supporting
-            if not text or not supporting or (update and not supporting & self.new_ids):
+            if (
+                not text
+                or (require_evidence and not supporting)
+                or (update and not supporting & self.new_ids)
+            ):
                 self.ungrounded += 1
                 continue
             claim_id = claim_id_for(self.thread_id, text)
@@ -202,23 +212,27 @@ class ThreadClaims:
         none of the claim's supporting messages is in the thread any more.
 
         Evidence ids of messages that left the thread are dropped; every other field of the
-        record (id, text, entities, stance, manual markers) is kept as it is.
+        record (id, text, entities, stance, manual markers) is kept as it is. A claim that never
+        had evidence (a migrated v1 claim the old model did not cite) is kept, dated by the
+        span of its thread, with zero counts.
         """
 
         supporting = {i for i in record.get("supporting_message_ids") or [] if i in self._position}
         opposing = {
             i for i in record.get("opposing_message_ids") or [] if i in self._position
         } - supporting
-        if not supporting:
+        if not supporting and record.get("supporting_message_ids"):
             return None
         evidence = collect_evidence(
             self.messages_by_id, self._ordered(supporting), self._ordered(opposing)
         )
+        span = [str(m.get("datetime") or "")[:10] for m in self.messages_by_id.values()]
+        span = [day for day in span if day]
         derived = {
             "supporting_message_ids": self._ordered(supporting),
             "opposing_message_ids": self._ordered(opposing),
-            "first_date": evidence.first_date,
-            "last_date": evidence.last_date,
+            "first_date": evidence.first_date or (min(span) if span else None),
+            "last_date": evidence.last_date or (max(span) if span else None),
             "supporter_count": evidence.supporter_count,
             "opposer_count": evidence.opposer_count,
             "reaction_summary": evidence.reaction_summary,

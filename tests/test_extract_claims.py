@@ -155,3 +155,11 @@ def test_fingerprints_follow_content_and_reactions() -> None:
     thread["messages"][1]["content"] = "two, edited"
     assert message_fingerprints(thread)["B"] != base_messages["B"]
     assert set(DERIVED_KEYS) < set(C3_KEYS)
+
+
+def test_a_claim_that_never_had_evidence_is_kept_and_dated_by_its_thread() -> None:
+    record = {"claim_id": "k", "thread_id": "t-A", "claim_text": "t", "entities": [],
+              "stance": "neutral", "supporting_message_ids": [], "opposing_message_ids": []}
+    claim, audit = ThreadClaims(_thread()).finalize(record)
+    assert (claim["first_date"], claim["last_date"]) == ("2024-01-05", "2024-02-01")
+    assert claim["supporter_count"] == 0 and audit["supporters"] == []
