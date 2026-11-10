@@ -70,7 +70,6 @@ class LLMClient:
             max_tokens if max_tokens is not None else CONFIG["default_max_tokens"]
         )
         self.use_cache = use_cache
-        self.thinking_param = thinking_param
         self.failure_log = Path(
             failure_log
             if failure_log is not None

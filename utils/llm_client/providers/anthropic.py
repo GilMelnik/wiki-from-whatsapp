@@ -1,15 +1,20 @@
-"""Anthropic provider: prompt caching (cache_control), structured output, and
-the batch API. Reasoning effort is set via ``output_config.effort`` (the shared
-``thinking_param``; when unset the model default applies — ``medium`` on Opus
-5.5 and Haiku 5.5, ``high`` on Sonnet 5.5). ``thinking`` itself is never sent:
-the 5.x models think adaptively by default and Opus 5.5 / Sonnet 5.5 reject
-``disabled``. Sampling params (temperature/top_p/top_k) are unsupported on Opus
-4.7+/Sonnet 5 — a non-default value returns 400 — so they are omitted and the
-API default is used.
+"""Anthropic providers.
+
+``AnthropicProvider`` (chat): prompt caching (cache_control), structured output,
+and the batch API. Reasoning effort is set via ``output_config.effort`` (the
+shared ``thinking_param``; when unset the model default applies — ``medium`` on
+Opus 5.5 and Haiku 5.5, ``high`` on Sonnet 5.5). ``thinking`` itself is never
+sent: the 5.x models think adaptively by default and Opus 5.5 / Sonnet 5.5
+reject ``disabled``. Thinking counts toward ``max_tokens``. Sampling params
+(temperature/top_p/top_k) are unsupported on Opus 4.7+/Sonnet 5 — a non-default
+value returns 400 — so they are omitted and the API default is used.
 
 Auto-caching of the system prompt, on sync calls and on every batch item alike,
 is controlled by the ``anthropic_prompt_cache`` config flag; explicit
 ``CacheSegment`` breakpoints in a prompt are always honoured.
+
+``AnthropicClassifierProvider`` (non-chat): Claude answering typed questions as
+structured output with thinking off — the manual fallback for the Jev classifier.
 """
 
 from __future__ import annotations
