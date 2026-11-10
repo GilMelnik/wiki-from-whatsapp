@@ -168,6 +168,12 @@
     "opposing_stances": ["positive", "negative"],
     "group_id_prefix": "g-",
     "group_id_hash_chars": 8,
+    "review": {
+      "suggestion_band": 0.04,
+      "similarity_block_rows": 1024,
+      "max_page_size": 200,
+      "partner_suggestions": 5
+    },
     "eval": {
       "backup_dir": "/mnt/SSD/coding/backup_data_wiki_from_whatsapp/2026_11_07_data",
       "pair_labels": "step_5_aggregate/eval/pair_labels.json",
