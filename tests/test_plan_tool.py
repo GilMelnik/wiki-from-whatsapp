@@ -278,6 +278,14 @@ def test_every_operation_saves_a_valid_plan_to_the_edited_file(setup: PlanSetup)
         changes["removed"]
 
 
+def test_moves_are_named_for_the_undo_button(setup: PlanSetup) -> None:
+    reorder = {"op": "move", "item_id": "costs", "parent_id": "choosing", "position": 0}
+    assert setup.post("/operations/preview", reorder)["label"] == "שינוי הסדר: „כותרת costs”"
+    move = {"op": "move", "item_id": "costs", "parent_id": "medical"}
+    assert setup.post("/operations/preview", move)["label"] == "העברת „כותרת costs” אל „רפואי”"
+    assert children(setup.apply(reorder)["overview"], "choosing") == ["costs", "agencies"]
+
+
 def test_answers_carry_the_downstream_consequences(setup: PlanSetup) -> None:
     answer = setup.apply(MERGE)
     assert answer["edit"]["removed_pages"] == ["costs"]

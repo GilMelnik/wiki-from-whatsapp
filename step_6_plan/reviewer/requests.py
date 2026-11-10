@@ -10,7 +10,7 @@ from typing import Annotated, Any, Literal, Union
 from pydantic import BaseModel, Field
 
 from step_6_plan import operations as ops
-from step_6_plan.model import PlanError, find_node
+from step_6_plan.model import PlanError, find_node, iter_nodes
 from step_6_plan.operations import PlanEdit
 
 Position = Annotated[int | None, Field(default=None, ge=0)]
@@ -176,6 +176,10 @@ class Move(BaseModel):
         return ops.move(plan, self.item_id, self.parent_id, self.position)
 
     def describe(self, plan: dict[str, Any]) -> str:
+        parents = {node["id"]: (ancestors[-1] if ancestors else None)
+                   for node, ancestors in iter_nodes(plan["tree"])}
+        if parents.get(self.item_id, self.parent_id) == self.parent_id:
+            return f"שינוי הסדר: {_q(plan, self.item_id)}"
         target = "לרמה העליונה" if self.parent_id is None else f"אל {_q(plan, self.parent_id)}"
         return f"העברת {_q(plan, self.item_id)} {target}"
 
