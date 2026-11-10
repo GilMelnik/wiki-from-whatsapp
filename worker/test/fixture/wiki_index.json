@@ -1,0 +1,416 @@
+{
+  "index_version": 1,
+  "generated_at": "2026-11-10T09:00:00Z",
+  "labels": {
+    "colombia": {
+      "title": "קולומביה",
+      "description": "עמודים על פונדקאות בקולומביה",
+      "kind": "country"
+    },
+    "mexico": {
+      "title": "מקסיקו",
+      "description": "עמודים על פונדקאות במקסיקו",
+      "kind": "country"
+    },
+    "usa": {
+      "title": "ארצות הברית",
+      "description": "עמודים על פונדקאות בארה\"ב",
+      "kind": "country"
+    },
+    "israel": {
+      "title": "ישראל",
+      "description": "הליכים בישראל",
+      "kind": "country"
+    },
+    "legal": {
+      "title": "משפטי",
+      "description": "היבטים משפטיים",
+      "kind": "topic"
+    },
+    "money": {
+      "title": "כסף ועלויות",
+      "description": "עלויות, תשלומים ומימון",
+      "kind": "topic"
+    },
+    "medical": {
+      "title": "רפואי",
+      "description": "בדיקות וטיפולים רפואיים",
+      "kind": "topic"
+    }
+  },
+  "pages": [
+    {
+      "id": "colombia",
+      "url": "colombia/",
+      "title": "קולומביה",
+      "description": "פונדקאות בקולומביה: חוקיות, זמני המתנה ועלויות",
+      "summary": "קולומביה היא יעד נגיש לזוגות גברים; ההליך מוסדר בפסיקה, ההמתנה לפונדקאית כשנה.",
+      "questions": [
+        "האם פונדקאות בקולומביה חוקית לזוגות גברים?",
+        "כמה זמן מחכים לפונדקאית בקולומביה?"
+      ],
+      "labels": [
+        "colombia"
+      ],
+      "path": [
+        {
+          "id": "destinations",
+          "title": "יעדים"
+        },
+        {
+          "id": "latin-america",
+          "title": "אמריקה הלטינית"
+        }
+      ],
+      "aliases": {
+        "he": [
+          "קולומביה"
+        ],
+        "en": [
+          "Colombia"
+        ]
+      },
+      "entities": [
+        "Clínica Ándes",
+        "בוגוטה"
+      ],
+      "related": [
+        {
+          "id": "mexico",
+          "relation": "compare_with"
+        },
+        {
+          "id": "costs",
+          "relation": "see_also"
+        }
+      ],
+      "out_links": [
+        "costs",
+        "mexico",
+        "agencies",
+        "parental-order"
+      ],
+      "claims": {
+        "total": 12,
+        "supporting": 41,
+        "opposing": 3,
+        "first_claim_at": "2023-06-01",
+        "last_claim_at": "2026-02-14"
+      },
+      "updated_at": "2026-11-01T10:00:00Z",
+      "text": "## רקע\n\nקולומביה היא יעד מוכר לפונדקאות עבור זוגות גברים. ההליך מוסדר בפסיקה ולא בחוק מפורש, ולכן מומלץ ליווי משפטי צמוד.\n\n!!! info \"ממקורות חיצוניים\"\n    המידע ברקע נאסף ממקורות ציבוריים.\n\n## מידע מהקהילה\n\nלפי חברי הקבוצה, רוב התהליכים מתבצעים בבוגוטה ובמדיין. זמן ההמתנה לפונדקאית הוא כשנה, ומחירים מפורטים בעמוד [[costs|עלויות ומימון]]. השוואה ל[[mexico|מקסיקו]] מופיעה בעמוד נפרד.[^g-1a2b3c4d]\n\nרשימת סוכנויות שפועלות בקולומביה נמצאת בעמוד [[agencies|סוכנויות פונדקאות]]. אחרי החזרה לישראל יש להגיש בקשה ל[[parental-order|צו הורות]].\n\nבדיקת מֵי שָׁפִיר אינה שגרתית במרפאות המקומיות, כמו Clínica Ándes, ויש לבקש אותה מראש.\n\n[^g-1a2b3c4d]: קבוצת טענות מהקהילה.\n"
+    },
+    {
+      "id": "mexico",
+      "url": "mexico/",
+      "title": "מקסיקו",
+      "description": "פונדקאות במקסיקו: מצב חוקי שמשתנה בין המדינות",
+      "questions": [],
+      "labels": [
+        "mexico"
+      ],
+      "path": [
+        {
+          "id": "destinations",
+          "title": "יעדים"
+        },
+        {
+          "id": "latin-america",
+          "title": "אמריקה הלטינית"
+        }
+      ],
+      "aliases": {
+        "he": [],
+        "en": [
+          "Mexico",
+          "México"
+        ]
+      },
+      "entities": [],
+      "related": [
+        {
+          "id": "colombia",
+          "relation": "compare_with"
+        }
+      ],
+      "out_links": [
+        "colombia",
+        "costs"
+      ],
+      "claims": {
+        "total": 4,
+        "supporting": 9,
+        "opposing": 5,
+        "first_claim_at": "2022-11-20",
+        "last_claim_at": "2025-03-02"
+      },
+      "updated_at": "2026-10-20T08:30:00Z",
+      "status": "draft",
+      "text": "המצב החוקי במקסיקו משתנה בין המדינות הפדרליות. חלק מהחברים עברו ממקסיקו לקולומביה אחרי שינויי חקיקה. כמו בקולומביה, גם כאן נדרש קשר גנטי לאחד ההורים.\n\nראו גם [[colombia|קולומביה]] ו[[costs|עלויות]].\n"
+    },
+    {
+      "id": "usa",
+      "url": "usa/",
+      "title": "ארצות הברית",
+      "description": "פונדקאות בארה״ב: יקרה, מוסדרת וּודאית",
+      "summary": "בארצות הברית ההליך מוסדר בחוזים ובצווים לפני הלידה, אבל העלות הגבוהה ביותר.",
+      "questions": [
+        "כמה עולה פונדקאות בארה\"ב?"
+      ],
+      "labels": [
+        "usa"
+      ],
+      "path": [
+        {
+          "id": "destinations",
+          "title": "יעדים"
+        },
+        {
+          "id": "north-america",
+          "title": "צפון אמריקה"
+        }
+      ],
+      "aliases": {
+        "he": [
+          "ארה\"ב",
+          "ארצות הברית",
+          "אמריקה"
+        ],
+        "en": [
+          "USA",
+          "United States",
+          "US"
+        ]
+      },
+      "entities": [],
+      "related": [
+        {
+          "id": "costs",
+          "relation": "see_also"
+        }
+      ],
+      "out_links": [
+        "costs",
+        "agencies"
+      ],
+      "claims": {
+        "total": 9,
+        "supporting": 30,
+        "opposing": 2,
+        "first_claim_at": "2021-01-10",
+        "last_claim_at": "2026-05-30"
+      },
+      "updated_at": "2026-11-02T12:00:00Z",
+      "text": "בארה\"ב הפונדקאות מוסדרת בחוזים מפורטים ובצווי בית משפט לפני הלידה. העלות גבוהה בהרבה מיעדים אחרים, וחברים דיווחו על סכומים של עשרות אלפי דולרים רק עבור טיפולי ה-IVF. פירוט ב[[costs|עלויות ומימון]].\n\nרוב הסוכנויות האמריקאיות עובדות גם עם זוגות מישראל ([[agencies]]).\n"
+    },
+    {
+      "id": "agencies",
+      "url": "agencies/",
+      "title": "סוכנויות פונדקאות",
+      "description": "איך בוחרים סוכנות ומה לשאול לפני חתימה",
+      "questions": [
+        "אילו שאלות לשאול סוכנות לפני חתימה?"
+      ],
+      "labels": [],
+      "path": [
+        {
+          "id": "process",
+          "title": "התהליך"
+        }
+      ],
+      "aliases": {
+        "he": [
+          "סוכנות",
+          "סוכנויות"
+        ],
+        "en": [
+          "agencies",
+          "agency"
+        ]
+      },
+      "entities": [
+        "Sol Familia",
+        "Clínica Ándes"
+      ],
+      "related": [],
+      "out_links": [
+        "colombia",
+        "usa",
+        "costs"
+      ],
+      "claims": {
+        "total": 7,
+        "supporting": 22,
+        "opposing": 6,
+        "first_claim_at": "2022-02-01",
+        "last_claim_at": "2026-01-15"
+      },
+      "updated_at": "2026-10-28T09:00:00Z",
+      "text": "לפני חתימה עם סוכנות כדאי לבקש חוזה מלא ולבדוק מה קורה אם ההליך נכשל. הסוכנות Sol Familia מלווה תהליכים שבקולומביה ובארצות הברית, לפי חברי הקבוצה. מומלץ לדבר עם הורים שעבדו עם הסוכנות בשנה האחרונה.\n\nראו [[colombia|קולומביה]], [[usa|ארה״ב]] ו[[costs|עלויות]].\n"
+    },
+    {
+      "id": "costs",
+      "url": "costs/",
+      "title": "עלויות ומימון",
+      "description": "כמה עולה תהליך פונדקאות ואיך מממנים אותו",
+      "questions": [
+        "כמה עולה פונדקאות בקולומביה לעומת ארה\"ב?"
+      ],
+      "labels": [
+        "money"
+      ],
+      "path": [
+        {
+          "id": "process",
+          "title": "התהליך"
+        }
+      ],
+      "aliases": {
+        "he": [],
+        "en": [
+          "costs",
+          "budget"
+        ]
+      },
+      "entities": [],
+      "related": [
+        {
+          "id": "usa",
+          "relation": "see_also"
+        }
+      ],
+      "out_links": [
+        "usa"
+      ],
+      "claims": {
+        "total": 15,
+        "supporting": 52,
+        "opposing": 11,
+        "first_claim_at": "2021-05-05",
+        "last_claim_at": "2026-06-01"
+      },
+      "updated_at": "2026-11-03T07:45:00Z",
+      "text": "העלות הכוללת תלויה ביעד: וקולומביה ומקסיקו זולות בהרבה מארה\"ב. מספר התשלומים לסוכנות נקבע בחוזה, ורוב הזוגות משלמים בשלבים.\n\nחברים המליצו לשמור רזרבה לסכומים לא צפויים, למשל ניתוח קיסרי או אשפוז פגים. השוואה בין [[usa|ארצות הברית]] ליעדים אחרים מופיעה בטבלה.\n"
+    },
+    {
+      "id": "egg-donation",
+      "url": "egg-donation/",
+      "title": "תרומת ביציות",
+      "description": "בחירת תורמת ביציות ומאגרי תורמות",
+      "questions": [],
+      "labels": [
+        "medical"
+      ],
+      "path": [
+        {
+          "id": "process",
+          "title": "התהליך"
+        }
+      ],
+      "aliases": {
+        "he": [],
+        "en": [
+          "egg donation"
+        ]
+      },
+      "entities": [],
+      "related": [
+        {
+          "id": "agencies",
+          "relation": "see_also"
+        }
+      ],
+      "out_links": [
+        "colombia",
+        "agencies"
+      ],
+      "claims": {
+        "total": 5,
+        "supporting": 14,
+        "opposing": 4,
+        "first_claim_at": "2023-03-03",
+        "last_claim_at": "2025-12-12"
+      },
+      "updated_at": "2026-09-15T15:00:00Z",
+      "text": "תְּרוּמַת בֵּיצִית היא שלב נפרד מהפונדקאות. אפשר לבחור תורמת ממאגר של הסוכנות או ממאגר חיצוני, ולפעמים ליצור עוברים מראש ולהעביר אותם ל[[colombia|קולומביה]].\n\nחלק מההורים בוחרים תורמת עם רקע דומה. מידע על [[agencies|סוכנויות]] שעובדות עם מאגרים.\n"
+    },
+    {
+      "id": "parental-order",
+      "url": "parental-order/",
+      "title": "צו הורות וניתוק זיקה",
+      "description": "ההליך המשפטי בישראל אחרי לידה בחו\"ל",
+      "summary": "אחרי החזרה מגישים בקשה לצו הורות; עד אז נדרש אישור ממשרד הפנים.",
+      "questions": [
+        "מתי מגישים בקשה לצו הורות?"
+      ],
+      "labels": [
+        "israel",
+        "legal"
+      ],
+      "path": [
+        {
+          "id": "after-birth",
+          "title": "אחרי הלידה"
+        }
+      ],
+      "aliases": {
+        "he": [
+          "צו הורות",
+          "ניתוק זיקה"
+        ],
+        "en": [
+          "parental order"
+        ]
+      },
+      "entities": [
+        "משרד הפנים"
+      ],
+      "related": [],
+      "out_links": [
+        "colombia",
+        "usa"
+      ],
+      "claims": {
+        "total": 10,
+        "supporting": 33,
+        "opposing": 1,
+        "first_claim_at": "2020-09-09",
+        "last_claim_at": "2026-04-04"
+      },
+      "updated_at": "2026-10-10T11:11:00Z",
+      "text": "אחרי החזרה לישראל מגישים בקשה לצו הורות לבית המשפט לענייני משפחה. עד לקבלת הצו ההורה שאינו ביולוגי זקוק לאישור ממשרד הפנים, ולעיתים נדרשת פנייה ללשכת שר הפנים. ההליך כולל ניתוק זיקה מהפונדקאית.\n\n[[colombia|קולומביה]] ו[[usa|ארצות הברית]] מנפיקות תעודות לידה בלי שם הפונדקאית.\n"
+    },
+    {
+      "id": "books",
+      "url": "books/",
+      "title": "ספרים ומדיה",
+      "description": "ספרי ילדים וסדרות על משפחות עם שני אבות",
+      "questions": [],
+      "labels": [],
+      "path": [
+        {
+          "id": "after-birth",
+          "title": "אחרי הלידה"
+        }
+      ],
+      "aliases": {
+        "he": [],
+        "en": [
+          "books"
+        ]
+      },
+      "entities": [],
+      "related": [],
+      "out_links": [],
+      "claims": {
+        "total": 3,
+        "supporting": 6,
+        "opposing": 0,
+        "first_claim_at": "2024-01-01",
+        "last_claim_at": "2025-08-08"
+      },
+      "updated_at": "2026-08-01T00:00:00Z",
+      "text": "המלצות על ספר ילדים שמסביר פונדקאות, וספרים להורים. ספר בישול לתינוקות ממליץ להתחיל בלי בשר. הספרים זמינים בספריות ציבוריות.\n"
+    }
+  ]
+}

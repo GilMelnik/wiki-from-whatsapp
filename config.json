@@ -203,5 +203,37 @@
     "coffee_link_text": "אפשר לקנות לו חדש 🍼",
     "custom_dir": "overrides"
   },
+  "mcp": {
+    "route": "/mcp",
+    "index_file": "wiki_index.json",
+    "index_version": 1,
+    "search_file": "wiki_search.json",
+    "search_version": 1,
+    "assets_origin": "https://assets.local",
+    "allowed_origin_hostnames": ["gaysurrogacy.co.il", "localhost", "127.0.0.1", "[::1]"],
+    "server": {
+      "name": "gaysurrogacy-wiki",
+      "title": "Gay Surrogacy Wiki (Hebrew)",
+      "version": "1.0.0",
+      "instructions": "Read-only access to gaysurrogacy.co.il, a Hebrew (right-to-left) community knowledge base about surrogacy for gay couples and single gay men, distilled from the discussions of an Israeli community chat group and organised into linked pages (countries, agencies, costs, medical and legal steps, life after birth). Search works best in Hebrew; Latin names and English aliases (e.g. Colombia, USA) also find pages. Each page reports claim statistics: how many distinct members backed (supporting) or disputed (opposing) its claims and the first/last date they were made, so you can judge how established, contested or dated the information is. The content is community experience, not legal, medical or financial advice, and can be out of date: say so when you rely on it and suggest confirming with professionals or official sources. Workflow: search (or list_pages / list_labels to browse) -> get_page with a page id -> get_links to walk to related pages. Page bodies link to other pages as [[page_id|text]]; pass that page_id to get_page. Cite pages by their url."
+    },
+    "search": {
+      "default_limit": 10,
+      "max_limit": 50,
+      "snippet_chars": 200,
+      "min_stem_length": 3,
+      "min_wildcard_length": 2,
+      "hebrew_prefixes": [
+        "ו", "ה", "ב", "ל", "מ", "ש", "כ",
+        "וה", "וב", "ול", "ומ", "וש", "וכ", "שה", "שב", "של", "שמ", "שכ", "מה", "כש",
+        "ושה", "ושב", "ושל", "ומה", "וכש"
+      ],
+      "field_weights": {
+        "title": 10, "aliases": 8, "entities": 5, "questions": 4, "summary": 4,
+        "description": 3, "labels": 3, "body": 1
+      },
+      "match_weights": {"exact": 1.0, "text_prefix": 0.8, "wildcard": 0.6, "query_prefix": 0.5}
+    }
+  },
   "update": {}
 }

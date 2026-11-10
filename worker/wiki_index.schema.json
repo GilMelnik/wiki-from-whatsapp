@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gaysurrogacy.co.il/wiki_index.schema.json",
+  "title": "wiki_index.json (contract C11, index_version 1)",
+  "description": "Search and graph index of the published wiki, written by the site generator (step 9) into the mkdocs docs dir so that it is copied into site/ and served as a static asset at /<config.mcp.index_file>. Read by the MCP Worker (worker/src). Plain data: no HTML, no scores, no normalised text.",
+  "type": "object",
+  "required": ["index_version", "generated_at", "labels", "pages"],
+  "additionalProperties": false,
+  "properties": {
+    "index_version": {
+      "description": "Shape version; equals config.json mcp.index_version. Bump both together on a breaking change.",
+      "const": 1
+    },
+    "generated_at": {
+      "description": "When step 9 wrote the index (UTC, ISO 8601 with offset).",
+      "$ref": "#/$defs/timestamp"
+    },
+    "labels": {
+      "description": "Every label of the plan (C7 labels), keyed by label id.",
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/label" }
+    },
+    "pages": {
+      "description": "Every published page, in site navigation order (the order of the mkdocs nav).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/page" }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[\\w\\-./]+$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+    },
+    "day": {
+      "description": "YYYY-MM-DD, an ISO datetime, or null when the page has no claims.",
+      "type": ["string", "null"],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}"
+    },
+    "nonEmpty": {
+      "type": "string",
+      "minLength": 1
+    },
+    "label": {
+      "type": "object",
+      "required": ["title", "description", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "title": { "description": "C7 labels[id].title_he.", "$ref": "#/$defs/nonEmpty" },
+        "description": { "description": "C7 labels[id].description.", "type": "string" },
+        "kind": { "description": "C7 labels[id].kind, e.g. country, topic.", "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "navNode": {
+      "type": "object",
+      "required": ["id", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "title": { "$ref": "#/$defs/nonEmpty" }
+      }
+    },
+    "page": {
+      "type": "object",
+      "required": [
+        "id", "url", "title", "description", "questions", "labels", "path", "aliases",
+        "entities", "related", "out_links", "claims", "updated_at", "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "description": "C7 page_id (= wiki_pages.json key = docs/<id>.md).", "$ref": "#/$defs/id" },
+        "url": {
+          "description": "Site-relative URL exactly as mkdocs publishes the page (use_directory_urls: 'colombia/'; the home page is '').",
+          "type": "string",
+          "pattern": "^(?!/)(?!https?:)"
+        },
+        "title": { "description": "Front matter title.", "$ref": "#/$defs/nonEmpty" },
+        "description": { "description": "Front matter description (one line).", "type": "string", "pattern": "^[^\\n]*$" },
+        "summary": { "description": "Front matter summary (optional; one paragraph).", "type": ["string", "null"] },
+        "questions": { "description": "Front matter questions, [] when absent.", "type": "array", "items": { "$ref": "#/$defs/nonEmpty" } },
+        "labels": {
+          "description": "Label ids of the page (front matter labels[].id); each must be a key of the top-level labels.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "path": {
+          "description": "Front matter path: section ancestors from the root to the parent, [] for a top-level page.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/navNode" }
+        },
+        "aliases": {
+          "description": "Front matter aliases.",
+          "type": "object",
+          "required": ["he", "en"],
+          "additionalProperties": false,
+          "properties": {
+            "he": { "type": "array", "items": { "$ref": "#/$defs/nonEmpty" } },
+            "en": { "type": "array", "items": { "$ref": "#/$defs/nonEmpty" } }
+          }
+        },
+        "entities": { "description": "Front matter entities.", "type": "array", "items": { "$ref": "#/$defs/nonEmpty" } },
+        "related": {
+          "description": "Front matter related, with slug renamed to id; only ids of published pages.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "relation"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "$ref": "#/$defs/id" },
+              "relation": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" }
+            }
+          }
+        },
+        "out_links": {
+          "description": "Distinct targets of [[page_id|text]] links in the body (utils.wiki_links.find_wiki_links, kind 'page'), in order of first appearance, only published pages, never the page itself. In-links are derived by the Worker.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "claims": {
+          "description": "Front matter claims statistics, copied as is.",
+          "type": "object",
+          "required": ["total", "supporting", "opposing", "first_claim_at", "last_claim_at"],
+          "additionalProperties": false,
+          "properties": {
+            "total": { "type": "integer", "minimum": 0 },
+            "supporting": { "type": "integer", "minimum": 0 },
+            "opposing": { "type": "integer", "minimum": 0 },
+            "first_claim_at": { "$ref": "#/$defs/day" },
+            "last_claim_at": { "$ref": "#/$defs/day" }
+          }
+        },
+        "updated_at": { "description": "Front matter generated.at (last content change).", "$ref": "#/$defs/timestamp" },
+        "status": { "description": "Front matter status, only when draft or deprecated.", "enum": ["draft", "deprecated"] },
+        "text": {
+          "description": "The page body markdown (C9 body_md) without front matter, wiki links kept in their [[page_id|text]] / [[label:id|text]] form.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

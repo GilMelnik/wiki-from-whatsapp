@@ -1,0 +1,29 @@
+{
+  "name": "wiki-mcp",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "dev": "cd .. && CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler dev --compatibility-date 2026-05-03",
+    "dry-run": "cd .. && wrangler deploy --dry-run",
+    "e2e": "node scripts/e2e.mjs",
+    "build-search": "tsx scripts/build-search.ts ../site"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0",
+    "@types/node": "22.20.5",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vitest": "4.1.12",
+    "wrangler": "4.86.0"
+  }
+}
