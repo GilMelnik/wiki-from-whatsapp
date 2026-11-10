@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from step_4_entities.collect import _claim_contacts
 from step_4_entities.mentions import Word, analyze_claims, find_mentions
+from step_4_entities.records import member_record
 from step_4_entities.reviewer.store.helpers import _merge_highlights
 
 
@@ -60,31 +60,9 @@ class ClaimsMixin:
         *,
         excluded_claim_ids: list[str] | None = None,
     ) -> dict[str, Any]:
-        emails: set[str] = set()
-        phones: set[str] = set()
-        websites: set[str] = set()
-        topics: set[str] = set()
-        for claim_id in claim_ids:
-            claim = self._claims_by_id.get(claim_id, {})
-            original = self._original_by_id.get(claim_id)
-            topics.update(claim.get("topic_tags") or [])
-            claim_emails, claim_phones, claim_sites = _claim_contacts(claim, original)
-            emails.update(claim_emails)
-            phones.update(claim_phones)
-            websites.update(claim_sites)
-        return {
-            "name": name,
-            "claim_ids": list(claim_ids),
-            "count": len(claim_ids),
-            "sample_claim_ids": list(claim_ids[:12]),
-            "topics": sorted(topics),
-            "contacts": {
-                "email": sorted(emails),
-                "phone": sorted(phones),
-                "website": sorted(websites),
-            },
-            "excluded_claim_ids": list(excluded_claim_ids or []),
-        }
+        member = member_record(name, claim_ids, self._claims_by_id, self._original_by_id)
+        member["excluded_claim_ids"] = list(excluded_claim_ids or [])
+        return member
 
     def _other_entities_in_claim(
         self,

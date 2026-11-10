@@ -4,11 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from step_4_entities.reviewer.store.helpers import (
-    Status,
-    _normalize_contacts,
-    _recompute_entity,
-)
+from step_4_entities.records import empty_contacts, new_entity, refresh_entity
+from step_4_entities.reviewer.store.helpers import Status, _normalize_contacts
 
 
 class MutationsMixin:
@@ -48,23 +45,13 @@ class MutationsMixin:
         if len(members) <= 1:
             entity["status"] = "suggested"
             if members:
-                _recompute_entity(entity)
+                refresh_entity(entity)
             self.save()
             return self.get_entity(entity_id)["entity"]
 
         new_entities: list[dict[str, Any]] = []
         for member in members:
-            split = {
-                "entity_id": self._new_entity_id(),
-                "canonical_name": member["name"],
-                "status": "suggested",
-                "aliases": [member["name"]],
-                "members": [member],
-                "contacts": {"email": [], "phone": [], "website": []},
-                "topics": [],
-                "score": 1.0,
-            }
-            _recompute_entity(split)
+            split = new_entity(self._new_entity_id(), [member])
             self.entities.append(split)
             new_entities.append(split)
         self.entities.pop(self.entities.index(entity))
@@ -76,6 +63,7 @@ class MutationsMixin:
         if name not in [m["name"] for m in entity.get("members") or []]:
             raise ValueError(f"name not a member of this entity: {name}")
         entity["canonical_name"] = name
+        entity["canonical_manual"] = True
         self.save()
         return self.get_entity(entity_id)["entity"]
 
@@ -85,6 +73,7 @@ class MutationsMixin:
             raise ValueError("canonical_name must not be empty")
         entity, _ = self._find_entity(entity_id)
         entity["canonical_name"] = name
+        entity["canonical_manual"] = True
         self.save()
         return self.get_entity(entity_id)["entity"]
 
@@ -115,9 +104,7 @@ class MutationsMixin:
             raise ValueError(f"unknown action: {action}")
 
         entity, _ = self._find_entity(entity_id)
-        uncertain = entity.setdefault(
-            "contacts_uncertain", {"email": [], "phone": [], "website": []}
-        )
+        uncertain = entity.setdefault("contacts_uncertain", empty_contacts())
         bucket = uncertain.get(kind) or []
         if value not in bucket:
             raise ValueError(f"value not an uncertain {kind}: {value}")
@@ -129,13 +116,15 @@ class MutationsMixin:
             if member_unc and value in (member_unc.get(kind) or []):
                 member_unc[kind] = [v for v in member_unc[kind] if v != value]
 
-        if action == "accept":
+        if action == "reject":
+            # Recorded so neither a later edit nor a step-4 update brings the value back.
+            rejected = entity.setdefault("contacts_rejected", empty_contacts())
+            rejected[kind] = sorted({*(rejected.get(kind) or []), value})
+        else:
             resolved = (new_value or value).strip()
             if not resolved:
                 raise ValueError("accepted contact must not be empty")
-            confident = entity.setdefault(
-                "contacts", {"email": [], "phone": [], "website": []}
-            )
+            confident = entity.setdefault("contacts", empty_contacts())
             values = list(confident.get(kind) or [])
             if resolved not in values:
                 values.append(resolved)
@@ -161,18 +150,9 @@ class MutationsMixin:
         if target_entity_id:
             target, _ = self._find_entity(target_entity_id)
             return target
-        new_entity = {
-            "entity_id": self._new_entity_id(),
-            "canonical_name": "",
-            "status": status,
-            "aliases": [],
-            "members": [],
-            "contacts": {"email": [], "phone": [], "website": []},
-            "topics": [],
-            "score": 1.0,
-        }
-        self.entities.append(new_entity)
-        return new_entity
+        created = new_entity(self._new_entity_id(), [], status=status)
+        self.entities.append(created)
+        return created
 
     def _add_claims_to_member(
         self,
@@ -220,12 +200,12 @@ class MutationsMixin:
         target = self._target_entity(target_entity_id)
         source["members"] = [m for m in members if m["name"] != name]
         target.setdefault("members", []).append(moving)
-        _recompute_entity(target)
+        refresh_entity(target)
 
         if not source["members"]:
             self.entities.pop(self.entities.index(source))
         else:
-            _recompute_entity(source)
+            refresh_entity(source)
         self.save()
         return self.get_entity(target["entity_id"])["entity"]
 
@@ -268,7 +248,7 @@ class MutationsMixin:
             target.setdefault("members", []).append(
                 self._member_from_claims(name, moving)
             )
-        _recompute_entity(target)
+        refresh_entity(target)
 
         if member.get("claim_ids"):
             remaining = [c for c in member["claim_ids"] if c not in moving]
@@ -287,7 +267,7 @@ class MutationsMixin:
         if not source["members"]:
             self.entities.pop(self.entities.index(source))
         else:
-            _recompute_entity(source)
+            refresh_entity(source)
         self.save()
         return self.get_entity(target["entity_id"])["entity"]
 
@@ -315,7 +295,7 @@ class MutationsMixin:
 
         target = self._target_entity(target_entity_id)
         self._add_claims_to_member(target, name, copying)
-        _recompute_entity(target)
+        refresh_entity(target)
         self.save()
         return self.get_entity(target["entity_id"])["entity"]
 
@@ -348,7 +328,7 @@ class MutationsMixin:
         member.update(refreshed)
         if preserved_claim_ids is None:
             member["claim_ids"] = None
-        _recompute_entity(entity)
+        refresh_entity(entity)
         self.save()
         return self.get_entity(entity_id)["entity"]
 
@@ -381,7 +361,7 @@ class MutationsMixin:
                     ]
                     touched = True
             if touched:
-                _recompute_entity(entity)
+                refresh_entity(entity)
 
         self._remove_claim_from_aggregations(claim_id)
         self.save()
@@ -393,7 +373,7 @@ class MutationsMixin:
         source, _ = self._find_entity(entity_id)
         target, _ = self._find_entity(target_entity_id)
         target.setdefault("members", []).extend(source.get("members") or [])
-        _recompute_entity(target)
+        refresh_entity(target)
         self.entities.pop(self.entities.index(source))
         self.save()
         return self.get_entity(target_entity_id)["entity"]

@@ -33,7 +33,6 @@ class ViewsMixin:
             "member_count": len(entity.get("members") or []),
             "total_count": _member_total(entity),
             "aliases": entity.get("aliases") or [],
-            "topics": entity.get("topics") or [],
             "contacts": entity.get("contacts") or {},
             "contacts_uncertain": entity.get("contacts_uncertain") or {},
             "contacts_manual": bool(entity.get("contacts_manual")),
@@ -178,7 +177,6 @@ class ViewsMixin:
             "count": len(claim_ids),
             "claim_ids": member.get("claim_ids"),
             "excluded_claim_ids": member.get("excluded_claim_ids") or [],
-            "topics": member.get("topics") or [],
             "contacts": member.get("contacts") or {},
             "sample_claims": samples,
         }
@@ -189,9 +187,13 @@ class ViewsMixin:
         name: str,
         *,
         offset: int = 0,
-        limit: int = ENTITIES_CONFIG["sample_claims_per_member"],
+        limit: int | None = None,
     ) -> dict[str, Any]:
-        """One page of a member's visible claims (Req 1 pagination)."""
+        """One page of a member's visible claims (Req 1 pagination; default page size from
+        ``entities.sample_claims_per_member``)."""
+
+        if limit is None:
+            limit = ENTITIES_CONFIG["sample_claims_per_member"]
 
         entity, _ = self._find_entity(entity_id)
         member = next(

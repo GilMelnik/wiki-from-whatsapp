@@ -97,8 +97,6 @@ AUDIT_PATH = AUDIT_DIR / "claims_audit.json"
 # -------------------------------------------------------------- step 4 entities
 ENTITIES_SEED_PATH = step_path(STEP_4, "entities_seed.json")
 ENTITY_ANALYSIS_PATH = step_path(STEP_4, "entity_claim_analysis.json")
-ENTITY_DISTANCE_MATRIX_PATH = step_path(STEP_4, "entity_distance_matrix.npy")
-ENTITY_DISTANCE_META_PATH = step_path(STEP_4, "entity_distance_matrix.json")
 # Manual claim aggregations created in the entity reviewer (no pipeline original);
 # consumed by step 5 to force-merge the grouped claims.
 MANUAL_AGGREGATIONS_PATH = step_path(STEP_4, "claim_aggregations.json")
