@@ -42,7 +42,9 @@ STEP_SPECS: tuple[StepSpec, ...] = (
     StepSpec("claims", "שלב 3 · חילוץ טענות", "step_3_extract.run", incremental_safe=True, paid=True),
     StepSpec("entities", "שלב 4 · זיהוי ישויות", "step_4_entities.run", incremental_safe=True),
     StepSpec("groups", "שלב 5 · קיבוץ טענות", "step_5_aggregate.run", incremental_safe=True),
-    StepSpec("plan", "שלב 6 · תכנון הוויקי", "step_6_plan.run", paid=True),
+    StepSpec(
+        "plan", "שלב 6 · תכנון הוויקי", "step_6_plan.run", incremental_safe=True, paid=True
+    ),
     StepSpec("pages", "שלב 7 · כתיבת הדפים", "step_7_write_pages.run", paid=True),
 )
 

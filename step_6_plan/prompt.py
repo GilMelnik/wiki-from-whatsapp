@@ -1,0 +1,296 @@
+"""What the planning model reads and returns: the prompt, the response schema, and the
+conversion of its flat answer into a C7 plan (``step_6_plan.model``).
+
+The model sees every claim group as one compact line (id, stance, distinct supporters and
+opposers, first and last month, thread count, entity names, representative claim text) and
+nothing about the people behind it. Structured output cannot express a recursive tree, so the
+model returns flat lists of category nodes and pages that point at their parent; the tree is
+built here.
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Sequence
+from typing import Any
+
+from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION
+from step_6_plan.model import PLAN_CONFIG, iter_nodes, sync_pages, validation_errors
+
+_EXAMPLES = PLAN_CONFIG["example_group_ids"]
+
+PLAN_SYSTEM = f"""\
+You are designing the structure of a Hebrew wiki for an Israeli WhatsApp community of gay \
+couples and gay men who are going through surrogacy abroad or considering it. Over several \
+years members asked questions and shared experience, recommendations and warnings. Their \
+statements were extracted as claims, and claims that say the same thing were grouped. The \
+user message lists every claim group, one per line, before the request.
+
+Your job is to propose the wiki's structure: a tree of content whose leaves are the wiki \
+pages, plus labels that cut across pages. You do not write the pages. The owner of the wiki \
+will review and edit your proposal by hand; then a fast, fairly literal classifier will read \
+only the page titles and scopes you wrote and assign every claim group to a page and to the \
+labels that match it. So the structure must come from what the members actually talk about, \
+weighted by how much they talk about it, not from a generic table of contents.
+
+## The tree
+- Levels: {PLAN_CONFIG["min_depth"]} to {PLAN_CONFIG["max_depth"]} levels, counting the \
+pages: every page sits on level {PLAN_CONFIG["min_depth"]} or deeper, never below level \
+{PLAN_CONFIG["max_depth"]}. The top level is an abstraction layer above the categories, a "world of content" a \
+reader can orient by. The owner's example: the steps of the process: before starting, during \
+the process, the birth, and afterwards. Use that principle, or another one if the claims \
+clearly call for it, and explain the choice in top_level_rationale (a few sentences). Below \
+the top level come categories; below a category come pages, or, where a category is large, \
+one more level of sub-categories and then pages. Pages are always leaves.
+- Pages: at most {PLAN_CONFIG["max_pages"]} in total. Not too many: no thin page for a \
+subject that only a handful of groups touch; fold it into the page it belongs with. Not too \
+general: no few long pages that each cover many subjects. A page is one coherent subject a \
+member would look up and expect to read in one place. Use the counts: a subject with hundreds \
+of groups and many supporters may deserve more than one page; a subject with very few groups \
+is a section of a neighbouring page.
+- Well defined and self-contained: define each page so that every claim group fits one page \
+easily and obviously. Pages must not overlap; where a subject could sit in two places, decide \
+where it goes and say so in both scopes. Together the pages must leave no common kind of \
+claim without a home.
+- A facet of many pages (a country, a stage, a type of provider) is not a page: make it a label.
+
+## Page fields
+- id: a short, stable, lowercase Latin slug (letters, digits and single hyphens, at most \
+{PLAN_CONFIG["slug_max_length"]} characters), for example "egg-donation". Ids are permanent, \
+so name the subject, not its position.
+- parent_id: the id of the category node the page sits in.
+- title_he: a short Hebrew page heading.
+- description: one Hebrew sentence saying what the page is about (shown under the title and \
+in search results).
+- scope: two or three Hebrew sentences that say exactly what belongs on the page AND what does \
+not, naming the page that takes each neighbouring subject. The classifier and the owner decide \
+where a claim goes from this text alone, so make it concrete (the kinds of questions and \
+statements it covers), not abstract.
+- aliases_he, aliases_en: other names a reader might search for (a few each; may be empty).
+- example_group_ids: {_EXAMPLES["min"]} to {_EXAMPLES["max"]} ids of groups from the list that \
+clearly belong on the page.
+
+## Category nodes (every node that is not a page, the top level included)
+- id (a slug as above, unique across nodes, pages and labels), parent_id (null for the top \
+level), title_he, and description (one Hebrew sentence). List siblings in the order a reader \
+should meet them (for phases of the process: chronologically).
+
+## Labels
+Labels are facets that cut across pages and are not pages, so that a reader can find, for \
+example, everything about one country on whichever pages it appears. The owner's example: by \
+country. Propose the label kinds the claims support (for example country, stage of the \
+process, type of provider; your call) and, for each kind, the labels that enough groups would \
+carry. A label is one value of a kind: kind "country", label "usa" titled "ארצות הברית". Each \
+label has an id (slug), a kind (slug), a title_he, and a description: one Hebrew sentence \
+precise enough to decide yes or no for a single claim. Skip labels that only a few groups \
+would carry. A label must not duplicate a page or the tree's top level. Labels are not part \
+of the tree.
+
+## The input
+Each line is one claim group: id | stance | support | month or first..last month | threads \
+| [entity names] | the claim as worded by its representative member claim. Stance: \
+positive (recommends), negative (warns against), neutral or factual. Support: +N \
+distinct members backed it, -M disputed it (left out when none). Threads appears only when \
+the claim came up in more than one conversation, entity names only when it names any. Support \
+shows how much the community cares; dates show what is current. Lines are in order of first \
+appearance.
+
+## Rules
+- Write titles, descriptions and scopes in Hebrew. {FORBIDDEN_TERM_INSTRUCTION}
+- Titles name topics. Never put a private person's name into a title, description or scope.
+- Return only the JSON object asked for."""
+
+_TEXT = {"type": "string"}
+_TEXTS = {"type": "array", "items": _TEXT}
+
+
+def _object(properties: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(properties),
+        "additionalProperties": False,
+    }
+
+
+PROPOSAL_SCHEMA: dict[str, Any] = _object({
+    "top_level_rationale": _TEXT,
+    "nodes": {"type": "array", "items": _object({
+        "id": _TEXT,
+        "parent_id": {"anyOf": [_TEXT, {"type": "null"}]},
+        "title_he": _TEXT,
+        "description": _TEXT,
+    })},
+    "pages": {"type": "array", "items": _object({
+        "id": _TEXT,
+        "parent_id": _TEXT,
+        "title_he": _TEXT,
+        "description": _TEXT,
+        "scope": _TEXT,
+        "aliases_he": _TEXTS,
+        "aliases_en": _TEXTS,
+        "example_group_ids": _TEXTS,
+    })},
+    "labels": {"type": "array", "items": _object({
+        "id": _TEXT,
+        "kind": _TEXT,
+        "title_he": _TEXT,
+        "description": _TEXT,
+    })},
+})
+
+
+def _one_line(text: str) -> str:
+    return " ".join(str(text).split())
+
+
+def group_line(group: dict[str, Any]) -> str:
+    """One claim group as the model reads it. Only group-level fields: no people, no messages.
+
+    Compact on purpose (the whole corpus goes into one prompt): optional parts are left out
+    when they carry nothing (no opposers, one month, one thread, no entities)."""
+
+    first, last = group["first_date"][:7], group["last_date"][:7]
+    support = f"+{group['supporter_count']}"
+    if group["opposer_count"]:
+        support += f" -{group['opposer_count']}"
+    parts = [group["group_id"], group["stance"], support, first if first == last else f"{first}..{last}"]
+    if group["thread_count"] > 1:
+        parts.append(f"{group['thread_count']} threads")
+    if group.get("entity_names"):
+        parts.append(f"[{'; '.join(_one_line(name) for name in group['entity_names'])}]")
+    parts.append(_one_line(group["claim_text"]))
+    return " | ".join(parts)
+
+
+def groups_block(groups: Sequence[dict[str, Any]]) -> str:
+    """Every group, one line each, for the start of the user message.
+
+    Not in the (cached) system prompt on purpose: a planning call takes longer than the
+    prompt cache lives (5 minutes), so a cache write would cost more and never be read."""
+
+    lines = "\n".join(group_line(group) for group in groups)
+    return f'<claim_groups count="{len(groups)}">\n{lines}\n</claim_groups>'
+
+
+def initial_request(group_count: int) -> str:
+    return f"Propose the wiki structure for the {group_count} claim groups above."
+
+
+def retry_request(group_count: int, answer: Any, errors: Sequence[str]) -> str:
+    problems = "\n".join(f"- {error}" for error in errors)
+    return (
+        f"{initial_request(group_count)}\n\nYour previous answer did not pass validation:\n"
+        f"{problems}\n\nThat answer was:\n{json.dumps(answer, ensure_ascii=False)}\n\n"
+        "Return the complete corrected answer, keeping everything that was not wrong."
+    )
+
+
+def revision_request(plan: dict[str, Any], sample_size: int, findings: Sequence[str]) -> str:
+    found = "\n".join(f"- {finding}" for finding in findings)
+    return (
+        f"This is the structure you proposed:\n"
+        f"{json.dumps(proposal_from_plan(plan), ensure_ascii=False)}\n\n"
+        f"A classifier then placed a random sample of {sample_size} claim groups, reading only "
+        f"the page titles and scopes. What it found:\n{found}\n\n"
+        "Revise the structure where these problems are real: sharpen scopes that overlap or "
+        "are vague, split overloaded pages, fold pages that attract almost nothing into their "
+        "neighbours, and give a home to the kinds of groups that fit nowhere. Keep the ids of "
+        "the pages you keep; when you merge pages, keep the id that best names the merged "
+        "subject. Return the complete revised answer."
+    )
+
+
+def proposal_from_plan(plan: dict[str, Any]) -> dict[str, Any]:
+    """A C7 plan in the model's flat answer format (the inverse of ``plan_from_proposal``)."""
+
+    pages = plan["pages"]
+    nodes: list[dict[str, Any]] = []
+    flat_pages: list[dict[str, Any]] = []
+    for node, ancestors in iter_nodes(plan["tree"]):
+        parent = ancestors[-1] if ancestors else None
+        if node["id"] not in pages:
+            nodes.append({"id": node["id"], "parent_id": parent,
+                          "title_he": node["title_he"], "description": node["description"]})
+            continue
+        page = pages[node["id"]]
+        flat_pages.append({
+            "id": node["id"], "parent_id": parent, "title_he": page["title_he"],
+            "description": page["description"], "scope": page["scope"],
+            "aliases_he": page["aliases"]["he"], "aliases_en": page["aliases"]["en"],
+            "example_group_ids": page["example_group_ids"],
+        })
+    return {
+        "top_level_rationale": plan["metadata"].get("top_level_rationale", ""),
+        "nodes": nodes,
+        "pages": flat_pages,
+        "labels": [{"id": lid, **{k: label[k] for k in ("kind", "title_he", "description")}}
+                   for lid, label in plan["labels"].items()],
+    }
+
+
+def _attach(raw: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Build the tree from the flat node and page lists; returns (tree, errors)."""
+
+    errors: list[str] = []
+    built: dict[str, dict[str, Any]] = {}
+    parents: dict[str, Any] = {}
+    for kind, items in (("node", raw["nodes"]), ("page", raw["pages"])):
+        for item in items:
+            if item["id"] in built:
+                errors.append(f"{kind} id {item['id']!r} is used more than once")
+                continue
+            built[item["id"]] = {"id": item["id"], "title_he": item["title_he"],
+                                 "description": item["description"], "children": []}
+            parents[item["id"]] = item["parent_id"]
+    page_ids = {page["id"] for page in raw["pages"]}
+    tree: list[dict[str, Any]] = []
+    for item_id, parent in parents.items():
+        if parent is None:
+            tree.append(built[item_id])
+        elif parent not in built or parent in page_ids:
+            errors.append(f"{item_id!r} has parent_id {parent!r}, which is not a category node")
+        else:
+            built[parent]["children"].append(built[item_id])
+    reachable = {node["id"] for node, _ in iter_nodes(tree)}
+    errors += [f"{item_id!r} cannot be reached from the top level (its parent_id chain loops)"
+               for item_id in built if item_id not in reachable
+               and parents[item_id] in built and parents[item_id] not in page_ids]
+    return tree, errors
+
+
+def plan_from_proposal(
+    raw: dict[str, Any], group_ids: set[str]
+) -> tuple[dict[str, Any], list[str]]:
+    """Turn the model's answer into a C7 plan; returns ``(plan, errors)``.
+
+    ``errors`` holds every structural and validation problem (empty = usable). Example group
+    ids that are not real groups are dropped silently: they are hints, not structure.
+    """
+
+    tree, errors = _attach(raw)
+    pages = {
+        page["id"]: {
+            "title_he": page["title_he"],
+            "description": page["description"],
+            "scope": page["scope"],
+            "path": [],
+            "aliases": {"he": page["aliases_he"], "en": page["aliases_en"]},
+            "example_group_ids": [g for g in page["example_group_ids"] if g in group_ids],
+        }
+        for page in raw["pages"]
+    }
+    labels = {
+        label["id"]: {"title_he": label["title_he"], "description": label["description"],
+                      "kind": label["kind"]}
+        for label in raw["labels"]
+    }
+    errors += [f"label id {lid!r} is used more than once"
+               for lid in labels if sum(1 for lab in raw["labels"] if lab["id"] == lid) > 1]
+    plan = sync_pages({
+        "tree": tree,
+        "pages": pages,
+        "labels": labels,
+        "metadata": {"top_level_rationale": raw["top_level_rationale"]},
+    })
+    return plan, errors + validation_errors(plan)
