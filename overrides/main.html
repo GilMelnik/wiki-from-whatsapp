@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block footer %}
+  {% if config.extra.coffee_url %}
+    <div class="md-coffee">
+      <p class="md-coffee__text">
+        {{ config.extra.coffee_text | e }}
+        <a href="{{ config.extra.coffee_url | e }}" target="_blank" rel="noopener">{{ config.extra.coffee_link_text | e }}</a>
+      </p>
+    </div>
+  {% endif %}
+  {{ super() }}
+{% endblock %}
