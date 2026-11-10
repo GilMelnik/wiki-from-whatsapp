@@ -161,7 +161,36 @@
     "claim_id_hash_chars": 8,
     "message_fingerprint_chars": 12
   },
-  "aggregate": {},
+  "aggregate": {
+    "embedding_kind": "similarity",
+    "merge_threshold": {"shared_entity": 0.95, "no_shared_entity": 0.96},
+    "contradiction_threshold": 0.9,
+    "opposing_stances": ["positive", "negative"],
+    "group_id_prefix": "g-",
+    "group_id_hash_chars": 8,
+    "eval": {
+      "backup_dir": "/mnt/SSD/coding/backup_data_wiki_from_whatsapp/2026_11_07_data",
+      "pair_labels": "step_5_aggregate/eval/pair_labels.json",
+      "bands": [0.9, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97],
+      "settings": [
+        {"name": "embedding 0.93", "shared": 0.93, "other": 0.93, "number_guard": false},
+        {"name": "embedding 0.94", "shared": 0.94, "other": 0.94, "number_guard": false},
+        {"name": "embedding 0.95", "shared": 0.95, "other": 0.95, "number_guard": false},
+        {"name": "embedding 0.96", "shared": 0.96, "other": 0.96, "number_guard": false},
+        {"name": "embedding 0.97", "shared": 0.97, "other": 0.97, "number_guard": false},
+        {"name": "entity 0.92/0.95", "shared": 0.92, "other": 0.95, "number_guard": false},
+        {"name": "entity 0.93/0.96", "shared": 0.93, "other": 0.96, "number_guard": false},
+        {"name": "entity 0.94/0.96", "shared": 0.94, "other": 0.96, "number_guard": false},
+        {"name": "entity 0.95/0.96", "shared": 0.95, "other": 0.96, "number_guard": false},
+        {"name": "entity+numbers 0.93/0.96", "shared": 0.93, "other": 0.96, "number_guard": true},
+        {"name": "entity+numbers 0.94/0.96", "shared": 0.94, "other": 0.96, "number_guard": true},
+        {"name": "entity+numbers 0.95/0.96", "shared": 0.95, "other": 0.96, "number_guard": true},
+        {"name": "numbers 0.96", "shared": 0.96, "other": 0.96, "number_guard": true}
+      ],
+      "base_fraction": 0.8,
+      "edit_suffix": " (נערך)"
+    }
+  },
   "plan": {
     "max_pages": 30
   },

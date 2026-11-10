@@ -1,328 +1,142 @@
-"""Step 5 aggregate: agglomerative clustering, soft size cap, stance split, caches."""
+"""Step 5 grouping: the pair rule, complete linkage, people counting, ids, contradictions."""
 
 from __future__ import annotations
 
+import hashlib
 import json
-from collections import Counter
 from pathlib import Path
+from typing import Any
 
-import numpy as np
+import pytest
 
-from step_5_aggregate.run import (
-    _claim_distance_matrix,
-    _claim_texts,
-    _cluster,
-    _medoid_index,
-    _merge_claims,
-    apply_manual_aggregations,
-    ensure_claim_embeddings,
-    ensure_distance_matrix,
-)
+import step_5_aggregate.similarity as similarity
+from step_5_aggregate.derive import people
+from step_5_aggregate.groups import allocate_group_id, used_group_ids
+from step_5_aggregate.run import run
+from step_5_aggregate.similarity import AGGREGATE_CONFIG, numbers_in
+from tests.aggregate_fixtures import Corpus, angle_for
+
+BARS = AGGREGATE_CONFIG["merge_threshold"]
+BETWEEN_BARS = angle_for((BARS["shared_entity"] + BARS["no_shared_entity"]) / 2)
+CLOSE = angle_for(0.995)
 
 
-def test_manual_aggregation_force_merges_dissimilar_claims():
-    # Two claims with unrelated text and opposite stances would never cluster on
-    # their own, but a manual group forces them into one merged claim under the
-    # chosen representative (Req 4).
-    claims = [
-        {
-            "claim_id": "a",
-            "claim_text": "agency X is great",
-            "stance": "positive",
-            "date": "2024-01",
-            "entities": ["agency X"],
-            "thread_id": "t1",
-            "topic_tags": ["overview"],
-            "support_count": 1,
+@pytest.fixture
+def corpus(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Corpus:
+    built = Corpus(tmp_path)
+    monkeypatch.setattr(similarity, "embed_texts", built.embed)
+    return built
+
+
+def groups_of(corpus: Corpus) -> list[dict[str, Any]]:
+    run(**corpus.paths())
+    return json.loads(corpus.artifact.edited.read_text("utf-8"))["groups"]
+
+
+def members(groups: list[dict[str, Any]]) -> list[list[str]]:
+    return sorted(g["member_claim_ids"] for g in groups)
+
+
+def test_shared_entity_lowers_the_bar(corpus: Corpus) -> None:
+    corpus.add("a", entities=["Alpha"])
+    corpus.add("b", angle=BETWEEN_BARS, entities=["Alpha"], date="2024-02-01")
+    corpus.add("c", plane=1)
+    corpus.add("d", plane=1, angle=BETWEEN_BARS, date="2024-02-01")
+    assert members(groups_of(corpus)) == [["a", "b"], ["c"], ["d"]]
+
+
+def test_opposite_stances_stay_apart_and_contradict(corpus: Corpus) -> None:
+    corpus.add("pos", stance="positive", entities=["Alpha"])
+    corpus.add("neg", stance="negative", angle=CLOSE, entities=["Alpha"])
+    corpus.add("pos2", stance="positive", plane=1)
+    corpus.add("neg2", stance="negative", plane=1, angle=CLOSE)
+    groups = {g["representative_claim_id"]: g for g in groups_of(corpus)}
+    assert len(groups) == 4
+    assert groups["pos"]["contradicts"] == [groups["neg"]["group_id"]]
+    assert groups["neg"]["contradicts"] == [groups["pos"]["group_id"]]
+    assert groups["pos2"]["contradicts"] == [] and groups["neg2"]["contradicts"] == []
+
+
+def test_neutral_and_factual_claims_may_join_a_positive_one(corpus: Corpus) -> None:
+    corpus.add("a", stance="positive", entities=["Alpha"])
+    corpus.add("b", stance="factual", angle=CLOSE, entities=["Alpha"])
+    assert members(groups_of(corpus)) == [["a", "b"]]
+
+
+def test_claims_quoting_different_numbers_never_merge(corpus: Corpus) -> None:
+    assert numbers_in("costs 10,000 or 2.5 per form 300") == {"10000", "2.5", "300"}
+    corpus.add("a", text="file form 300", entities=["Alpha"])
+    corpus.add("b", text="file form 302", angle=CLOSE, entities=["Alpha"])
+    corpus.add("c", text="the form 300 is the one", angle=-CLOSE, entities=["Alpha"])
+    assert members(groups_of(corpus)) == [["a", "c"], ["b"]]
+
+
+def test_a_claim_must_match_every_member(corpus: Corpus) -> None:
+    half = angle_for(BARS["shared_entity"]) * 0.75
+    corpus.add("a", entities=["Alpha"])
+    corpus.add("b", angle=half, entities=["Alpha"], date="2024-01-02")
+    # c matches b, but not a: complete linkage keeps it out (no chaining).
+    corpus.add("c", angle=2 * half, entities=["Alpha"], date="2024-01-03")
+    assert members(groups_of(corpus)) == [["a", "b"], ["c"]]
+
+
+def test_people_are_distinct_across_members_and_months() -> None:
+    audit = {
+        "a": {
+            "supporters": [
+                {"person": "p1", "date": "2024-01-05"},
+                {"person": "p2", "date": "2024-01-05"},
+                {"person": "p3", "date": "2024-02-01"},
+            ],
+            "opposers": [{"person": "p4", "date": "2024-02-03"}],
         },
-        {
-            "claim_id": "b",
-            "claim_text": "completely unrelated wording about something else",
-            "stance": "negative",
-            "date": "2024-02",
-            "entities": ["Y"],
-            "thread_id": "t2",
-            "topic_tags": ["overview"],
-            "support_count": 1,
+        "b": {
+            "supporters": [
+                {"person": "p1", "date": "2024-03-01"},  # p1 again: counted once
+                {"person": "p4", "date": "2024-03-02"},  # p4 changed their mind: supporter
+                {"person": "p5", "date": "2024-02-01"},
+            ],
+            "opposers": [{"person": "p5", "date": "2024-02-01"}],  # same day: opposer wins
         },
-    ]
-    aggregations = [{"id": "agg0000", "representative": "a", "claim_ids": ["a", "b"]}]
-
-    reduced = apply_manual_aggregations(claims, aggregations)
-    assert [c["claim_id"] for c in reduced] == ["a"]
-
-    merged = _merge_claims(
-        reduced,
-        {},
-        _claim_distance_matrix(_claim_texts(reduced), None, None),
-        similarity_threshold=0.9,
-    )
-    assert len(merged) == 1
-    entry = merged[0]
-    assert set(entry["source_claim_ids"]) == {"a", "b"}
-    assert entry["claim_text"] == "agency X is great"  # the chosen representative
-    assert entry["support_count"] == 2
-    assert entry["thread_count"] == 2
-    assert set(entry["entities"]) == {"Y", "agency X"}
-
-
-def test_cluster_bounds_diameter():
-    # 0-1 and 1-2 are close; 0-2 is far. Complete linkage refuses to chain
-    # them into one cluster (unlike DBSCAN's density connectivity).
-    dist = np.array(
-        [
-            [0.0, 0.1, 0.5],
-            [0.1, 0.0, 0.1],
-            [0.5, 0.1, 0.0],
-        ],
-        dtype=np.float32,
-    )
-    labels = _cluster(dist, distance_threshold=0.15, max_size=8, keep_together_distance=0.0)
-    assert labels[0] != labels[2]
-
-
-def test_cluster_keeps_dissimilar_points_separate():
-    dist = np.array(
-        [
-            [0.0, 0.9],
-            [0.9, 0.0],
-        ],
-        dtype=np.float32,
-    )
-    labels = _cluster(dist, distance_threshold=0.15, max_size=8, keep_together_distance=0.0)
-    assert labels[0] != labels[1]
-
-
-def test_cluster_caps_size():
-    # 10 points all within the merge threshold but spread out enough that the
-    # cluster diameter exceeds keep_together_distance, so the cap applies.
-    n = 10
-    dist = np.full((n, n), 0.1, dtype=np.float32)
-    np.fill_diagonal(dist, 0.0)
-    labels = _cluster(dist, distance_threshold=0.5, max_size=8, keep_together_distance=0.05)
-    sizes = Counter(labels)
-    assert all(size <= 8 for size in sizes.values())
-    assert sum(sizes.values()) == n
-
-
-def test_cluster_soft_cap_keeps_tight_cluster():
-    # 10 identical points (distance 0): below keep_together_distance, so the
-    # oversized cluster stays whole despite max_size=8.
-    n = 10
-    dist = np.zeros((n, n), dtype=np.float32)
-    labels = _cluster(dist, distance_threshold=0.5, max_size=8, keep_together_distance=0.05)
-    assert len(set(labels)) == 1
-
-
-def test_medoid_picks_central_point():
-    dist = np.array(
-        [
-            [0.0, 0.4, 0.4],
-            [0.4, 0.0, 0.1],
-            [0.4, 0.1, 0.0],
-        ],
-        dtype=np.float32,
-    )
-    assert _medoid_index([0, 1, 2], dist) == 1
-
-
-def test_merge_claims_uses_dbscan_and_medoid():
-    claims = [
-        {
-            "claim_id": "a",
-            "claim_text": "agency X is very expensive in Israel",
-            "stance": "negative",
-            "date": "2024-01",
-            "entities": ["agency X"],
-            "thread_id": "t1",
-            "topic_tags": ["costs"],
-            "support_count": 2,
-        },
-        {
-            "claim_id": "b",
-            "claim_text": "agency X is expensive in Israel",
-            "stance": "negative",
-            "date": "2024-02",
-            "entities": ["agency X"],
-            "thread_id": "t2",
-            "topic_tags": ["costs"],
-            "support_count": 1,
-        },
-        {
-            "claim_id": "c",
-            "claim_text": "agency X is costly in Israel",
-            "stance": "negative",
-            "date": "2024-03",
-            "entities": ["agency X"],
-            "thread_id": "t4",
-            "topic_tags": ["costs"],
-            "support_count": 1,
-        },
-        {
-            "claim_id": "d",
-            "claim_text": "egg donation laws in Georgia are clear",
-            "stance": "positive",
-            "date": "2024-04",
-            "entities": ["Georgia"],
-            "thread_id": "t3",
-            "topic_tags": ["costs"],
-            "support_count": 3,
-        },
-    ]
-    merged = _merge_claims(
-        claims,
-        {},
-        _claim_distance_matrix(_claim_texts(claims), None, None),
-        similarity_threshold=0.55,
-    )
-    assert len(merged) == 2
-    trio = next(m for m in merged if m["endorsement_count"] == 3)
-    assert set(trio["variants"]) == {
-        "agency X is very expensive in Israel",
-        "agency X is expensive in Israel",
-        "agency X is costly in Israel",
     }
-    assert trio["claim_text"] == "agency X is expensive in Israel"
+    out = people(["a", "b"], audit)
+    assert out["supporter_count"] == 4  # p1 p2 p3 p4
+    assert out["opposer_count"] == 1  # p5
+    assert out["by_month"] == {
+        "2024-01": {"supporters": 2, "opposers": 0},
+        "2024-02": {"supporters": 1, "opposers": 2},
+        "2024-03": {"supporters": 2, "opposers": 0},
+    }
 
 
-def test_merge_keeps_stances_separate():
-    # Near-identical text, opposite stance: must not merge.
-    claims = [
-        {
-            "claim_id": "a",
-            "claim_text": "agency X is great",
-            "stance": "positive",
-            "date": "2024-01",
-            "entities": ["agency X"],
-            "thread_id": "t1",
-            "topic_tags": ["overview"],
-            "support_count": 1,
-        },
-        {
-            "claim_id": "b",
-            "claim_text": "agency X is great",
-            "stance": "negative",
-            "date": "2024-02",
-            "entities": ["agency X"],
-            "thread_id": "t2",
-            "topic_tags": ["overview"],
-            "support_count": 1,
-        },
-    ]
-    merged = _merge_claims(
-        claims,
-        {},
-        _claim_distance_matrix(_claim_texts(claims), None, None),
-        similarity_threshold=0.5,
+def test_group_fields_and_id_from_the_oldest_claim(corpus: Corpus) -> None:
+    corpus.add("late", entities=["Alpha"], date="2024-05-01", supporters=[("p1", "2024-05-01")])
+    corpus.add(
+        "early",
+        angle=CLOSE,
+        entities=["Alpha", "Beta"],
+        date="2023-12-30",
+        supporters=[("p1", "2023-12-30"), ("p2", "2023-12-30")],
+        opposers=[("p3", "2024-01-02")],
     )
-    assert len(merged) == 2
-    assert {m["stance"] for m in merged} == {"positive", "negative"}
+    (group,) = groups_of(corpus)
+    prefix, chars = AGGREGATE_CONFIG["group_id_prefix"], AGGREGATE_CONFIG["group_id_hash_chars"]
+    assert group["group_id"] == prefix + hashlib.sha1(b"early").hexdigest()[:chars]
+    assert group["representative_claim_id"] == "early"  # most supporters
+    assert group["claim_text"] == "claim early"
+    assert group["member_claim_ids"] == ["early", "late"]
+    assert group["entities"] == ["e0000", "e0001"]
+    assert group["entity_names"] == ["Alpha", "Beta"]
+    assert (group["supporter_count"], group["opposer_count"]) == (2, 1)
+    assert (group["first_date"], group["last_date"]) == ("2023-12-30", "2024-05-01")
+    assert group["thread_count"] == 2
+    assert group["by_month"]["2024-01"] == {"supporters": 0, "opposers": 1}
 
 
-def test_claim_embeddings_cache_reuses_file(tmp_path: Path):
-    claims = [
-        {"claim_id": "a", "claim_text": "first claim"},
-        {"claim_id": "b", "claim_text": "second claim"},
-    ]
-    texts = _claim_texts(claims)
-    source = tmp_path / "claims.json"
-    source.write_text(json.dumps({"claims": claims}), encoding="utf-8")
-    query_path = tmp_path / "query.json"
-    passage_path = tmp_path / "passage.json"
-
-    fake_query = [np.array([1.0, 0.0], dtype=np.float32), np.array([0.0, 1.0], dtype=np.float32)]
-    fake_passage = [np.array([0.9, 0.1], dtype=np.float32), np.array([0.1, 0.9], dtype=np.float32)]
-
-    import step_5_aggregate.run as aggregate
-
-    aggregate._write_claim_embeddings(
-        query_path,
-        fake_query,
-        source_path=source,
-        model_name=aggregate.DEFAULT_EMBEDDING_MODEL,
-        embedding_dim=2,
-        embedding_kind="query",
-        claims=claims,
-        companion_path=passage_path,
-    )
-    aggregate._write_claim_embeddings(
-        passage_path,
-        fake_passage,
-        source_path=source,
-        model_name=aggregate.DEFAULT_EMBEDDING_MODEL,
-        embedding_dim=2,
-        embedding_kind="passage",
-        claims=claims,
-        companion_path=query_path,
-    )
-
-    class ExplodingEmbedder:
-        def __init__(self, *args, **kwargs):
-            raise AssertionError("embedder should not run when cache is valid")
-
-    from step_1_threads_split.embedding import embedding as embedding_mod
-
-    original_cls = embedding_mod.Embedder
-    embedding_mod.Embedder = ExplodingEmbedder
-    try:
-        query_vectors, passage_vectors = ensure_claim_embeddings(
-            claims,
-            texts,
-            source,
-            query_path=query_path,
-            passage_path=passage_path,
-        )
-    finally:
-        embedding_mod.Embedder = original_cls
-
-    assert len(query_vectors) == len(passage_vectors) == 2
-    assert np.allclose(query_vectors[0], fake_query[0])
-
-
-def test_distance_matrix_cache_reuses_file(tmp_path: Path):
-    claims = [
-        {"claim_id": "a", "claim_text": "first claim"},
-        {"claim_id": "b", "claim_text": "second claim"},
-    ]
-    texts = _claim_texts(claims)
-    source = tmp_path / "claims.json"
-    source.write_text(json.dumps({"claims": claims}), encoding="utf-8")
-    matrix_path = tmp_path / "matrix.npy"
-    meta_path = tmp_path / "matrix.json"
-    dist = _claim_distance_matrix(texts, None, None)
-
-    import step_5_aggregate.run as aggregate
-
-    original_build = aggregate._claim_distance_matrix
-    calls = {"count": 0}
-
-    def counting_build(*args, **kwargs):
-        calls["count"] += 1
-        return dist
-
-    aggregate._claim_distance_matrix = counting_build
-    try:
-        first = ensure_distance_matrix(
-            claims,
-            texts,
-            source,
-            None,
-            None,
-            matrix_path=matrix_path,
-            meta_path=meta_path,
-        )
-        second = ensure_distance_matrix(
-            claims,
-            texts,
-            source,
-            None,
-            None,
-            matrix_path=matrix_path,
-            meta_path=meta_path,
-        )
-    finally:
-        aggregate._claim_distance_matrix = original_build
-
-    assert calls["count"] == 1
-    assert np.array_equal(first, second)
-    assert matrix_path.is_file() and meta_path.is_file()
+def test_allocate_group_id_never_reuses_an_id() -> None:
+    first = allocate_group_id("seed", set())
+    groups = [{"group_id": "g-other", "member_claim_ids": ["x"], "merged_from": [first]}]
+    used = used_group_ids(groups)
+    assert used == {"g-other", first}
+    second = allocate_group_id("seed", used)
+    assert second != first and second.startswith(AGGREGATE_CONFIG["group_id_prefix"])

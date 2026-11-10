@@ -5,7 +5,7 @@ Runs steps in order:
     3. classify  -> data/threads_classified.json
     4. extract   -> data/claims.json + data/audit/ (private)
     4b. entities -> data/entities.json
-    5. aggregate -> data/claims_aggregated.json
+    5. aggregate -> data/claims_aggregated.json (claim groups, contract C6)
     6. plan      -> data/wiki_plan.json (seed page catalog)
     7. write pages -> data/wiki_pages.json (agentic, mini-batch over claims)
     9. site      -> mkdocs.yml
@@ -52,7 +52,6 @@ def _stage_clients(logger: logging.Logger) -> dict[str, LLMClient]:
 
 
 def run(
-    use_embeddings: bool = True,
     *,
     use_batch: bool = False,
     skip_plan: bool = False,
@@ -101,8 +100,11 @@ def run(
 
     logger = setup_step_logging(STEP_5)
     logger.info("[5] Aggregating claims...")
-    a_meta = aggregate(use_embeddings=use_embeddings)
-    logger.info(f"    {a_meta['topic_count']} topics (merge: {a_meta['merge_method']})")
+    a_meta = aggregate()
+    logger.info(
+        f"    {a_meta['group_count']} groups ({a_meta['multi_member_group_count']} with several "
+        f"claims) from {a_meta['claim_count']} claims; {a_meta['new_claims']} new claims"
+    )
 
     logger = setup_step_logging(STEP_6)
     if skip_plan:
