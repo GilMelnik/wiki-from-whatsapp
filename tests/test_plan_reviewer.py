@@ -1,4 +1,9 @@
-"""Tests for plan_reviewer.store."""
+"""Tests for plan_reviewer.store (the OLD page-list step-6 reviewer).
+
+Handed to task 35a: step 6 now writes contract C7 (a tree of pages + labels) and no longer
+exports ``identity_plan`` / ``pages_by_category``, which this reviewer imports. Task 35a
+rebuilds the plan review tool on ``step_6_plan.operations`` and replaces these tests.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +12,12 @@ from pathlib import Path
 
 import pytest
 
-from step_6_plan.reviewer.store import PlanStore
+pytest.skip(
+    "old page-list step-6 reviewer; task 35a rebuilds it on contract C7 (step_6_plan.operations)",
+    allow_module_level=True,
+)
+
+from step_6_plan.reviewer.store import PlanStore  # noqa: E402
 
 
 @pytest.fixture

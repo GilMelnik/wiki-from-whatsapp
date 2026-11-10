@@ -105,6 +105,10 @@ MANUAL_AGGREGATIONS_PATH = step_path(STEP_4, "claim_aggregations.json")
 # The measurement's private working folder (``python -m step_5_aggregate.evaluate``).
 AGGREGATE_EVAL_DIR = step_path(STEP_5, "eval")
 
+# ---------------------------------------------------------------- step 6 plan
+# The coverage check of the last planning run (not part of the plan itself).
+PLAN_COVERAGE_PATH = step_path(STEP_6, "coverage_report.json")
+
 # ------------------------------------------------------------------- shared
 BACKUPS_DIR = step_path(SHARED, "backups")
 

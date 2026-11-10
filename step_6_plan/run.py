@@ -1,256 +1,261 @@
-"""Step 6: plan wiki pages, merges, and cross-links from aggregated claims.
+"""Step 6: let the planning model propose the wiki's structure from the claim groups (contract C7).
 
-The planning agent reads all aggregated topic buckets and the taxonomy seed list,
-then proposes a page catalog (with merges/splits/new pages) and a link graph.
-Output: ``data/wiki_plan.json``.
+How it works, in plain words: the model configured for stage ``plan.stage`` (Opus 5.5) reads
+every claim group of the effective step-5 file, one compact line each, and proposes a tree of
+content: an abstraction layer on top (for example the phases of the process), categories
+below it, and pages as the leaves (at most ``plan.max_pages``), each with a scope that says
+what belongs on it and what does not, plus labels that cut across pages (for example by
+country). The answer is validated (``step_6_plan.model``); on failure the model gets ONE retry
+with the errors. A coverage check (``step_6_plan.coverage``) then asks the cheap classifier to
+place a fixed sample of groups using only titles and scopes; if it finds real problems, the
+model gets ONE revision call, kept only when it does not lower the confident share. At most
+``plan.max_model_calls`` model calls per run. The prompt's token count is checked before each
+call: a corpus that would not fit the context window fails with a clear message instead of
+being truncated.
+
+A plan is curated, not derived: the owner edits it (``step_6_plan.operations``, the plan
+review tool). So a normal run on an existing plan makes NO model call and writes nothing: it
+validates the plan and reports how many groups are newer than it (task 24 assigns them). Only
+``run(rebuild=True)`` / ``--rebuild`` plans again, after backing up the edited plan.
+
+    python -m step_6_plan.run [--rebuild]
+
+Output: ``wiki_plan.json`` == ``wiki_plan_edited.json`` after a planning run (C7, see
+``step_6_plan.model``) and ``coverage_report.json`` (the coverage numbers of that run).
 """
 
 from __future__ import annotations
 
+import argparse
 import json
-from collections import defaultdict
+import logging
+from collections.abc import Callable, Sequence
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import anthropic
+
+from step_6_plan.coverage import COVERAGE_CONFIG, coverage_check, findings
+from step_6_plan.model import PLAN_CONFIG, PlanError, validation_errors
+from step_6_plan.prompt import (
+    PROPOSAL_SCHEMA,
+    initial_request,
+    plan_from_proposal,
+    retry_request,
+    revision_request,
+    system_prompt,
+)
+from utils.config import LLM_CONFIG
+from utils.embedding_ab import _git_commit
 from utils.json_io import write_json_file
-from utils.llm_client import BatchRequest, LLMClient, extract_json
+from utils.llm_client import Classifier, LLMClient, _flatten
+from utils.llm_client.models import PromptInput
 from utils.logging_setup import setup_step_logging
-from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION
-from utils.taxonomy import CATEGORIES, category_title, resolve_search_focus, taxonomy_seed_block
+from utils.paths import PLAN, PLAN_COVERAGE_PATH, STEP_6, Artifact, resolve, resolve_aggregated_path
+from utils.reconcile import guarded_write
 
-from utils.paths import (
-    ORIGINAL_AGGREGATED_PATH,
-    ORIGINAL_PLAN_PATH,
-    STEP_6,
-    resolve_aggregated_path,
-)
-
-PLAN_SYSTEM = (
-    "אתה מתכנן את מבנה הויקי בעברית על פונדקאות לגייז, על בסיס טענות שחולצו מקבוצת וואטסאפ.\n"
-    "כללים:\n"
-    "1. רשימת הנושאים המוצעים היא נקודת התחלה בלבד — אתה רשאי למזג נושאים קרובים, "
-    "לפצל נושאים רחבים וליצור עמודים חדשים.\n"
-    "2. כל עמוד חייב לכלול לפחות טענה אחת, באמצעות source_tags המצביעים על מזהי הנושאים המקוריים.\n"
-    "3. הצע גרף קישורים סמנטי בין עמודים (ללא הגבלת מספר): קשר כל עמוד לעמודים "
-    "המשלימים או הקרובים לו מבחינת תוכן. קישורים אלה מזינים את סעיף 'עמודים קשורים'.\n"
-    "4. עבור עמודים ברשימת הנושאים עם search_focus מוגדר — השתמש בערך הזה כפי שהוא. "
-    "עבור עמודים חדשים שלא ברשימה, הצע search_focus — שאילתת חיפוש לרקע ציבורי כללי (לא דעות הקבוצה).\n"
-    f"5. {FORBIDDEN_TERM_INSTRUCTION}\n"
-    "החזר אך ורק אובייקט JSON תקין, ללא טקסט נוסף."
-)
+TokenCounter = Callable[[PromptInput, str], int]
 
 
-def _topic_summary_lines(topics: dict[str, Any]) -> str:
-    lines: list[str] = []
-    for topic_id, topic in sorted(
-        topics.items(), key=lambda kv: kv[1]["claim_count"], reverse=True
-    ):
-        entities = sorted(
-            {e for c in topic["merged_claims"][:5] for e in c.get("entities", [])}
-        )[:6]
-        samples = [c["claim_text"][:120] for c in topic["merged_claims"][:3]]
-        sample_text = " / ".join(samples) if samples else "(אין דוגמאות)"
-        entity_text = ", ".join(entities) if entities else "(אין)"
-        lines.append(
-            f"- id: {topic_id} | title: {topic['title']} | claims: {topic['claim_count']} "
-            f"| category: {topic['category']} | entities: {entity_text} "
-            f"| samples: {sample_text}"
-        )
-    return "\n".join(lines)
+class AnthropicTokenCounter:
+    """Counts a request's input tokens with the Messages API ``count_tokens`` endpoint (free)."""
+
+    def __init__(self, model: str) -> None:
+        self.model = model
+        self.client = anthropic.Anthropic()
+
+    def __call__(self, system: PromptInput, user: str) -> int:
+        return self.client.messages.count_tokens(
+            model=self.model,
+            system=_flatten(system),
+            messages=[{"role": "user", "content": user}],
+        ).input_tokens
 
 
-def build_plan_prompt(topics: dict[str, Any]) -> str:
-    categories = "\n".join(f"- {cid}: {title}" for cid, title in CATEGORIES.items())
+class Planner:
+    """The model calls of one planning run over a fixed list of groups."""
+
+    def __init__(
+        self,
+        groups: Sequence[dict[str, Any]],
+        llm: LLMClient,
+        count_tokens: TokenCounter,
+        logger: logging.Logger,
+    ) -> None:
+        self.groups = groups
+        self.group_ids = {group["group_id"] for group in groups}
+        self.llm = llm
+        self.count_tokens = count_tokens
+        self.logger = logger
+        self.system = system_prompt(groups)
+        self.input_tokens: list[int] = []
+
+    @property
+    def calls_left(self) -> int:
+        return PLAN_CONFIG["max_model_calls"] - len(self.input_tokens)
+
+    def _ask(self, user: str, task: str) -> dict[str, Any]:
+        if self.calls_left <= 0:
+            raise RuntimeError(f"plan.max_model_calls ({PLAN_CONFIG['max_model_calls']}) used up")
+        tokens = self.count_tokens(self.system, user)
+        budget = PLAN_CONFIG["context_window_tokens"] - PLAN_CONFIG["max_output_tokens"]
+        if tokens > budget:
+            raise ValueError(
+                f"The planning prompt has {tokens} input tokens ({len(self.groups)} groups); "
+                f"with plan.max_output_tokens={PLAN_CONFIG['max_output_tokens']} it does not fit "
+                f"plan.context_window_tokens={PLAN_CONFIG['context_window_tokens']}. Nothing was "
+                "sent. The corpus outgrew one call: plan from a subset or split the input."
+            )
+        self.input_tokens.append(tokens)
+        self.logger.info(f"Plan {task}: {tokens} input tokens; calling {self.llm.model}")
+        return self.llm.complete_json(self.system, user, task=task, response_schema=PROPOSAL_SCHEMA)
+
+    def propose(self) -> dict[str, Any]:
+        """A fresh, valid plan (one retry with the validation errors), else ``PlanError``."""
+
+        raw = self._ask(initial_request(len(self.groups)), "plan")
+        plan, errors = plan_from_proposal(raw, self.group_ids)
+        if errors and self.calls_left > 0:
+            self.logger.warning(f"Plan failed validation ({len(errors)} problems); retrying: {errors}")
+            raw = self._ask(retry_request(len(self.groups), raw, errors), "plan-retry")
+            plan, errors = plan_from_proposal(raw, self.group_ids)
+        if errors:
+            raise PlanError(["the planning model's answer failed validation twice", *errors])
+        return plan
+
+    def revise(
+        self, plan: dict[str, Any], sample_size: int, found: list[str]
+    ) -> dict[str, Any] | None:
+        """One revision call fed with the coverage findings; ``None`` if no call is left or
+        the revised plan is invalid (the caller keeps the plan it has)."""
+
+        if self.calls_left <= 0:
+            self.logger.info("Plan revision skipped: no model call left")
+            return None
+        raw = self._ask(revision_request(plan, sample_size, found), "plan-revise")
+        revised, errors = plan_from_proposal(raw, self.group_ids)
+        if errors:
+            self.logger.warning(f"Revised plan is invalid; keeping the first plan: {errors}")
+            return None
+        return revised
+
+
+def _coverage_line(report: dict[str, Any]) -> str:
     return (
-        "נושאים מוצעים (seed taxonomy — ניתן להתעלם, למזג או להרחיב):\n"
-        f"{taxonomy_seed_block()}\n\n"
-        "קטגוריות אפשריות לעמודים:\n"
-        f"{categories}\n\n"
-        "נושאים שחולצו מהשיחות (כל שורה = bucket אגרגציה):\n"
-        f"{_topic_summary_lines(topics)}\n\n"
-        "החזר JSON במבנה:\n"
-        "{\n"
-        '  "pages": [\n'
-        "    {\n"
-        '      "id": "<slug-latin>",\n'
-        '      "title": "<כותרת בעברית>",\n'
-        '      "category": "<category-id>",\n'
-        '      "source_tags": ["<topic-id>", ...],\n'
-        '      "rationale": "<משפט קצר>",\n'
-        '      "search_focus": "<search query — use seed value when defined, else propose one>"\n'
-        "    }\n"
-        "  ],\n"
-        '  "links": [\n'
-        '    {"from": "<page-id>", "to": "<page-id>", "reason": "<משפט קצר>"}\n'
-        "  ]\n"
-        "}\n"
-        "כל source_tag חייב להיות מזהה מהרשימה למעלה. "
-        "אל תיצור עמודים ללא טענות. מזג buckets קשורים לעמוד אחד כשמתאים."
+        f"confident {report['confident_share']:.0%}, none {report['none_share']:.0%}, "
+        f"unsure {report['unsure_share']:.0%} of {report['sample_size']}; "
+        f"small pages {report['small_pages']}, large pages {report['large_pages']}"
     )
 
 
-def identity_plan(
-    topics: dict[str, Any], *, min_claims: int = 1
-) -> dict[str, Any]:
-    """One page per aggregated topic (legacy / --no-plan behaviour)."""
+def _plan_and_check(
+    planner: Planner, groups: Sequence[dict[str, Any]], classifier: Classifier
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Propose, check coverage and revise at most once; returns ``(plan, coverage report)``."""
 
-    pages: list[dict[str, Any]] = []
-    for topic_id, topic in topics.items():
-        if topic["claim_count"] < min_claims:
-            continue
-        pages.append(
-            {
-                "id": topic_id,
-                "title": topic["title"],
-                "category": topic["category"],
-                "source_tags": [topic_id],
-                "rationale": "identity mapping (no plan agent)",
-                "search_focus": resolve_search_focus(topic_id, [topic_id]),
-            }
-        )
-    return {"pages": pages, "links": []}
-
-
-def _normalize_plan(raw: dict[str, Any], topics: dict[str, Any]) -> dict[str, Any]:
-    known_tags = set(topics.keys())
-    pages_out: list[dict[str, Any]] = []
-    seen_ids: set[str] = set()
-
-    for page in raw.get("pages") or []:
-        if not isinstance(page, dict):
-            continue
-        page_id = str(page.get("id") or "").strip()
-        if not page_id or page_id in seen_ids:
-            continue
-        source_tags = [
-            str(t).strip()
-            for t in (page.get("source_tags") or [])
-            if isinstance(t, str) and str(t).strip() in known_tags
-        ]
-        if not source_tags:
-            continue
-        title = str(page.get("title") or topics[source_tags[0]]["title"]).strip()
-        category = str(page.get("category") or topics[source_tags[0]]["category"]).strip()
-        if category not in CATEGORIES:
-            category = topics[source_tags[0]]["category"]
-        pages_out.append(
-            {
-                "id": page_id,
-                "title": title,
-                "category": category,
-                "source_tags": source_tags,
-                "rationale": str(page.get("rationale") or ""),
-                "search_focus": resolve_search_focus(
-                    page_id,
-                    source_tags,
-                    llm_value=page.get("search_focus"),
-                ),
-            }
-        )
-        seen_ids.add(page_id)
-
-    if not pages_out:
-        return identity_plan(topics)
-
-    valid_ids = {p["id"] for p in pages_out}
-    links_out: list[dict[str, str]] = []
-    for link in raw.get("links") or []:
-        if not isinstance(link, dict):
-            continue
-        src = str(link.get("from") or "").strip()
-        dst = str(link.get("to") or "").strip()
-        if src in valid_ids and dst in valid_ids and src != dst:
-            links_out.append(
-                {
-                    "from": src,
-                    "to": dst,
-                    "reason": str(link.get("reason") or ""),
-                }
-            )
-
-    return {"pages": pages_out, "links": links_out}
-
-
-def page_titles(plan: dict[str, Any]) -> dict[str, str]:
-    return {p["id"]: p["title"] for p in plan.get("pages", [])}
-
-
-def links_from_plan(plan: dict[str, Any], page_id: str) -> list[str]:
-    out: list[str] = []
-    seen: set[str] = {page_id}
-    for link in plan.get("links") or []:
-        if link.get("from") == page_id:
-            target = link.get("to")
-            if target and target not in seen:
-                out.append(target)
-                seen.add(target)
-    return out
+    plan = planner.propose()
+    report = coverage_check(plan, groups, classifier)
+    report["findings"] = findings(report, plan)
+    planner.logger.info(f"Coverage: {_coverage_line(report)}")
+    if not (report["findings"] and COVERAGE_CONFIG["revise"]):
+        return plan, report
+    revised = planner.revise(plan, report["sample_size"], report["findings"])
+    if revised is None:
+        return plan, report
+    revised_report = coverage_check(revised, groups, classifier)
+    revised_report["findings"] = findings(revised_report, revised)
+    planner.logger.info(f"Coverage after revision: {_coverage_line(revised_report)}")
+    if revised_report["confident_share"] < report["confident_share"]:
+        planner.logger.warning("The revision lowered the confident share; keeping the first plan")
+        return plan, {**report, "revision": {"kept": False, "revised_plan": revised,
+                                             "revised_report": revised_report}}
+    return revised, {**revised_report, "revision": {"kept": True, "first_plan": plan,
+                                                    "first_report": report}}
 
 
 def run(
-    aggregated_path: Path | str = ORIGINAL_AGGREGATED_PATH,
-    output_path: Path | str = ORIGINAL_PLAN_PATH,
-    llm: LLMClient | None = None,
-    use_batch: bool = False,
     *,
-    skip_agent: bool = False,
+    aggregated_path: Path | None = None,
+    artifact: Artifact = PLAN,
+    rebuild: bool = False,
+    llm: LLMClient | None = None,
+    classifier: Classifier | None = None,
+    count_tokens: TokenCounter | None = None,
 ) -> dict[str, Any]:
+    """Plan the wiki if there is no plan yet (or on ``rebuild``); otherwise only check it.
+
+    ``aggregated_path`` defaults to the effective (edited) step-5 file. ``llm``,
+    ``classifier`` and ``count_tokens`` default to the configured stages. Returns
+    ``written``, ``model_calls``, ``page_count``, ``label_count``, ``plan_path`` and, after
+    a planning run, ``input_tokens``, ``coverage`` (the report) and ``backup``; after a check
+    run, ``unplanned_groups`` (groups newer than the plan).
+    """
+
     logger = setup_step_logging(STEP_6)
-    agg_path = Path(aggregated_path) if aggregated_path is not None else resolve_aggregated_path()
-    with agg_path.open(encoding="utf-8") as f:
-        topics = json.load(f)["topics"]
+    source = aggregated_path or resolve_aggregated_path()
+    groups = json.loads(source.read_text(encoding="utf-8"))["groups"]
+    current = resolve(artifact)
+    if current.is_file() and not rebuild:
+        plan = json.loads(current.read_text(encoding="utf-8"))
+        errors = validation_errors(plan)
+        if errors:
+            raise PlanError([f"{current} is not a valid C7 plan; fix it in the plan review "
+                             "tool, or plan again with --rebuild (backs it up first)", *errors])
+        planned = set(plan["metadata"].get("planned_group_ids") or [])
+        unplanned = sum(1 for group in groups if group["group_id"] not in planned)
+        logger.info(
+            f"Plan {current}: {len(plan['pages'])} pages, {len(plan['labels'])} labels; kept "
+            f"as is (curated; --rebuild to plan again). {unplanned} of {len(groups)} groups "
+            "are newer than the plan."
+        )
+        return {"written": False, "model_calls": 0, "page_count": len(plan["pages"]),
+                "label_count": len(plan["labels"]), "unplanned_groups": unplanned,
+                "plan_path": str(current)}
 
-    if skip_agent:
-        plan = identity_plan(topics)
-        write_json_file(plan, Path(output_path))
-        return {
-            "page_count": len(plan["pages"]),
-            "link_count": 0,
-            "output_path": str(output_path),
-            "mode": "identity",
-        }
-
-    llm = LLMClient.for_stage("plan", logger=logger) if llm is None else llm
-    llm.set_logger(logger)
-    prompt = build_plan_prompt(topics)
-
-    raw: Any = {}
-    if use_batch and llm.supports_batch():
-        req = BatchRequest(request_id="plan", system=PLAN_SYSTEM, user=prompt, task="plan")
-        # Retries the plan synchronously with a larger window if it truncates.
-        raw = llm.complete_batch_json([req]).get("plan", {})
-    else:
-        raw_text = llm.complete_text(PLAN_SYSTEM, prompt, task="plan")
-        try:
-            raw = (
-                json.loads(raw_text)
-                if raw_text.strip().startswith("{")
-                else extract_json(raw_text)
-            )
-        except (json.JSONDecodeError, ValueError):
-            raw = {}
-
-    plan = _normalize_plan(raw if isinstance(raw, dict) else {}, topics)
-    write_json_file(plan, Path(output_path))
-
-    return {
-        "page_count": len(plan["pages"]),
-        "link_count": len(plan.get("links") or []),
-        "output_path": str(output_path),
-        "mode": "agent",
-        "provider": llm.provider,
+    llm = llm or LLMClient.for_stage(
+        PLAN_CONFIG["stage"], max_tokens=PLAN_CONFIG["max_output_tokens"], logger=logger
+    )
+    classifier = classifier or Classifier.for_stage(COVERAGE_CONFIG["stage"], logger=logger)
+    planner = Planner(groups, llm, count_tokens or AnthropicTokenCounter(llm.model), logger)
+    plan, report = _plan_and_check(planner, groups, classifier)
+    plan["metadata"] = {
+        **plan["metadata"],
+        "source": str(source),
+        "stage": PLAN_CONFIG["stage"],
         "model": llm.model,
-        "batch_mode": use_batch and llm.supports_batch(),
+        "effort": LLM_CONFIG["stages"][PLAN_CONFIG["stage"]].get("thinking_param"),
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "git_commit": _git_commit(),
+        "config": PLAN_CONFIG,
+        "group_count": len(groups),
+        "planned_group_ids": sorted(planner.group_ids),
+        "model_calls": len(planner.input_tokens),
+        "input_tokens": planner.input_tokens,
+        "retired_ids": [],
     }
+    backup = guarded_write(artifact.edited, plan, backup=True)
+    guarded_write(artifact.original, plan, backup=rebuild)
+    run_meta = {key: plan["metadata"][key] for key in ("generated_at", "git_commit", "model")}
+    write_json_file({**report, "metadata": run_meta}, PLAN_COVERAGE_PATH)
+    logger.info(
+        f"Plan written: {len(plan['pages'])} pages, {len(plan['labels'])} labels, "
+        f"{len(planner.input_tokens)} model calls (input tokens {planner.input_tokens}); "
+        f"coverage {_coverage_line(report)}; backup {backup}"
+    )
+    return {"written": True, "model_calls": len(planner.input_tokens),
+            "page_count": len(plan["pages"]), "label_count": len(plan["labels"]),
+            "plan_path": str(artifact.edited), "input_tokens": planner.input_tokens,
+            "coverage": report, "backup": str(backup) if backup else None}
 
 
-def pages_by_category(plan: dict[str, Any]) -> dict[str, list[tuple[str, str]]]:
-    grouped: dict[str, list[tuple[str, str]]] = defaultdict(list)
-    for page in plan.get("pages") or []:
-        cat = page.get("category", "emergent")
-        grouped[category_title(cat)].append((page["id"], page["title"]))
-    return dict(grouped)
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Step 6: plan the wiki structure (C7).")
+    parser.add_argument("--rebuild", action="store_true",
+                        help="plan again with the model (backs up the edited plan first)")
+    args = parser.parse_args(argv)
+    run(rebuild=args.rebuild)
 
 
 if __name__ == "__main__":
-    run(use_batch=True, skip_agent=True)
+    main()
