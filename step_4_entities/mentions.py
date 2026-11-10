@@ -164,10 +164,6 @@ def find_mentions(words: list[Word], name: str) -> list[list[int]]:
     return spans
 
 
-def mentions_name(words: list[Word], name: str) -> bool:
-    return bool(find_mentions(words, name))
-
-
 def analyze_claims(
     claims: list[dict[str, Any]], analyzer: Analyzer
 ) -> dict[str, list[Word]]:

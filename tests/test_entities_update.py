@@ -272,3 +272,20 @@ def test_store_ids_and_claim_index_follow_edits(step: Step) -> None:
     index = step.edited()["claim_entities"]
     assert index["t4-a"] == [moved["entity_id"]]
     assert "t5-a" not in index
+
+
+def test_attachment_needs_every_member_to_match(step: Step) -> None:
+    store = step.store()
+    omega = step.entity_of("Omega Lawyers")["entity_id"]
+    store.merge(step.entity_of("Sigma Insurance")["entity_id"], omega)
+    step.run(
+        [
+            *BASE,
+            _claim("t6-a", ["Sigma Insurances"], "Sigma Insurances covers twins"),
+            _claim("t6-b", ["Kappas"], "Kappas hospital delivery ward"),
+        ]
+    )
+    # Like "Sigma Insurance" but not like "Omega Lawyers": not attached to the merged entity.
+    assert step.entity_of("Sigma Insurances")["entity_id"] != omega
+    # Like the only member of an entity: attached.
+    assert step.entity_of("Kappas")["entity_id"] == step.entity_of("Kappa")["entity_id"]

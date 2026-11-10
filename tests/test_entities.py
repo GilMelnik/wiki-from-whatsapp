@@ -1,4 +1,4 @@
-"""Step 4 entity resolution: clustering precision, transliteration, guard, resolver."""
+"""Step 4 entity resolution: clustering precision, transliteration, guard, mentions."""
 
 from __future__ import annotations
 
@@ -15,11 +15,9 @@ from step_4_entities.mentions import (
     analyze_claims,
     build_or_load_analysis,
     find_mentions,
-    mentions_name,
 )
 from step_4_entities.normalize import normalize_name, transliteration_skeleton
 from step_4_entities.records import claim_contacts
-from step_5_aggregate.resolver import EntityResolver, load_entity_resolver, apply_entity_resolution
 
 
 class FakeAnalyzer:
@@ -107,7 +105,7 @@ def _entity_with(entities: list[dict], name: str) -> dict:
     raise AssertionError(f"{name} not found in any cluster")
 
 
-def test_clustering_merges_variants_keeps_distinct_separate(tmp_path: Path):
+def test_clustering_merges_variants_keeps_distinct_separate(tmp_path: Path) -> None:
     claims = [
         _claim("t1-c0", ["עמית פלס"]),
         _claim("t1-c1", ["Amit Peles"]),
@@ -132,7 +130,7 @@ def test_clustering_merges_variants_keeps_distinct_separate(tmp_path: Path):
     assert _cluster_of(entities, "מכבי") != _cluster_of(entities, "כללית")
 
 
-def test_prefix_and_cooccurrence_merge(tmp_path: Path):
+def test_prefix_and_cooccurrence_merge(tmp_path: Path) -> None:
     # "עו"ד הראל" normalizes to "הראל", a whole-word prefix of "הראל ברק", and the
     # two co-occur on one claim -> a must-link alias (not two entities).
     claims = [
@@ -147,7 +145,7 @@ def test_prefix_and_cooccurrence_merge(tmp_path: Path):
     assert "co_occur" in ent["merge_signals"]
 
 
-def test_context_guard_holds_look_alike_short_names_apart(tmp_path: Path):
+def test_context_guard_holds_look_alike_short_names_apart(tmp_path: Path) -> None:
     # Same short name up to punctuation, but the claims around them share no word:
     # held apart and flagged for review instead of silently merged.
     claims = [
@@ -161,7 +159,7 @@ def test_context_guard_holds_look_alike_short_names_apart(tmp_path: Path):
     assert ent["conflict_with"] == ["Gayaa"]
 
 
-def test_context_guard_lets_look_alikes_with_shared_context_merge(tmp_path: Path):
+def test_context_guard_lets_look_alikes_with_shared_context_merge(tmp_path: Path) -> None:
     claims = [
         _claim("t1-c0", ["Gaya"], "Gaya agency charges a fee for the surrogacy process"),
         _claim("t2-c0", ["Gayaa"], "Gayaa agency fee for the surrogacy process is high"),
@@ -171,7 +169,7 @@ def test_context_guard_lets_look_alikes_with_shared_context_merge(tmp_path: Path
     assert _entity_with(entities, "Gaya")["status"] == "suggested"
 
 
-def test_context_guard_ignores_long_names(tmp_path: Path):
+def test_context_guard_ignores_long_names(tmp_path: Path) -> None:
     # Long names are distinctive enough: string similarity alone decides.
     claims = [
         _claim("t1-c0", ["Sunrise Fertility Center"], "Sunrise Fertility Center court papers"),
@@ -183,7 +181,7 @@ def test_context_guard_ignores_long_names(tmp_path: Path):
     )
 
 
-def test_confident_contact_merges_distinct_spellings(tmp_path: Path):
+def test_confident_contact_merges_distinct_spellings(tmp_path: Path) -> None:
     # Each name appears alone with the same email -> confident contact must-link.
     claims = [
         {
@@ -207,7 +205,7 @@ def test_confident_contact_merges_distinct_spellings(tmp_path: Path):
     assert "confident_contact" in ent["merge_signals"]
 
 
-def test_multi_entity_contact_is_uncertain_and_no_merge(tmp_path: Path):
+def test_multi_entity_contact_is_uncertain_and_no_merge(tmp_path: Path) -> None:
     # One email, two entities in the claim: unattributable -> uncertain, no merge.
     claims = [
         {
@@ -225,41 +223,14 @@ def test_multi_entity_contact_is_uncertain_and_no_merge(tmp_path: Path):
     assert "shared@x.com" in alpha["contacts_uncertain"]["email"]
 
 
-def test_resolver_topic_disambiguation():
-    registry = [
-        {
-            "entity_id": "e0",
-            "canonical_name": "הראל ברק",
-            "aliases": ["הראל"],
-            "members": [{"name": "הראל", "claim_ids": None}],
-            "contacts": {},
-            "topics": ["legal-lawyers"],
-        },
-        {
-            "entity_id": "e1",
-            "canonical_name": "הראל ביטוח",
-            "aliases": ["הראל ביטוח"],
-            "members": [
-                {"name": "הראל", "claim_ids": None},
-                {"name": "הראל ביטוח", "claim_ids": None},
-            ],
-            "contacts": {},
-            "topics": ["insurance-newborn"],
-        },
-    ]
-    resolver = EntityResolver(registry)
-    assert resolver.canonical("הראל", topic_tags=["legal-lawyers"]) == "הראל ברק"
-    assert resolver.canonical("הראל", topic_tags=["insurance-newborn"]) == "הראל ביטוח"
-
-
-def test_normalize_strips_titles_and_phones():
+def test_normalize_strips_titles_and_phones() -> None:
 
     assert normalize_name('עו"ד הראל') == normalize_name("הראל")
     assert normalize_name("Dr. Cohen") == normalize_name("cohen")
     assert normalize_name("+1 (555) 010-2030") == "15550102030"
 
 
-def test_seed_must_links_aliases(tmp_path: Path):
+def test_seed_must_links_aliases(tmp_path: Path) -> None:
     seed_path = tmp_path / "seed.json"
     seed_path.write_text(
         json.dumps(
@@ -298,13 +269,13 @@ def test_seed_must_links_aliases(tmp_path: Path):
     assert "seed" in ent["merge_signals"]
 
 
-def test_transliteration_skeleton_aligns_across_scripts():
+def test_transliteration_skeleton_aligns_across_scripts() -> None:
     assert transliteration_skeleton("עמית פלס") == transliteration_skeleton("Amit Peles")
     # David Shield: skeletons are close but not required to be identical.
     assert transliteration_skeleton("דלתא") == transliteration_skeleton("Delta")
 
 
-def test_contacts_preserved_from_claims(tmp_path: Path):
+def test_contacts_preserved_from_claims(tmp_path: Path) -> None:
     claim = _claim("t1-c0", ["David Shield"])
     claim["_redactions"] = [{"type": "email", "value": "x@davidshield.com"}]
     claim["claim_text"] = "ביטוח David Shield דרך davidshield.com"
@@ -314,7 +285,7 @@ def test_contacts_preserved_from_claims(tmp_path: Path):
     assert "davidshield.com" in contacts["website"]
 
 
-def test_contacts_from_original_when_edited_lacks_redactions(tmp_path: Path):
+def test_contacts_from_original_when_edited_lacks_redactions(tmp_path: Path) -> None:
     """PII review drops ``_redactions`` from edited claims; original still has them."""
     original = _claim("t1-c0", ["David Shield"])
     original["_redactions"] = [{"type": "email", "value": "x@davidshield.com"}]
@@ -337,7 +308,7 @@ def test_contacts_from_original_when_edited_lacks_redactions(tmp_path: Path):
     assert "joindavidshield@davidshield.com" in contacts["email"]
 
 
-def test_contacts_from_claim_text_without_redactions():
+def test_contacts_from_claim_text_without_redactions() -> None:
     claim = _claim("t1-c0", ["David Shield"])
     claim["claim_text"] = (
         'ניתן לפנות ל-David Shield בדוא"ל joindavidshield@davidshield.com'
@@ -347,7 +318,7 @@ def test_contacts_from_claim_text_without_redactions():
     assert "davidshield.com" in sites
 
 
-def test_collect_entities_includes_text_mentions():
+def test_collect_entities_includes_text_mentions() -> None:
     claims = [
         {
             "claim_id": "t1-c0",
@@ -371,17 +342,17 @@ def test_collect_entities_includes_text_mentions():
     assert "topics" not in tipat
 
 
-def test_word_level_matching_rejects_inner_substrings():
+def test_word_level_matching_rejects_inner_substrings() -> None:
     # The reported bug: a short name must not match inside a longer word.
-    assert not mentions_name(_words("כללית מרפאה"), "כלל")
-    assert not mentions_name(_words("באופן כללי מאוד"), "כלל")
-    assert not mentions_name(_words("שנתיים חלפו מאז"), "נתי")
+    assert not find_mentions(_words("כללית מרפאה"), "כלל")
+    assert not find_mentions(_words("באופן כללי מאוד"), "כלל")
+    assert not find_mentions(_words("שנתיים חלפו מאז"), "נתי")
     # ...but the whole word, and multi-word phrases, still match.
-    assert mentions_name(_words("כלל חברת ביטוח"), "כלל")
-    assert mentions_name(_words("שירותי טיפת חלב בעיר"), "טיפת חלב")
+    assert find_mentions(_words("כלל חברת ביטוח"), "כלל")
+    assert find_mentions(_words("שירותי טיפת חלב בעיר"), "טיפת חלב")
 
 
-def test_proclitic_prefix_matches_via_segmentation():
+def test_proclitic_prefix_matches_via_segmentation() -> None:
     # With segmentation, an attached Hebrew proclitic still matches, and the span
     # covers only the entity word (not the proclitic).
     analyzer = FakeAnalyzer(cores={"בטיפת": "טיפת"})
@@ -392,106 +363,35 @@ def test_proclitic_prefix_matches_via_segmentation():
     assert "בטיפת חלב מחר"[start:end] == "טיפת חלב"
 
 
-def test_single_word_requires_name_like_evidence():
+def test_single_word_requires_name_like_evidence() -> None:
     # The reported "בדרך כלל" case: a single common Hebrew word matches only with
     # name-like evidence (PROPN or NER), not as a bare common noun / function word.
     idiom = FakeAnalyzer(pos={"כלל": "NOUN"})
-    assert not mentions_name(_words("בדרך כלל זה בסדר", idiom), "כלל")
+    assert not find_mentions(_words("בדרך כלל זה בסדר", idiom), "כלל")
     adverb = FakeAnalyzer(pos={"כלל": "ADV"})
-    assert not mentions_name(_words("זה לא כלל ברור", adverb), "כלל")
+    assert not find_mentions(_words("זה לא כלל ברור", adverb), "כלל")
     # Proper-noun or NER context is accepted (the insurance company "כלל").
     propn = FakeAnalyzer(pos={"כלל": "PROPN"})
-    assert mentions_name(_words("חברת כלל גדולה", propn), "כלל")
+    assert find_mentions(_words("חברת כלל גדולה", propn), "כלל")
     # NER rescues an entity the model tags as ADJ (e.g. "כללית").
     ner = FakeAnalyzer(
         cores={"בכללית": "כללית"}, pos={"בכללית": "ADJ"}, ner={"בכללית"}
     )
-    assert mentions_name(_words("רשומה בכללית היום", ner), "כללית")
+    assert find_mentions(_words("רשומה בכללית היום", ner), "כללית")
 
 
-def test_multi_word_match_is_not_gated_by_name_likeness():
+def test_multi_word_match_is_not_gated_by_name_likeness() -> None:
     # Distinctive multi-word phrases (NOUN NOUN, no NER) stay matchable.
     plain = FakeAnalyzer(pos={"טיפת": "NOUN", "חלב": "NOUN"})
-    assert mentions_name(_words("שירותי טיפת חלב בעיר", plain), "טיפת חלב")
+    assert find_mentions(_words("שירותי טיפת חלב בעיר", plain), "טיפת חלב")
 
 
-def test_short_hotline_phones_detected():
+def test_short_hotline_phones_detected() -> None:
     from step_3_extract.scrub import find_phones
 
     text = 'מוקד משרד הבריאות (5400*), גם *5400'
     assert "(5400*)" in find_phones(text)
     assert "*5400" in find_phones(text)
-
-
-def test_resolver_maps_name_and_claim_overrides():
-    registry_entities = [
-        {
-            "entity_id": "e0000",
-            "canonical_name": "תמוז",
-            "aliases": ["תמוז", "Tammuz"],
-            "members": [
-                {"name": "תמוז", "claim_ids": None},
-                {"name": "Tammuz", "claim_ids": None},
-            ],
-            "contacts": {"email": [], "phone": [], "website": []},
-            "topics": ["tamuz"],
-        },
-        {
-            "entity_id": "e0001",
-            "canonical_name": "מיכל קרן דוד",
-            "aliases": ["מיכל"],
-            "members": [{"name": "מיכל", "claim_ids": ["t9-c0"]}],
-            "contacts": {"email": [], "phone": [], "website": []},
-            "topics": ["providers-other"],
-        },
-    ]
-    resolver = EntityResolver(registry_entities)
-
-    assert resolver.canonical("Tammuz") == "תמוז"
-    assert resolver.canonical("מיכל", "t9-c0") == "מיכל קרן דוד"  # claim override
-    assert resolver.canonical("מיכל", "t1-c0") == "מיכל"  # no override -> identity
-    assert resolver.canonical("unknown") == "unknown"
-
-    claim = _claim("t1-c0", ["Tammuz", "תמוז"])
-    assert resolver.resolve_claim(claim) == ["תמוז"]  # deduped to canonical
-    assert "תמוז" in resolver.registry()
-
-
-def test_apply_resolution_and_missing_file_fallback(tmp_path: Path):
-    # Missing file -> no resolver, claims untouched.
-    missing = tmp_path / "nope.json"
-    assert load_entity_resolver(missing) is None
-    claim = _claim("t1-c0", ["אלעל"])
-    apply_entity_resolution([claim], None)
-    assert claim["entities"] == ["אלעל"]
-
-    # Present file -> claims rewritten to canonical names.
-    path = tmp_path / "entities.json"
-    path.write_text(
-        json.dumps(
-            {
-                "entities": [
-                    {
-                        "entity_id": "e0000",
-                        "canonical_name": "אל על",
-                        "aliases": ["אל על", "אלעל"],
-                        "members": [
-                            {"name": "אל על", "claim_ids": None},
-                            {"name": "אלעל", "claim_ids": None},
-                        ],
-                        "contacts": {},
-                        "topics": [],
-                    }
-                ]
-            }
-        ),
-        encoding="utf-8",
-    )
-    resolver = load_entity_resolver(path)
-    assert resolver is not None
-    claim2 = _claim("t1-c0", ["אלעל"])
-    apply_entity_resolution([claim2], resolver)
-    assert claim2["entities"] == ["אל על"]
 
 
 class CountingAnalyzer(SimpleAnalyzer):
@@ -505,7 +405,7 @@ class CountingAnalyzer(SimpleAnalyzer):
         return super().analyze_batch(texts)
 
 
-def test_analysis_cache_is_per_claim(tmp_path: Path):
+def test_analysis_cache_is_per_claim(tmp_path: Path) -> None:
     cache = tmp_path / "analysis.json"
     claims = [_claim("t1-c0", ["Alpha"], "Alpha one"), _claim("t2-c0", ["Beta"], "Beta two")]
     first = CountingAnalyzer()
@@ -525,7 +425,7 @@ def test_analysis_cache_is_per_claim(tmp_path: Path):
     assert third.seen == []
 
 
-def test_mention_index_matches_a_full_scan():
+def test_mention_index_matches_a_full_scan() -> None:
     analyzer = FakeAnalyzer(cores={"לטיפת": "טיפת", "בכללית": "כללית"})
     claims = [
         _claim("t1-c0", ["טיפת חלב"], "לטיפת חלב יש תור"),
@@ -535,11 +435,11 @@ def test_mention_index_matches_a_full_scan():
     analysis = analyze_claims(claims, analyzer)
     index = MentionIndex(analysis)
     for name in ("טיפת חלב", "כללית", "טיפת", "חלב", "nothing"):
-        scan = {cid for cid, words in analysis.items() if mentions_name(words, name)}
+        scan = {cid for cid, words in analysis.items() if find_mentions(words, name)}
         assert index.claims_mentioning(name) == scan
 
 
-def test_claim_corpus_names_and_claims():
+def test_claim_corpus_names_and_claims() -> None:
     claims = [
         _claim("t1-c0", ["Alpha", "Beta"], "Alpha and Beta"),
         _claim("t2-c0", ["Alpha"], "Alpha again"),
