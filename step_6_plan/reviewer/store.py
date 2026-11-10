@@ -128,8 +128,10 @@ class PlanStore:
         self._loaded = False
 
     def load(self) -> None:
-        init_aggregated_edited()
-        init_plan_edited()
+        if self._aggregated_override is None:
+            init_aggregated_edited()
+        if self._plan_override is None:
+            init_plan_edited()
 
         if self._aggregated_override is not None:
             self._aggregated_source = self._aggregated_override
@@ -362,10 +364,17 @@ class PlanStore:
         if self._backup_done:
             return
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
-        for path in (self._plan_source, self._aggregated_source):
+        sources = (
+            (self._plan_source, self._plan_override),
+            (self._aggregated_source, self._aggregated_override),
+        )
+        for path, override in sources:
             if path.exists():
-                dest = BACKUPS_DIR / f"{path.stem}_{ts}{path.suffix}"
+                backups_dir = (
+                    BACKUPS_DIR if override is None else override.parent / BACKUPS_DIR.name
+                )
+                backups_dir.mkdir(parents=True, exist_ok=True)
+                dest = backups_dir / f"{path.stem}_{ts}{path.suffix}"
                 shutil.copy2(path, dest)
         self._backup_done = True
 

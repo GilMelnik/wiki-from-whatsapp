@@ -15,8 +15,7 @@ from utils import config, paths
 def restore_modules(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.delenv("WIKI_DATA_DIR", raising=False)
     yield
-    monkeypatch.undo()
-    monkeypatch.delenv("WIKI_DATA_DIR", raising=False)
+    monkeypatch.undo()  # restores the session value pinned by conftest.py
     importlib.reload(config)
     importlib.reload(paths)
 
