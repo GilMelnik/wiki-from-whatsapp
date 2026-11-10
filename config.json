@@ -120,7 +120,15 @@
   "plan": {
     "max_pages": 30
   },
-  "pages": {},
+  "pages": {
+    "okf_version": "0.2",
+    "page_type": "wiki-page",
+    "lang": "he",
+    "dir": "rtl",
+    "statuses": ["draft", "stable", "deprecated"],
+    "default_status": "stable",
+    "stale_after_days": 180
+  },
   "review": {
     "host": "127.0.0.1",
     "port": 8780,
