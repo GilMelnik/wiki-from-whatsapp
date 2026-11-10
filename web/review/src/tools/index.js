@@ -4,6 +4,7 @@
 
 import entities from "./entities/index.jsx";
 import pii from "./pii/index.jsx";
+import plan from "./plan/index.jsx";
 import status from "./status/index.jsx";
 
-export const TOOLS = [status, pii, entities];
+export const TOOLS = [status, pii, entities, plan];

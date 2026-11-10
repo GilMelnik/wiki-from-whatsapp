@@ -68,7 +68,8 @@ export function ItemList({
         className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto"
         onKeyDown={(event) => {
           const step = ARROW_STEPS[event.key];
-          if (!step) return;
+          // Arrows with a modifier belong to the tool's own shortcuts (e.g. Alt+↑ reorders).
+          if (!step || event.altKey || event.ctrlKey || event.metaKey) return;
           event.preventDefault();
           move(step);
         }}
