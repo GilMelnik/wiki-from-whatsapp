@@ -6,6 +6,8 @@ on:
     paths:
       - "docs/**"
       - "mkdocs.yml"
+      - "overrides/**"
+      - "step_9_site/hebrew_search.py"
       - "wrangler.jsonc"
       - "worker/**"
       - "config.json"
