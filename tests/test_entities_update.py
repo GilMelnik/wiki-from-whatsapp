@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from step_4_entities.mentions import SimpleAnalyzer
-from step_4_entities.reviewer.store import EntityStore
+from step_4_entities.reviewer.store import EntityStore, EntityView
 from step_4_entities.run import run
 from utils.paths import Artifact
 
@@ -71,9 +71,14 @@ class Step:
         return json.loads(self.artifact.edited.read_text(encoding="utf-8"))
 
     def store(self) -> EntityStore:
-        store = EntityStore(entities_path=self.artifact.edited, claims_path=self.claims_path)
-        store.load()
-        return store
+        return EntityStore(
+            self.artifact.original,
+            self.artifact.edited,
+            self.claims_path,
+            self.claims_path.with_name("claims_edited.json"),
+            self.claims_path.with_name("claim_aggregations.json"),
+            self.analysis_path,
+        )
 
     def entity_of(self, name: str) -> dict:
         found = [
@@ -173,11 +178,11 @@ def test_manual_merge_split_rename_survive_an_update(step: Step) -> None:
     sigma = step.entity_of("Sigma Insurance")["entity_id"]
     store.merge(sigma, omega)  # manual merge of two unrelated-looking strings
     delta = step.entity_of("Delta")["entity_id"]
-    store.move_member(delta, "Delta")  # manual split into a new entity
+    store.move_member(delta, "Delta", None)  # manual split into a new entity
     split_id = step.entity_of("Delta")["entity_id"]
     alpha = step.entity_of("Alpha Agency")["entity_id"]
-    store.rename_entity(alpha, "Alpha (agency)")
-    store.set_status(alpha, "accepted")
+    store.rename(alpha, "Alpha (agency)")
+    store.set_status(alpha, "accepted", EntityView())
 
     step.run(
         [
@@ -208,9 +213,9 @@ def test_exclusion_contacts_and_deleted_entity_survive(tmp_path: Path) -> None:
     store = step.store()
     kappa = step.entity_of("Kappa")["entity_id"]
     store.exclude_claims(kappa, "Kappa", ["t5-a"])
-    store.resolve_uncertain_contact(kappa, kind="email", value="help@k.org", action="reject")
+    store.resolve_contact(kappa, "email", "help@k.org", "reject")
     store.set_contacts(step.entity_of("Delta")["entity_id"], {"phone": ["+972-3-000"]})
-    store.delete_entity(step.entity_of("Omega Lawyers")["entity_id"])
+    store.delete_entity(step.entity_of("Omega Lawyers")["entity_id"], EntityView())
 
     step.run(
         [
@@ -252,7 +257,7 @@ def test_only_restricts_the_work(step: Step) -> None:
 
 def test_rebuild_backs_up_and_never_reuses_ids(step: Step) -> None:
     store = step.store()
-    store.rename_entity(step.entity_of("Kappa")["entity_id"], "Renamed")
+    store.rename(step.entity_of("Kappa")["entity_id"], "Renamed")
     last = step.edited()["metadata"]["last_entity_number"]
     result = step.run(list(BASE), rebuild=True)
     assert result["backup"] and Path(result["backup"]).is_file()
@@ -265,12 +270,12 @@ def test_store_ids_and_claim_index_follow_edits(step: Step) -> None:
     store = step.store()
     last = step.edited()["metadata"]["last_entity_number"]
     kappa = step.entity_of("Kappa")["entity_id"]
-    store.delete_entity(kappa)
+    store.delete_entity(kappa, EntityView())
     sigma = step.entity_of("Sigma Insurance")["entity_id"]
-    moved = store.move_member(sigma, "Sigma Insurance")  # into a brand-new entity
-    assert int(moved["entity_id"][1:]) == last + 1  # never reuses the deleted id
+    moved = store.move_member(sigma, "Sigma Insurance", None)  # into a brand-new entity
+    assert int(moved[1:]) == last + 1  # never reuses the deleted id
     index = step.edited()["claim_entities"]
-    assert index["t4-a"] == [moved["entity_id"]]
+    assert index["t4-a"] == [moved]
     assert "t5-a" not in index
 
 

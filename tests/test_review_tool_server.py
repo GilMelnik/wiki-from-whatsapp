@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from review_tool import __main__ as cli
+from review_tool.artifacts import GRAPH
 from review_tool.port import PortFinder
 from review_tool.tools import TOOL_SPECS
 from tests.review_tool_support import (
@@ -185,7 +186,8 @@ def test_second_invocation_opens_a_tab_on_the_running_server(
     tmp_path: Path, launched: dict[str, list[Any]]
 ) -> None:
     bus = new_bus()
-    app = build_app(tmp_path, bus=bus, specs=TOOL_SPECS, data_dir=DATA_DIR)
+    # The hosted tools are built on the pipeline graph (files in the pinned test data dir).
+    app = build_app(tmp_path, bus=bus, specs=TOOL_SPECS, graph=GRAPH, data_dir=DATA_DIR)
     with running_server(app, bus) as port:
         assert cli.main(["--port", str(port), "--tool", "status"]) == 0
         assert cli.main(["--port", str(port)]) == 0

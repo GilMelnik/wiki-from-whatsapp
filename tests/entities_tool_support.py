@@ -53,9 +53,7 @@ def build_entity_graph(root: Path) -> ArtifactGraph:
     """claims -> entities, plus the hand-made claim aggregations file (as in the pipeline)."""
     return ArtifactGraph(
         [
-            ArtifactNode(
-                "claims", "Claims", root / "claims.json", root / "claims_edited.json", "s3"
-            ),
+            ArtifactNode("claims", "Claims", root / "claims.json", root / "claims_edited.json", "s3"),
             ArtifactNode(
                 "entities",
                 "Entities",
