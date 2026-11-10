@@ -20,9 +20,11 @@ from fastapi import FastAPI
 from review_tool.app import ReviewApp
 from review_tool.artifacts import ArtifactGraph, ArtifactNode
 from review_tool.events import EventBus
+from review_tool.jobs import JOB_SETTINGS, JobRunner
 from review_tool.registry import ToolRegistry, ToolSpec
 from review_tool.server import ReviewServer
 from review_tool.settings import SETTINGS, ReviewSettings
+from review_tool.steps import StepRegistry
 
 HOST = "127.0.0.1"
 BASE_URL = f"http://{HOST}"
@@ -86,13 +88,21 @@ def build_app(
     specs: tuple[ToolSpec, ...] = (),
     graph: ArtifactGraph | None = None,
     bus: EventBus | None = None,
+    jobs: JobRunner | None = None,
     data_dir: Path | None = None,
     bind_host: str = HOST,
 ) -> FastAPI:
+    graph = build_graph(root) if graph is None else graph
+    bus = new_bus() if bus is None else bus
+    if jobs is None:
+        jobs = JobRunner(
+            StepRegistry((), graph), bus, cwd=root, data_dir=root, settings=JOB_SETTINGS
+        )
     return ReviewApp(
         registry=ToolRegistry(specs),
-        graph=build_graph(root) if graph is None else graph,
-        bus=new_bus() if bus is None else bus,
+        graph=graph,
+        bus=bus,
+        jobs=jobs,
         settings=fast_settings(root),
         data_dir=root if data_dir is None else data_dir,
         bind_host=bind_host,

@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from fastapi import APIRouter
 
 _NAME_PATTERN = re.compile(r"[a-z][a-z0-9_-]*")
-RESERVED_NAMES = frozenset({"health", "tools", "artifacts", "events", "jobs"})
+RESERVED_NAMES = frozenset({"health", "tools", "artifacts", "events", "steps", "jobs"})
 
 
 @dataclass(frozen=True)

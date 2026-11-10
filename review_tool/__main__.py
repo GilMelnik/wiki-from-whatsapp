@@ -18,12 +18,14 @@ from review_tool.app import ReviewApp
 from review_tool.artifacts import GRAPH
 from review_tool.events import BUS
 from review_tool.guard import WILDCARD_HOSTS
+from review_tool.jobs import JOB_SETTINGS, JobRunner
 from review_tool.port import PortFinder
 from review_tool.registry import ToolRegistry
 from review_tool.server import ReviewServer
 from review_tool.settings import SETTINGS
+from review_tool.steps import SERVED_STEPS
 from review_tool.tools import TOOL_SPECS
-from utils.config import DATA_DIR
+from utils.config import DATA_DIR, PROJECT_ROOT
 from utils.logging_setup import setup_step_logging
 
 
@@ -54,6 +56,9 @@ class Launcher:
             registry=self._registry,
             graph=GRAPH,
             bus=BUS,
+            jobs=JobRunner(
+                SERVED_STEPS, BUS, cwd=PROJECT_ROOT, data_dir=DATA_DIR, settings=JOB_SETTINGS
+            ),
             settings=SETTINGS,
             data_dir=DATA_DIR,
             bind_host=self._args.host,

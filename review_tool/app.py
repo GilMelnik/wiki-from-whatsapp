@@ -5,6 +5,7 @@ Routes:
 - ``GET /api/tools``      ``[{name, title, reads, writes, missing}]``
 - ``GET /api/artifacts``  the artifact status list (``review_tool.artifacts.ArtifactStatus``)
 - ``GET /api/events``     Server-Sent Events (``review_tool.events``)
+- ``/api/steps``, ``/api/jobs``  the step runner (``review_tool.jobs_api``)
 - ``/api/<tool>/...``     each registered tool's router
 - everything else         the built web app (``web/review/dist``) with SPA fallback
 
@@ -31,6 +32,8 @@ from review_tool.artifacts import ArtifactGraph
 from review_tool.events import EventBus, sse_response
 from review_tool.fs import iso_utc
 from review_tool.guard import OriginGuard, allowed_hosts_for
+from review_tool.jobs import JobRunner
+from review_tool.jobs_api import JobsApi, WriteGuard
 from review_tool.locks import ArtifactLockTimeout
 from review_tool.registry import ToolRegistry
 from review_tool.settings import API_PREFIX, APP_ID, ReviewSettings
@@ -56,6 +59,7 @@ class ReviewApp:
         registry: ToolRegistry,
         graph: ArtifactGraph,
         bus: EventBus,
+        jobs: JobRunner,
         settings: ReviewSettings,
         data_dir: Path,
         bind_host: str,
@@ -63,6 +67,7 @@ class ReviewApp:
         self._registry = registry
         self._graph = graph
         self._bus = bus
+        self._jobs = jobs
         self._settings = settings
         self._data_dir = data_dir
         self._bind_host = bind_host
@@ -76,6 +81,8 @@ class ReviewApp:
             redoc_url=None,
             openapi_url=f"{API_PREFIX}/openapi.json",
         )
+        # Added first, so it runs inside OriginGuard (a cross-site request is refused first).
+        app.add_middleware(WriteGuard, registry=self._registry, graph=self._graph, runner=self._jobs)
         app.add_middleware(
             OriginGuard,
             allowed_hosts=allowed_hosts_for(self._bind_host),
@@ -87,6 +94,7 @@ class ReviewApp:
         app.add_api_route(f"{API_PREFIX}/tools", self.tools, methods=["GET"])
         app.add_api_route(f"{API_PREFIX}/artifacts", self.artifacts, methods=["GET"])
         app.add_api_route(f"{API_PREFIX}/events", self.events, methods=["GET"])
+        app.include_router(JobsApi(self._jobs).router, prefix=API_PREFIX, tags=["jobs"])
         for spec in self._registry.specs:
             for key in (*spec.reads, *spec.writes):
                 try:
@@ -112,6 +120,7 @@ class ReviewApp:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task
+            await asyncio.to_thread(self._jobs.shutdown)  # stop the steps this server started
 
     def health(self) -> dict[str, Any]:
         return {
