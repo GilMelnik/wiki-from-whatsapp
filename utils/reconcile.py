@@ -8,6 +8,11 @@ the previous run (judged against the ``metadata.inputs`` the step stored in its 
 are, and ``write_reconciled`` writes the fresh output to the original file and three-way merges
 it into the edited file (``merge_edited``). ``guarded_write`` + ``backup_file`` lock, back up
 and atomically write one file, for artifacts the step merges by its own logic.
+
+Items may carry fields the step always owns and that change often (counts, dates, evidence
+ids). Name them as ``refresh_keys`` and a manual edit survives their changes, while those
+fields are still brought up to date; ``same_ignoring`` instead freezes volatile fields at the
+user's old values.
 """
 
 from __future__ import annotations
@@ -17,7 +22,7 @@ import json
 import logging
 import operator
 import shutil
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Collection, Iterator, Mapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, fields
 from datetime import datetime
@@ -70,7 +75,8 @@ def diff_inputs(previous: Mapping[str, str], current: Mapping[str, str]) -> Inpu
 def same_ignoring(*keys: str) -> IsSame:
     """Build an ``is_same`` for dict items that ignores volatile ``keys`` (timestamps, scores).
 
-    A manual edit that is kept because of it also keeps its own, older values of those keys.
+    A manual edit that is kept because of it also keeps its own, older values of those keys; use
+    ``refresh_keys`` instead when the kept edit should get the step's current values.
     """
 
     def is_same(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
@@ -90,6 +96,8 @@ class MergeChanges:
     by a new or changed fresh item; ``resurrected`` = a manually deleted item came back for the
     same reason; ``dropped_edited`` = a manually modified item went away because the step no
     longer produces it; ``user_created`` = items only the user has, kept as they are.
+    ``refreshed`` = kept manual edits whose ``refresh_keys`` were updated from the step's output;
+    nothing the user wrote was lost there, so it is not part of ``lost_edits``.
     """
 
     added: tuple[str, ...]
@@ -99,6 +107,7 @@ class MergeChanges:
     resurrected: tuple[str, ...]
     dropped_edited: tuple[str, ...]
     user_created: tuple[str, ...]
+    refreshed: tuple[str, ...] = ()
 
     @property
     def lost_edits(self) -> tuple[str, ...]:
@@ -132,6 +141,7 @@ def merge_edited(
     fresh: Mapping[str, Any],
     *,
     is_same: IsSame = operator.eq,
+    refresh_keys: Collection[str] = (),
 ) -> MergeResult:
     """Three-way merge of ``{id: item}`` collections; returns what the edited copy becomes.
 
@@ -144,25 +154,41 @@ def merge_edited(
       recorded as ``superseded`` / ``resurrected``;
     * not in fresh, in base: dropped (``dropped_edited`` if the user had modified it);
     * in edited only: kept, after the fresh items (``user_created``).
+
+    ``refresh_keys`` names top-level keys of dict items that the step always owns (counts,
+    dates, evidence ids). They are left out when judging whether the step's output changed
+    (``is_same`` then sees items without them) and whether the user modified an item, so a
+    change in them alone neither supersedes a manual edit nor brings back a deleted item. Where
+    the user's version is kept, its refresh keys are overwritten from the fresh item (a key
+    missing there is removed), and the id is listed in ``refreshed``. Raises ``ValueError`` if
+    ``refresh_keys`` is given and an item is not a dict. With ``refresh_keys=()`` nothing of
+    this applies.
     """
+    keys = _as_key_set(refresh_keys)
+    if keys:
+        _require_dict_items(keys, base=base, edited=edited, fresh=fresh)
     items: dict[str, Any] = {}
     found: dict[str, list[str]] = {field.name: [] for field in fields(MergeChanges)}
 
     for item_id, fresh_item in fresh.items():
         base_item = base.get(item_id, _ABSENT)
         user_item = edited.get(item_id, _ABSENT)
-        step_changed = base_item is _ABSENT or not is_same(base_item, fresh_item)
-        user_changed = user_item != base_item
+        step_changed = base_item is _ABSENT or not is_same(
+            _without(base_item, keys), _without(fresh_item, keys)
+        )
+        user_changed = _without(user_item, keys) != _without(base_item, keys)
         if base_item is _ABSENT:
             found["added"].append(item_id)
         elif step_changed:
             found["updated"].append(item_id)
         if step_changed or not user_changed:
             items[item_id] = fresh_item
-            if user_changed and user_item != fresh_item:
+            if user_changed and _without(user_item, keys) != _without(fresh_item, keys):
                 found["resurrected" if user_item is _ABSENT else "superseded"].append(item_id)
         elif user_item is not _ABSENT:
-            items[item_id] = user_item
+            items[item_id] = _refresh(user_item, fresh_item, keys)
+            if items[item_id] != user_item:
+                found["refreshed"].append(item_id)
 
     for item_id, base_item in base.items():
         if item_id not in fresh:
@@ -195,6 +221,7 @@ def write_reconciled(
     items_key: str,
     id_key: str | None,
     is_same: IsSame = operator.eq,
+    refresh_keys: Collection[str] = (),
     rebuild: bool = False,
     lock_timeout: float | None = None,
 ) -> ReconcileReport:
@@ -205,7 +232,8 @@ def write_reconciled(
     disk is the merge base; an existing edited file is backed up and rewritten as ``payload``
     with its items replaced by ``merge_edited(base, edited, fresh)``; then the original becomes
     ``payload``. No edited file is created if none exists. ``lock_timeout=None`` keeps
-    ``file_lock``'s default.
+    ``file_lock``'s default. ``refresh_keys`` is passed to ``merge_edited``: the fields the step
+    always owns, refreshed on manual edits that are kept (items must then be dicts).
 
     ``rebuild=True`` regenerates from scratch: the files on disk are not read (so a broken one
     cannot block it), the edited file is backed up and becomes ``payload`` too, and every item
@@ -225,7 +253,13 @@ def write_reconciled(
         if not rebuild:
             base = _read_items(artifact.original, items_key, id_key) or {}
             edited = _read_items(artifact.edited, items_key, id_key)
-        merge = merge_edited(base, base if edited is None else edited, fresh, is_same=is_same)
+        merge = merge_edited(
+            base,
+            base if edited is None else edited,
+            fresh,
+            is_same=is_same,
+            refresh_keys=refresh_keys,
+        )
         backup = backup_file(artifact.edited)
         if backup is not None:
             merged = merge.items if id_key is None else list(merge.items.values())
@@ -290,6 +324,47 @@ def _locked(paths: tuple[Path, ...], timeout: float | None) -> Iterator[None]:
         for path in paths:
             stack.enter_context(file_lock(path, **options))
         yield
+
+
+def _as_key_set(refresh_keys: Collection[str]) -> frozenset[str]:
+    """Return ``refresh_keys`` as a set; a bare string is rejected (it would split in letters)."""
+    if isinstance(refresh_keys, str):
+        raise TypeError(f"refresh_keys must be a collection of names, not {refresh_keys!r}")
+    return frozenset(refresh_keys)
+
+
+def _require_dict_items(keys: frozenset[str], **collections: Mapping[str, Any]) -> None:
+    """Raise ``ValueError`` if any item of the named collections is not a dict."""
+    for name, items in collections.items():
+        for item_id, item in items.items():
+            if not isinstance(item, dict):
+                raise ValueError(
+                    f"refresh_keys={sorted(keys)} need dict items, but {name}[{item_id!r}] "
+                    f"is a {type(item).__name__}"
+                )
+
+
+def _without(item: Any, keys: frozenset[str]) -> Any:
+    """Return a dict ``item`` minus ``keys``; anything else (and an empty ``keys``) as it is."""
+    if not keys or item is _ABSENT:
+        return item
+    return {k: v for k, v in item.items() if k not in keys}
+
+
+def _refresh(user_item: dict[str, Any], fresh_item: dict[str, Any], keys: frozenset[str]) -> Any:
+    """Return the user's item with its ``keys`` taken from the fresh item (keeping key order)."""
+    if not keys:
+        return user_item
+    refreshed = {}
+    for key, value in user_item.items():
+        if key not in keys:
+            refreshed[key] = value
+        elif key in fresh_item:
+            refreshed[key] = fresh_item[key]
+    for key, value in fresh_item.items():
+        if key in keys and key not in refreshed:
+            refreshed[key] = value
+    return refreshed
 
 
 def _read_object(path: Path) -> dict[str, Any] | None:
