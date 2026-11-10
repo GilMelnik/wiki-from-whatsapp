@@ -138,6 +138,18 @@
     "eval_size_buckets": [3, 6, 11, 21, 51],
     "eval_bootstrap": 1000
   },
+  "extract": {
+    "render": {
+      "alias": "משתתף {n}",
+      "new_marker": "(חדשה)",
+      "reply_mark": "↩",
+      "reactions_label": "תגובות",
+      "quote_max_chars": 160,
+      "existing_claim_prefix": "C"
+    },
+    "claim_id_hash_chars": 8,
+    "message_fingerprint_chars": 12
+  },
   "aggregate": {},
   "plan": {
     "max_pages": 30

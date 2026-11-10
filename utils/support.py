@@ -2,15 +2,21 @@
 
 Supporters are distinct users who authored a supporting message or reacted with a
 *positive* emoji on one. Opposers are distinct users who authored an opposing
-message or reacted with a *negative* emoji. Neutral reactions count toward
-neither side. Emoji sentiment is independent of claim stance — a 👎 never adds
+message, reacted with a *positive* emoji on an opposing message (agreeing with the
+opposition) or with a *negative* emoji on a supporting one. Neutral reactions count
+toward neither side. Emoji sentiment is independent of claim stance — a 👎 never adds
 a supporter. A user is never double-counted within the same side.
+
+``collect_evidence`` derives a claim's supporters / opposers / dates from its evidence
+message ids (step 3). The ``*_audit*`` readers below understand the v1 audit records
+still read by the old steps 5 and 7.
 """
 
 from __future__ import annotations
 
 import json
 from collections import Counter
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal, TypedDict
@@ -92,18 +98,6 @@ def summarize_reactions(reactions: list[dict[str, Any]] | None) -> list[dict[str
             }
         )
     return out
-
-
-def format_reactions_for_llm(reactions: list[dict[str, Any]] | None) -> str:
-    """Anonymized reaction summary appended to a rendered message line."""
-
-    parts = summarize_reactions(reactions)
-    if not parts:
-        return ""
-    detail = ", ".join(
-        f"{item['emoji']}×{item['count']}" for item in parts if item["emoji"]
-    )
-    return f" [תגובות: {detail}]" if detail else ""
 
 
 def aggregate_reaction_summary(
@@ -225,88 +219,123 @@ def engagement_for_claims(
     }
 
 
-def compute_support(
-    thread: dict[str, Any],
-    line_meta: list[dict[str, Any]],
-    local_message_ids: list[int],
-    *,
-    opposing_local_message_ids: list[int] | None = None,
-) -> dict[str, Any]:
-    """Derive supporter/opposer sets and reaction trace for a claim.
+def person_key(person: Any) -> str:
+    """One stable identity string for a sender, from a plain id or an export
+    ``{user_name, phone}`` dict (``user_name`` first: it is what thread messages carry).
 
-    ``local_message_ids`` are indices into ``line_meta`` (rendered lines),
-    not raw ``thread["messages"]`` indices.
+    Identities are private: they go to the audit file, never to the LLM or the public claims.
     """
 
-    messages = thread.get("messages", [])
-    message_ids = thread.get("message_ids", [])
+    if isinstance(person, dict):
+        return str(person.get("user_name") or person.get("phone") or "")
+    return str(person or "")
 
-    statement_senders: set[str] = set()
-    opposing_senders: set[str] = set()
-    reaction_supporters: set[str] = set()
-    reaction_opposers: set[str] = set()
-    message_reactions: list[dict[str, Any]] = []
 
-    linked_ids = set(local_message_ids)
-    linked_ids.update(opposing_local_message_ids or [])
+EvidenceSide = Literal["supporting", "opposing"]
+# Who a reaction counts for, by the side of the message it is on and its sentiment. A
+# positive reaction agrees with the message it is on, so on an OPPOSING message it backs the
+# opposition. A negative reaction on an opposing message is not read as support (a sad face
+# under a bad experience is sympathy, not disagreement), so it counts for neither side.
+_REACTION_SIDE: dict[tuple[EvidenceSide, ReactionSentiment], EngagementSide] = {
+    ("supporting", "positive"): "supporter",
+    ("supporting", "negative"): "opposer",
+    ("opposing", "positive"): "opposer",
+}
 
-    for local_id in sorted(linked_ids):
-        meta = line_meta[local_id]
-        if local_id in local_message_ids:
-            statement_senders.add(meta["sender"])
 
-        msg_index = meta["message_index"]
-        msg = messages[msg_index]
-        rx_list = msg.get("reactions") or meta.get("reactions") or []
-        reaction_supporters.update(
-            _reaction_senders(rx_list, sentiment="positive")
+@dataclass(frozen=True)
+class Evidence:
+    """Everything a claim's evidence messages say about who backs or disputes it.
+
+    ``supporters`` / ``opposers`` are private events ``{person, date, via, message_id}``
+    (``via`` is ``"message"`` for the author, ``"reaction"`` for a reactor; a reaction has no
+    time of its own in the export, so it carries the date of the message it is on). The
+    counts are distinct people per side; dates span the evidence messages (``YYYY-MM-DD``).
+    """
+
+    supporters: list[dict[str, str]]
+    opposers: list[dict[str, str]]
+    first_date: str | None
+    last_date: str | None
+    reaction_summary: list[dict[str, Any]]
+
+    @property
+    def supporter_count(self) -> int:
+        return len({event["person"] for event in self.supporters})
+
+    @property
+    def opposer_count(self) -> int:
+        return len({event["person"] for event in self.opposers})
+
+
+def collect_evidence(
+    messages_by_id: dict[str, dict[str, Any]],
+    supporting_ids: list[str],
+    opposing_ids: list[str],
+) -> Evidence:
+    """Derive supporters, opposers, dates and the reaction summary of one claim.
+
+    ``messages_by_id`` maps WhatsApp ids to messages ``{sender, datetime, reactions?}`` whose
+    reactions are ``[{emoji, senders}]``. The author of a supporting message supports the
+    claim, the author of an opposing one opposes it; reactions count by ``_REACTION_SIDE``.
+    An id missing from ``messages_by_id`` raises ``KeyError``: prune evidence first.
+    """
+
+    events: dict[EngagementSide, list[dict[str, str]]] = {"supporter": [], "opposer": []}
+    seen: set[tuple[EngagementSide, str, str, str]] = set()
+    reaction_counts: Counter[tuple[EvidenceSide, str]] = Counter()
+    dates: list[str] = []
+
+    def add(side: EngagementSide, person: str, date: str, via: str, message_id: str) -> None:
+        key = (side, person, message_id, via)
+        if person and key not in seen:
+            seen.add(key)
+            events[side].append(
+                {"person": person, "date": date, "via": via, "message_id": message_id}
+            )
+
+    sides: list[tuple[EvidenceSide, list[str]]] = [
+        ("supporting", supporting_ids),
+        ("opposing", opposing_ids),
+    ]
+    for evidence_side, ids in sides:
+        for message_id in ids:
+            message = messages_by_id[message_id]
+            date = str(message.get("datetime") or "")[:10]
+            if date:
+                dates.append(date)
+            author_side: EngagementSide = (
+                "supporter" if evidence_side == "supporting" else "opposer"
+            )
+            add(author_side, person_key(message.get("sender")), date, "message", message_id)
+            for reaction in message.get("reactions") or []:
+                emoji = reaction.get("emoji") or ""
+                senders = [person_key(s) for s in reaction.get("senders") or []]
+                senders = [s for s in senders if s]
+                if not emoji or not senders:
+                    continue
+                reaction_counts[(evidence_side, emoji)] += len(senders)
+                side = _REACTION_SIDE.get((evidence_side, reaction_sentiment(emoji)))
+                if side is not None:
+                    for sender in senders:
+                        add(side, sender, date, "reaction", message_id)
+
+    summary = [
+        {
+            "emoji": emoji,
+            "side": evidence_side,
+            "sentiment": reaction_sentiment(emoji),
+            "count": count,
+        }
+        for (evidence_side, emoji), count in sorted(
+            reaction_counts.items(),
+            key=lambda item: (item[0][0] != "supporting", -item[1], item[0][1]),
         )
-        reaction_opposers.update(_reaction_senders(rx_list, sentiment="negative"))
-
-        rx_audit: list[dict[str, Any]] = []
-        for reaction in rx_list:
-            senders = [s for s in (reaction.get("senders") or []) if s]
-            if not senders:
-                continue
-            emoji = reaction.get("emoji", "")
-            rx_audit.append(
-                {
-                    "emoji": emoji,
-                    "senders": senders,
-                    "sentiment": reaction_sentiment(emoji),
-                }
-            )
-
-        if rx_audit:
-            global_id = message_ids[msg_index] if msg_index < len(message_ids) else None
-            message_reactions.append(
-                {
-                    "local_message_id": local_id,
-                    "message_index": msg_index,
-                    "global_message_id": global_id,
-                    "reactions": rx_audit,
-                }
-            )
-
-    for local_id in opposing_local_message_ids or []:
-        opposing_senders.add(line_meta[local_id]["sender"])
-
-    all_supporters = statement_senders | reaction_supporters
-    all_opposers = opposing_senders | reaction_opposers
-    reaction_only = reaction_supporters - statement_senders
-
-    return {
-        "statement_senders": sorted(statement_senders),
-        "opposing_senders": sorted(opposing_senders),
-        "reaction_senders": sorted(reaction_supporters),
-        "reaction_opposers": sorted(reaction_opposers),
-        "all_supporters": sorted(all_supporters),
-        "all_opposers": sorted(all_opposers),
-        "support_count": max(len(all_supporters), 1),
-        "opposer_count": len(all_opposers),
-        "statement_count": len(statement_senders),
-        "reaction_endorser_count": len(reaction_supporters),
-        "reaction_only_count": len(reaction_only),
-        "message_reactions": message_reactions,
-        "reaction_summary": aggregate_reaction_summary(message_reactions),
-    }
+    ]
+    return Evidence(
+        supporters=events["supporter"],
+        opposers=events["opposer"],
+        first_date=min(dates) if dates else None,
+        last_date=max(dates) if dates else None,
+        reaction_summary=summary,
+    )

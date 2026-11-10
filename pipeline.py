@@ -82,8 +82,9 @@ def run(
     logger.info("[4] Extracting claims...")
     e_meta = extract(llm=clients["extract"], use_batch=use_batch)
     logger.info(
-        f"    {e_meta['claims_count']} claims; "
-        f"redactions: {e_meta['scrub']['total_redactions']}, "
+        f"    {e_meta['claims_count']} claims ({e_meta['new_claims']} new, "
+        f"{e_meta['model_calls']} model calls, {len(e_meta['failed_threads'])} failed); "
+        f"new redactions: {e_meta['scrub']['total_redactions']}, "
         f"PII review: {e_meta['scrub']['pii_review_claims']}"
     )
     logger.info(

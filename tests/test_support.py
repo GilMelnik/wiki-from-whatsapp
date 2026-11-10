@@ -1,9 +1,10 @@
-"""Support counts: emoji sentiment is independent of claim stance."""
+"""Support counts: emoji sentiment is independent of claim stance; evidence per claim."""
 
 from utils.support import (
-    compute_support,
+    collect_evidence,
     engagement_for_claim,
     participants_from_audit,
+    person_key,
     supporter_count_for_claims,
 )
 
@@ -19,7 +20,7 @@ def _audit_record(reactions: list[dict], *, opposing: list[str] | None = None) -
     }
 
 
-def test_only_positive_emojis_count_as_supporters():
+def test_only_positive_emojis_count_as_supporters() -> None:
     record = _audit_record(
         [
             {"emoji": "👍", "senders": ["a"]},
@@ -30,66 +31,94 @@ def test_only_positive_emojis_count_as_supporters():
     assert participants_from_audit(record, side="supporter") == {"author", "a"}
 
 
-def test_negative_emojis_count_as_opposers_not_supporters():
+def test_negative_emojis_count_as_opposers_not_supporters() -> None:
     record = _audit_record([{"emoji": "👎", "senders": ["c"]}])
     assert participants_from_audit(record, side="supporter") == {"author"}
     assert participants_from_audit(record, side="opposer") == {"c"}
 
 
-def test_negative_claim_still_uses_positive_emojis_for_support():
-    record = _audit_record(
-        [
-            {"emoji": "👍", "senders": ["a"]},
-            {"emoji": "👎", "senders": ["b"]},
-        ]
-    )
-    assert participants_from_audit(record, side="supporter") == {"author", "a"}
-    assert participants_from_audit(record, side="opposer") == {"b"}
-
-
-def test_opposing_message_senders_count_as_opposers():
+def test_opposing_message_senders_count_as_opposers() -> None:
     record = _audit_record([], opposing=["dissenter"])
     assert participants_from_audit(record, side="opposer") == {"dissenter"}
 
 
-def test_compute_support_splits_supporters_and_opposers():
-    thread = {
-        "messages": [
-            {
-                "sender": "author",
-                "content": "support",
-                "reactions": [
-                    {"emoji": "👍", "senders": ["a"]},
-                    {"emoji": "👎", "senders": ["b"]},
-                ],
-            },
-            {"sender": "dissenter", "content": "oppose", "reactions": []},
-        ],
-        "message_ids": [1, 2],
-    }
-    line_meta = [
-        {
-            "sender": "author",
-            "month": "2024-01",
-            "message_index": 0,
-            "reactions": thread["messages"][0]["reactions"],
-        },
-        {
-            "sender": "dissenter",
-            "month": "2024-01",
-            "message_index": 1,
-            "reactions": [],
-        },
-    ]
-    result = compute_support(thread, line_meta, [0], opposing_local_message_ids=[1])
-    assert set(result["all_supporters"]) == {"author", "a"}
-    assert set(result["all_opposers"]) == {"dissenter", "b"}
-
-
-def test_supporter_count_ignores_stale_all_supporters_field():
+def test_supporter_count_ignores_stale_all_supporters_field() -> None:
     record = _audit_record([{"emoji": "😢", "senders": ["sympathizer"]}])
     assert supporter_count_for_claims(["c1"], {"c1": record}) == 1
     assert engagement_for_claim("c1", {"c1": record}) == {
         "supporter_count": 1,
         "opposer_count": 1,
     }
+
+
+def _messages() -> dict[str, dict]:
+    return {
+        "W1": {
+            "sender": "author",
+            "datetime": "2024-01-05T10:00:00",
+            "reactions": [
+                {"emoji": "👍", "senders": ["a", "author"]},
+                {"emoji": "👎", "senders": ["b"]},
+                {"emoji": "🙂", "senders": ["n"]},
+            ],
+        },
+        "W2": {
+            "sender": "dissenter",
+            "datetime": "2024-03-02T08:00:00",
+            "reactions": [
+                {"emoji": "👍", "senders": ["agrees-with-dissent"]},
+                {"emoji": "😢", "senders": ["sympathizer"]},
+            ],
+        },
+        "W3": {"sender": "a", "datetime": "2024-02-01T00:00:00", "reactions": []},
+    }
+
+
+def _people(events: list[dict]) -> set[str]:
+    return {e["person"] for e in events}
+
+
+def test_positive_reaction_on_an_opposing_message_backs_the_opposition() -> None:
+    """The v1 bug: a 👍 on an opposing message was counted as SUPPORT for the claim."""
+    evidence = collect_evidence(_messages(), ["W1"], ["W2"])
+    assert "agrees-with-dissent" not in _people(evidence.supporters)
+    assert "agrees-with-dissent" in _people(evidence.opposers)
+    # A sad face under a dissenting message is sympathy: it counts for neither side.
+    assert "sympathizer" not in _people(evidence.supporters) | _people(evidence.opposers)
+
+
+def test_supporters_opposers_and_distinct_counts() -> None:
+    evidence = collect_evidence(_messages(), ["W1", "W3"], ["W2"])
+    assert _people(evidence.supporters) == {"author", "a"}
+    assert _people(evidence.opposers) == {"b", "dissenter", "agrees-with-dissent"}
+    # "a" wrote W3 and reacted to W1: two events, one person.
+    assert len([e for e in evidence.supporters if e["person"] == "a"]) == 2
+    assert evidence.supporter_count == 2
+    assert evidence.opposer_count == 3
+
+
+def test_event_shape_and_dates() -> None:
+    evidence = collect_evidence(_messages(), ["W1", "W3"], ["W2"])
+    assert evidence.first_date == "2024-01-05"
+    assert evidence.last_date == "2024-03-02"
+    assert {"person": "a", "date": "2024-01-05", "via": "reaction", "message_id": "W1"} in (
+        evidence.supporters
+    )
+    assert {"person": "a", "date": "2024-02-01", "via": "message", "message_id": "W3"} in (
+        evidence.supporters
+    )
+
+
+def test_reaction_summary_by_side() -> None:
+    summary = collect_evidence(_messages(), ["W1"], ["W2"]).reaction_summary
+    assert summary[0] == {"emoji": "👍", "side": "supporting", "sentiment": "positive", "count": 2}
+    assert {"emoji": "😢", "side": "opposing", "sentiment": "negative", "count": 1} in summary
+    sides = [s["side"] for s in summary]
+    assert sides == sorted(sides, key=lambda side: side != "supporting")
+
+
+def test_person_key_accepts_export_dicts() -> None:
+    assert person_key({"user_name": "u", "phone": "p"}) == "u"
+    assert person_key({"user_name": "", "phone": "p"}) == "p"
+    assert person_key("u") == "u"
+    assert person_key(None) == ""
