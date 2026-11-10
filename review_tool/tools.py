@@ -12,10 +12,12 @@ from review_tool.registry import ToolSpec
 from review_tool.status_tool import StatusTool
 from step_3_extract.reviewer.tool import PiiTool
 from step_4_entities.reviewer.tool import EntitiesTool
+from step_6_plan.reviewer.tool import PlanTool
 from utils.config import DATA_DIR
 
 TOOL_SPECS: tuple[ToolSpec, ...] = (
     StatusTool(GRAPH, DATA_DIR).spec,
     PiiTool(GRAPH).spec,
     EntitiesTool(GRAPH).spec,
+    PlanTool(GRAPH).spec,
 )

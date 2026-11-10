@@ -212,6 +212,9 @@
       "small_page_factor": 0.25,
       "large_page_factor": 3.0,
       "revise": true
+    },
+    "review": {
+      "undo_depth": 20
     }
   },
   "pages": {

@@ -155,3 +155,42 @@ def test_move_and_reorder(plan: dict) -> None:
     category = ops.move(plan, "choosing", "during")
     assert category.plan["pages"]["agencies"]["path"] == ["during", "choosing"]
     assert ops.kind_of(category.plan, "choosing") == "node"
+
+
+def test_split_page_can_narrow_the_original_in_the_same_edit(plan: dict) -> None:
+    edit = ops.split_page(plan, "agencies", "lawyers", title_he="עורכי דין", description="ת",
+                          scope="ס", original_scope="רק סוכנויות")
+    assert edit.plan["pages"]["agencies"]["scope"] == "רק סוכנויות"
+    assert edit.reassign == ("agencies",)
+    with pytest.raises(PlanError, match="non-empty text 'scope'"):
+        ops.split_page(plan, "agencies", "lawyers", title_he="x", description="x", scope="x",
+                       original_scope=" ")
+
+
+def test_change_id_keeps_the_page_and_redirects_the_old_id(plan: dict) -> None:
+    merged = ops.merge(plan, "agencies", ["costs"]).plan
+    edit = ops.change_id(merged, "agencies", "providers")
+    assert edit.created == ("providers",) and edit.removed_pages == () and edit.reassign == ()
+    assert edit.redirects == {"agencies": "providers", "costs": "providers"}
+    page = edit.plan["pages"]["providers"]
+    assert page["merged_from"] == ["costs", "agencies"]
+    assert page["title_he"] == merged["pages"]["agencies"]["title_he"]
+    assert page["example_group_ids"] == merged["pages"]["agencies"]["example_group_ids"]
+    assert list(edit.plan["pages"]) == ["providers", "clinics", "hospital"]  # same order
+    assert _children(edit.plan, "choosing") == ["providers"]
+    with pytest.raises(PlanError, match="retired"):
+        ops.change_id(edit.plan, "providers", "agencies")
+
+
+def test_change_id_of_a_label_and_a_category(plan: dict) -> None:
+    label = ops.change_id(plan, "usa", "united-states")
+    assert label.redirects == {"usa": "united-states"}
+    assert label.plan["labels"]["united-states"]["merged_from"] == ["usa"]
+    category = ops.change_id(plan, "choosing", "planning")
+    assert category.redirects == {} and "choosing" in category.plan["metadata"]["retired_ids"]
+    assert category.plan["pages"]["costs"]["path"] == ["before", "planning"]
+    for item_id, taken in (("costs", "agencies"), ("usa", "georgia"), ("usa", "costs")):
+        with pytest.raises(PlanError, match="already in use"):
+            ops.change_id(plan, item_id, taken)
+    with pytest.raises(PlanError, match="not a slug"):
+        ops.change_id(plan, "costs", "Bad Id")
