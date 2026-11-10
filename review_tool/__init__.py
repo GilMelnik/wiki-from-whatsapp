@@ -2,8 +2,9 @@
 
 Run ``python -m review_tool --tool <name>``. What a tool author imports:
 
-- ``review_tool.registry``: ``ToolSpec``, ``register``
-- ``review_tool.artifacts``: ``GRAPH`` (artifact keys, files, staleness), ``ArtifactNode``
+- ``review_tool.registry``: ``ToolSpec`` (a tool is registered by adding it to ``TOOL_SPECS``)
+- ``review_tool.artifacts``: ``GRAPH`` (artifact keys, files, staleness), ``ArtifactNode``;
+  a new artifact is one ``ArtifactNode`` line in ``artifacts._pipeline_nodes``
 - ``review_tool.stores``: ``StoreHandle`` (a store that reloads when its files change)
 - ``review_tool.locks``: ``artifact_lock``, ``save_json``, ``ArtifactLockTimeout``
 - ``review_tool.events``: ``publish``

@@ -5,6 +5,10 @@ store when any of them changed on disk (a pipeline step ran, another tool saved)
 is never served from stale memory. ``mutate()`` additionally holds the cross-process lock on
 the files the store writes for the whole read-modify-write, so a change is never applied to
 stale memory and never interleaves with another writer.
+
+Use handles from plain ``def`` endpoints (FastAPI runs them in a worker thread): ``get()`` and
+``mutate()`` take a thread lock and may wait for a file lock, which would stall the event loop
+(and every open event stream) inside an ``async def`` endpoint.
 """
 
 from __future__ import annotations
@@ -77,9 +81,18 @@ class StoreHandle(Generic[T]):
                     self._loaded = False
                     raise
                 else:
-                    self._stamps = self._current_stamps()  # our own writes are not a change
+                    self._stamps = self._stamps_after_own_writes()
                 finally:
                     self._mutating = False
+
+    def _stamps_after_own_writes(self) -> tuple[FileStamp | None, ...]:
+        """Our own writes (to the locked files) are not a change; any other watched file that
+        changed meanwhile (an upstream input) still makes the next access reload."""
+        locked = {path.resolve() for path in self._lock_paths}
+        return tuple(
+            stamp(path) if path.resolve() in locked else loaded
+            for path, loaded in zip(self._watched_paths, self._stamps)
+        )
 
     def _fresh(self) -> T:
         # Stamps are taken before loading: a write that lands during the load causes one more

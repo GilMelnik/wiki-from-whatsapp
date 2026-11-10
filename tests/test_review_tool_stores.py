@@ -320,3 +320,16 @@ def test_factory_returning_none_is_still_cached(tmp_path: Path) -> None:
     handle: StoreHandle[None] = StoreHandle(lambda: calls.append(1), [tmp_path / "absent.json"])
     assert handle.get() is None and handle.get() is None
     assert len(calls) == 1
+
+
+def test_upstream_change_during_a_mutation_still_reloads(items_path: Path, tmp_path: Path) -> None:
+    upstream = tmp_path / "upstream.json"
+    write_file(upstream, {"v": 1})
+    factory = CountingFactory(items_path)
+    handle = StoreHandle(factory, [items_path, upstream], lock_paths=[items_path])
+    with handle.mutate() as store:
+        store.add("b")
+        write_json_file({"v": 2}, upstream)  # a step rewrote an input meanwhile
+    assert factory.loads == 1
+    handle.get()
+    assert factory.loads == 2
