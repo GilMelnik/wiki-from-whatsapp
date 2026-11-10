@@ -58,3 +58,25 @@ html[dir="rtl"] body {
 [dir="rtl"] .md-footer__inner {
   text-align: right;
 }
+
+/* Discreet support line above the footer (overrides/main.html). */
+.md-coffee {
+  padding: 0.8rem 0.8rem 1rem;
+  text-align: center;
+  font-size: 0.64rem;
+  color: var(--md-default-fg-color--light);
+}
+
+.md-coffee__text {
+  margin: 0;
+  unicode-bidi: plaintext;
+}
+
+.md-coffee a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.md-coffee a:hover {
+  color: var(--md-accent-fg-color);
+}

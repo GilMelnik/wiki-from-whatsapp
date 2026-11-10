@@ -64,7 +64,10 @@
   "review": {},
   "site": {
     "url": "https://gaysurrogacy.co.il/",
-    "coffee_url": "https://buymeacoffee.com/gilmelnik"
+    "coffee_url": "https://buymeacoffee.com/gilmelnik",
+    "coffee_text": "אחזקת האתר והאחסון שלו עולים כסף. קפה אני כבר שותה מספיק — אבל התינוק שלי שוב איבד מוצץ.",
+    "coffee_link_text": "אפשר לקנות לו חדש 🍼",
+    "custom_dir": "overrides"
   },
   "update": {}
 }

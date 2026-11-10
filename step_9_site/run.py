@@ -15,6 +15,7 @@ from typing import Any
 
 import yaml
 
+from utils.config import section
 from utils.paths import DRAFTS_DIR, ORIGINAL_PLAN_PATH, resolve_plan_path
 from utils.rtl import HEBREW_CSS, wrap_rtl_markdown
 from utils.taxonomy import CATEGORIES, all_pages, category_title
@@ -97,14 +98,17 @@ def build_config(
     docs_dir: Path,
     plan_path: Path | str = ORIGINAL_PLAN_PATH,
 ) -> dict[str, Any]:
+    site = section("site")
     return {
         "site_name": "ויקי פונדקאות לגייז",
+        "site_url": site["url"],
         "site_description": "ידע קהילתי אנונימי על תהליכי פונדקאות",
         "docs_dir": str(docs_dir),
         "theme": {
             "name": "material",
             "language": "he",
             "direction": "rtl",
+            "custom_dir": site["custom_dir"],
             "features": [
                 "navigation.sections",
                 "navigation.top",
@@ -144,6 +148,11 @@ def build_config(
             "tables",
             "toc",
         ],
+        "extra": {
+            "coffee_text": site["coffee_text"],
+            "coffee_link_text": site["coffee_link_text"],
+            "coffee_url": site["coffee_url"],
+        },
         "extra_css": [HEBREW_CSS],
         "nav": _build_nav(docs_dir, plan_path),
     }
