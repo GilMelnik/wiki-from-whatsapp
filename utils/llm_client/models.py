@@ -7,43 +7,6 @@ from typing import Any, Literal, Sequence
 
 
 @dataclass(frozen=True)
-class GroundedCitation:
-    title: str
-    url: str
-
-
-@dataclass(frozen=True)
-class GroundedResult:
-    text: str
-    citations: tuple[GroundedCitation, ...] = ()
-    search_queries: tuple[str, ...] = ()
-
-    def to_dict(self) -> dict[str, Any]:
-        """Serialize for the on-disk cache. The ``grounded`` marker is what
-        distinguishes a grounded entry from a plain text completion on read."""
-
-        return {
-            "grounded": True,
-            "response": self.text,
-            "citations": [{"title": c.title, "url": c.url} for c in self.citations],
-            "search_queries": list(self.search_queries),
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "GroundedResult":
-        citations = tuple(
-            GroundedCitation(title=c["title"], url=c["url"])
-            for c in data.get("citations", [])
-            if c.get("url")
-        )
-        return cls(
-            text=data.get("response", ""),
-            citations=citations,
-            search_queries=tuple(data.get("search_queries", [])),
-        )
-
-
-@dataclass(frozen=True)
 class CacheSegment:
     """One text segment of a prompt; ``cache`` places a cache_control breakpoint after it."""
 

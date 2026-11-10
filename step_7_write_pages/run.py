@@ -35,12 +35,12 @@ from pathlib import Path
 from typing import Any
 
 from step_5_aggregate.resolver import EntityResolver, load_entity_resolver
-from step_7_community.prompts import (
+from step_7_write_pages.prompts import (
     COMMUNITY_ACTIONS_SCHEMA,
     COMMUNITY_AGENT_SYSTEM,
     build_batch_prompt,
 )
-from step_7_community.store import PageStore
+from step_7_write_pages.store import PageStore
 from utils.json_io import write_json_file
 from utils.llm_client import LLMClient
 from utils.logging_setup import setup_step_logging

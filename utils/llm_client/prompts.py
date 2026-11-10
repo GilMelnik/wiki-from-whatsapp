@@ -38,17 +38,6 @@ def extract_json(text: str) -> Any:
         return json.loads(match.group(1))
 
 
-def _gemini_truncated(response: Any) -> bool:
-    """True if a Gemini response stopped because it hit max_output_tokens."""
-
-    for cand in getattr(response, "candidates", None) or []:
-        reason = getattr(cand, "finish_reason", None)
-        name = getattr(reason, "name", None) or (str(reason) if reason else "")
-        if name.endswith("MAX_TOKENS"):
-            return True
-    return False
-
-
 def _flatten(prompt: PromptInput) -> str:
     """Collapse a prompt into plain text for the disk cache key and non-anthropic providers."""
 

@@ -12,7 +12,7 @@ from typing import Any
 
 from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION
 from step_5_aggregate.resolver import EntityResolver
-from step_7_community.store import STANCE_HE, PageStore
+from step_7_write_pages.store import STANCE_HE, PageStore
 from utils.llm_client import CacheSegment
 from utils.support import engagement_for_claim
 

@@ -9,7 +9,6 @@ from utils.llm_client.providers.anthropic import (
     AnthropicProvider,
 )
 from utils.llm_client.providers.base import ClassifierProvider, LLMProvider
-from utils.llm_client.providers.gemini import GeminiProvider
 from utils.llm_client.providers.typesafe import TypeSafeClassifierProvider
 
 
@@ -24,7 +23,7 @@ def create_provider(
 ) -> LLMProvider:
     registry: dict[str, type[LLMProvider]] = {
         provider_object.name: provider_object
-        for provider_object in (AnthropicProvider, GeminiProvider)
+        for provider_object in (AnthropicProvider,)
     }
 
     try:

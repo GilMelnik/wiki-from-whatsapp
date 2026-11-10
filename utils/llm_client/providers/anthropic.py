@@ -52,7 +52,6 @@ from utils.llm_client.settings import CLASSIFIER_CONFIG, CONFIG
 class AnthropicProvider(LLMProvider):
     name = "anthropic"
     supports_batch = True
-    supports_grounded = False
 
     def _output_config(
         self, response_schema: dict[str, Any] | None

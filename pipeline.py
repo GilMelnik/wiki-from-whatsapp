@@ -7,8 +7,7 @@ Runs steps in order:
     4b. entities -> data/entities.json
     5. aggregate -> data/claims_aggregated.json
     6. plan      -> data/wiki_plan.json (seed page catalog)
-    7. community -> data/wiki_pages.json (agentic, mini-batch over claims)
-    8. background-> drafts/*.md (public overview + assembled drafts)
+    7. write pages -> data/wiki_pages.json (agentic, mini-batch over claims)
     9. site      -> mkdocs.yml
 
 Human gates (web UIs, no CLI):
@@ -28,8 +27,7 @@ from step_3_extract.run import run as extract
 from step_4_entities.run import run as resolve_entities
 from step_5_aggregate.run import run as aggregate
 from step_6_plan.run import run as plan
-from step_7_community.run import run as community
-from step_8_background.run import run as background
+from step_7_write_pages.run import run as write_pages
 from step_9_site.run import run as site
 from utils.llm_client import LLMClient
 from utils.logging_setup import setup_step_logging
@@ -41,18 +39,15 @@ from utils.paths import (
     STEP_5,
     STEP_6,
     STEP_7,
-    STEP_8,
     STEP_9,
 )
 
 
 def _stage_clients(logger: logging.Logger) -> dict[str, LLMClient]:
     return {
-        "classify": LLMClient.for_stage("classify", logger=logger),
         "extract": LLMClient.for_stage("extract", logger=logger),
         "plan": LLMClient.for_stage("plan", logger=logger),
         "generate": LLMClient.for_stage("generate", logger=logger),
-        "research": LLMClient.for_stage("research", logger=logger),
     }
 
 
@@ -61,7 +56,6 @@ def run(
     *,
     use_batch: bool = False,
     skip_plan: bool = False,
-    enable_web_search: bool | None = None,
 ) -> None:
     logger = setup_step_logging(SHARED)
     clients = _stage_clients(logger)
@@ -127,27 +121,15 @@ def run(
     )
 
     logger = setup_step_logging(STEP_7)
-    logger.info("[7] Building community pages (agentic, mini-batch)...")
-    cm_meta = community(llm=clients["generate"])
+    logger.info("[7] Writing wiki pages (agentic, mini-batch)...")
+    cm_meta = write_pages(llm=clients["generate"])
     logger.info(
         f"    {cm_meta['statements']} statements across {cm_meta['pages']} pages "
         f"from {cm_meta['claims']} claims ({cm_meta['batches']} batches)"
     )
     logger.info(
-        "    -> Review pages in the community page store before background/assembly."
+        "    -> Review the pages before the site step."
     )
-
-    logger = setup_step_logging(STEP_8)
-    logger.info("[8] Researching background + assembling drafts...")
-    bg_meta = background(
-        research_llm=clients["research"],
-        enable_web_search=enable_web_search,
-    )
-    search_note = "with web search" if bg_meta.get("web_search") else "no web search"
-    logger.info(
-        f"    {bg_meta['pages_written']} drafts in {bg_meta['drafts_dir']}/ ({search_note})"
-    )
-    logger.info("    Manual review: edit drafts/ and copy approved pages into docs/.")
 
     logger = setup_step_logging(STEP_9)
     logger.info("[9] Writing site config...")
