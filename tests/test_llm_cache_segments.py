@@ -4,8 +4,8 @@ reordered community prompt still flattens to text the mock/disk-cache can parse.
 
 from __future__ import annotations
 
-from step_7_community.run import build_batch_prompt
-from step_7_community.store import PageStore
+from step_7_write_pages.run import build_batch_prompt
+from step_7_write_pages.store import PageStore
 from utils.llm_client import CacheSegment, _flatten, _to_blocks
 
 EPHEMERAL = {"type": "ephemeral"}

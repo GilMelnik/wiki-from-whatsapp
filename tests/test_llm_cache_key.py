@@ -3,15 +3,13 @@
 The key must cover everything that changes an answer (provider, model,
 ``thinking_param``, prompts, JSON mode, response schema) so a config or schema
 change never returns a stale entry, and nothing that does not (temperature is
-never sent by Anthropic or Gemini). Default paths must follow the data dir.
+never sent by Anthropic). Default paths must follow the data dir.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-
-import pytest
 
 from utils.config import DATA_DIR
 from utils.llm_client import BatchRequest, CacheSegment, LLMClient
@@ -73,29 +71,20 @@ def test_schema_and_json_mode_change_the_key(tmp_path: Path) -> None:
     assert len(keys) == 4
 
 
-def test_thinking_model_and_provider_change_the_key(tmp_path: Path) -> None:
+def test_thinking_and_model_change_the_key(tmp_path: Path) -> None:
     keys = {
         _client(tmp_path)._cache_key("sys", "usr"),
         _client(tmp_path, thinking_param="high")._cache_key("sys", "usr"),
         _client(tmp_path, thinking_param=None)._cache_key("sys", "usr"),
         _client(tmp_path, model="claude-opus-5-5")._cache_key("sys", "usr"),
-        _client(tmp_path, provider="gemini", model="gemini-3.5-flash")._cache_key(
-            "sys", "usr"
-        ),
     }
 
-    assert len(keys) == 5
+    assert len(keys) == 4
 
 
-@pytest.mark.parametrize(
-    ("provider", "model"),
-    [("anthropic", "claude-sonnet-5-5"), ("gemini", "gemini-3.5-flash")],
-)
-def test_temperature_does_not_change_the_key(
-    tmp_path: Path, provider: str, model: str
-) -> None:
-    cold = _client(tmp_path, provider=provider, model=model, temperature=0.0)
-    warm = _client(tmp_path, provider=provider, model=model, temperature=0.9)
+def test_temperature_does_not_change_the_key(tmp_path: Path) -> None:
+    cold = _client(tmp_path, temperature=0.0)
+    warm = _client(tmp_path, temperature=0.9)
 
     assert cold._cache_key("sys", "usr") == warm._cache_key("sys", "usr")
 

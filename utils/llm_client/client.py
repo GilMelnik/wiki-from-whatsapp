@@ -4,8 +4,7 @@ The client exposes methods used across the wiki pipeline:
 
 - ``complete_json(system, user, task=...)`` -> parsed ``dict``/``list``
 - ``complete_text(system, user, task=...)`` -> ``str``
-- ``complete_grounded(system, user)`` -> ``GroundedResult`` (Gemini + Google Search)
-- ``complete_batch(requests)`` -> ``dict[request_id, (text, truncated)]`` (anthropic / gemini)
+- ``complete_batch(requests)`` -> ``dict[request_id, (text, truncated)]`` (anthropic)
 - ``complete_batch_json(requests)`` -> ``dict[request_id, parsed]`` (re-submits only
   items *truncated at max_tokens* as another batch with a larger window; other
   unparseable items are logged and dropped rather than retried)
@@ -30,7 +29,7 @@ from typing import Any, Sequence
 
 from utils.llm_client.cache import LLMCache
 from utils.llm_client.failure_log import append_failure
-from utils.llm_client.models import BatchRequest, GroundedResult, PromptInput
+from utils.llm_client.models import BatchRequest, PromptInput
 from utils.llm_client.prompts import _flatten, extract_json
 from utils.llm_client.providers import create_provider
 from utils.llm_client.settings import CONFIG, DATA_DIR
@@ -89,8 +88,8 @@ class LLMClient:
             logger=self.logger,
             thinking_param=thinking_param,
         )
-        # No temperature: neither provider sends it (Anthropic 5.x rejects
-        # non-default sampling, Gemini 3.x ignores it), so it never changes an answer.
+        # No temperature: the provider never sends it (Anthropic 5.x rejects
+        # non-default sampling), so it never changes an answer.
         identity: dict[str, Any] = {
             "provider": self.provider,
             "model": self.model,
@@ -123,8 +122,8 @@ class LLMClient:
         )
 
     def _batch_key(self, req: BatchRequest) -> str:
-        """Cache key of a batch item. Batch items are JSON requests (Gemini's
-        batch always asks for JSON; Anthropic ignores the flag), so they share
+        """Cache key of a batch item. Batch items are JSON requests (Anthropic
+        ignores the flag), so they share
         keys with ``complete_json`` and either path can reuse the other's answer."""
 
         return self._cache_key(
@@ -198,7 +197,7 @@ class LLMClient:
         if self.use_cache:
             key = self._cache_key(system, user)
             cached = self.cache._read_cache(key)
-            # A GroundedResult can share this key space but is not plain text.
+            # An entry can hold a classifier's answer list, which is not plain text.
             if isinstance(cached, str):
                 self._log_call(True, task, "(cache)")
                 return cached
@@ -257,8 +256,7 @@ class LLMClient:
         )
         if key is not None:
             cached = self.cache._read_cache(key)
-            # A GroundedResult can share this key space; it isn't a JSON string,
-            # so only a str cache entry is a candidate for extract_json.
+            # Only a str cache entry is a candidate for extract_json.
             if isinstance(cached, str):
                 try:
                     data = extract_json(cached)
@@ -315,23 +313,6 @@ class LLMClient:
         self._log_call(False, task, "parse_error exhausted -> logged")
         raise last_exc  # type: ignore[misc]
 
-    def complete_grounded(self, system: str, user: str) -> GroundedResult:
-        """Run the provider with Google Search grounding; returns text + citations."""
-
-        if self.use_cache:
-            key = self._cache_key(system, user)
-            cached = self.cache._read_cache(key)
-            if isinstance(cached, GroundedResult):
-                return cached
-
-        if not self._provider.supports_grounded:
-            raise ValueError(f"Grounded search requires provider 'gemini'; got {self.provider!r}")
-        result = self._provider.generate_grounded(system, user)
-
-        if self.use_cache:
-            self.cache._write_cache(key, result)
-        return result
-
     def complete_batch(
         self, requests: Sequence[BatchRequest]
     ) -> dict[str, tuple[str, bool]]:
@@ -348,7 +329,7 @@ class LLMClient:
         for req in requests:
             if self.use_cache:
                 cached = self.cache._read_cache(self._batch_key(req))
-                # A GroundedResult can share this key space but is not batch text.
+                # An entry can hold a classifier's answer list, which is not batch text.
                 if isinstance(cached, str):
                     results[req.request_id] = (cached, False)
                     self._log_call(True, req.task, f"(batch cache {req.request_id})")

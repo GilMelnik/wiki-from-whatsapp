@@ -8,10 +8,8 @@ the answer must be in that payload, otherwise a config change silently returns a
 stale entry.
 
 An entry is ``{"response": ...}`` (a text completion, or a classifier's list of
-answers) or a grounded result (``GroundedResult.to_dict()``, which sets a
-``"grounded"`` marker plus citations/queries); reads tell the two apart from that
-marker, so both share the same key space. Unparseable responses are copied
-verbatim to a sibling ``*_bad`` dir (same key) for inspection.
+answers). Unparseable responses are copied verbatim to a sibling ``*_bad`` dir
+(same key) for inspection.
 """
 
 from __future__ import annotations
@@ -22,9 +20,8 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from utils.json_io import write_json_file
-from utils.llm_client.models import GroundedResult
 
-CacheValue = str | list[dict[str, Any]] | GroundedResult
+CacheValue = str | list[dict[str, Any]]
 
 
 class LLMCache:
@@ -46,29 +43,20 @@ class LLMCache:
         return self.cache_dir / f"{key}.json"
 
     def _read_cache(self, key: str) -> CacheValue | None:
-        """Return the cached value, rebuilding a ``GroundedResult`` when the file
-        holds grounded data and the stored ``response`` otherwise."""
+        """Return the stored ``response``, or ``None`` when nothing is cached."""
 
         path = self._cache_path(key)
         if not path.exists():
             return None
         with path.open(encoding="utf-8") as f:
             data = json.load(f)
-        if data.get("grounded") is True:
-            return GroundedResult.from_dict(data)
         return data["response"]
 
     def _write_cache(self, key: str, response: CacheValue) -> None:
-        """Persist a response or a grounded result, letting the value decide its
-        own on-disk shape. The write is atomic, so concurrent writers of
+        """Persist a response. The write is atomic, so concurrent writers of
         different keys (the classifier's thread pool) never leave a torn file."""
 
-        payload = (
-            response.to_dict()
-            if isinstance(response, GroundedResult)
-            else {"response": response}
-        )
-        write_json_file(payload, self._cache_path(key))
+        write_json_file({"response": response}, self._cache_path(key))
 
     def _delete_cache(self, key: str) -> None:
         self._cache_path(key).unlink(missing_ok=True)

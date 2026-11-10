@@ -1,4 +1,4 @@
-"""Step 8: build the MkDocs site config and wire approved pages.
+"""Step 9: build the MkDocs site config and wire approved pages.
 
 Generates ``mkdocs.yml`` (Material theme, Hebrew, RTL, search) with a ``nav``
 derived from ``data/wiki_plan.json`` when present, otherwise from the taxonomy
@@ -8,7 +8,6 @@ seed. Only pages that exist in ``docs/`` are included.
 from __future__ import annotations
 
 import json
-import shutil
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -16,7 +15,7 @@ from typing import Any
 import yaml
 
 from utils.config import section
-from utils.paths import DRAFTS_DIR, ORIGINAL_PLAN_PATH, resolve_plan_path
+from utils.paths import ORIGINAL_PLAN_PATH, resolve_plan_path
 from utils.rtl import HEBREW_CSS, wrap_rtl_markdown
 from utils.taxonomy import CATEGORIES, all_pages, category_title
 
@@ -160,18 +159,11 @@ def build_config(
 
 def run(
     docs_dir: Path | str = DEFAULT_DOCS_DIR,
-    drafts_dir: Path | str = DRAFTS_DIR,
     config_path: Path | str = DEFAULT_CONFIG_PATH,
     plan_path: Path | str = ORIGINAL_PLAN_PATH,
-    seed_from_drafts: bool = False,
 ) -> dict[str, Any]:
     docs = Path(docs_dir)
     docs.mkdir(parents=True, exist_ok=True)
-
-    if seed_from_drafts:
-        drafts = Path(drafts_dir)
-        for md in drafts.glob("*.md"):
-            shutil.copy2(md, docs / md.name)
 
     if not (docs / "index.md").exists():
         (docs / "index.md").write_text(

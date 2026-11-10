@@ -3,9 +3,9 @@
 ``LLMProvider`` (chat): each concrete provider owns its SDK client (constructed
 on first use) and converts prompts to whatever shape its API expects.
 ``generate`` returns ``(text, truncated)`` where
-``truncated`` marks a max_tokens cutoff. Grounded search and batch are optional
-capabilities; the base raises ``NotImplementedError`` and advertises support via
-``supports_grounded`` / ``supports_batch`` so the client can fail fast.
+``truncated`` marks a max_tokens cutoff. Batch is an optional
+capability; the base raises ``NotImplementedError`` and advertises support via
+``supports_batch`` so the client can fail fast.
 
 ``ClassifierProvider`` (non-chat): answers typed questions about a state with
 probabilities. It is a separate hierarchy because it shares nothing with a chat
@@ -22,7 +22,6 @@ from typing import Any, Sequence
 from utils.llm_client.models import (
     Answer,
     BatchRequest,
-    GroundedResult,
     PromptInput,
     Question,
 )
@@ -31,7 +30,6 @@ from utils.llm_client.models import (
 class LLMProvider(ABC):
     name: str = ""
     supports_batch: bool = False
-    supports_grounded: bool = False
 
     def __init__(
         self,
@@ -60,11 +58,6 @@ class LLMProvider(ABC):
         response_schema: dict[str, Any] | None = None,
     ) -> tuple[str, bool]:
         """Return ``(text, truncated)`` for a single completion."""
-
-    def generate_grounded(self, system: str, user: str) -> GroundedResult:
-        raise NotImplementedError(
-            f"Provider {self.name!r} does not support grounded search"
-        )
 
     def generate_batch(
         self, requests: Sequence[BatchRequest]

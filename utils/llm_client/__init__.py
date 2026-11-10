@@ -4,11 +4,9 @@ Public API (import from ``utils.llm_client``):
 
 - ``LLMClient`` - the chat orchestrator (caching, JSON-retry, batch, failure logging)
 - ``CacheSegment`` / ``BatchRequest`` - prompt/batch inputs
-- ``GroundedCitation`` / ``GroundedResult`` - grounded-search outputs
 - ``Classifier`` with ``Question`` / ``Answer`` / ``ClassifierError`` - typed
   questions about a state, answered with probabilities (see ``classifier``)
 - ``extract_json`` - lenient JSON parser
-- ``web_search_enabled`` - whether Gemini grounding should run
 - ``MAX_TOKENS_CEILING`` - the JSON-retry token ceiling
 
 Configuration lives in ``config.json`` (see ``settings``); secrets in ``.env``.
@@ -23,12 +21,10 @@ from utils.llm_client.models import (
     BatchRequest,
     CacheSegment,
     ClassifierError,
-    GroundedCitation,
-    GroundedResult,
     Question,
 )
 from utils.llm_client.prompts import _flatten, _to_blocks, extract_json
-from utils.llm_client.settings import CONFIG, web_search_enabled
+from utils.llm_client.settings import CONFIG
 
 MAX_TOKENS_CEILING = CONFIG["max_tokens_ceiling"]
 
@@ -40,10 +36,7 @@ __all__ = [
     "ClassifierError",
     "BatchRequest",
     "CacheSegment",
-    "GroundedCitation",
-    "GroundedResult",
     "extract_json",
-    "web_search_enabled",
     "MAX_TOKENS_CEILING",
     "_flatten",
     "_to_blocks",

@@ -20,8 +20,7 @@ STEP_3 = "step_3_extract"
 STEP_4 = "step_4_entities"
 STEP_5 = "step_5_aggregate"
 STEP_6 = "step_6_plan"
-STEP_7 = "step_7_community"
-STEP_8 = "step_8_background"
+STEP_7 = "step_7_write_pages"
 STEP_9 = "step_9_site"
 SHARED = "shared"
 
@@ -109,9 +108,6 @@ CLAIM_QUERY_EMBEDDINGS_PATH = step_path(STEP_5, "claim_query_embeddings.json")
 CLAIM_PASSAGE_EMBEDDINGS_PATH = step_path(STEP_5, "claim_passage_embeddings.json")
 CLAIM_DISTANCE_MATRIX_PATH = step_path(STEP_5, "claim_distance_matrix.npy")
 CLAIM_DISTANCE_META_PATH = step_path(STEP_5, "claim_distance_matrix.json")
-
-# ----------------------------------------------------------- step 8 background
-DRAFTS_DIR = step_path(STEP_8, "drafts")
 
 # ------------------------------------------------------------------- shared
 BACKUPS_DIR = step_path(SHARED, "backups")
