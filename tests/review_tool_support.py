@@ -25,6 +25,7 @@ from review_tool.registry import ToolRegistry, ToolSpec
 from review_tool.server import ReviewServer
 from review_tool.settings import SETTINGS, ReviewSettings
 from review_tool.steps import StepRegistry
+from utils.file_lock import file_lock
 
 HOST = "127.0.0.1"
 BASE_URL = f"http://{HOST}"
@@ -156,3 +157,24 @@ def read_event(stream: HTTPResponse) -> dict[str, Any]:
             raise EOFError("the event stream ended")
         if line.startswith("data: "):
             return json.loads(line[len("data: ") :])
+
+
+@contextmanager
+def locked_elsewhere(path: Path) -> Iterator[None]:
+    """Hold the lock of ``path`` in another thread for the duration of the block."""
+    held = threading.Event()
+    release = threading.Event()
+
+    def holder() -> None:
+        with file_lock(path):
+            held.set()
+            release.wait(timeout=10)
+
+    thread = threading.Thread(target=holder)
+    thread.start()
+    try:
+        assert held.wait(timeout=5)
+        yield
+    finally:
+        release.set()
+        thread.join()

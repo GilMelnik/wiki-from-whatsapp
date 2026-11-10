@@ -12,7 +12,7 @@ Runs steps in order:
 
 Human gates (web UIs, no CLI):
     step 1 — thread review: ``python -m step_1_threads_split.review``
-    step 3 — PII review: ``python -m step_3_extract.reviewer``
+    step 3 — PII review: ``python -m review_tool --tool pii``
     step 4 — entity review: ``python -m step_4_entities.reviewer``
     step 5 — aggregate review: ``python -m step_5_aggregate.reviewer``
     step 6 — plan review: ``python -m step_6_plan.reviewer``
@@ -83,7 +83,7 @@ def run(
     )
     logger.info(
         "    -> Review claims via "
-        "`python -m step_3_extract.reviewer` before aggregate."
+        "`python -m review_tool --tool pii` before aggregate."
     )
 
     logger = setup_step_logging(STEP_4)

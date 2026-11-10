@@ -8,11 +8,16 @@ intact; anonymity is enforced by the extraction prompt and human draft review.
 from __future__ import annotations
 
 import re
-from collections import Counter
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from typing import Any
 
 REDACTION_MARK = "[הוסר]"
+# While scrubbing, each match is replaced by one supplementary private-use character (never
+# a word character, digit or separator, so later patterns see it like the mark) numbered
+# from here; chat text does not contain these code points.
+_PLACEHOLDER_BASE = 0xF0000
+_PLACEHOLDER_RE = re.compile("[\U000F0000-\U000FFFFD]")
 
 _EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
 # A run that contains 9-15 digits once separators are stripped (phone-like).
@@ -114,20 +119,30 @@ def find_phones(text: str) -> list[str]:
     return out
 
 
+def _placeholder(index: int) -> str:
+    return chr(_PLACEHOLDER_BASE + index)
+
+
 def scrub_text(text: str) -> ScrubResult:
+    """Replace emails and phone numbers with ``REDACTION_MARK``.
+
+    ``redactions`` lists one entry per mark, in the order the marks appear in the text, so
+    ``restore_scrubbed_text`` puts every value back in its own place. (The patterns run one
+    after the other; each match is first replaced by a placeholder that the later patterns
+    treat exactly like the mark, then the placeholders are numbered in text order.)
+    """
     if not text:
         return ScrubResult(text="")
 
-    redactions: list[dict[str, str]] = []
+    found: list[dict[str, str]] = []
     result = text
 
     def _redact(pattern: re.Pattern[str], kind: str) -> None:
         nonlocal result
 
         def repl(match: re.Match[str]) -> str:
-            value = match.group(0)
-            redactions.append({"type": kind, "value": value})
-            return REDACTION_MARK
+            found.append({"type": kind, "value": match.group(0)})
+            return _placeholder(len(found) - 1)
 
         result = pattern.sub(repl, result)
 
@@ -135,7 +150,13 @@ def scrub_text(text: str) -> ScrubResult:
     _redact(_PHONE_RE, "phone")
     _redact(_SHORT_PHONE_RE, "phone")
 
-    return ScrubResult(text=result, redactions=redactions)
+    in_text_order = [
+        found[ord(match.group(0)) - _PLACEHOLDER_BASE]
+        for match in _PLACEHOLDER_RE.finditer(result)
+    ]
+    return ScrubResult(
+        text=_PLACEHOLDER_RE.sub(REDACTION_MARK, result), redactions=in_text_order
+    )
 
 
 def scrub_claims(claims: list[dict[str, Any]]) -> dict[str, Any]:
@@ -158,17 +179,19 @@ def scrub_claims(claims: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def summarize_redactions(redactions: list[dict[str, str]]) -> str:
-    """Human-readable summary, e.g. ``phone ×2, email ×1``."""
+def restore_scrubbed_text(
+    text: str, redactions: list[dict[str, str]], only: Collection[int] | None = None
+) -> str:
+    """Put redacted values back: mark number ``i`` (in text order) gets ``redactions[i]``.
 
-    counts = Counter(item["type"] for item in redactions)
-    return ", ".join(f"{kind} ×{count}" for kind, count in sorted(counts.items()))
+    With ``only``, just the marks with those numbers are restored; the others stay. Marks
+    without a matching redaction are left as they are.
+    """
 
-
-def restore_scrubbed_text(text: str, redactions: list[dict[str, str]]) -> str:
-    """Replace redaction marks with the original values, in scrub order."""
-
-    restored = text
-    for item in redactions:
-        restored = restored.replace(REDACTION_MARK, item["value"], 1)
-    return restored
+    parts = text.split(REDACTION_MARK)
+    pieces = [parts[0]]
+    for index, part in enumerate(parts[1:]):
+        restore = index < len(redactions) and (only is None or index in only)
+        pieces.append(redactions[index]["value"] if restore else REDACTION_MARK)
+        pieces.append(part)
+    return "".join(pieces)

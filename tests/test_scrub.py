@@ -68,3 +68,16 @@ def test_restore_scrubbed_text() -> None:
     ]
     restored = restore_scrubbed_text(scrubbed, redactions)
     assert restored == "התקשרו ל-050-1234567 או a@b.com."
+    assert restore_scrubbed_text(scrubbed, redactions, only={1}) == (
+        f"התקשרו ל-{REDACTION_MARK} או a@b.com."
+    )
+
+
+def test_redactions_follow_text_order_across_patterns() -> None:
+    """Emails are matched before phones, yet each value must go back to its own mark."""
+    from step_3_extract.scrub import restore_scrubbed_text
+
+    text = "חייגו 050-1234567, כתבו ל-foo@bar.com או למוקד *5400."
+    result = scrub_text(text)
+    assert [item["type"] for item in result.redactions] == ["phone", "email", "phone"]
+    assert restore_scrubbed_text(result.text, result.redactions) == text

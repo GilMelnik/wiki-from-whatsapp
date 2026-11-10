@@ -16,6 +16,7 @@ export { useJobs } from "./jobs.js";
 export { Layout } from "./Layout.jsx";
 export { Panel } from "./Panel.jsx";
 export { ItemList } from "./ItemList.jsx";
+export { Pager } from "./Pager.jsx";
 export { PanelState } from "./states.jsx";
 export { Dialog } from "./Dialog.jsx";
 export { useToast } from "./Toast.jsx";
