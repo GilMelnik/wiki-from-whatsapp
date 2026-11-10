@@ -52,7 +52,23 @@
   "embedding": {
     "provider": "gemini",
     "model": "gemini-embedding-001",
-    "output_dimensionality": 768
+    "output_dimensionality": 768,
+    "batch_size": 100,
+    "save_every_batches": 50,
+    "cache_dir": "shared/embedding_cache",
+    "max_retries": 5,
+    "retry_backoff_seconds": 2.0,
+    "task_types": {
+      "similarity": "SEMANTIC_SIMILARITY",
+      "query": "RETRIEVAL_QUERY",
+      "document": "RETRIEVAL_DOCUMENT"
+    },
+    "prompt_task_model_prefixes": ["gemini-embedding-2"],
+    "prompt_templates": {
+      "similarity": "task: sentence similarity | query: {text}",
+      "query": "task: search result | query: {text}",
+      "document": "title: none | text: {text}"
+    }
   },
   "classifier": {},
   "threads": {},
