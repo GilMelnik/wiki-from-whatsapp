@@ -12,7 +12,7 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from utils.config import DATA_DIR
+from utils.config import DATA_DIR, section
 
 STEP_1 = "step_1_threads_split"
 STEP_2 = "step_2_classify"
@@ -38,7 +38,9 @@ class Artifact:
 
 # ------------------------------------------------- input (from the scraper)
 # Produced by the whatsapp-group-scraper crypt15 exporter; copy it here.
-CHAT_ANDROID_PATH = DATA_DIR / "chat_android.json"
+INPUT_CONFIG = section("input")
+CHAT_ANDROID_PATH = DATA_DIR / INPUT_CONFIG["export_filename"]
+UPDATES_DIR = DATA_DIR / INPUT_CONFIG["updates_dir"]
 
 # ------------------------------------------------------- step 1 threads_split
 TFIDF_CORPUS_PATH = step_path(STEP_1, "tfidf_corpus.json")
