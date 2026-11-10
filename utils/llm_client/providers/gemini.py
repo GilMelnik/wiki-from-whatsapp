@@ -112,12 +112,12 @@ class GeminiProvider(LLMProvider):
         # Extract/classify/plan all want JSON, so batch always runs json_mode via
         # the shared _config so it can't drift from the single-call path.
         return genai_types.InlinedRequest(
-            contents=req.user,
+            contents=_flatten(req.user),
             metadata={"key": req.request_id},
             config=self._config(
                 json_mode=True,
                 response_schema=req.response_schema,
-                system=req.system,
+                system=_flatten(req.system),
             ),
         )
 

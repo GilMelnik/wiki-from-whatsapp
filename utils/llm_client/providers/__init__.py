@@ -1,13 +1,16 @@
-"""Provider registry and factory."""
+"""Provider registries and factories: chat providers and classifier providers."""
 
 from __future__ import annotations
 
 import logging
 
-from utils.llm_client.providers.anthropic import AnthropicProvider
-from utils.llm_client.providers.base import LLMProvider
+from utils.llm_client.providers.anthropic import (
+    AnthropicClassifierProvider,
+    AnthropicProvider,
+)
+from utils.llm_client.providers.base import ClassifierProvider, LLMProvider
 from utils.llm_client.providers.gemini import GeminiProvider
-from utils.llm_client.providers.openai import OpenAIProvider
+from utils.llm_client.providers.typesafe import TypeSafeClassifierProvider
 
 
 def create_provider(
@@ -21,7 +24,7 @@ def create_provider(
 ) -> LLMProvider:
     registry: dict[str, type[LLMProvider]] = {
         provider_object.name: provider_object
-        for provider_object in (AnthropicProvider, GeminiProvider, OpenAIProvider)
+        for provider_object in (AnthropicProvider, GeminiProvider)
     }
 
     try:
@@ -36,3 +39,21 @@ def create_provider(
         logger=logger,
         thinking_param=thinking_param,
     )
+
+
+def create_classifier_provider(
+    provider: str, model: str, logger: logging.Logger
+) -> ClassifierProvider:
+    registry: dict[str, type[ClassifierProvider]] = {
+        provider_object.name: provider_object
+        for provider_object in (TypeSafeClassifierProvider, AnthropicClassifierProvider)
+    }
+
+    try:
+        provider_cls = registry[provider]
+    except KeyError:
+        raise ValueError(
+            f"Unknown classifier provider: {provider!r}; "
+            f"expected one of {sorted(registry.keys())}"
+        ) from None
+    return provider_cls(model=model, logger=logger)

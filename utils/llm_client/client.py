@@ -14,21 +14,26 @@ Provider/model per stage and every other non-secret tunable live in
 ``config.json`` (see ``settings``); only API keys live in ``.env``. Build a
 per-stage client with ``LLMClient.for_stage(stage)``; construct one directly with
 an explicit ``provider`` for ad-hoc use. An unconfigured client raises.
+
+The response cache and the failure log default to ``cache_dir`` / ``failure_log``
+from ``config.json``, which are relative to the data dir (``utils.config.DATA_DIR``)
+so every worktree / ``WIKI_DATA_DIR`` gets its own. The cache key covers
+everything that changes an answer: provider, model, ``thinking_param``, the
+flattened prompts, JSON mode and the response schema.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import time
 from pathlib import Path
 from typing import Any, Sequence
 
 from utils.llm_client.cache import LLMCache
+from utils.llm_client.failure_log import append_failure
 from utils.llm_client.models import BatchRequest, GroundedResult, PromptInput
 from utils.llm_client.prompts import _flatten, extract_json
 from utils.llm_client.providers import create_provider
-from utils.llm_client.settings import CONFIG
+from utils.llm_client.settings import CONFIG, DATA_DIR
 
 
 class LLMClient:
@@ -66,15 +71,15 @@ class LLMClient:
         )
         self.use_cache = use_cache
         self.failure_log = Path(
-            failure_log if failure_log is not None else CONFIG["failure_log"]
+            failure_log
+            if failure_log is not None
+            else DATA_DIR / CONFIG["failure_log"]
         )
         self.batch_poll_interval = (
             batch_poll_interval
             if batch_poll_interval is not None
             else CONFIG["batch_poll_interval"]
         )
-        cache_dir = cache_dir if cache_dir is not None else CONFIG["cache_dir"]
-        self.cache = LLMCache(cache_dir, self.provider, self.model, self.temperature)
         self._provider = create_provider(
             self.provider,
             self.model,
@@ -84,9 +89,47 @@ class LLMClient:
             logger=self.logger,
             thinking_param=thinking_param,
         )
+        # No temperature: neither provider sends it (Anthropic 5.x rejects
+        # non-default sampling, Gemini 3.x ignores it), so it never changes an answer.
+        identity: dict[str, Any] = {
+            "provider": self.provider,
+            "model": self.model,
+            "thinking_param": thinking_param,
+        }
+        self.cache = LLMCache(
+            cache_dir if cache_dir is not None else DATA_DIR / CONFIG["cache_dir"],
+            identity,
+        )
 
     def supports_batch(self) -> bool:
         return self._provider.supports_batch
+
+    def _cache_key(
+        self,
+        system: PromptInput,
+        user: PromptInput,
+        *,
+        json_mode: bool = False,
+        response_schema: dict[str, Any] | None = None,
+    ) -> str:
+        """Cache key of one request: the prompts plus the per-call settings that
+        change the answer (the client-wide ones are the cache's identity)."""
+
+        return self.cache._cache_key(
+            system=_flatten(system),
+            user=_flatten(user),
+            json_mode=json_mode,
+            response_schema=response_schema,
+        )
+
+    def _batch_key(self, req: BatchRequest) -> str:
+        """Cache key of a batch item. Batch items are JSON requests (Gemini's
+        batch always asks for JSON; Anthropic ignores the flag), so they share
+        keys with ``complete_json`` and either path can reuse the other's answer."""
+
+        return self._cache_key(
+            req.system, req.user, json_mode=True, response_schema=req.response_schema
+        )
 
     def set_logger(self, logger: logging.Logger) -> None:
         """Retarget this client's (and its provider's) logging, e.g. per step."""
@@ -134,31 +177,26 @@ class LLMClient:
         examined and re-run differently later.
         """
 
-        entry = {
-            "time": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "provider": self.provider,
-            "model": self.model,
-            "task": task,
-            "kind": kind,
-            "error": error,
-            "max_tokens": self.max_tokens,
-            "system": _flatten(system),
-            "user": _flatten(user),
-            "response": response,
-        }
-        try:
-            self.failure_log.parent.mkdir(parents=True, exist_ok=True)
-            with self.failure_log.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        except OSError as exc:
-            self.logger.warning(
-                f"LLM: could not write failure log {self.failure_log}: {exc}"
-            )
+        append_failure(
+            self.failure_log,
+            {
+                "provider": self.provider,
+                "model": self.model,
+                "task": task,
+                "kind": kind,
+                "error": error,
+                "max_tokens": self.max_tokens,
+                "system": _flatten(system),
+                "user": _flatten(user),
+                "response": response,
+            },
+            self.logger,
+        )
 
     # --------------------------------------------------------------- complete
     def complete_text(self, system: PromptInput, user: PromptInput, task: str = "") -> str:
         if self.use_cache:
-            key = self.cache._cache_key(_flatten(system), _flatten(user))
+            key = self._cache_key(system, user)
             cached = self.cache._read_cache(key)
             # A GroundedResult can share this key space but is not plain text.
             if isinstance(cached, str):
@@ -211,7 +249,9 @@ class LLMClient:
         """
 
         key = (
-            self.cache._cache_key(_flatten(system), _flatten(user))
+            self._cache_key(
+                system, user, json_mode=True, response_schema=response_schema
+            )
             if self.use_cache
             else None
         )
@@ -279,7 +319,8 @@ class LLMClient:
         """Run the provider with Google Search grounding; returns text + citations."""
 
         if self.use_cache:
-            cached = self.cache._read_cache(self.cache._cache_key(system, user))
+            key = self._cache_key(system, user)
+            cached = self.cache._read_cache(key)
             if isinstance(cached, GroundedResult):
                 return cached
 
@@ -288,7 +329,7 @@ class LLMClient:
         result = self._provider.generate_grounded(system, user)
 
         if self.use_cache:
-            self.cache._write_cache(self.cache._cache_key(system, user), result)
+            self.cache._write_cache(key, result)
         return result
 
     def complete_batch(
@@ -306,7 +347,7 @@ class LLMClient:
 
         for req in requests:
             if self.use_cache:
-                cached = self.cache._read_cache(self.cache._cache_key(req.system, req.user))
+                cached = self.cache._read_cache(self._batch_key(req))
                 # A GroundedResult can share this key space but is not batch text.
                 if isinstance(cached, str):
                     results[req.request_id] = (cached, False)
@@ -333,9 +374,7 @@ class LLMClient:
                 # Only cache a parseable-looking response; the JSON layer decides
                 # what to keep, but a truncated one must never persist as valid.
                 if self.use_cache and not truncated:
-                    self.cache._write_cache(
-                        self.cache._cache_key(req.system, req.user), response
-                    )
+                    self.cache._write_cache(self._batch_key(req), response)
             else:
                 self._log_call(False, req.task, f"batch_empty ({req.request_id})")
         return results
@@ -366,7 +405,7 @@ class LLMClient:
                     continue
                 except ValueError as exc:
                     error = str(exc)
-                key = self.cache._cache_key(_flatten(req.system), _flatten(req.user))
+                key = self._batch_key(req)
                 self.cache._write_bad_cache(key, text)
                 # Never let an unparseable response linger in the good cache.
                 self.cache._delete_cache(key)

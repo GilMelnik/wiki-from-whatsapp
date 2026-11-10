@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Any
 from utils.llm_client.models import CacheSegment, PromptInput
 
 if TYPE_CHECKING:
-    # Anthropic-only typing; guarded so gemini/openai-only installs need not
-    # have the anthropic SDK present at runtime.
+    # Anthropic-only typing; guarded so this module does not need the
+    # anthropic SDK at runtime.
     from anthropic.types import TextBlockParam
 
 

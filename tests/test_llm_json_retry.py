@@ -53,7 +53,7 @@ def test_non_truncation_parse_failure_is_not_retried(tmp_path):
     assert len(lines) == 1  # a single attempt, then give up
     assert json.loads(lines[0])["kind"] == "parse_error"
     # Bad answer copied to the sibling *_bad cache for inspection.
-    key = llm.cache._cache_key("sys", "usr")
+    key = llm._cache_key("sys", "usr", json_mode=True)
     assert (llm.cache.bad_cache_dir / f"{key}.json").exists()
 
 
@@ -65,7 +65,7 @@ def test_stale_bad_cache_is_dropped_and_rerequested(tmp_path):
         max_tokens=4096,
         failure_log=tmp_path / "failures.jsonl",
     )
-    key = llm.cache._cache_key("sys", "usr")
+    key = llm._cache_key("sys", "usr", json_mode=True)
     llm.cache._write_cache(key, '{"a": 1')  # truncated answer left by a prior run
 
     llm._dispatch = lambda *a, **k: ('{"a": 2}', False)  # type: ignore[method-assign]
@@ -158,7 +158,7 @@ def test_complete_batch_json_drops_non_truncation_without_retry(tmp_path):
     assert llm.max_tokens == 4096  # window untouched
     entry = json.loads((tmp_path / "failures.jsonl").read_text().splitlines()[0])
     assert entry["kind"] == "parse_error"
-    key = llm.cache._cache_key("s", "u")
+    key = llm._cache_key("s", "u", json_mode=True)
     assert (llm.cache.bad_cache_dir / f"{key}.json").exists()
 
 
