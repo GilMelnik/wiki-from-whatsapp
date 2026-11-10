@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import Any, Literal, Sequence
 
 
 @dataclass(frozen=True)
@@ -70,3 +70,46 @@ class BatchRequest:
     user: PromptInput
     task: str = ""
     response_schema: dict[str, Any] | None = None
+
+
+QuestionKind = Literal["choice", "noul", "score"]
+
+
+@dataclass(frozen=True)
+class Question:
+    """One typed question a ``Classifier`` answers about a state (contract C4).
+
+    ``kind`` decides what ``options`` holds:
+
+    - ``noul``: ``text`` is a yes/no question or a statement; no ``options``.
+    - ``choice``: ``options`` are the labels, exactly one of which is picked.
+    - ``score``: ``options`` are the ordered level descriptions of the scale,
+      lowest first (describe situations, not numbers).
+    """
+
+    id: str
+    kind: QuestionKind
+    text: str
+    options: tuple[str, ...] | None = None
+
+
+@dataclass(frozen=True)
+class Answer:
+    """The answer to the ``Question`` with the same ``id`` (contract C4).
+
+    ``probabilities`` is a ``{option: probability}`` dict for ``choice``; for
+    ``noul`` it is the probability of "yes"; for ``score`` it is the position on
+    the scale normalised to 0.0 (first level) .. 1.0 (last level).
+    """
+
+    id: str
+    probabilities: dict[str, float] | float
+
+
+class ClassifierError(RuntimeError):
+    """A classifier request failed. ``index`` is the failing item's position in
+    the ``classify_many`` call, or ``None`` for a single ``classify``."""
+
+    def __init__(self, message: str, index: int | None = None) -> None:
+        super().__init__(message)
+        self.index = index

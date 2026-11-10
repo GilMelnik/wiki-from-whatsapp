@@ -59,7 +59,19 @@
     "model": "gemini-embedding-001",
     "output_dimensionality": 768
   },
-  "classifier": {},
+  "classifier": {
+    "stages": {
+      "knowledge": {"provider": "typesafe", "model": "jev-latest"},
+      "assign": {"provider": "typesafe", "model": "jev-latest"}
+    },
+    "fallback": {"provider": "anthropic", "model": "claude-haiku-5-5"},
+    "concurrency": 8,
+    "cache_dir": "shared/classifier_cache",
+    "failure_log": "shared/classifier_failures.jsonl",
+    "max_choice_options": 255,
+    "max_score_levels": 10,
+    "anthropic": {"effort": "low", "max_tokens": 4096}
+  },
   "threads": {},
   "aggregate": {},
   "plan": {
