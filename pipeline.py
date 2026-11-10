@@ -6,7 +6,7 @@ Runs steps in order:
     4. extract   -> data/claims.json + data/audit/ (private)
     4b. entities -> data/entities.json
     5. aggregate -> data/claims_aggregated.json (claim groups, contract C6)
-    6. plan      -> data/wiki_plan.json (seed page catalog)
+    6. plan      -> data/wiki_plan.json (contract C7; planned once, then curated by hand)
     7. write pages -> data/wiki_pages.json (agentic, mini-batch over claims)
     9. site      -> mkdocs.yml
 
@@ -15,7 +15,7 @@ Human gates (web UIs, no CLI):
     step 3 — PII review: ``python -m review_tool --tool pii``
     step 4 — entity review: ``python -m review_tool --tool entities``
     step 5 — claim-group review: ``python -m review_tool --tool groups``
-    step 6 — plan review: ``python -m step_6_plan.reviewer``
+    step 6 — plan review: rebuilt by task 35a on ``step_6_plan.operations``
 """
 
 from __future__ import annotations
@@ -54,7 +54,6 @@ def _stage_clients(logger: logging.Logger) -> dict[str, LLMClient]:
 def run(
     *,
     use_batch: bool = False,
-    skip_plan: bool = False,
 ) -> None:
     logger = setup_step_logging(SHARED)
     clients = _stage_clients(logger)
@@ -107,20 +106,13 @@ def run(
     )
 
     logger = setup_step_logging(STEP_6)
-    if skip_plan:
-        logger.info("[6] Planning wiki structure... (identity mapping, skip_plan=True)")
-        p_meta = plan(llm=clients["plan"], skip_agent=True)
-    else:
-        logger.info("[6] Planning wiki structure...")
-        p_meta = plan(llm=clients["plan"], use_batch=use_batch)
+    logger.info("[6] Planning wiki structure (no model call once a plan exists)...")
+    p_meta = plan()
     logger.info(
-        f"    {p_meta['page_count']} pages, {p_meta['link_count']} links "
-        f"-> {p_meta['output_path']} ({p_meta['mode']})"
+        f"    {p_meta['page_count']} pages, {p_meta['label_count']} labels "
+        f"-> {p_meta['plan_path']} ({p_meta['model_calls']} model calls)"
     )
-    logger.info(
-        "    -> Edit plan via "
-        "`python -m step_6_plan.reviewer` before generate."
-    )
+    logger.info("    -> Review the plan in the plan review tool before writing pages.")
 
     logger = setup_step_logging(STEP_7)
     logger.info("[7] Writing wiki pages (agentic, mini-batch)...")

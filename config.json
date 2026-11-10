@@ -198,7 +198,27 @@
     }
   },
   "plan": {
-    "max_pages": 30
+    "max_pages": 30,
+    "min_depth": 3,
+    "max_depth": 4,
+    "slug_pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+    "slug_max_length": 40,
+    "stage": "plan",
+    "max_output_tokens": 100000,
+    "context_window_tokens": 1000000,
+    "max_model_calls": 3,
+    "example_group_ids": {"min": 3, "max": 8},
+    "coverage": {
+      "stage": "assign",
+      "sample_size": 300,
+      "seed": 23,
+      "none_option": "none",
+      "confident_probability": 0.6,
+      "max_unplaced_share": 0.15,
+      "small_page_factor": 0.25,
+      "large_page_factor": 3.0,
+      "revise": true
+    }
   },
   "pages": {
     "okf_version": "0.2",
