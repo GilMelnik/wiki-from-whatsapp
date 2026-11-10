@@ -55,6 +55,14 @@ class TypeSafeClassifierProvider(ClassifierProvider):
         self.logger.debug(
             f"TypeSafe {response.model}: input_tokens={response.usage.input_tokens}"
         )
+        missing = [q.id for q in questions if q.id not in response.answers]
+        if missing:
+            # The SDK drops answer types it does not model; never pass that on
+            # as a KeyError the caller cannot index or log.
+            raise ClassifierError(
+                f"TypeSafe {response.model} returned no answer for {missing}; "
+                f"answered: {sorted(response.answers)}"
+            )
         return [
             self._to_answer(question, response.answers[question.id])
             for question in questions

@@ -89,14 +89,13 @@ class LLMClient:
             logger=self.logger,
             thinking_param=thinking_param,
         )
+        # No temperature: neither provider sends it (Anthropic 5.x rejects
+        # non-default sampling, Gemini 3.x ignores it), so it never changes an answer.
         identity: dict[str, Any] = {
             "provider": self.provider,
             "model": self.model,
             "thinking_param": thinking_param,
         }
-        # Temperature only changes an answer for providers that actually send it.
-        if self._provider.sends_temperature:
-            identity["temperature"] = self.temperature
         self.cache = LLMCache(
             cache_dir if cache_dir is not None else DATA_DIR / CONFIG["cache_dir"],
             identity,

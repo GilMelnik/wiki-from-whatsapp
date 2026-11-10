@@ -458,3 +458,16 @@ def test_jev_sdk_errors_become_classifier_errors() -> None:
 
     with pytest.raises(ClassifierError, match="TypeSafe jev-latest request failed"):
         provider.classify("state", [NOUL])
+
+
+def test_jev_missing_answer_becomes_a_classifier_error() -> None:
+    provider = _jev()
+    partial = {**JEV_RESPONSE, "answers": {"is_advice": JEV_RESPONSE["answers"]["is_advice"]}}
+    provider._client = SimpleNamespace(
+        system_one=lambda state, questions: SystemOneResponse.model_validate_json(
+            json.dumps(partial)
+        )
+    )
+
+    with pytest.raises(ClassifierError, match=r"no answer for \['topic'\]"):
+        provider.classify("state", [NOUL, CHOICE])
