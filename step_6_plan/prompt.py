@@ -16,7 +16,6 @@ from typing import Any
 
 from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION
 from step_6_plan.model import PLAN_CONFIG, iter_nodes, sync_pages, validation_errors
-from utils.llm_client import CacheSegment
 
 _EXAMPLES = PLAN_CONFIG["example_group_ids"]
 
@@ -24,8 +23,8 @@ PLAN_SYSTEM = f"""\
 You are designing the structure of a Hebrew wiki for an Israeli WhatsApp community of gay \
 couples and gay men who are going through surrogacy abroad or considering it. Over several \
 years members asked questions and shared experience, recommendations and warnings. Their \
-statements were extracted as claims, and claims that say the same thing were grouped. You \
-receive every claim group, one per line, at the end of this prompt.
+statements were extracted as claims, and claims that say the same thing were grouped. The \
+user message lists every claim group, one per line, before the request.
 
 Your job is to propose the wiki's structure: a tree of content whose leaves are the wiki \
 pages, plus labels that cut across pages. You do not write the pages. The owner of the wiki \
@@ -164,15 +163,14 @@ def group_line(group: dict[str, Any]) -> str:
     return " | ".join(parts)
 
 
-def system_prompt(groups: Sequence[dict[str, Any]]) -> list[CacheSegment]:
-    """The instructions, then every group; both are cached so a retry or a revision call
-    re-reads the long group list at the cache price."""
+def groups_block(groups: Sequence[dict[str, Any]]) -> str:
+    """Every group, one line each, for the start of the user message.
+
+    Not in the (cached) system prompt on purpose: a planning call takes longer than the
+    prompt cache lives (5 minutes), so a cache write would cost more and never be read."""
 
     lines = "\n".join(group_line(group) for group in groups)
-    return [
-        CacheSegment(PLAN_SYSTEM),
-        CacheSegment(f"\n\n<claim_groups count=\"{len(groups)}\">\n{lines}\n</claim_groups>", cache=True),
-    ]
+    return f'<claim_groups count="{len(groups)}">\n{lines}\n</claim_groups>'
 
 
 def initial_request(group_count: int) -> str:
@@ -198,7 +196,8 @@ def revision_request(plan: dict[str, Any], sample_size: int, findings: Sequence[
         "Revise the structure where these problems are real: sharpen scopes that overlap or "
         "are vague, split overloaded pages, fold pages that attract almost nothing into their "
         "neighbours, and give a home to the kinds of groups that fit nowhere. Keep the ids of "
-        "the pages you keep. Return the complete revised answer."
+        "the pages you keep; when you merge pages, keep the id that best names the merged "
+        "subject. Return the complete revised answer."
     )
 
 

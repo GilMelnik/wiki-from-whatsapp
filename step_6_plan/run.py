@@ -39,23 +39,23 @@ import anthropic
 from step_6_plan.coverage import COVERAGE_CONFIG, coverage_check, findings
 from step_6_plan.model import PLAN_CONFIG, PlanError, validation_errors
 from step_6_plan.prompt import (
+    PLAN_SYSTEM,
     PROPOSAL_SCHEMA,
+    groups_block,
     initial_request,
     plan_from_proposal,
     retry_request,
     revision_request,
-    system_prompt,
 )
 from utils.config import LLM_CONFIG
 from utils.embedding_ab import _git_commit
 from utils.json_io import write_json_file
-from utils.llm_client import Classifier, LLMClient, _flatten
-from utils.llm_client.models import PromptInput
+from utils.llm_client import Classifier, LLMClient
 from utils.logging_setup import setup_step_logging
 from utils.paths import PLAN, PLAN_COVERAGE_PATH, STEP_6, Artifact, resolve, resolve_aggregated_path
 from utils.reconcile import guarded_write
 
-TokenCounter = Callable[[PromptInput, str], int]
+TokenCounter = Callable[[str, str], int]
 
 
 class AnthropicTokenCounter:
@@ -65,10 +65,10 @@ class AnthropicTokenCounter:
         self.model = model
         self.client = anthropic.Anthropic()
 
-    def __call__(self, system: PromptInput, user: str) -> int:
+    def __call__(self, system: str, user: str) -> int:
         return self.client.messages.count_tokens(
             model=self.model,
-            system=_flatten(system),
+            system=system,
             messages=[{"role": "user", "content": user}],
         ).input_tokens
 
@@ -88,7 +88,7 @@ class Planner:
         self.llm = llm
         self.count_tokens = count_tokens
         self.logger = logger
-        self.system = system_prompt(groups)
+        self.groups_text = groups_block(groups)
         self.input_tokens: list[int] = []
 
     @property
@@ -98,7 +98,8 @@ class Planner:
     def _ask(self, user: str, task: str) -> dict[str, Any]:
         if self.calls_left <= 0:
             raise RuntimeError(f"plan.max_model_calls ({PLAN_CONFIG['max_model_calls']}) used up")
-        tokens = self.count_tokens(self.system, user)
+        user = f"{self.groups_text}\n\n{user}"
+        tokens = self.count_tokens(PLAN_SYSTEM, user)
         budget = PLAN_CONFIG["context_window_tokens"] - PLAN_CONFIG["max_output_tokens"]
         if tokens > budget:
             raise ValueError(
@@ -109,7 +110,7 @@ class Planner:
             )
         self.input_tokens.append(tokens)
         self.logger.info(f"Plan {task}: {tokens} input tokens; calling {self.llm.model}")
-        return self.llm.complete_json(self.system, user, task=task, response_schema=PROPOSAL_SCHEMA)
+        return self.llm.complete_json(PLAN_SYSTEM, user, task=task, response_schema=PROPOSAL_SCHEMA)
 
     def propose(self) -> dict[str, Any]:
         """A fresh, valid plan (one retry with the validation errors), else ``PlanError``."""

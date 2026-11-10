@@ -10,7 +10,7 @@ import pytest
 
 from step_6_plan import coverage
 from step_6_plan.model import PLAN_CONFIG, PlanError, check_plan, validation_errors
-from step_6_plan.prompt import plan_from_proposal, proposal_from_plan, system_prompt
+from step_6_plan.prompt import groups_block, plan_from_proposal, proposal_from_plan
 from step_6_plan.run import run
 from tests.plan_fixtures import (
     PAGE_IDS,
@@ -49,7 +49,7 @@ def _run(setup: dict[str, Any], llm: FakeLLM, *, tokens: int = 1000, rebuild: bo
 
 def test_prompt_lists_every_group_once_and_nothing_about_people() -> None:
     groups = make_groups()
-    text = "".join(segment.text for segment in system_prompt(groups))
+    text = groups_block(groups)
     for group in groups:
         assert text.count(group["group_id"]) == 1
         assert group["claim_text"] in text
@@ -114,6 +114,7 @@ def test_invalid_answer_gets_one_retry_with_the_errors(setup: dict[str, Any]) ->
     result = _run(setup, llm)
     assert result["written"] and result["page_count"] == 4
     assert [c["task"] for c in llm.calls] == ["plan", "plan-retry"]
+    assert all(c["user"].count("g-00000005") == 1 for c in llm.calls)
     assert "sits at depth 2" in llm.calls[1]["user"]
     assert check_plan(json.loads(setup["artifact"].edited.read_text(encoding="utf-8")))
 
