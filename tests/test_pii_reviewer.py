@@ -62,3 +62,30 @@ def test_restore_redaction(claims_file: Path) -> None:
     claim = store.get_claim("t2-c0")
     assert claim is not None
     assert claim["_pii_review"] == "restored"
+
+
+def test_store_loads_c3_claims(tmp_path: Path) -> None:
+    claim = {
+        "claim_id": "t-W1-0a1b2c3d",
+        "thread_id": "t-W1",
+        "claim_text": "צור קשר ב-050-1234567.",
+        "entities": ["Alpha"],
+        "stance": "factual",
+        "supporting_message_ids": ["W1"],
+        "opposing_message_ids": [],
+        "first_date": "2024-01-05",
+        "last_date": "2024-01-05",
+        "supporter_count": 3,
+        "opposer_count": 1,
+        "reaction_summary": [],
+    }
+    scrub_claims([claim])
+    path = tmp_path / "claims.json"
+    path.write_text(json.dumps({"claims": [claim], "metadata": {}}), encoding="utf-8")
+    store = ClaimStore(claims_path=path)
+    store.load()
+    items, total = store.list_enriched(filter_kind="pending", sort="date")
+    assert total == 1
+    assert items[0]["date"] == "2024-01-05"
+    assert items[0]["support_count"] == 3 and items[0]["opposer_count"] == 1
+    assert store.review(claim["claim_id"], "accept")["review_status"] == "accepted"

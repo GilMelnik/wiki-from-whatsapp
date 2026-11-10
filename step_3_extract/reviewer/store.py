@@ -40,18 +40,17 @@ def _enrich_claim(claim: dict[str, Any]) -> dict[str, Any]:
     original = (
         restore_scrubbed_text(scrubbed, redactions) if redactions else scrubbed
     )
+    # C3 claims: the UI's "date" and "support" fields show first_date and supporter_count.
     return {
         "claim_id": claim["claim_id"],
         "thread_id": claim.get("thread_id"),
         "claim_text": scrubbed,
         "original_text": original,
-        "topic_tags": claim.get("topic_tags") or [],
         "entities": claim.get("entities") or [],
         "stance": claim.get("stance"),
-        "date": claim.get("date"),
-        "support_count": claim.get("support_count"),
-        "statement_count": claim.get("statement_count"),
-        "reaction_endorser_count": claim.get("reaction_endorser_count"),
+        "date": claim.get("first_date"),
+        "support_count": claim.get("supporter_count"),
+        "opposer_count": claim.get("opposer_count"),
         "redactions": redactions,
         "redaction_summary": summarize_redactions(redactions),
         "review_status": _review_status(claim),

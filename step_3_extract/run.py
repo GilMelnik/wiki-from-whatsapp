@@ -1,443 +1,327 @@
-"""Step 4: per-thread knowledge-claim extraction (the core).
+"""Step 3: extract claims from knowledge-bearing threads, incrementally (contracts C3, C14).
 
-For every knowledge-bearing thread the LLM produces a list of anonymized,
-neutral Hebrew claims, each tagged with topics, a stance, the supporting
-message indices and the entities mentioned. We then:
+Per thread (fingerprint = message ids + contents + reactions, ``metadata.inputs``):
 
-- map the supporting local message indices back to senders and months,
-- count distinct supporters (message authors plus reaction senders, each user
-  once even if they both stated and reacted),
-- attach per-message reaction details to the private audit trace,
-- compute a distinct-supporter count and the claim date (earliest support),
-- run a light PII scrub (phones and emails only) over the claim text,
-- write the publishable ``data/claims.json`` (no sender ids, no raw text) and
-  a PRIVATE ``data/audit/`` source map that links each claim back to messages.
+- new thread -> the model reads the whole thread and returns claims;
+- unchanged thread -> no call; its claims are carried;
+- only reactions changed, or messages left the thread -> no call; counts, dates and evidence
+  ids are recomputed;
+- messages were added -> one call with the new messages marked and the thread's existing
+  claims listed: existing claims keep id and text and may gain evidence, new claims are
+  appended (a thread that had no claims is simply extracted again);
+- thread gone or no longer knowledge-bearing -> its claims are dropped.
+
+A failed call leaves the thread's previous fingerprint (or none) in place, so the next run
+retries it. Output: ``claims.json`` (public, C3) written through ``utils.reconcile`` with the
+derived fields as ``refresh_keys`` -- a manual text edit, PII decision or deletion in
+``claims_edited.json`` survives count / date changes -- plus the PRIVATE
+``audit/claims_audit.json`` with every supporter / opposer identity per claim.
 """
 
 from __future__ import annotations
 
+import argparse
+import dataclasses
+import json
 import logging
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
+from step_3_extract.claims import (
+    DERIVED_KEYS,
+    OutputError,
+    ThreadClaims,
+    input_fingerprint,
+    message_fingerprints,
+)
+from step_3_extract.prompt import EXTRACT_SYSTEM, FRESH_SCHEMA, UPDATE_SCHEMA
+from step_3_extract.scrub import scrub_claims
 from utils.json_io import write_json_file
 from utils.llm_client import BatchRequest, LLMClient
 from utils.logging_setup import setup_step_logging
-from utils.paths import AUDIT_DIR, ORIGINAL_CLAIMS_PATH, STEP_3, resolve_classified_path
-from step_3_extract.parsing import _normalize_claims
-from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION, scrub_claims
-from utils.support import compute_support
-from utils.taxonomy import page_ids, taxonomy_tag_seed
-from utils.threads_io import (
-    DEFAULT_THREADS_PATH,
-    load_threads,
-    render_thread_for_llm,
+from utils.paths import (
+    AUDIT_PATH,
+    CHAT_ANDROID_PATH,
+    CLAIMS,
+    STEP_3,
+    Artifact,
+    resolve_classified_path,
+    resolve_threads_path,
 )
+from utils.reconcile import diff_inputs, load_previous, write_reconciled
+from utils.threads_io import load_export_index, load_threads, with_export
 
-DEFAULT_CLASSIFIED_PATH = resolve_classified_path()
-
-EXTRACT_SYSTEM = (
-    "אתה עוזר שמחלץ ידע מקבוצת וואטסאפ על פונדקאות לגייז, לטובת בניית ויקי בעברית. "
-    "מכל שיחה חלץ טענות/תובנות ספציפיות ומועילות: המלצות, אזהרות, עובדות, עלויות, "
-    "ניסיון אישי, מידע משפטי/רפואי/כספי. "
-    "כללי אנונימיזציה: אל תכלול שמות פרטיים של חברי קבוצה שאינם ספקים מקצועיים, "
-    "מספרי טלפון, אימיילים או פרטים מזהים אחרים. "
-    "שמות עסקים, סוכנויות, עורכי דין, סוכני נסיעות, מרפאות וספקים מקצועיים — לשמור "
-    "בטקסט הטענה ובשדה entities. שמות מדינות ומקומות מותרים. "
-    "נסח כל טענה בעברית ניטרלית. "
-    "התעלם מצ'יטצ'אט, מסירות ציוד וויכוחים לא רלוונטיים. "
-    f"{FORBIDDEN_TERM_INSTRUCTION} "
-    "החזר אך ורק JSON תקין."
-)
-
-EXTRACT_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "additionalProperties": False,
-    "properties": {
-        "claims": {
-            "type": "array",
-            "description": "רשימת הטענות שחולצו מהשיחה (ריק אם אין ידע מועיל)",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "claim_text": {
-                        "type": "string",
-                        "description": (
-                            "טענה ניטרלית בעברית; שמות ספקים/מקצוענים מותרים"
-                        ),
-                    },
-                    "topic_tags": {
-                        "type": "array",
-                        "description": (
-                            "מזהי נושא מהרשימה המוצעת (או מזהה חדש אם צריך)"
-                        ),
-                        "items": {"type": "string"},
-                    },
-                    "entities": {
-                        "type": "array",
-                        "description": "ספק / עו״ד / סוכנות / מדינה / מקום",
-                        "items": {"type": "string"},
-                    },
-                    "stance": {
-                        "type": "string",
-                        "description": "positive / negative / neutral / factual",
-                        "enum": ["positive", "negative", "neutral", "factual"],
-                    },
-                    "supporting_message_ids": {
-                        "type": "array",
-                        "description": "מספרי [m..] התומכים בטענה",
-                        "items": {"type": "integer"},
-                    },
-                    "opposing_message_ids": {
-                        "type": "array",
-                        "description": "מספרי [m..] הסותרים את הטענה, אם יש",
-                        "items": {"type": "integer"},
-                    },
-                },
-                "required": [
-                    "claim_text",
-                    "topic_tags",
-                    "entities",
-                    "stance",
-                    "supporting_message_ids",
-                    "opposing_message_ids",
-                ],
-            },
-        }
-    },
-    "required": ["claims"],
-}
-
-ENTITY_HINT_HEADER = (
-    "ישויות שכבר זוהו בשיחה זו (העדף את הכתיב הזה אם הן מופיעות בטענה; "
-    "אפשר להוסיף חדשות):"
-)
+AUDIT_WARNING = "PRIVATE - links claims to the people behind them. Do not publish."
 
 
-def _schema_json_example(schema: dict[str, Any], indent: int = 1) -> str:
-    """Render a JSON-shaped template from a JSON Schema, using each field's
-    ``description`` as its placeholder and ``enum`` values joined with ``|``.
+def load_audit(path: Path) -> dict[str, dict[str, Any]]:
+    """claim_id -> private audit record; ``{}`` when the file does not exist."""
 
-    Derived from the schema so editing ``EXTRACT_SCHEMA`` updates the prompt.
-    """
-
-    pad = "  " * indent
-    kind = schema.get("type")
-    if kind == "object":
-        props = schema.get("properties", {})
-        body = ",\n".join(
-            f'{pad}"{key}": {_schema_json_example(sub, indent + 1)}'
-            for key, sub in props.items()
-        )
-        return "{\n" + body + "\n" + "  " * (indent - 1) + "}"
-    if kind == "array":
-        item = schema.get("items", {})
-        desc = schema.get("description", "")
-        if item.get("type") == "object":
-            return (
-                "[\n" + pad + _schema_json_example(item, indent + 1)
-                + "\n" + "  " * (indent - 1) + "]"
-            )
-        if item.get("type") in ("integer", "number"):
-            return f"[<{desc}>]"
-        return f'["<{desc}>", ...]'
-    if kind == "string":
-        if schema.get("enum"):
-            return '"' + "|".join(schema["enum"]) + '"'
-        return f'"<{schema.get("description", "")}>"'
-    if kind in ("integer", "number"):
-        return f'<{schema.get("description", "")}>'
-    return "null"
+    if not path.is_file():
+        return {}
+    with path.open(encoding="utf-8") as f:
+        return {record["claim_id"]: record for record in json.load(f).get("audit", [])}
 
 
-def build_extract_prompt(
-    rendered: str,
-    entities_hint: list[str] | None = None,
-    include_schema_example: bool = True,
-) -> str:
-    hints = [e.strip() for e in (entities_hint or []) if isinstance(e, str) and e.strip()]
-    hint_block = ""
-    if hints:
-        listed = "\n".join(f"- {name}" for name in hints)
-        hint_block = f"{ENTITY_HINT_HEADER}\n{listed}\n\n"
-    schema_block = ""
-    if include_schema_example:
-        schema_block = (
-            "חלץ טענות מהשיחה והחזר JSON במבנה:\n"
-            f"{_schema_json_example(EXTRACT_SCHEMA)}\n\n"
-        )
-    return (
-        "נושאים מוצעים (נקודת התחלה — ניתן להוסיף מזהים חדשים):\n"
-        f"{taxonomy_tag_seed()}\n\n"
-        f"{hint_block}"
-        f"{schema_block}"
-        "חלץ טענות מהשיחה. שורות עם [תגובות: ...] מציינות תגובות אימוג'י להודעה — "
-        "קח אותן בחשבון כשאתה מעריך עד כמה הטענה נתמכת. "
-        "אם אין ידע מועיל, החזר claims ריק.\n\n"
-        "השיחה:\n"
-        f"{rendered}"
+def write_audit(path: Path, records: list[dict[str, Any]]) -> None:
+    write_json_file(
+        {"audit": records, "metadata": {"warning": AUDIT_WARNING, "claims_count": len(records)}},
+        path,
     )
 
 
-def _knowledge_bearing_ids(classified: dict[str, Any]) -> set[str]:
-    ids: set[str] = set()
-    for record in classified["threads"]:
-        if not record.get("is_knowledge_bearing"):
-            continue
-        ids.add(record["thread_id"])
-    return ids
+def knowledge_thread_ids(classified: dict[str, Any]) -> list[str]:
+    """Knowledge-bearing thread ids; reads only ``thread_id`` / ``is_knowledge_bearing``
+    (both the old classified shape and C2 have them)."""
+
+    return [r["thread_id"] for r in classified["threads"] if r.get("is_knowledge_bearing")]
 
 
-def _claims_from_result(
-    result: Any, thread: dict[str, Any], line_meta: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
-    known = set(page_ids())
-    claims: list[dict[str, Any]] = []
-    for position, raw in enumerate(_normalize_claims(result)):
-        claim_text = raw["claim_text"]
+class Extractor:
+    """One step-3 run: decides per thread what to do, calls the model, assembles the output."""
 
-        local_ids = [
-            i for i in raw["supporting_message_ids"] if 0 <= i < len(line_meta)
-        ]
-        opposing_ids = [
-            i for i in raw["opposing_message_ids"] if 0 <= i < len(line_meta)
-        ]
-        support = compute_support(
-            thread, line_meta, local_ids, opposing_local_message_ids=opposing_ids
-        )
-        months = sorted({line_meta[i]["month"] for i in local_ids})
-        if not months:
-            months = sorted({m["month"] for m in line_meta})
+    def __init__(
+        self, llm: LLMClient, logger: logging.Logger, *, use_batch: bool, previous: dict[str, Any]
+    ) -> None:
+        self.llm = llm
+        self.logger = logger
+        self.use_batch = use_batch and llm.supports_batch()
+        meta = previous.get("metadata") or {}
+        self.prev_inputs: dict[str, str] = meta.get("inputs") or {}
+        self.prev_messages: dict[str, dict[str, str]] = meta.get("message_fingerprints") or {}
+        self.prev_claims: dict[str, list[dict[str, Any]]] = {}
+        for claim in previous.get("claims") or []:
+            self.prev_claims.setdefault(claim["thread_id"], []).append(claim)
+        self.failed: list[str] = []
+        self.ungrounded = 0
 
-        topic_tags = raw["topic_tags"]
-        global_ids = [
-            thread["message_ids"][line_meta[i]["message_index"]] for i in local_ids
-        ]
+    def plan(self, thread: dict[str, Any], *, changed: bool) -> ThreadClaims | None:
+        """The thread's model job, or ``None`` when its claims only need recomputing."""
 
-        claims.append(
-            {
-                "claim_id": f"{thread['thread_id']}-c{position}",
-                "thread_id": thread["thread_id"],
-                "claim_text": claim_text,
-                "topic_tags": topic_tags,
-                "emergent_tags": [t for t in topic_tags if t not in known],
-                "entities": raw["entities"],
-                "stance": raw["stance"],
-                "date": months[0],
-                "support_count": support["support_count"],
-                "opposer_count": support["opposer_count"],
-                "statement_count": support["statement_count"],
-                "reaction_endorser_count": support["reaction_endorser_count"],
-                "reaction_only_count": support["reaction_only_count"],
-                "reaction_summary": support["reaction_summary"],
-                "_support": support,
-                "_local_message_ids": local_ids,
-                "_opposing_local_message_ids": opposing_ids,
-                "_global_message_ids": global_ids,
-            }
-        )
-    return claims
+        thread_id = thread["thread_id"]
+        old = self.prev_claims.get(thread_id, [])
+        if not changed:
+            return None
+        if not old:
+            return ThreadClaims(thread)
+        before = self.prev_messages.get(thread_id, {})
+        current = message_fingerprints(thread)
+        new_ids = frozenset(i for i, fp in current.items() if before.get(i) != fp)
+        return ThreadClaims(thread, new_ids) if new_ids else None
 
+    def ask(self, jobs: list[ThreadClaims]) -> dict[str, Any]:
+        """thread_id -> parsed model answer; failed threads are left out (and logged)."""
 
-def publish_claims(
-    thread_claims: list[dict[str, Any]],
-    published_claims: list[dict[str, Any]],
-    audit_records: list[dict[str, Any]],
-) -> None:
-    """Split each claim into a public record and a PRIVATE audit record."""
-
-    for claim in thread_claims:
-        support = claim.pop("_support")
-        audit_records.append(
-            {
-                "claim_id": claim["claim_id"],
-                "thread_id": claim["thread_id"],
-                "raw_claim_text": claim["claim_text"],
-                "supporting_senders": support["statement_senders"],
-                "opposing_senders": support["opposing_senders"],
-                "reaction_senders": support["reaction_senders"],
-                "reaction_opposers": support["reaction_opposers"],
-                "all_supporters": support["all_supporters"],
-                "all_opposers": support["all_opposers"],
-                "local_message_ids": claim.pop("_local_message_ids"),
-                "opposing_local_message_ids": claim.pop(
-                    "_opposing_local_message_ids", []
-                ),
-                "global_message_ids": claim.pop("_global_message_ids"),
-                "message_reactions": support["message_reactions"],
-            }
-        )
-        published_claims.append(claim)
-
-
-def extract_claims_for_threads(
-    pending_llm: list[tuple[dict[str, Any], str, list[dict[str, Any]]]],
-    llm: LLMClient,
-    use_batch: bool,
-    logger: logging.Logger,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Run extraction over prepared prompts, returning (public, audit) records."""
-
-    published_claims: list[dict[str, Any]] = []
-    audit_records: list[dict[str, Any]] = []
-    if not pending_llm:
-        return published_claims, audit_records
-
-    if use_batch and llm.supports_batch():
-        logger.info(f"Extract: submitting {len(pending_llm)} requests via batch API...")
-        requests = [
-            BatchRequest(
-                request_id=thread["thread_id"],
-                system=EXTRACT_SYSTEM,
-                user=prompt,
-                task="extract",
-                response_schema=EXTRACT_SCHEMA,
+        if not jobs:
+            return {}
+        schemas = {
+            job.thread_id: UPDATE_SCHEMA if self.prev_claims.get(job.thread_id) else FRESH_SCHEMA
+            for job in jobs
+        }
+        prompts = {
+            job.thread_id: job.prompt(self.prev_claims.get(job.thread_id, [])) for job in jobs
+        }
+        if self.use_batch:
+            self.logger.info(f"Extract: {len(jobs)} threads via the batch API")
+            return self.llm.complete_batch_json(
+                [
+                    BatchRequest(
+                        request_id=tid,
+                        system=EXTRACT_SYSTEM,
+                        user=prompts[tid],
+                        task="extract",
+                        response_schema=schemas[tid],
+                    )
+                    for tid in prompts
+                ]
             )
-            for thread, prompt, _ in pending_llm
-        ]
-        parsed = llm.complete_batch_json(requests)
-        for thread, _, line_meta in pending_llm:
-            thread_id = thread["thread_id"]
-            data = parsed.get(thread_id)
-            if data is None:
-                continue  # failed even after retry; already logged
+        answers: dict[str, Any] = {}
+        for tid, prompt in prompts.items():
             try:
-                publish_claims(
-                    _claims_from_result(data, thread, line_meta),
-                    published_claims,
-                    audit_records,
+                answers[tid] = self.llm.complete_json(
+                    EXTRACT_SYSTEM, prompt, task="extract", response_schema=schemas[tid]
                 )
-            except Exception as exc:  # noqa: BLE001 - one bad item mustn't abort the batch
-                logger.warning(
-                    f"Extract: parsing output failed for {thread_id}: {exc}"
-                )
-                continue
-    else:
-        if use_batch:
-            logger.info("Extract: batch not supported for this provider; using sync API.")
-        for thread, prompt, line_meta in pending_llm:
-            thread_id = thread["thread_id"]
-            try:
-                result = llm.complete_json(
-                    EXTRACT_SYSTEM, prompt, task="extract",
-                    response_schema=EXTRACT_SCHEMA,
-                )
-            except Exception as exc:  # noqa: BLE001 - keep the run going
-                logger.warning(f"Extract: LLM call failed for {thread_id}: {exc}")
-                continue
-            try:
-                publish_claims(
-                    _claims_from_result(result, thread, line_meta),
-                    published_claims,
-                    audit_records,
-                )
-            except Exception as exc:  # noqa: BLE001 - a bad output mustn't abort the run
-                logger.warning(
-                    f"Extract: parsing output failed for {thread_id}: {exc}"
-                )
-                continue
-    return published_claims, audit_records
+            # Provider errors have no common base class; one thread must not stop the run.
+            except Exception as exc:  # noqa: BLE001
+                self.logger.warning(f"Extract: model call failed for {tid}: {exc!r}")
+        return answers
 
+    def absorb(self, job: ThreadClaims, answer: Any) -> list[dict[str, Any]] | None:
+        """The thread's claim records after the answer, or ``None`` if it is unusable."""
 
-def extract_thread(thread: dict[str, Any], llm: LLMClient) -> list[dict[str, Any]]:
-    rendered, line_meta = render_thread_for_llm(thread)
-    if not rendered:
-        return []
-    prompt = build_extract_prompt(rendered)
-    try:
-        result = llm.complete_json(
-            EXTRACT_SYSTEM, prompt, task="extract", response_schema=EXTRACT_SCHEMA
-        )
-        return _claims_from_result(result, thread, line_meta)
-    except Exception:  # noqa: BLE001 - keep the batch going
-        return []
+        try:
+            records = job.absorb(answer, self.prev_claims.get(job.thread_id, []))
+        except OutputError as exc:
+            self.logger.warning(f"Extract: {job.thread_id}: {exc}")
+            return None
+        self.ungrounded += job.ungrounded
+        return records
 
 
 def run(
-    input_path: Path | str = DEFAULT_THREADS_PATH,
-    classified_path: Path | str = DEFAULT_CLASSIFIED_PATH,
-    output_path: Path | str = ORIGINAL_CLAIMS_PATH,
-    audit_dir: Path | str = AUDIT_DIR,
+    *,
+    threads_path: Path | str | None = None,
+    classified_path: Path | str | None = None,
+    export_path: Path | str | None = CHAT_ANDROID_PATH,
+    artifact: Artifact = CLAIMS,
+    audit_path: Path | str = AUDIT_PATH,
     llm: LLMClient | None = None,
     use_batch: bool = True,
+    only: Collection[str] | None = None,
+    rebuild: bool = False,
 ) -> dict[str, Any]:
-    """Extract claims from knowledge-bearing threads."""
+    """Extract / update claims; see the module docstring.
+
+    ``threads_path`` / ``classified_path`` default to the reviewed (edited) files when they
+    exist. ``export_path`` is the chat export quotes and reactions are joined from (``None``
+    when the threads carry them inline). ``only`` restricts the work to these thread ids
+    (everything else is carried as it is); ``rebuild`` ignores the previous output.
+    """
 
     logger = setup_step_logging(STEP_3)
     llm = LLMClient.for_stage("extract", logger=logger) if llm is None else llm
     llm.set_logger(logger)
-    payload = load_threads(input_path)
-    threads_by_id = {t["thread_id"]: t for t in payload["threads"]}
+    audit_path = Path(audit_path)
 
-    import json
+    threads = {
+        t["thread_id"]: t
+        for t in load_threads(threads_path or resolve_threads_path())["threads"]
+    }
+    with Path(classified_path or resolve_classified_path()).open(encoding="utf-8") as f:
+        knowledge = knowledge_thread_ids(json.load(f))
+    unknown = [tid for tid in knowledge if tid not in threads]
+    if unknown:
+        logger.warning(
+            f"Extract: {len(unknown)} knowledge-bearing ids not in threads: {unknown[:10]}"
+        )
+    export_index = load_export_index(export_path) if export_path is not None else None
+    scope = None if only is None else set(only)
+    current = {
+        tid: with_export(threads[tid], export_index)
+        for tid in knowledge
+        if tid in threads and (scope is None or tid in scope)
+    }
 
-    with Path(classified_path).open(encoding="utf-8") as f:
-        classified = json.load(f)
-    keep_ids = _knowledge_bearing_ids(classified)
-
-    pending_llm: list[tuple[dict[str, Any], str, list[dict[str, Any]]]] = []
-    processed = 0
-
-    for record in classified["threads"]:
-        thread_id = record["thread_id"]
-        if thread_id not in keep_ids:
-            continue
-        thread = threads_by_id[thread_id]
-        rendered, line_meta = render_thread_for_llm(thread)
-        if rendered:
-            pending_llm.append(
-                (
-                    thread,
-                    build_extract_prompt(
-                        rendered, entities_hint=record.get("entities") or []
-                    ),
-                    line_meta,
-                )
-            )
-        processed += 1
-
-    published_claims, audit_records = extract_claims_for_threads(
-        pending_llm, llm, use_batch, logger
+    previous = {} if rebuild else load_previous(artifact)
+    extractor = Extractor(llm, logger, use_batch=use_batch, previous=previous)
+    inputs = {tid: input_fingerprint(thread) for tid, thread in current.items()}
+    diff = diff_inputs(
+        {tid: fp for tid, fp in extractor.prev_inputs.items() if scope is None or tid in scope},
+        inputs,
     )
 
-    scrub_summary = scrub_claims(published_claims)
+    # Out of scope (``only``): carried exactly as they are, fingerprints included.
+    def out_of_scope(thread_id: str) -> bool:
+        return scope is not None and thread_id not in scope
 
-    write_json_file(
-        {
-            "claims": published_claims,
-            "metadata": {
-                "source": str(Path(input_path)),
-                "threads_processed": processed,
-                "claims_count": len(published_claims),
-                "scrub": scrub_summary,
-                "provider": llm.provider,
-                "model": llm.model,
-                "batch_mode": use_batch and llm.supports_batch(),
-            },
+    out_inputs = {t: fp for t, fp in extractor.prev_inputs.items() if out_of_scope(t)}
+    out_messages = {
+        t: fps for t, fps in extractor.prev_messages.items() if out_of_scope(t)
+    }
+    carried_threads = [tid for tid in extractor.prev_claims if out_of_scope(tid)]
+
+    jobs: dict[str, ThreadClaims] = {}
+    for tid, thread in current.items():
+        job = extractor.plan(thread, changed=tid in diff.new or tid in diff.changed)
+        if job is not None:
+            jobs[tid] = job
+    answers = extractor.ask(list(jobs.values()))
+
+    records: dict[str, list[dict[str, Any]]] = {}
+    fresh: list[dict[str, Any]] = []
+    for tid, thread in current.items():
+        old = extractor.prev_claims.get(tid, [])
+        records[tid] = old
+        if tid in jobs:
+            absorbed = extractor.absorb(jobs[tid], answers[tid]) if tid in answers else None
+            if absorbed is None:
+                extractor.failed.append(tid)
+                if tid in extractor.prev_inputs:  # retried next run
+                    out_inputs[tid] = extractor.prev_inputs[tid]
+                    out_messages[tid] = extractor.prev_messages.get(tid, {})
+                continue
+            known = {c["claim_id"] for c in old}
+            fresh.extend(c for c in absorbed if c["claim_id"] not in known)
+            records[tid] = absorbed
+        out_inputs[tid] = inputs[tid]
+        out_messages[tid] = message_fingerprints(thread)
+    scrub_summary = scrub_claims(fresh)
+
+    claims: list[dict[str, Any]] = []
+    audit: list[dict[str, Any]] = []
+    dropped = 0
+    for tid, thread_records in records.items():
+        thread_claims = jobs.get(tid) or ThreadClaims(current[tid])
+        for record in thread_records:
+            finalized = thread_claims.finalize(record)
+            if finalized is None:
+                dropped += 1
+                continue
+            claims.append(finalized[0])
+            audit.append(finalized[1])
+    previous_audit = load_audit(audit_path) if carried_threads else {}
+    for tid in carried_threads:
+        for claim in extractor.prev_claims[tid]:
+            claims.append(claim)
+            if claim["claim_id"] in previous_audit:
+                audit.append(previous_audit[claim["claim_id"]])
+
+    stats = {
+        "threads_in_scope": len(current),
+        "model_calls": len(jobs),
+        "new_threads": len(diff.new),
+        "changed_threads": len(diff.changed),
+        "removed_threads": len(diff.removed),
+        "failed_threads": extractor.failed,
+        "new_claims": len(fresh),
+        "ungrounded_claims_dropped": extractor.ungrounded,
+        "claims_without_evidence_dropped": dropped,
+    }
+    payload = {
+        "claims": claims,
+        "metadata": {
+            "inputs": out_inputs,
+            "message_fingerprints": out_messages,
+            "provider": llm.provider,
+            "model": llm.model,
+            "batch_mode": extractor.use_batch,
+            "claims_count": len(claims),
+            "run": stats,
+            "scrub": scrub_summary,
         },
-        Path(output_path),
+    }
+    report = write_reconciled(
+        artifact,
+        payload,
+        items_key="claims",
+        id_key="claim_id",
+        refresh_keys=DERIVED_KEYS,
+        rebuild=rebuild,
     )
-
-    audit_path = Path(audit_dir) / "claims_audit.json"
-    write_json_file(
-        {
-            "audit": audit_records,
-            "metadata": {
-                "warning": "PRIVATE - links claims to source messages/senders. Do not publish.",
-                "claims_count": len(audit_records),
-            },
-        },
-        audit_path,
+    write_audit(audit_path, audit)
+    logger.info(
+        f"Extract: {len(claims)} claims; {len(jobs)} model calls, {len(fresh)} new claims, "
+        f"{len(extractor.failed)} failed threads; {report.changes.summary()}"
     )
-
     return {
-        "threads_processed": processed,
-        "claims_count": len(published_claims),
+        **stats,
+        "claims_count": len(claims),
         "scrub": scrub_summary,
+        "changes": dataclasses.asdict(report.changes),
+        "backup": str(report.backup) if report.backup else None,
         "audit_path": str(audit_path),
     }
 
 
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Step 3: extract claims (incremental).")
+    parser.add_argument("--rebuild", action="store_true", help="ignore the previous output")
+    parser.add_argument("--only", nargs="+", metavar="THREAD_ID", help="restrict to these threads")
+    parser.add_argument("--sync", action="store_true", help="sync API instead of the batch API")
+    args = parser.parse_args(argv)
+    run(use_batch=not args.sync, only=args.only, rebuild=args.rebuild)
+
+
 if __name__ == "__main__":
-    run()
+    main()
