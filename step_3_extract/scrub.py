@@ -8,7 +8,6 @@ intact; anonymity is enforced by the extraction prompt and human draft review.
 from __future__ import annotations
 
 import re
-from collections import Counter
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from typing import Any
@@ -178,13 +177,6 @@ def scrub_claims(claims: list[dict[str, Any]]) -> dict[str, Any]:
         "total_redactions": total_redactions,
         "pii_review_claims": pii_review_claims,
     }
-
-
-def summarize_redactions(redactions: list[dict[str, str]]) -> str:
-    """Human-readable summary, e.g. ``phone ×2, email ×1``."""
-
-    counts = Counter(item["type"] for item in redactions)
-    return ", ".join(f"{kind} ×{count}" for kind, count in sorted(counts.items()))
 
 
 def restore_scrubbed_text(

@@ -5,8 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -17,8 +15,7 @@ from review_tool import locks
 from review_tool.events import HELLO, KEEPALIVE_FRAME, EventBus
 from review_tool.locks import ArtifactLockTimeout, artifact_lock, save_json
 from review_tool.stores import StoreHandle
-from tests.review_tool_support import new_bus, write_file
-from utils.file_lock import file_lock
+from tests.review_tool_support import locked_elsewhere, new_bus, write_file
 from utils.json_io import write_json_file
 
 SHORT_TIMEOUT = 0.2
@@ -27,27 +24,6 @@ SHORT_TIMEOUT = 0.2
 def parse_frame(frame: str) -> dict[str, Any]:
     assert frame.startswith("data: ") and frame.endswith("\n\n")
     return json.loads(frame[len("data: ") :])
-
-
-@contextmanager
-def locked_elsewhere(path: Path) -> Iterator[None]:
-    """Hold the lock of ``path`` in another thread for the duration of the block."""
-    held = threading.Event()
-    release = threading.Event()
-
-    def holder() -> None:
-        with file_lock(path):
-            held.set()
-            release.wait(timeout=10)
-
-    thread = threading.Thread(target=holder)
-    thread.start()
-    try:
-        assert held.wait(timeout=5)
-        yield
-    finally:
-        release.set()
-        thread.join()
 
 
 class ItemStore:
