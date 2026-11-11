@@ -15,7 +15,9 @@ import numpy as np
 import pytest
 
 from step_1_threads_split.message import message_record
-from step_1_threads_split.review.store import ThreadStore
+from step_1_threads_split.reviewer.gold_windows import GoldProgress, GoldWindows
+from step_1_threads_split.reviewer.history import EditHistory
+from step_1_threads_split.reviewer.store import ThreadsStore
 from step_1_threads_split.run import load_export_messages, run
 from step_1_threads_split.splitter import SplitParams, ThreadSplitter
 from step_2_classify.run import thread_state
@@ -253,17 +255,27 @@ def test_an_old_format_file_is_never_a_starting_point(step: dict[str, Any]) -> N
 
 
 # ------------------------------------------------------------------- readers
-def test_steps_two_and_three_and_the_old_tagger_read_the_new_file(step: dict[str, Any]) -> None:
+def test_steps_two_and_three_read_the_new_file(step: dict[str, Any]) -> None:
     _run(step)
     path = step["artifact"].original
     thread = json.loads(path.read_text(encoding="utf-8"))["threads"][0]
     assert thread_state(thread).count("\n") == 1
     rendered, refs = render_thread_for_llm(with_export(thread, None))
     assert refs == ["a1", "a2"] and "↩[1]" in rendered
-    store = ThreadStore(inspect_only=True, threads_path=path)
-    store.load()
-    items, total = store.list_enriched()
-    assert total == 2 and {item["num_messages"] for item in items} == {2}
+
+
+def test_an_edit_of_the_conversations_tool_survives_the_next_run(step: dict[str, Any]) -> None:
+    _run(step)
+    artifact = step["artifact"]
+    store = ThreadsStore(artifact.original, artifact.edited, step["export"],
+                         GoldWindows([], GoldProgress(artifact.original.with_name("progress.json"))),
+                         EditHistory(1))  # fmt: skip
+    assert store.views.rows()["total"] == 2
+    store.apply(store.editor().move(["b2"], None))
+    step["export"].write_text(json.dumps([*step["chat"], entry("c1", 106, "eve", "fish b")]), encoding="utf-8")
+    result = _run(step)
+    assert result["new"] == 1
+    assert _ids(artifact.edited) == [["a1", "a2"], ["b1"], ["b2", "c1"]]
 
 
 def test_load_export_messages_keeps_time_order(step: dict[str, Any]) -> None:

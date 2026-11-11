@@ -137,6 +137,12 @@
       "min_messages": 40,
       "max_messages": 120,
       "min_threads": 2
+    },
+    "review": {
+      "context_step": 10,
+      "max_context_messages": 400,
+      "excerpt_chars": 160,
+      "undo_depth": 30
     }
   },
   "classify": {

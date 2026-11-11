@@ -1,8 +1,8 @@
-"""Gold-window mode of the thread tagger: which threads a window holds, which windows are done.
+"""Gold-window mode of the conversations tool: which threads a window holds, which are done.
 
 The windows are ``config.json`` ``threads.gold_windows`` (see ``step_1_threads_split.gold``),
 indexed in chronological order. Window membership is computed live from the threads the
-tagger currently holds, so a thread that was just split off shows up at once.
+tool currently holds, so a thread that was just split off shows up at once.
 
 The "done" flags live in ``gold_progress.json``::
 
