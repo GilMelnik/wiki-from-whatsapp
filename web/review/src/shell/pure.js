@@ -4,3 +4,7 @@
 // (src/shell/index.js) re-exports everything here.
 
 export * from "./planText.js";
+export { plainText, textDirection } from "./direction.js";
+export { FAILED, RUNNING } from "./jobState.js";
+export { formatBytes, formatCount, formatDateTime, formatRelative } from "./format.js";
+export { STANCES, stanceOf } from "./stance.js";
