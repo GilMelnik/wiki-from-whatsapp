@@ -1,10 +1,10 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { TOAST_MS } from "./config.js";
 
-// Short feedback after something happened: "נשמר", "מוזג ל-t-12", or an error message.
+// Short feedback after something happened: "Saved", "Merged into t-12", or an error message.
 //
 //   const toast = useToast();
-//   try { await api.post(...); toast.success("נשמר"); } catch (error) { toast.error(error); }
+//   try { await api.post(...); toast.success("Saved"); } catch (error) { toast.error(error); }
 //
 // Toasts disappear by themselves (errors stay longer and can be closed). Anything the user
 // must decide or must not miss is a Dialog or a banner instead.
@@ -57,7 +57,7 @@ export function ToastProvider({ children }) {
             {toast.tone === "error" && (
               <button
                 type="button"
-                aria-label="סגירה"
+                aria-label="Close"
                 className="text-white/80 hover:text-white"
                 onClick={() => dismiss(toast.id)}
               >

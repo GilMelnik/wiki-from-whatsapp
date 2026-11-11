@@ -1,7 +1,7 @@
 // A labelled drop-down for a tool's toolbar (filter, sort, order).
 //
-//   <Select label="מיון" value={sort} onChange={setSort}
-//           options={[{ value: "count", label: "אזכורים" }, { value: "id", label: "מזהה" }]} />
+//   <Select label="Sort" value={sort} onChange={setSort}
+//           options={[{ value: "count", label: "Mentions" }, { value: "id", label: "Id" }]} />
 //
 // `onChange` receives the chosen option's value (a string).
 

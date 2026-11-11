@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Kbd } from "./text.jsx";
 
 // Modal dialog for anything that needs a decision or input before it happens
 // (merge, split, move, delete). Quick feedback after the fact is a toast, not a dialog.
 //
-//   <Dialog open={mergeOpen} title="מיזוג שיחות" confirmLabel="מזג"
+//   <Dialog open={mergeOpen} title="Merge conversations" confirmLabel="Merge"
 //           confirmDisabled={!targetId} onClose={() => setMergeOpen(false)}
 //           onConfirm={() => api.post("/threads/merge", { ids: [id, targetId] })}>
 //     ...form fields...
@@ -23,9 +24,9 @@ export function Dialog({
   title,
   onClose,
   onConfirm,
-  confirmLabel = "אישור",
-  cancelLabel = "ביטול",
-  closeLabel = "סגירה",
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  closeLabel = "Close",
   confirmDisabled = false,
   tone = "primary",
   size = "md",
@@ -76,7 +77,7 @@ export function Dialog({
   const Body = onConfirm ? "form" : "div";
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !busy) onClose();
       }}
@@ -87,7 +88,7 @@ export function Dialog({
         aria-modal="true"
         aria-labelledby={titleId}
         onSubmit={onConfirm ? confirm : undefined}
-        className={`mx-4 flex max-h-[90vh] w-full flex-col rounded-lg bg-white p-5 shadow-xl ${SIZES[size]}`}
+        className={`mx-4 flex max-h-[90vh] w-full flex-col rounded-lg border border-slate-200 bg-white p-5 shadow-xl ${SIZES[size]}`}
       >
         <h2 id={titleId} className="mb-3 text-lg font-semibold">
           {title}
@@ -100,7 +101,7 @@ export function Dialog({
         )}
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" className="btn" disabled={busy} onClick={onClose}>
-            {onConfirm ? cancelLabel : closeLabel}
+            {onConfirm ? cancelLabel : closeLabel} <Kbd>Esc</Kbd>
           </button>
           {onConfirm && (
             <button

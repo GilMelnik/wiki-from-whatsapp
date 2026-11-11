@@ -1,8 +1,8 @@
 import { LOCALE } from "./config.js";
 
-// Formatting for the Hebrew UI. All API timestamps are ISO-8601 strings.
+// Formatting for the UI. All API timestamps are ISO-8601 strings.
 
-const dateTime = new Intl.DateTimeFormat(LOCALE, { dateStyle: "short", timeStyle: "medium" });
+const dateTime = new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium", timeStyle: "short" });
 const relative = new Intl.RelativeTimeFormat(LOCALE, { numeric: "auto" });
 const number = new Intl.NumberFormat(LOCALE);
 
@@ -18,7 +18,7 @@ export function formatDateTime(iso) {
   return iso ? dateTime.format(new Date(iso)) : "—";
 }
 
-/** "לפני 3 דקות" relative to `nowMs` (see useNow). A time after `nowMs` reads as "now". */
+/** "3 minutes ago" relative to `nowMs` (see useNow). A time after `nowMs` reads as "now". */
 export function formatRelative(iso, nowMs) {
   if (!iso) return "—";
   const seconds = Math.min(0, Math.round((new Date(iso).getTime() - nowMs) / 1000));

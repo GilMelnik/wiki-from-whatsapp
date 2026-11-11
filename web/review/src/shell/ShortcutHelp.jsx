@@ -9,9 +9,9 @@ function comboLabel(keys) {
 export function ShortcutHelp({ open, onClose }) {
   const shortcuts = open ? listShortcuts() : [];
   return (
-    <Dialog open={open} title="קיצורי מקלדת" onClose={onClose}>
+    <Dialog open={open} title="Keyboard shortcuts" onClose={onClose}>
       {shortcuts.length === 0 ? (
-        <p className="text-slate-500">אין קיצורים בכלי הזה.</p>
+        <p className="text-slate-500">This tool has no shortcuts.</p>
       ) : (
         <table className="w-full">
           <tbody className="divide-y divide-slate-100">
@@ -29,7 +29,7 @@ export function ShortcutHelp({ open, onClose }) {
         </table>
       )}
       <p className="mt-3 text-xs text-slate-500">
-        אותיות עובדות גם במקלדת עברית. בזמן הקלדה בשדה פועלים רק צירופים עם Ctrl.
+        Letters work on the Hebrew keyboard layout too. While you type in a field, only Ctrl combinations work.
       </p>
     </Dialog>
   );

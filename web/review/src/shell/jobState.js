@@ -14,10 +14,10 @@ export const RUN_ACTION = "run";
 export const LOG_ACTION = "log";
 
 export const JOB_STATE_LABELS = {
-  [RUNNING]: "רץ",
-  [SUCCEEDED]: "הסתיים",
-  [FAILED]: "נכשל",
-  [CANCELLED]: "בוטל",
+  [RUNNING]: "Running",
+  [SUCCEEDED]: "Done",
+  [FAILED]: "Failed",
+  [CANCELLED]: "Stopped",
 };
 
 export const JOB_STATE_BADGES = {
@@ -55,9 +55,9 @@ function changedInputs(artifact, byKey) {
   const keys = artifact.stale_because;
   const parts = keys.map((key) => {
     const upstream = byKey[key];
-    return `"${upstream?.title ?? key}" (${formatDateTime(effectiveMtime(upstream))})`;
+    return `“${upstream?.title ?? key}” (${formatDateTime(effectiveMtime(upstream))})`;
   });
-  return `${parts.join(", ")} ${keys.length === 1 ? "השתנה" : "השתנו"}`;
+  return parts.join(", ");
 }
 
 function newestInputChange(artifact, byKey) {
@@ -75,25 +75,23 @@ function newestInputChange(artifact, byKey) {
 export function artifactNotice({ artifact, byKey, step, running, feeding, latest, writes, quiet = false }) {
   if (!artifact) return null;
   if (running) {
-    const effect = writes
-      ? "שמירת שינויים בכלי הזה חסומה עד שההרצה תסתיים; התצוגה תתעדכן מעצמה."
-      : "התצוגה תתעדכן מעצמה כשההרצה תסתיים.";
+    const effect = writes ? " Saving here is blocked until it finishes; the view then updates by itself." : "";
     return {
       tone: "info",
-      text: `"${running.title}" רץ כעת ומעדכן את "${artifact.title}". ${effect}`,
+      text: `${running.title} is running and rewriting “${artifact.title}”.${effect}`,
       action: LOG_ACTION,
-      actionLabel: "יומן ההרצה",
+      actionLabel: "Show log",
       jobId: running.id,
     };
   }
   if (!step || artifact.stale_because.length === 0) return null;
-  const stale = `${changedInputs(artifact, byKey)} אחרי ש"${artifact.title}" נוצר, ולכן מה שמוצג כאן עוד לא משקף את השינוי.`;
+  const stale = `“${artifact.title}” is out of date: ${changedInputs(artifact, byKey)} changed since it was made.`;
   if (feeding) {
     return {
       tone: "info",
-      text: `${stale} "${feeding.title}" רץ כעת ומעדכן את "${byKey[feeding.produces]?.title ?? feeding.produces}"; אחרי שיסתיים אפשר יהיה להריץ את "${step.title}".`,
+      text: `${stale} Wait for ${feeding.title} to finish, then run ${step.title}.`,
       action: LOG_ACTION,
-      actionLabel: "יומן ההרצה",
+      actionLabel: "Show log",
       jobId: feeding.id,
     };
   }
@@ -102,9 +100,9 @@ export function artifactNotice({ artifact, byKey, step, running, feeding, latest
   if (failedSinceChange) {
     return {
       tone: "danger",
-      text: `${stale} ההרצה האחרונה של "${step.title}" נכשלה (קוד יציאה ${latest.exit_code}).`,
+      text: `${stale} The last run of ${step.title} failed (exit code ${latest.exit_code}).`,
       action: LOG_ACTION,
-      actionLabel: "יומן ההרצה",
+      actionLabel: "Show log",
       jobId: latest.id,
     };
   }
@@ -113,16 +111,16 @@ export function artifactNotice({ artifact, byKey, step, running, feeding, latest
     const how = step.command ? `: ${step.command}` : "";
     return {
       tone: "warning",
-      text: `${stale} את "${step.title}" אי אפשר עדיין להריץ מכאן (הוא לא שומר על עריכות ידניות); הריצו אותו ידנית${how}.`,
+      text: `${stale} ${step.title} cannot run from here yet (it would not keep manual edits); run it by hand${how}.`,
       action: null,
       actionLabel: null,
     };
   }
   return {
     tone: "warning",
-    text: `${stale} הרצה מחדש של "${step.title}" תעדכן אותו: רק מה שהשתנה מעובד, ועריכות ידניות נשמרות.`,
+    text: `${stale} ${step.title} updates it, keeping manual edits.`,
     action: RUN_ACTION,
-    actionLabel: step.paid ? "הרצת השלב…" : "הרצת השלב",
+    actionLabel: step.paid ? "Run step…" : "Run step",
   };
 }
 

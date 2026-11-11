@@ -4,8 +4,8 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 // for as long as its condition holds (lost connection, missing input files, and later
 // "an input changed, re-run the step").
 //
-//   useBanner("pii.unsaved", dirty ? { tone: "warning", text: "יש שינויים שלא נשמרו" } : null);
-//   useBanner("stale", stale ? { tone: "warning", text: "...", actionLabel: "הרצה מחדש",
+//   useBanner("pii.unsaved", dirty ? { tone: "warning", text: "Some changes are not saved" } : null);
+//   useBanner("stale", stale ? { tone: "warning", text: "...", actionLabel: "Run again",
 //                               onAction: rerun } : null);
 //
 // The hook is declarative: pass the banner while it applies and `null` when it does not.
@@ -62,11 +62,11 @@ export function BannerSlot() {
         <div
           key={banner.id}
           role="status"
-          className={`flex flex-wrap items-center gap-3 border-b px-4 py-2 text-sm ${TONES[banner.tone]}`}
+          className={`flex items-center gap-3 border-b px-4 py-1.5 text-sm ${TONES[banner.tone]}`}
         >
-          <span dir="auto">{banner.text}</span>
+          <span className="min-w-0 flex-1">{banner.text}</span>
           {banner.actionLabel && (
-            <button type="button" className="btn btn-sm" onClick={banner.onAction}>
+            <button type="button" className="btn btn-sm shrink-0" onClick={banner.onAction}>
               {banner.actionLabel}
             </button>
           )}

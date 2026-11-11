@@ -1,7 +1,7 @@
 // The three states every panel has before it has something to show.
 //
 //   <PanelState loading={list.loading} error={list.error} onRetry={list.reload}
-//               empty={list.data?.items.length === 0} emptyText="אין טענות בסינון הזה">
+//               empty={list.data?.items.length === 0} emptyText="No claims match this filter">
 //     ...the panel's real content...
 //   </PanelState>
 //
@@ -21,8 +21,8 @@ export function PanelState({
   error = null,
   empty = false,
   hasData = false,
-  emptyText = "אין מה להציג",
-  loadingText = "טוען…",
+  emptyText = "Nothing to show",
+  loadingText = "Loading…",
   onRetry,
   children,
 }) {
@@ -32,7 +32,7 @@ export function PanelState({
         <p dir="auto">{error.message || String(error)}</p>
         {onRetry && (
           <button type="button" className="btn btn-sm" onClick={onRetry}>
-            נסו שוב
+            Try again
           </button>
         )}
       </Centered>

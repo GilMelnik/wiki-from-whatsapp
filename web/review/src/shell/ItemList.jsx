@@ -7,12 +7,15 @@ import { useShortcuts } from "./useShortcuts.js";
 //   <ItemList
 //     items={claims} getKey={(claim) => claim.claim_id}
 //     selectedKey={selectedId} onSelect={setSelectedId}
-//     total={page.total}                       // optional: "200 מתוך 2,710"
-//     header={<SortMenu />}                    // optional: shown next to the count
+//     total={page.total}                       // optional: "200 of 2,710" when it differs
+//     header={<SortMenu />}                    // optional: a strip above the rows
 //     prevKey={queue.prev_id} nextKey={queue.next_id}  // optional: neighbours off this page
+//     sectionOf={(claim) => claim.status_name} // optional: a heading wherever it changes
 //     renderItem={(claim, { selected }) => <ClaimRow claim={claim} />}
 //   />
 //
+// The strip above the rows shows only when it says something: the header, or "50 of 2,710"
+// when the list holds part of a longer one (a bare count of what is in view is noise).
 // j / k move the selection from anywhere on the page; the arrow keys do so while the list
 // has the focus (elsewhere they keep scrolling). The selected row is kept in view. In a
 // server-paged list, `prevKey` / `nextKey` (the selected item's neighbours in the whole
@@ -30,10 +33,12 @@ export function ItemList({
   header,
   prevKey = null,
   nextKey = null,
+  sectionOf,
 }) {
   const listRef = useRef(null);
   const selectedRef = useRef(null);
   const index = items.findIndex((item) => getKey(item) === selectedKey);
+  const partial = total !== undefined && total !== items.length;
 
   const move = (step) => {
     if (items.length === 0) return;
@@ -43,8 +48,8 @@ export function ItemList({
     onSelect(getKey(items[target]));
   };
   useShortcuts([
-    { keys: "j", label: "הפריט הבא ברשימה", run: () => move(1) },
-    { keys: "k", label: "הפריט הקודם ברשימה", run: () => move(-1) },
+    { keys: "j", label: "Next item in the list", run: () => move(1) },
+    { keys: "k", label: "Previous item in the list", run: () => move(-1) },
   ]);
 
   useEffect(() => {
@@ -56,13 +61,12 @@ export function ItemList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 text-xs text-slate-500">
-        <span>
-          {formatCount(items.length)}
-          {total !== undefined && total !== items.length && ` מתוך ${formatCount(total)}`}
-        </span>
-        {header}
-      </div>
+      {(header || partial) && (
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 text-xs text-slate-500">
+          <span>{partial && `${formatCount(items.length)} of ${formatCount(total)}`}</span>
+          {header}
+        </div>
+      )}
       <ul
         ref={listRef}
         className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto"
@@ -74,11 +78,14 @@ export function ItemList({
           move(step);
         }}
       >
-        {items.map((item) => {
+        {items.map((item, position) => {
           const key = getKey(item);
           const selected = key === selectedKey;
+          const section = sectionOf?.(item) ?? null;
+          const opens = section !== null && (position === 0 || sectionOf(items[position - 1]) !== section);
           return (
             <li key={key}>
+              {opens && <div className="list-section">{section}</div>}
               <button
                 type="button"
                 ref={selected ? selectedRef : null}

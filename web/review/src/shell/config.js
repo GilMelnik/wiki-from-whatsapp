@@ -1,7 +1,8 @@
 // UI constants of the shell. Server-side values (ports, timers) live in config.json.
 
-export const APP_TITLE = "כלי סקירה";
-export const LOCALE = "he-IL";
+export const APP_TITLE = "Wiki review";
+// English, with day-first dates ("11 Nov 2026, 15:35").
+export const LOCALE = "en-GB";
 export const EVENTS_URL = "/api/events";
 
 // Waits between attempts to reopen the event stream; the last one repeats.
