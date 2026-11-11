@@ -8,6 +8,7 @@ on:
       - "mkdocs.yml"
       - "overrides/**"
       - "step_9_site/hebrew_search.py"
+      - "step_9_site/agent_hook.py"
       - "wrangler.jsonc"
       - "worker/**"
       - "config.json"
