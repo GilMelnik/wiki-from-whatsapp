@@ -17,6 +17,8 @@ collapse into one claim. ``metadata.legacy_claim_ids`` maps each new id to its v
 claim the old model did not tie to any message is kept with empty evidence, zero counts and
 its thread's date span (``metadata.migration.claims_without_evidence``). v1 did not link a
 dissent to the claim it disputes, so every migrated claim has ``counters: []``.
+``participant_count`` (and the audit's ``participants``) come from the backup's thread, as
+step 3 computes them: the distinct people who wrote in it.
 """
 
 from __future__ import annotations

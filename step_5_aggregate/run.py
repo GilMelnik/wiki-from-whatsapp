@@ -13,7 +13,8 @@ opposite-stance claims about a common entity with very similar wording are linke
 ``contradicts``. Disagreements recorded by step 3 travel as data: two claims that dispute each
 other (C3 ``counters``) never share a group (also when placed by a re-run), and their groups
 are linked as ``contradicts``; a reviewer's merge that holds both wins (logged, no link). For every group the step then counts the distinct people who backed or
-disputed any of its claims, per month, from the private audit (see ``derive``). There is no
+disputed any of its claims, per month, and the distinct people who wrote in the conversations
+its claims come from, from the private audit (see ``derive``). There is no
 LLM call and no randomness.
 
 Re-runs (C14, custom merge): ``metadata.inputs`` holds a fingerprint per claim (text, stance,
@@ -32,7 +33,7 @@ Output (``claims_aggregated.json`` == ``claims_aggregated_edited.json`` after a 
 
     {"groups": [{group_id, claim_text, representative_claim_id, stance, member_claim_ids,
        entities, entity_names, supporter_count, opposer_count, first_date, last_date,
-       by_month: {"YYYY-MM": {supporters, opposers}}, thread_count, contradicts,
+       by_month: {"YYYY-MM": {supporters, opposers}}, thread_count, participant_count, contradicts,
        merged_from?, representative_manual?, contradicts_manual?, contradicts_rejected?}],
      "not_same"?: [{id, claims_a, claims_b, group_ids, source, at}],   (groups reviewer)
      "metadata": {source, inputs, must_links, params, embedding_model, git_commit, run,

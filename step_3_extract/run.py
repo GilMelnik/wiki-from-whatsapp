@@ -21,7 +21,8 @@ A failed call leaves the thread's previous fingerprint (or none) in place, so th
 retries it. Output: ``claims.json`` (public, C3) written through ``utils.reconcile`` with the
 derived fields as ``refresh_keys`` -- a manual text edit, PII decision or deletion in
 ``claims_edited.json`` survives count / date changes -- plus the PRIVATE
-``audit/claims_audit.json`` with every supporter / opposer identity per claim.
+``audit/claims_audit.json`` with every supporter / opposer identity per claim and the people
+who wrote in its thread (``participants``; C3 carries only their number).
 """
 
 from __future__ import annotations
