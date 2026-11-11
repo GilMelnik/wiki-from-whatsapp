@@ -4,8 +4,9 @@ The plan is ``plan_fixtures.make_plan`` (pages agencies / costs / clinics / hosp
 usa / georgia). Group ``i`` goes to page ``PAGE_IDS[i % 4]``; group 4 also has ``costs`` as
 its second page; group 11 is unplaced. Groups carry private-looking fields (claim ids,
 identities, a reaction summary) that no prompt may show. ``FakeWriter`` answers like the
-model: it cites every group id it finds in the prompt's ``<groups>`` block and links one
-other page. Nothing here comes from real data.
+model: one point per ``main`` group of the prompt's ``<groups>`` block, then an article with
+one sentence per group (each citing it) and links to one other page and a label. Nothing
+here comes from real data.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from utils.paths import Artifact
 
 SECRET = "PRIVATE-IDENTITY"
 _GROUP_LINE = re.compile(r"^(?:new: |changed: )?(g-[0-9a-f]{8}) \|", re.MULTILINE)
+_MAIN_LINE = re.compile(r"^(g-[0-9a-f]{8}) \| main \|", re.MULTILINE)
 _PAGE_ID = re.compile(r"^id: (\S+)$", re.MULTILINE)
 
 
@@ -64,15 +66,27 @@ def group_ids_in(user: Any) -> list[str]:
     return list(dict.fromkeys(_GROUP_LINE.findall(block)))
 
 
+def main_ids_in(user: Any) -> list[str]:
+    """The ``main`` group ids of a prompt's ``<groups>`` block."""
+    text = _flatten(user)
+    return _MAIN_LINE.findall(text[text.rindex("<groups"):])
+
+
 def page_id_in(user: Any) -> str:
     return _PAGE_ID.search(_flatten(user)).group(1)
 
 
+def points_of(ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+    """``points`` (one ``fact`` per group) and an empty ``left_out``."""
+    return {"points": [{"kind": "fact", "statement": f"נקודה {gid}", "groups": [gid]} for gid in ids],
+            "left_out": []}
+
+
 def article(ids: list[str], page_id: str, extra: str = "") -> str:
     other = next(pid for pid in PAGE_IDS if pid != page_id)
-    marks = "".join(f"[^{gid}]" for gid in ids)
-    return (f"פתיח קצר על הדף.{marks}\n\n## חלק ראשון\n\nטקסט עם קישור ל[[{other}|דף אחר]] "
-            f"ול[[label:usa|ארה\"ב]].{marks}\n{extra}")
+    told = " ".join(f"משפט על הקבוצה {gid}.[^{gid}]" for gid in ids)
+    return (f"פתיח קצר על הדף.\n\n## חלק ראשון\n\n{told}\nטקסט עם קישור ל[[{other}|דף אחר]] "
+            f"ול[[label:usa|ארה\"ב]].\n{extra}")
 
 
 Responder = Callable[[str, Any, str], dict[str, Any]]
@@ -92,8 +106,9 @@ class FakeWriter:
         if self.respond is not None:
             return copy.deepcopy(self.respond(system, user, task))
         page_id = page_id_in(user)
-        answer = {"body": article(group_ids_in(user), page_id), "summary": f"תקציר {page_id}",
-                  "questions": ["שאלה?"], "related": [{"page_id": "clinics", "relation": "see_also"}]}
+        answer = {**points_of(main_ids_in(user)), "body": article(group_ids_in(user), page_id),
+                  "summary": f"תקציר {page_id}", "questions": ["שאלה?"],
+                  "related": [{"page_id": "clinics", "relation": "see_also"}]}
         if task.startswith("update:"):
             answer["no_change"] = False
         return answer

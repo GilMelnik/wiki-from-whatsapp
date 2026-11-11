@@ -88,8 +88,10 @@ def test_a_mistake_is_corrected_through_step_7_and_saved_to_the_edited_pages(ws:
     assert all(s in after["body_md"] for s in untouched)
     assert result.details["pages"]["agencies"]["kept_sentence_share"] == 1.0
     assert after["front_matter"]["summary"] == "תקציר מתוקן"
-    prompt = llm.calls[0]["user"]
-    assert "editor request" in "".join(segment.text for segment in prompt)
+    assert [p["groups"] for p in after["points"]] == [["g-00000000"], ["g-00000004"], ["g-00000008"]]
+    assert after["left_out"] == []
+    prompt = "".join(segment.text for segment in llm.calls[0]["user"])
+    assert "editor request" in prompt and "<current_points>\n- fact | נקודה g-00000000" in prompt
     assert ws.pages()["pages"]["agencies"]["body_md"] == before
 
 

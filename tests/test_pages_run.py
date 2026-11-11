@@ -14,7 +14,7 @@ from review_tool.steps import SERVED_STEPS
 from step_6_plan import operations
 from step_7_write_pages.checks import cited_ids
 from step_9_site.content import Site
-from tests.pages_fixtures import FakeWriter, PagesWorkspace
+from tests.pages_fixtures import FakeWriter, PagesWorkspace, main_ids_in, points_of
 from utils.llm_client import _flatten
 from utils.okf import validate_front_matter
 
@@ -52,10 +52,14 @@ def test_first_run_writes_c9_pages_that_step_9_accepts(ws: PagesWorkspace) -> No
     payload = ws.pages()
     assert list(payload["pages"]) == PAGES
     for page_id, page in payload["pages"].items():
-        assert set(page) == {"front_matter", "body_md", "input_fingerprint"}
+        assert list(page) == ["front_matter", "body_md", "points", "left_out", "input_fingerprint"]
         validate_front_matter(page["front_matter"])
         assert not page["body_md"].startswith(("---", "# "))
         cited = cited_ids(page["body_md"])
+        report = payload["metadata"]["pages"][page_id]["report"]
+        assert report["unaccounted"] == [] and report["final_problems"] == []
+        assert [gid for point in page["points"] for gid in point["groups"]] == [
+            gid for gid in cited if ws.assignments()["assignments"][gid]["pages"][0] == page_id]
         assert cited and [s["id"] for s in page["front_matter"]["sources"]] == cited
         assert payload["metadata"]["inputs"][page_id] == page["input_fingerprint"]
         assert "report" in payload["metadata"]["pages"][page_id]
@@ -125,7 +129,8 @@ def test_no_change_keeps_generated_at_and_records_the_new_fingerprint(ws: PagesW
     before = ws.pages()["pages"]["agencies"]
     _bump(ws, 8)
     update = FakeWriter("fake-update", respond=lambda s, u, t: {
-        "no_change": True, "body": "", "summary": "", "questions": [], "related": []})
+        **points_of(main_ids_in(u)), "no_change": True, "body": "", "summary": "",
+        "questions": [], "related": []})
     result = ws.run(FakeWriter(), update)
     after = ws.pages()["pages"]["agencies"]
     assert result["no_change"] == 1

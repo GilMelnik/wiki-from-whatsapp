@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import re
 import shutil
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -37,7 +36,7 @@ from typing import Any, Protocol
 from review_tool.artifacts import GRAPH
 from step_5_aggregate.reviewer.store import EditConflict, GroupNotFound, GroupsStore
 from step_6_plan.model import PlanError
-from step_7_write_pages.checks import strip_definitions
+from step_7_write_pages.checks import sentences, strip_definitions
 from step_7_write_pages.front_matter import LabelRule, page_front_matter
 from step_7_write_pages.inputs import PAGES_CONFIG, Corpus
 from step_7_write_pages.writer import GroupDelta, PageText, PageWriter, current_text
@@ -57,11 +56,8 @@ from utils.reconcile import backup_file, guarded_write
 
 APPLY_CONFIG = REVIEW_CONFIG["apply"]
 MESSAGES = REVIEW_CONFIG["messages"]
-# A sentence: up to its end mark (not a decimal point) and the citation marks right after it,
-# or up to the end of its line.
 _END = ".!?:;, "
 _MIN_QUOTED = 10  # a shorter piece (a heading word) never counts as the quoted sentence
-_SENTENCE = re.compile(r"(?:[^.!?\n]|[.!?](?=\d))+(?:[.!?]+(?:\[\^[^\]\s]+\])*)?")
 
 
 class ApplyRefused(Exception):
@@ -91,12 +87,6 @@ class ApplyResult:
 
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def sentences(body: str) -> list[str]:
-    """The body's sentences (footnote definitions left out), stripped."""
-    found = (part.strip() for part in _SENTENCE.findall(strip_definitions(body)))
-    return [part for part in found if part]
 
 
 def kept_share(before: str, after: str, touched: Collection[str], quoted: str = "") -> float:
@@ -230,8 +220,8 @@ class Applier:
             context, corpus.plan, body=text.body, summary=text.summary, questions=text.questions,
             related=text.related, labels=LabelRule(corpus, list(corpus.plan["pages"]))(page_id),
             model=model, generated_at=_now())
-        item = {"front_matter": front_matter, "body_md": text.body,
-                "input_fingerprint": page.get("input_fingerprint")}
+        item = {"front_matter": front_matter, "body_md": text.body, "points": text.points,
+                "left_out": text.left_out, "input_fingerprint": page.get("input_fingerprint")}
         self.logger.info(f"Corrected {page_id}: {_pct(share)} of its sentences kept; report "
                          f"{text.report}")
         return item, share

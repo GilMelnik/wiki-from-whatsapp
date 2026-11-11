@@ -278,11 +278,31 @@
     "stale_after_days": 180,
     "generated_by": "wiki-from-whatsapp",
     "source_resource_prefix": "claim-group:",
-    "prompt_version": 1,
+    "prompt_version": 2,
     "write": {"stage": "write", "max_output_tokens": 64000},
     "update": {"stage": "update", "max_output_tokens": 64000, "rewrite_changed_share": 0.5},
     "concurrency": 4,
-    "min_cited_share": 0.85,
+    "max_marks_per_statement": 3,
+    "max_statements_per_point": 2,
+    "max_left_out_share": 0.3,
+    "points": {
+      "kinds": {
+        "common_view": "what members generally recommend or report on a question (said once, however many groups repeat it)",
+        "condition": "a condition, an exception or an \"it depends\" that qualifies another point",
+        "number": "a differing number, price, duration or date range",
+        "warning": "a warning, a risk or a pitfall",
+        "dispute": "members disagree: both positions with their content",
+        "change": "something that changed over time: the latest state and the earlier one",
+        "outdated": "information that may no longer hold (old relative to as-of)",
+        "experience": "one member's or a few members' own experience, not a general view",
+        "fact": "a fact, rule, procedure, name or contact nobody disputes"
+      },
+      "left_out_reasons": {
+        "repeats": "everything it says is already said by the points (a group that says the same as ONE point belongs in that point instead)",
+        "trivial": "nothing a reader can use (thanks, a greeting, a question nobody answered, a vague remark)",
+        "off_scope": "about another page's subject and adds nothing here"
+      }
+    },
     "max_entities": 30,
     "default_relation": "see_also",
     "labels": {"min_groups": 3, "min_page_share": 0.2, "min_label_share": 0.2, "min_lift": 2.0},
