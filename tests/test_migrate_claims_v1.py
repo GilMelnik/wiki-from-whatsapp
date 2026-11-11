@@ -20,7 +20,7 @@ from utils.paths import AUDIT_PATH, CHAT_ANDROID_PATH, CLAIMS, THREADS, Artifact
 C3_KEYS = {
     "claim_id", "thread_id", "claim_text", "entities", "stance", "supporting_message_ids",
     "opposing_message_ids", "counters", "first_date", "last_date", "supporter_count", "opposer_count",
-    "reaction_summary",
+    "participant_count", "reaction_summary",
 }
 
 
@@ -101,6 +101,9 @@ def test_migrate_emits_c3_claims_and_audit(backup: Path, tmp_path: Path) -> None
     audit = json.loads(_at(out, AUDIT_PATH).read_text("utf-8"))["audit"]
     assert {r["claim_id"] for r in audit} == set(claims)
     assert {e["person"] for e in audit[0]["supporters"]} == {"u1", "u4"}
+    # the thread's writers, from the backup's thread: u4 only reacted
+    assert {c["participant_count"] for c in claims.values()} == {3}
+    assert all(r["participants"] == ["u1", "u2", "u3"] for r in audit)
 
 
 def test_migrated_corpus_reruns_without_model_calls(backup: Path, tmp_path: Path) -> None:

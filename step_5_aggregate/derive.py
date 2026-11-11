@@ -6,7 +6,10 @@ group, even when they backed several member claims. A person found on both sides
 is counted on the side of their latest event (they changed their mind); on the same day the
 opposing side wins, so a dispute is never hidden. ``by_month`` applies the same rule inside
 each month (``YYYY-MM`` of the event date). Reactions the owner classed as neutral (❤️, 🙏 …)
-never reach the audit, so they count for nobody. The public file carries counts only.
+never reach the audit, so they count for nobody. ``participant_count`` is the number of
+distinct people who wrote in the conversations the members come from (the audit's
+``participants`` of each member, united: a person in two of them counts once); it is ``None``
+when a member's audit record predates that field. The public file carries counts only.
 """
 
 from __future__ import annotations
@@ -59,6 +62,18 @@ def people(member_ids: Iterable[str], audit: Mapping[str, Mapping[str, Any]]) ->
         "opposer_count": totals["opposers"],
         "by_month": {month: _sides(months[month]) for month in sorted(months)},
     }
+
+
+def participant_count(member_ids: Iterable[str], audit: Mapping[str, Mapping[str, Any]]) -> int | None:
+    """Distinct people who wrote in the members' threads, or ``None`` when one is unknown."""
+
+    people_seen: set[str] = set()
+    for claim_id in member_ids:
+        participants = (audit.get(claim_id) or {}).get("participants")
+        if participants is None:
+            return None
+        people_seen.update(participants)
+    return len(people_seen)
 
 
 class GroupDeriver:
@@ -114,6 +129,7 @@ class GroupDeriver:
             "last_date": max(last) if last else None,
             "by_month": counts["by_month"],
             "thread_count": len({claims[m].get("thread_id") for m in members}),
+            "participant_count": participant_count(members, self.inputs.audit),
             "contradicts": [],
         }
         for key in MANUAL_KEYS:

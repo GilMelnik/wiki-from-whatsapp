@@ -83,7 +83,7 @@ def test_a_mistake_is_corrected_through_step_7_and_saved_to_the_edited_pages(ws:
     result = ws.applier(llm).apply(_suggestion(ws, "mistake"))
     after = ws.effective_page("agencies")
     assert FIXED in after["body_md"] and sentence_a("g-00000004") not in after["body_md"]
-    assert after["body_md"].count("[^g-00000004]:") == 1
+    assert "[^g-00000004]" in after["body_md"] and "]:" not in after["body_md"]  # marks only
     untouched = [s for s in sentences(before) if "g-00000004" not in s]
     assert all(s in after["body_md"] for s in untouched)
     assert result.details["pages"]["agencies"]["kept_sentence_share"] == 1.0

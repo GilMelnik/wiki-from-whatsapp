@@ -2,7 +2,7 @@
 
 A claim record (C3) is ``{claim_id, thread_id, claim_text, entities, stance,
 supporting_message_ids, opposing_message_ids, counters, first_date, last_date,
-supporter_count, opposer_count, reaction_summary, _redactions?}``. The model supplies text,
+supporter_count, opposer_count, participant_count, reaction_summary, _redactions?}``. The model supplies text,
 entities, stance, message numbers and the claims a claim disputes; everything in
 ``DERIVED_KEYS`` is computed or maintained here. A claim id is
 ``<thread_id>-<sha1[:8](text as extracted)>`` and is assigned once: later runs carry the record
@@ -13,6 +13,10 @@ answered another one). The link is mutual (if B counters A, A counters B), is se
 the model's answers (a new claim may dispute an existing one in update mode), and loses an id
 when that claim leaves the output. It is a derived key: a manual edit of the claim survives
 when a later dissent adds a link to it.
+
+``participant_count`` is the number of distinct people who wrote in the claim's thread (not
+people who only reacted); the private audit keeps who they were (``participants``), so step 5
+can count distinct people across a group's threads.
 
 ``ThreadClaims`` works on one thread whose messages already carry quotes and reactions
 (``utils.threads_io.with_export``).
@@ -26,7 +30,7 @@ from typing import Any
 from step_3_extract.prompt import STANCES, build_fresh_prompt, build_update_prompt
 from utils.config import section
 from utils.reconcile import fingerprint
-from utils.support import collect_evidence
+from utils.support import collect_evidence, person_key
 from utils.threads_io import render_thread_for_llm
 
 EXTRACT_CONFIG = section("extract")
@@ -41,6 +45,7 @@ DERIVED_KEYS = (
     "last_date",
     "supporter_count",
     "opposer_count",
+    "participant_count",
     "reaction_summary",
 )
 
@@ -136,6 +141,9 @@ class ThreadClaims:
         self.thread_id = str(thread["thread_id"])
         self.new_ids = new_ids
         self.messages_by_id = {str(m["id"]): m for m in thread.get("messages", [])}
+        self.participants = sorted(
+            {person_key(m.get("sender")) for m in self.messages_by_id.values()} - {""}
+        )
         self._position = {message_id: i for i, message_id in enumerate(self.messages_by_id)}
         self.rendered, self.refs = render_thread_for_llm(thread, new_ids=new_ids)
         self.ungrounded = 0  # new claims dropped for lacking (new) supporting evidence
@@ -283,6 +291,7 @@ class ThreadClaims:
             "last_date": evidence.last_date or (max(span) if span else None),
             "supporter_count": evidence.supporter_count,
             "opposer_count": evidence.opposer_count,
+            "participant_count": len(self.participants),
             "reaction_summary": evidence.reaction_summary,
         }
         head = {k: v for k, v in record.items() if k not in DERIVED_KEYS and not k.startswith("_")}
@@ -293,6 +302,7 @@ class ThreadClaims:
             "thread_id": self.thread_id,
             "supporters": evidence.supporters,
             "opposers": evidence.opposers,
+            "participants": self.participants,
         }
         return claim, audit
 

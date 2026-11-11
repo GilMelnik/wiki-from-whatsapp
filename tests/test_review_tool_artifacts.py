@@ -50,7 +50,8 @@ def test_default_graph_is_the_pipeline_in_order() -> None:
         "export", "threads", "gold_threads", "classified", "claims", "entities",
         "claim_aggregations", "groups", "plan", "assignments", "pages", "suggestions", "site",
     ]  # fmt: skip
-    assert (GRAPH.node("site").step, GRAPH.node("site").upstream) == ("step_9_site", ("plan", "pages"))
+    assert (GRAPH.node("site").step, GRAPH.node("site").upstream) == (
+        "step_9_site", ("plan", "pages", "groups"))
     assert GRAPH.node("site").edited is None
     assert GRAPH.node("export").edited is None
     assert (GRAPH.node("gold_threads").step, GRAPH.node("gold_threads").upstream) == (None, ())

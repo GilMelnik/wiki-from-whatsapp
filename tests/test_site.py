@@ -86,7 +86,9 @@ def test_wiki_links_are_resolved_outside_code(built: tuple[Path, dict[str, Any]]
     assert "ו-גאורגיה." in body  # a label nobody carries has no page: its title, unlinked
     assert "[כאן](agencies.md)" in body
     assert "`[[costs]]`" in body and "```\n[[clinics]]\n```" in body
-    assert "[^g-00000001]: קבוצה." in body
+    # a body stored with its definition (older step 7): the stored text gives way to the reference
+    reference = f"[^g-00000001]: {section('site')['references']['start_mark']}g-00000001 · "
+    assert reference in body and "קבוצה." not in body
 
 
 def test_front_matter_round_trips_unchanged(built: tuple[Path, dict[str, Any]]) -> None:
@@ -158,7 +160,8 @@ def test_rerun_on_unchanged_inputs_writes_nothing(tmp_path: Path) -> None:
     stamps = {path: path.stat().st_mtime_ns for path in files}
     second = run_site(tmp_path, plan, _pages(plan))
     assert (second["written"], second["removed"]) == ([], [])
-    changed = [path for path in files if path.name not in ("plan.json", "wiki_pages.json")]
+    inputs = ("plan.json", "wiki_pages.json", "claims_aggregated.json")
+    changed = [path for path in files if path.name not in inputs]
     assert all(path.stat().st_mtime_ns == stamps[path] for path in changed)
 
 

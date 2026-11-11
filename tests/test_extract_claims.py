@@ -29,6 +29,7 @@ C3_KEYS = [
     "last_date",
     "supporter_count",
     "opposer_count",
+    "participant_count",
     "reaction_summary",
 ]
 
@@ -71,8 +72,23 @@ def test_numbers_map_to_whatsapp_ids_and_record_shape() -> None:
     assert (claim["first_date"], claim["last_date"]) == ("2024-01-05", "2024-02-01")
     # p3 wrote C and reacted to A: one supporter. p2 opposes.
     assert (claim["supporter_count"], claim["opposer_count"]) == (2, 1)
-    assert list(audit) == ["claim_id", "thread_id", "supporters", "opposers"]
+    assert list(audit) == ["claim_id", "thread_id", "supporters", "opposers", "participants"]
     assert {e["person"] for e in audit["supporters"]} == {"p1", "p3"}
+    assert claim["participant_count"] == 3 and audit["participants"] == ["p1", "p2", "p3"]
+
+
+def test_participants_are_the_people_who_wrote_in_the_thread() -> None:
+    thread = _thread()
+    thread["messages"][1]["reactions"] = [{"emoji": "👍", "senders": ["p8", "p9"]}]  # only react
+    thread["messages"].append({"id": "D", "datetime": "2024-02-02T10:00:00",
+                               "sender": {"user_name": "p1", "phone": "x"}, "content": "again"})
+    job = ThreadClaims(thread)
+    claim, audit = job.finalize(job.absorb({"claims": [_claim("fact", [1])]}, [])[0])
+    assert claim["participant_count"] == 3  # p1 twice, p8 / p9 only reacted
+    assert audit["participants"] == ["p1", "p2", "p3"]
+    job = ThreadClaims({**thread, "messages": thread["messages"][:1]})  # a message left
+    claim, _ = job.finalize({**claim, "supporting_message_ids": ["A"]})
+    assert claim["participant_count"] == 1
 
 
 def test_claim_id_is_the_short_sha1_of_the_text() -> None:

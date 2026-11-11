@@ -152,6 +152,8 @@ def test_fresh_run_writes_c3_claims_and_private_audit(corpus: Corpus) -> None:
     assert (alpha["first_date"], alpha["last_date"]) == ("2024-01-05", "2024-01-06")
     # Supporters: Alice (wrote W1), Carol (👍 W1). Opposers: Bob (wrote W2), Dan (👍 on W2).
     assert (alpha["supporter_count"], alpha["opposer_count"]) == (2, 2)
+    # Participants: the people who wrote in the thread (Carol and Dan only reacted in t-1).
+    assert (alpha["participant_count"], claims[BETA]["participant_count"]) == (2, 1)
     public = corpus.artifact.original.read_text("utf-8")
     assert "whatsapp.net" not in public and "9725" not in public
     audit = corpus.audit_records()[ALPHA]
@@ -169,6 +171,19 @@ def test_unchanged_rerun_makes_no_calls_and_keeps_the_files(corpus: Corpus) -> N
     summary = corpus.run(llm)
     assert llm.prompts == [] and summary["model_calls"] == 0
     assert json.loads(corpus.artifact.original.read_text("utf-8"))["claims"] == json.loads(before)["claims"]
+
+
+def test_claims_written_before_the_count_gain_it_without_a_call(corpus: Corpus) -> None:
+    corpus.run(FakeLLM(answer_by_text))
+    payload = json.loads(corpus.artifact.original.read_text("utf-8"))
+    for claim in payload["claims"]:
+        del claim["participant_count"]
+    corpus.artifact.original.write_text(json.dumps(payload), "utf-8")
+    llm = FakeLLM(answer_by_text)
+    corpus.run(llm)
+    assert llm.prompts == []
+    assert {cid: c["participant_count"] for cid, c in corpus.claims().items()} == {ALPHA: 2, BETA: 1}
+    assert corpus.audit_records()[ALPHA]["participants"] == sorted([ALICE, BOB])
 
 
 def test_reaction_only_change_recomputes_counts_without_a_call(corpus: Corpus) -> None:
@@ -199,6 +214,7 @@ def test_changed_thread_keeps_existing_claims_and_appends_new_ones(corpus: Corpu
     assert alpha["claim_text"] == first[ALPHA]["claim_text"]
     assert alpha["supporting_message_ids"] == ["W1", "W9"]
     assert alpha["last_date"] == "2024-03-01" and alpha["supporter_count"] == 3
+    assert alpha["participant_count"] == 3 and claims[FAST]["participant_count"] == 3  # Dan wrote
     assert claims[FAST]["supporting_message_ids"] == ["W9"]
     assert claims[BETA] == first[BETA]
     assert summary["new_claims"] == 1 and set(corpus.audit_records()) == set(claims)
@@ -224,6 +240,7 @@ def test_manual_edits_survive_evidence_changes(corpus: Corpus) -> None:
     assert mine[ALPHA]["_pii_review"] == "accepted"
     assert mine[ALPHA]["supporting_message_ids"] == ["W1", "W9"]
     assert mine[ALPHA]["last_date"] == "2024-03-01"
+    assert mine[ALPHA]["participant_count"] == 3  # a derived field: refreshed on the edit
     assert FAST in mine
     assert corpus.claims()[BETA]["supporter_count"] == 2  # the original keeps the step's view
 

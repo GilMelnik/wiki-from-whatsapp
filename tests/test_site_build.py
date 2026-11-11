@@ -49,7 +49,9 @@ def test_generated_site_builds_strict_with_footer_hidden_metadata_and_search_var
         assert all(hidden not in html for html in pages_html.values()), hidden
     assert '<a href="../clinics/">מרפאות</a>' in agencies
     assert '<a href="../labels/usa/">תגית</a>' in agencies
-    assert 'class="footnote"' in agencies
+    assert 'class="footnote"' in agencies and 'sup id="fnref:g-00000001"' in agencies
+    # the body was stored with its definition (older step 7): the reference replaces it
+    assert "g-00000001 · ינואר 2023 – יוני 2024" in agencies and "קבוצת טענות" not in agencies
     assert 'http-equiv="refresh" content="0; url=../agencies/"' in pages_html["costs/index.html"]
     assert (out / section("mcp")["index_file"]).is_file()
     search = json.loads((out / "search" / "search_index.json").read_text(encoding="utf-8"))

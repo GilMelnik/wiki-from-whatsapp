@@ -283,8 +283,7 @@
     "hebrew_months": [
       "ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני",
       "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"
-    ],
-    "footnote": {"said_in": "נאמר ב{when}", "said_between": "נאמר בין {first} ל{last}"}
+    ]
   },
   "wiki_review": {
     "stage": "review",
@@ -418,6 +417,15 @@
         "state_on": "מוצגות",
         "state_off": "מוסתרות",
         "storage_key": "wiki-show-references"
+      },
+      "references": {
+        "start_mark": "‏",
+        "separator": " · ",
+        "date_range": "{first} – {last}",
+        "participants_one": "משתתף אחד",
+        "participants_many": "{count} משתתפים",
+        "conversations_one": "{participants} בשיחה",
+        "conversations_many": "{participants} ב־{count} שיחות"
       },
       "about": {
         "file": "about.md",

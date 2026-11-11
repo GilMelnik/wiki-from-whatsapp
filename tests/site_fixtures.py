@@ -2,7 +2,8 @@
 
 The plan is ``plan_fixtures.make_plan`` (phases ``before`` / ``during``, categories
 ``choosing`` / ``medical``, pages agencies, costs, clinics, hospital, country labels usa and
-georgia) plus an empty category and a category whose only page is never written.
+georgia) plus an empty category and a category whose only page is never written. The claim
+groups (C6, for the references) are ``plan_fixtures.make_groups`` unless a test passes its own.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from typing import Any
 from step_6_plan import operations
 from step_6_plan.model import find_node
 from step_9_site.run import run
-from tests.plan_fixtures import make_plan
+from tests.plan_fixtures import make_groups, make_plan
 from utils.okf import build_front_matter
 
 GENERATED_AT = "2026-11-01T10:00:00Z"
@@ -64,14 +65,23 @@ def make_page(
     return {"front_matter": front_matter, "body_md": body, "input_fingerprint": f"fp-{page_id}"}
 
 
-def run_site(tmp_path: Path, plan: dict[str, Any], pages: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def run_site(
+    tmp_path: Path,
+    plan: dict[str, Any],
+    pages: dict[str, dict[str, Any]],
+    groups: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Write the inputs under ``tmp_path`` and build the site into ``tmp_path/docs``."""
     plan_path, pages_path = tmp_path / "plan.json", tmp_path / "wiki_pages.json"
+    groups_path = tmp_path / "claims_aggregated.json"
     plan_path.write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
     pages_path.write_text(json.dumps({"pages": pages, "metadata": {}}, ensure_ascii=False), encoding="utf-8")
+    payload = {"groups": make_groups(4) if groups is None else groups, "metadata": {}}
+    groups_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     return run(
         plan_path=plan_path,
         pages_path=pages_path,
+        groups_path=groups_path,
         docs_dir=tmp_path / "docs",
         mkdocs_path=tmp_path / "mkdocs.yml",
     )
