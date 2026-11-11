@@ -1,11 +1,8 @@
 import { useState } from "react";
-import { Bidi, formatCount, Ltr, Panel } from "@shell";
+import { Bidi, EditableText, formatCount, KindField, Ltr, nodeById, Panel, pathTitles, titleOf } from "@shell";
 import { GROUPS_TAB } from "./assign.js";
 import { ItemGroups, ItemTabs } from "./AssignmentViews.jsx";
 import { ChangeBadge, MergedFrom, Warnings } from "./bits.jsx";
-import { EditableText } from "./fields.jsx";
-import { KindField } from "./FormDialogs.jsx";
-import { nodeById, pathTitles, titleOf } from "./plan.js";
 
 // Main column for a category (its texts and what it holds) and for a label (its texts and
 // kind, or in the second tab the claim groups that carry it). Titles and descriptions save at

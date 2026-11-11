@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ItemList, Layout, PanelState, useBanner, useJobs, useResource, useShortcuts, useStoredState, useToast } from "@shell";
+import { ItemList, kindOf, labelItems, Layout, nodeById, PanelState, useBanner, useJobs, useResource, useShortcuts, useStoredState, useToast } from "@shell";
 import { ActionsPanel } from "./ActionsPanel.jsx";
 import { api } from "./api.js";
 import { assignmentRows, DETAILS_TAB, GROUPS_TAB, isAssignmentRow, PROPOSALS_ID, UNPLACED_ID, WAITING_ID } from "./assign.js";
@@ -8,7 +8,7 @@ import { DialogHost } from "./Dialogs.jsx";
 import { CategoryView, LabelView } from "./ItemViews.jsx";
 import { Overview } from "./Overview.jsx";
 import { PageView } from "./PageView.jsx";
-import { kindOf, labelItems, LABELS_VIEW, nodeById, OVERVIEW_ID, reorderOp, TOOL_ID, TREE_VIEW, treeItems } from "./plan.js";
+import { LABELS_VIEW, OVERVIEW_ID, reorderOp, TOOL_ID, TREE_VIEW, treeItems } from "./plan.js";
 import { ProposalsView } from "./ProposalsView.jsx";
 import { LabelRow, TreeRow } from "./Rows.jsx";
 import { Toolbar } from "./Toolbar.jsx";

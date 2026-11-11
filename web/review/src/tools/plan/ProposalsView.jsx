@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { Bidi, formatCount, formatDateTime, JOB_STATE_LABELS, Ltr, Panel, PanelState, useJobs, useResource } from "@shell";
+import { Bidi, formatCount, formatDateTime, groupCount, JOB_STATE_LABELS, Ltr, Panel, PanelState, titleOf, useJobs, useResource } from "@shell";
 import { api } from "./api.js";
-import { ASSIGNMENTS_KEY, groupCount, PROPOSAL_KINDS, STATUS_LABELS } from "./assign.js";
+import { ASSIGNMENTS_KEY, PROPOSAL_KINDS, STATUS_LABELS } from "./assign.js";
 import { NotRunYet, RunAssignButton } from "./AssignmentViews.jsx";
-import { titleOf } from "./plan.js";
 
 // The proposals of the assignment step for groups that fit no page: a new page, a new label
 // or a wider scope. Pending ones first, each with its reason and its groups' texts; decided

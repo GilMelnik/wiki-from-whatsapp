@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { pickState, setPicked, togglePicked } from "../src/shell/picking.js";
+import { assignmentLines, groupCount } from "../src/shell/planText.js";
 import { stanceOf } from "../src/shell/stance.js";
 import {
-  assignmentLines,
   assignmentRows,
   DEFAULT_GROUP_VIEW,
   findingText,
-  groupCount,
   groupsQuery,
   isAssignmentRow,
   labelChanges,

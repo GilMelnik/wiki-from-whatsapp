@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Bidi, formatCount, formatDateTime, Ltr, Panel, PanelState, useResource } from "@shell";
+import { Bidi, formatCount, formatDateTime, groupCount, Ltr, Panel, PanelState, useResource } from "@shell";
 import { api } from "./api.js";
-import { groupCount, UNPLACED_ID } from "./assign.js";
+import { UNPLACED_ID } from "./assign.js";
 import { AssignmentSummary } from "./AssignmentViews.jsx";
 import { Warnings } from "./bits.jsx";
 import { percent } from "./plan.js";

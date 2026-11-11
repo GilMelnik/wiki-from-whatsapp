@@ -1,10 +1,11 @@
 // Pure helpers for the assignment views of the plan tool (no React): the extra rows of the
 // list column, the list query, the page picker's choices, the label changes of a bulk edit,
-// the proposal forms and the Hebrew lines about what a plan change does to the groups. The
-// server decides what is allowed; these only shape requests and texts. Functions that write
-// numbers take the shell's `formatCount` as `format` (this file is tested without the shell).
+// the proposal forms and the label findings. The server decides what is allowed; these only
+// shape requests and texts. Functions that write numbers take the shell's `formatCount` as
+// `format` (this file is tested with only the shell's pure helpers: scripts/shell-alias.mjs).
 
-import { percent, titleOf } from "./plan.js";
+import { groupCount, prefixed, titleOf } from "@shell";
+import { percent } from "./plan.js";
 
 export const UNPLACED_ID = "__unplaced";
 export const WAITING_ID = "__waiting";
@@ -26,16 +27,6 @@ export const ROLE_OPTIONS = [
 export const DEFAULT_GROUP_VIEW = { sort: "uncertain", role: "all", q: "" };
 export const PROPOSAL_KINDS = { page: "דף חדש", label: "תווית חדשה", scope: "הרחבת תחום" };
 export const STATUS_LABELS = { pending: "ממתינה", accepted: "התקבלה", rejected: "נדחתה" };
-
-/** "קבוצה אחת" / "12 קבוצות". */
-export function groupCount(count, format = String) {
-  return count === 1 ? "קבוצה אחת" : `${format(count)} קבוצות`;
-}
-
-/** `groupCount` after a one-letter prefix ("מ", "ל"): a hyphen before digits ("ל-12 קבוצות"). */
-function prefixed(prefix, count, format) {
-  return `${prefix}${count === 1 ? "" : "-"}${groupCount(count, format)}`;
-}
 
 /** The rows the tree list shows above the tree: groups on no page, waiting, proposals. */
 export function assignmentRows(overview) {
@@ -124,43 +115,6 @@ export function proposalForm(proposal, overview) {
     parentId: categories.includes(proposal.parent_id) ? proposal.parent_id : (categories[0] ?? null),
     kind: proposal.label_kind ?? "",
   };
-}
-
-/**
- * What a plan change does to the claim groups at the next assignment run, as Hebrew lines
- * `{tone, text}`, from the preview's `assignments` (null before step 6b has run).
- */
-export function assignmentLines(effect, overview, format = String) {
-  if (!effect) return [];
-  const lines = [];
-  const count = (n) => groupCount(n, format);
-  const names = (ids) => ids.map((id) => `„${titleOf(overview, id)}”`).join(", ");
-  if (effect.redirected > 0) {
-    lines.push({ tone: "info", text: `השיוך של ${count(effect.redirected)} יעבור אל היעד החדש בהרצת השיוך הבאה, בלי לשאול שוב.` });
-  }
-  if (effect.reask > 0) {
-    lines.push({ tone: "warning", text: `בהרצת השיוך הבאה המסווג יחליט מחדש על הדף של ${count(effect.reask)} (בתשלום).` });
-  }
-  if (effect.screen_pages.length > 0) {
-    lines.push({ tone: "info", text: `על שאר הקבוצות המסווג ישאל שאלת כן/לא זולה: האם הן שייכות ל${names(effect.screen_pages)}.` });
-  }
-  if (effect.asked_labels.length > 0) {
-    lines.push({ tone: "info", text: `המסווג ישאל על כל הקבוצות אם התווית ${names(effect.asked_labels)} מתאימה להן.` });
-  }
-  if (effect.pages_cleared > 0) {
-    lines.push({ tone: "warning", text: `הדף שנמחק יוסר מהשיוך של ${count(effect.pages_cleared)}.` });
-  }
-  if (effect.labels_cleared > 0) {
-    lines.push({ tone: "warning", text: `התווית שנמחקה תוסר מהשיוך של ${count(effect.labels_cleared)}.` });
-  }
-  if (effect.manual_lost > 0) {
-    const back = effect.manual_reask > 0 ? ` השיוך הידני של ${count(effect.manual_reask)} יתבטל, כי לא יישאר להן דף, והמסווג יחליט עליהן מחדש.` : "";
-    lines.push({ tone: "danger", text: `הדף שנמחק יוסר גם ${prefixed("מ", effect.manual_lost, format)} ששייכתם ביד.${back}` });
-  }
-  if (lines.length > 0) {
-    lines.push({ tone: "info", text: "הכלי לא משנה את השיוך עכשיו: שלב השיוך יעשה זאת בהרצה הבאה, וההודעה למעלה תציע אותה." });
-  }
-  return lines;
 }
 
 /** A label that attaches to very few groups or to a very large share, in Hebrew. */
