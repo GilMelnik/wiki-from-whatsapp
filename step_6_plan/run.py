@@ -3,7 +3,8 @@
 How it works, in plain words: the model configured for stage ``plan.stage`` (Opus 5.5) reads
 every claim group of the effective step-5 file, one compact line each, and proposes a tree of
 content: an abstraction layer on top (for example the phases of the process), categories
-below it, and pages as the leaves (at most ``plan.max_pages``), each with a scope that says
+below it, and pages as the leaves (sized by ``plan.page_groups``, with ``plan.max_pages``
+only as a safety ceiling), each with a scope that says
 what belongs on it and what does not, plus labels that cut across pages (for example by
 country). The answer is validated (``step_6_plan.model``); on failure the model gets ONE retry
 with the errors. A coverage check (``step_6_plan.coverage``) then asks the cheap classifier to
@@ -224,6 +225,7 @@ def run(
         **plan["metadata"],
         "source": str(source),
         "stage": PLAN_CONFIG["stage"],
+        "prompt_version": PLAN_CONFIG["prompt_version"],
         "model": llm.model,
         "effort": LLM_CONFIG["stages"][PLAN_CONFIG["stage"]].get("thinking_param"),
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),

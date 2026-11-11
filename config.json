@@ -197,7 +197,14 @@
     }
   },
   "plan": {
-    "max_pages": 30,
+    "prompt_version": 2,
+    "max_pages": 80,
+    "page_groups": {
+      "fold_below": 15,
+      "typical_min": 30,
+      "typical_max": 100,
+      "split_above": 120
+    },
     "min_depth": 3,
     "max_depth": 4,
     "slug_pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
@@ -214,8 +221,6 @@
       "none_option": "none",
       "confident_probability": 0.6,
       "max_unplaced_share": 0.15,
-      "small_page_factor": 0.25,
-      "large_page_factor": 3.0,
       "revise": true
     },
     "review": {
