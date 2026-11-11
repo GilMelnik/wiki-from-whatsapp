@@ -43,7 +43,7 @@ from typing import Any
 from step_6_plan.run import AnthropicTokenCounter, TokenCounter
 from step_8_review.inputs import REVIEW_CONFIG, ReviewInput, page_marks, read_json
 from step_8_review.prompts import review_prompt
-from step_8_review.proposals import ACCEPTED, ANSWER_SCHEMA, PENDING, from_answer
+from step_8_review.proposals import ANSWER_SCHEMA, OPEN, PENDING, from_answer
 from utils.config import LLM_CONFIG
 from utils.embedding_ab import _git_commit
 from utils.llm_client import LLMClient, _flatten
@@ -52,7 +52,6 @@ from utils.paths import STEP_8, SUGGESTIONS, WIKI_PAGES, Artifact
 from utils.reconcile import fingerprint, load_previous, write_reconciled
 
 REFRESH_KEYS = ("page_marks",)
-MARKED = (PENDING, ACCEPTED)
 
 
 def _now() -> str:
@@ -77,7 +76,7 @@ def with_marks(suggestions: Sequence[Mapping[str, Any]], statuses: Mapping[str, 
     out = []
     for suggestion in suggestions:
         status = statuses.get(suggestion["id"], suggestion["status"])
-        marks = page_marks(suggestion.get("raised_on") or {}, current) if status in MARKED else {}
+        marks = page_marks(suggestion.get("raised_on") or {}, current) if status in OPEN else {}
         out.append({**suggestion, "page_marks": marks})
     return out
 

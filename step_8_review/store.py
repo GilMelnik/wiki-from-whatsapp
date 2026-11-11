@@ -12,7 +12,7 @@ accepted.
 
 Applying (``step_8_review.apply``) changes the artifact the suggestion is about, then marks it
 ``applied``; a refused apply raises ``ApplyRefused`` and writes nothing. ``list`` adds live page
-marks (a page changed or gone since the suggestion was raised) and Hebrew names for kinds,
+marks to open suggestions (a page changed or gone since the suggestion was raised) and Hebrew names for kinds,
 statuses and marks (``wiki_review`` in config.json).
 """
 
@@ -35,6 +35,7 @@ from step_8_review.inputs import (
 from step_8_review.proposals import (
     ACCEPTED,
     APPLIED,
+    OPEN,
     PENDING,
     REJECTED,
     problems,
@@ -106,7 +107,8 @@ class SuggestionsStore:
         current = current_fingerprints(self.pages_artifact, self.plan_artifact)
         items = []
         for suggestion in payload["suggestions"]:
-            marks = page_marks(suggestion.get("raised_on") or {}, current)
+            marks = (page_marks(suggestion.get("raised_on") or {}, current)
+                     if suggestion["status"] in OPEN else {})
             items.append({
                 **suggestion, "page_marks": marks,
                 "kind_name": REVIEW_CONFIG["kind_names"][suggestion["kind"]],

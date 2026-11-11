@@ -46,6 +46,7 @@ CONTRADICTION, MISTAKE = "contradiction", "mistake"
 KINDS = (*STRUCTURAL, CONTRADICTION, MISTAKE)
 PENDING, ACCEPTED, REJECTED, APPLIED = "pending", "accepted", "rejected", "applied"
 STATUSES = (PENDING, ACCEPTED, REJECTED, APPLIED)
+OPEN = (PENDING, ACCEPTED)  # still to be decided or carried out: page marks matter
 OPERATION = TypeAdapter(Operation)
 
 _TEXT = {"type": "string"}
