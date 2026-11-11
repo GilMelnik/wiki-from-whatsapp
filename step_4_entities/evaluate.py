@@ -118,7 +118,7 @@ class IncrementalExperiment:
         cache = self.work / f"{artifact.original.stem}_analysis.json"
         if not cache.is_file() and ENTITY_ANALYSIS_PATH.is_file():
             shutil.copy2(ENTITY_ANALYSIS_PATH, cache)
-        return run(claims_path=path, artifact=artifact, analysis_path=cache)
+        return run(claims_path=path, artifact=artifact, analysis_path=cache, kinds=False)
 
     def _store(self) -> EntityStore:
         return EntityStore(

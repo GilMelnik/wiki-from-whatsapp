@@ -115,6 +115,7 @@ function EntitiesTool({ tool }) {
       post("/status", { status, view }, status === "accepted" ? "Entity accepted" : "Entity back to suggested"),
     rename: (name) => post("/rename", { canonical_name: name }, "Name updated"),
     setCanonical: (name) => post("/rename", { canonical_name: name }, "Canonical name updated"),
+    setKind: (kind) => post("/kind", { kind }, "Kind saved"),
     saveContacts: (contacts) => post("/contacts", contacts, "Contacts saved"),
     resolveContact: (body) => post("/contact", body, CONTACT_TOASTS[body.action]),
     confirm: (name) => post("/members/confirm", { name }, "Attachment confirmed"),

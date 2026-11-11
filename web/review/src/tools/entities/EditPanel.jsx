@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Bidi, countText, Kbd, Ltr, Panel, PanelState } from "@shell";
 import { Contacts } from "./Contacts.jsx";
+import { KINDS, kindNote } from "./entities.js";
 
 // Side column: what can be done with the selected entity. Decisions in the footer (accept,
 // merge, reject, delete); the name, contacts and claim grouping above. Every change is saved
@@ -26,6 +27,38 @@ function NameForm({ entity, saving, nameRef, onRename }) {
         Save name
       </button>
     </form>
+  );
+}
+
+function KindControl({ entity, saving, onSetKind }) {
+  return (
+    <section className="space-y-1">
+      <h3 className="section-title">
+        <label htmlFor="entity-kind">Kind</label>
+        {entity.kind_manual && <span className="badge badge-sky ms-1">Set by hand</span>}
+      </h3>
+      <select
+        id="entity-kind"
+        className="field w-full"
+        value={entity.kind ?? ""}
+        disabled={saving}
+        onChange={(event) => onSetKind(event.target.value)}
+      >
+        {!entity.kind && (
+          <option value="" disabled>
+            Not classified yet
+          </option>
+        )}
+        {KINDS.map((kind) => (
+          <option key={kind.value} value={kind.value}>
+            {kind.label}
+          </option>
+        ))}
+      </select>
+      <p className="text-xs text-slate-500">
+        {kindNote(entity)} A negative claim about a person reaches the wiki only when two members reported it.
+      </p>
+    </section>
   );
 }
 
@@ -81,6 +114,7 @@ export function EditPanel({ detail, saving, nameRef, pickedCount, on }) {
         {entity && (
           <div className="space-y-6 p-4 text-sm">
             <NameForm entity={entity} saving={saving} nameRef={nameRef} onRename={on.rename} />
+            <KindControl entity={entity} saving={saving} onSetKind={on.setKind} />
             <Contacts entity={entity} saving={saving} onSave={on.saveContacts} onResolve={on.resolveContact} />
             <section>
               <h3 className="section-title">All names</h3>

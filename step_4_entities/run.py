@@ -8,6 +8,10 @@ step 5 which canonical entities every claim mentions (``claim_entities``).
 Inputs: only ``claim_id``, ``thread_id``, ``claim_text`` and ``entities`` of each claim (plus
 the redaction trail for contacts). Nothing else about a claim is read.
 
+Each entity also gets a ``kind`` (person / organisation / place / other) from the cheap
+classifier of stage ``entities`` (``step_4_entities.kinds``): asked only for entities whose kind
+is missing or whose names / mentions changed, never for one whose kind the owner set by hand.
+
 Similarity is deterministic and high-precision (see ``pair_index``). Semantic embeddings were
 measured and rejected for short proper nouns: they encode the category, not the identity
 (two different cities score higher than a true transliteration pair).
@@ -23,7 +27,8 @@ Output (``entities.json`` / ``entities_edited.json``)::
     {"entities": [{entity_id, canonical_name, status, aliases, members: [{name, claim_ids,
        count, sample_claim_ids, contacts, contacts_uncertain, excluded_claim_ids?,
        attached_by?}], contacts, contacts_uncertain, merge_signals, score, conflict_with?,
-       type?, contacts_manual?, contacts_rejected?, canonical_manual?}],
+       type?, contacts_manual?, contacts_rejected?, canonical_manual?, kind?,
+       kind_confidence?, kind_input?, kind_manual?}],
      "claim_entities": {claim_id: [entity_id]},
      "deleted_claims"?: [claim_id], "deleted_names"?: [name],
      "metadata": {inputs, run, params, last_entity_number, ...}}
@@ -39,11 +44,13 @@ from typing import Any
 
 from step_4_entities.cluster import EntityClusterer
 from step_4_entities.collect import ClaimCorpus, load_claims_for_entities, tagged_names
+from step_4_entities.kinds import KIND_CONFIG, EntityKinds, kind_counts
 from step_4_entities.mentions import Analyzer, DictaAnalyzer, build_or_load_analysis
 from step_4_entities.records import entity_counts, member_names
 from step_4_entities.update import EntityUpdate
 from utils.config import ENTITIES_CONFIG
 from utils.embedding_ab import _git_commit
+from utils.llm_client import Classifier
 from utils.logging_setup import setup_step_logging
 from utils.paths import (
     ENTITIES,
@@ -89,6 +96,7 @@ def _metadata(
         "git_commit": _git_commit(),
         "last_entity_number": state.get("metadata", {}).get("last_entity_number", -1),
         **entity_counts(state),
+        "kinds": kind_counts(state.get("entities") or []),
     }
 
 
@@ -101,13 +109,17 @@ def run(
     seed_path: Path = ENTITIES_SEED_PATH,
     only: Collection[str] | None = None,
     rebuild: bool = False,
+    classifier: Classifier | None = None,
+    kinds: bool = True,
 ) -> dict[str, Any]:
     """Create or incrementally update the canonical entities; see the module docstring.
 
     ``claims_path`` defaults to the reviewed (edited) claims when they exist. ``only``
     restricts the work to these claim ids (other claims keep their entities and
     fingerprints); ``rebuild`` re-clusters everything (the edited file is backed up first,
-    entity ids keep counting up). ``analyzer`` defaults to dictabert (``DictaAnalyzer``).
+    entity ids keep counting up). ``analyzer`` defaults to dictabert (``DictaAnalyzer``),
+    ``classifier`` (entity kinds) to the ``entities.kind.stage`` classifier; ``kinds=False``
+    leaves the kinds as they are (no classifier call: the clustering experiments).
     Returns the run counters plus ``entity_count`` and ``backup``.
     """
 
@@ -136,23 +148,33 @@ def run(
         {cid: fp for cid, fp in prev_inputs.items() if scope is None or cid in scope}, inputs
     )
     affected = [*diff.new, *diff.changed, *diff.removed]
-    if not affected and previous and not rebuild:
-        logger.info(f"Entities: {len(inputs)} claims unchanged; nothing to do")
-        return {"claims_processed": 0, **entity_counts(state), "backup": None}
-
-    analysis = build_or_load_analysis(
-        claims, analyzer or DictaAnalyzer(), cache_path=analysis_path, source_path=resolved
-    )
-    clusterer = EntityClusterer(
-        analysis,
-        similarity_threshold=ENTITIES_CONFIG["similarity_threshold"],
-        seed_path=seed_path,
-    )
-    corpus = ClaimCorpus(claims, analysis, original_by_id)
-    stats = EntityUpdate(state, corpus, clusterer).apply(affected)
-    stats.update(
-        new_claims=len(diff.new), changed_claims=len(diff.changed), removed_claims=len(diff.removed)
-    )
+    claims_unchanged = not affected and bool(previous) and not rebuild
+    stats: dict[str, Any] = {"claims_processed": 0}
+    if not claims_unchanged:
+        analysis = build_or_load_analysis(
+            claims, analyzer or DictaAnalyzer(), cache_path=analysis_path, source_path=resolved
+        )
+        clusterer = EntityClusterer(
+            analysis,
+            similarity_threshold=ENTITIES_CONFIG["similarity_threshold"],
+            seed_path=seed_path,
+        )
+        corpus = ClaimCorpus(claims, analysis, original_by_id)
+        stats = EntityUpdate(state, corpus, clusterer).apply(affected)
+        stats.update(
+            new_claims=len(diff.new), changed_claims=len(diff.changed),
+            removed_claims=len(diff.removed),
+        )
+    stats["kinds_classified"] = 0
+    if kinds:
+        stats.update(EntityKinds(
+            classifier or Classifier.for_stage(KIND_CONFIG["stage"], logger=logger),
+            {c["claim_id"]: c for c in claims},
+            logger,
+        ).apply(state.setdefault("entities", [])))
+    if claims_unchanged and not stats["kinds_classified"]:
+        logger.info(f"Entities: {len(inputs)} claims unchanged, every kind current; nothing to do")
+        return {**stats, **entity_counts(state), "backup": None}
 
     out_inputs = {
         cid: fp for cid, fp in prev_inputs.items() if scope is not None and cid not in scope

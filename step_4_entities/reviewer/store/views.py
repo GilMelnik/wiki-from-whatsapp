@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
+from step_4_entities.kinds import known_kind
 from step_4_entities.reviewer.store.helpers import (
     EntityView,
     attached_members,
@@ -53,6 +54,7 @@ class ViewsMixin:
             "canonical_name": entity.get("canonical_name") or "",
             "status": entity.get("status", "suggested"),
             "type": entity.get("type"),
+            "kind": known_kind(entity),
             "member_count": len(entity.get("members") or []),
             "total_count": member_total(entity),
             "aliases": entity.get("aliases") or [],
@@ -183,6 +185,8 @@ class ViewsMixin:
         detail = {
             **self.list_item(entity),
             "canonical_manual": bool(entity.get("canonical_manual")),
+            "kind_manual": bool(entity.get("kind_manual")),
+            "kind_confidence": entity.get("kind_confidence"),
             "contacts": entity.get("contacts") or {},
             "contacts_uncertain": entity.get("contacts_uncertain") or {},
             "contacts_rejected": entity.get("contacts_rejected") or {},

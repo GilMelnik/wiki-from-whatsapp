@@ -48,6 +48,23 @@ export const SIGNAL_LABELS = {
   transliteration: "Transliteration",
 };
 
+// The kinds of `config.json` `entities.kind.kinds`. A person's lone negative claim is kept
+// off the wiki (task 29), so the owner can correct a wrong kind here.
+export const KINDS = [
+  { value: "person", label: "Person" },
+  { value: "organisation", label: "Organisation" },
+  { value: "place", label: "Place" },
+  { value: "other", label: "Other" },
+];
+
+/** Where the entity's kind comes from, in words (the line under the kind control). */
+export function kindNote(entity) {
+  if (entity.kind_manual) return "Set by you; step 4 keeps it.";
+  if (!entity.kind) return "Not classified yet: counts as a person until step 4 classifies it.";
+  const sure = entity.kind_confidence == null ? "" : `, ${Math.round(entity.kind_confidence * 100)}% sure`;
+  return `Set by the classifier${sure}; step 4 asks again when the names change.`;
+}
+
 export const CONTACT_KINDS = [
   { key: "email", label: "Email" },
   { key: "phone", label: "Phone" },
