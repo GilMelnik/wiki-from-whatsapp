@@ -42,7 +42,9 @@ is in good shape.
 - <plan>: the wiki's tree. `category id | title | description`, and `page id | title | \
 description | scope` (the scope says what belongs on the page and what belongs elsewhere). \
 <labels>: `label_id | title | kind | description` (labels cut across pages, e.g. a country). \
-<retired_ids>: ids that may never be used again. <as_of>: the newest date in the corpus.
+<retired_ids>: ids that may never be used again (a link to a page that was merged away \
+still works: the site sends it to the page it was merged into; never report it). \
+<as_of>: the newest date in the corpus.
 - <page id="..." title="...">: <body> is the page as readers see it. A mark \
 `[^g-xxxxxxxx]` cites the group with that id; `[[page_id|text]]` and `[[label:id|text]]` \
 are links. <groups> holds one line per group that belongs to the page, fields separated by " | \
