@@ -10,7 +10,9 @@ common canonical entity from step 4, or the higher ``merge_threshold.no_shared_e
 they do not. Requiring a match with every member keeps groups tight: a chain of small
 differences can never pull two different statements together. Groups holding
 opposite-stance claims about a common entity with very similar wording are linked as
-``contradicts``. For every group the step then counts the distinct people who backed or
+``contradicts``. Disagreements recorded by step 3 travel as data: two claims that dispute each
+other (C3 ``counters``) never share a group (also when placed by a re-run), and their groups
+are linked as ``contradicts``; a reviewer's merge that holds both wins (logged, no link). For every group the step then counts the distinct people who backed or
 disputed any of its claims, per month, from the private audit (see ``derive``). There is no
 LLM call and no randomness.
 
@@ -42,11 +44,12 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import logging
 from collections.abc import Collection, Sequence
 from pathlib import Path
 from typing import Any
 
-from step_5_aggregate.derive import GroupDeriver, link_contradictions
+from step_5_aggregate.derive import GroupDeriver, counter_links, link_contradictions
 from step_5_aggregate.groups import GroupBook
 from step_5_aggregate.inputs import MustLink, StepInputs, load_inputs, load_must_links
 from step_5_aggregate.similarity import AGGREGATE_CONFIG, ClaimScorer
@@ -57,6 +60,8 @@ from utils.paths import AGGREGATED, AUDIT_PATH, MANUAL_AGGREGATIONS_PATH, STEP_5
 from utils.reconcile import InputDiff, diff_inputs, guarded_write, load_previous
 
 PARAM_KEYS = ("merge_threshold", "contradiction_threshold", "opposing_stances", "embedding_kind")
+
+logger = logging.getLogger(__name__)
 
 
 def assign_new_claims(
@@ -88,6 +93,11 @@ def assign_new_claims(
     dropped = book.drop_empty()
     deriver = GroupDeriver(inputs, scorer)
     state["groups"] = [deriver.refresh(group) for group in book.groups]
+    counters = counter_links(state["groups"], scorer)
+    for a, b in counters.within_group:
+        logger.info(
+            f"Groups: {a} and {b} dispute each other but share a group (a manual merge): no link"
+        )
     return {
         "new_claims": len(diff.new),
         "changed_claims": len(diff.changed),
@@ -97,6 +107,8 @@ def assign_new_claims(
         "must_links_applied": linked,
         "groups_dropped": dropped,
         "contradiction_links": link_contradictions(state["groups"], scorer),
+        "counter_links": len(counters.group_pairs),
+        "counter_pairs_in_one_group": len(counters.within_group),
     }
 
 
