@@ -7,12 +7,14 @@ for an update, the sentences of the current body (kept text is not held to the s
 rules it may predate). ``problems`` lists what is wrong in words the model can act on (the
 writer sends them back in its one retry):
 - the body: only the page's groups cited, valid links, every disputed / contradicted group
-  cited;
+  cited, no sentence resting on a withheld group (``step_7_write_pages.withhold``; an update
+  of a text written before the rule);
 - the points (``step_7_write_pages.points``): every main group in exactly one point or left
   out with a reason; no mark on a group that was left out; every point carried by a statement
   that cites one of its groups; at most ``pages.max_marks_per_statement`` marks per statement;
   a point told in at most ``pages.max_statements_per_point`` statements after the lead.
-``repair`` fixes what code can fix: an unknown citation is removed, an unknown or malformed
+``repair`` fixes what code can fix: a sentence that cites a withheld group is deleted whole
+(its statement is never kept without its mark), an unknown citation is removed, an unknown or malformed
 link becomes its plain text (``utils.wiki_links``), a front-matter block, a ``#`` heading and
 any footnote definition the model wrote are taken out, ``related`` keeps only planned pages,
 the points keep only the page's main groups, each once. A missing citation or an unaccounted
@@ -105,6 +107,7 @@ class AnswerRules:
     page_targets: frozenset[str]
     label_targets: frozenset[str]
     frozen: frozenset[str] = frozenset()
+    withheld: frozenset[str] = frozenset()
 
     def valid_link(self, link: WikiLink) -> bool:
         if link.kind == "label":
@@ -132,8 +135,13 @@ def _quote(text: str) -> str:
 
 def _body_problems(body: str, rules: AnswerRules) -> list[str]:
     found: list[str] = []
-    unknown = [mark for mark in dict.fromkeys(_ANY_MARK.findall(body))
-               if mark not in rules.allowed_ids]
+    marks = list(dict.fromkeys(_ANY_MARK.findall(body)))
+    withheld = [mark for mark in marks if mark in rules.withheld]
+    if withheld:
+        found.append(f"cites groups that may appear on no page: {', '.join(withheld)}; delete "
+                     "every sentence that rests on them, and do not say what they said in any "
+                     "other words")
+    unknown = [mark for mark in marks if mark not in rules.allowed_ids and mark not in rules.withheld]
     if unknown:
         found.append(f"cites ids that are not groups of this page: {', '.join(unknown)}; "
                      "mark only ids from <groups>")
@@ -260,6 +268,14 @@ def repair(answer: Mapping[str, Any], rules: AnswerRules) -> tuple[dict[str, Any
         repairs.append(f"removed citation {match.group(1)}")
         return ""
 
+    def drop_withheld(match: re.Match[str]) -> str:
+        cited = rules.withheld.intersection(_ANY_MARK.findall(match.group(0)))
+        if not cited:
+            return match.group(0)
+        repairs.append(f"deleted a sentence resting on withheld group(s) {', '.join(sorted(cited))}")
+        return ""
+
+    body = _SENTENCE.sub(drop_withheld, body)
     body = _ANY_MARK.sub(keep_mark, body)
     body = _clean_links(body, rules, repairs)
     tidied = tidy(answer["points"], answer["left_out"], rules.main_ids)
@@ -278,9 +294,11 @@ def repair(answer: Mapping[str, Any], rules: AnswerRules) -> tuple[dict[str, Any
 
 
 def rules_for(page_id: str, records: Sequence[Record], plan: Mapping[str, Any], *,
-              required: Collection[str], frozen: Collection[str] = ()) -> AnswerRules:
+              required: Collection[str], frozen: Collection[str] = (),
+              withheld: Collection[str] = ()) -> AnswerRules:
     """The rules of one answer about ``records`` (the page's groups now); ``frozen``: the
-    sentences of the current body when updating."""
+    sentences of the current body when updating; ``withheld``: the groups no page may rest
+    on."""
     return AnswerRules(
         page_id=page_id,
         allowed_ids=frozenset(record["id"] for record in records),
@@ -289,4 +307,5 @@ def rules_for(page_id: str, records: Sequence[Record], plan: Mapping[str, Any], 
         page_targets=frozenset(plan["pages"]),
         label_targets=frozenset(plan["labels"]),
         frozen=frozenset(frozen),
+        withheld=frozenset(withheld),
     )

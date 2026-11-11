@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from step_7_write_pages.run import run
-from tests.plan_fixtures import PAGE_IDS, make_groups, make_plan
+from tests.plan_fixtures import PAGE_IDS, make_entities, make_groups, make_plan
 from utils.json_io import write_json_file
 from utils.llm_client import _flatten
 from utils.paths import Artifact
@@ -118,17 +118,27 @@ class FakeWriter:
 
 
 class PagesWorkspace:
-    """Groups, plan, assignments and the pages artifact in a temp folder."""
+    """Groups, plan, assignments, entities (every one an organisation: no group is withheld)
+    and the pages artifact in a temp folder."""
 
     def __init__(self, root: Path) -> None:
         self.groups_path = root / "groups.json"
         self.plan_path = root / "plan.json"
         self.assignments_path = root / "assignments.json"
+        self.entities_path = root / "entities.json"
         self.artifact = Artifact(root / "wiki_pages.json", root / "wiki_pages_edited.json")
         groups = page_groups()
         self.write_groups(groups)
         write_json_file(make_plan(), self.plan_path)
         write_json_file(page_assignments(groups), self.assignments_path)
+        self.write_entities(make_entities(groups))
+
+    def write_entities(self, payload: dict[str, Any]) -> None:
+        write_json_file(payload, self.entities_path)
+
+    def paths(self) -> tuple[Path, Path, Path, Path]:
+        """The four inputs in ``Corpus.load`` order."""
+        return self.groups_path, self.plan_path, self.assignments_path, self.entities_path
 
     def write_groups(self, groups: list[dict[str, Any]]) -> None:
         write_json_file({"groups": groups, "metadata": {}}, self.groups_path)
@@ -158,6 +168,7 @@ class PagesWorkspace:
     def run(self, llm: FakeWriter | None = None, update_llm: FakeWriter | None = None,
             **kwargs: Any) -> dict[str, Any]:
         return run(aggregated_path=self.groups_path, plan_path=self.plan_path,
-                   assignments_path=self.assignments_path, artifact=self.artifact,
+                   assignments_path=self.assignments_path, entities_path=self.entities_path,
+                   artifact=self.artifact,
                    llm=llm or FakeWriter(), update_llm=update_llm or FakeWriter("fake-update"),
                    **kwargs)

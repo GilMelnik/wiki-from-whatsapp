@@ -96,7 +96,7 @@ class PageWriter:
     def write(self, context: PageContext) -> PageText:
         """The page in full from its groups (stage ``write``)."""
         rules = rules_for(context.page_id, context.records, self.plan,
-                          required=context.required_ids())
+                          required=context.required_ids(), withheld=context.withheld)
         system, user = write_prompt(context)
         return self._complete(self.write_llm, system, user, WRITE_SCHEMA, rules, context,
                               task=f"write:{context.page_id}", current=None)
@@ -118,7 +118,8 @@ class PageWriter:
         request); the checks are the same.
         """
         rules = rules_for(context.page_id, context.records, self.plan,
-                          required=context.required_ids(), frozen=sentences(current["body"]))
+                          required=context.required_ids(), frozen=sentences(current["body"]),
+                          withheld=context.withheld)
         system, user = update_prompt(context, current, new=delta.new, changed=delta.changed,
                                      removed=delta.removed, brief_changed=delta.brief_changed,
                                      request=request)

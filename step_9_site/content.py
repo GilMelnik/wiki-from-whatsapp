@@ -10,17 +10,23 @@ Wiki links in page bodies are resolved here: ``[[page_id|text]]`` becomes a rela
 link to that page, ``[[label:label_id|text]]`` a link to the label's page; a link to a merged
 id goes to the survivor; a link to anything not published becomes its plain text. The
 references under a page are rendered from the groups (``step_9_site.references``).
+
+A page that cites a withheld group (``withheld``: a negative statement about a named individual
+that fewer than two members reported, ``step_7_write_pages.withhold``) is an issue of kind
+``withheld_reference``: a page written before the rule, or edited by hand, that step 7 must
+write again before the site is published.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from typing import Any
 
 import yaml
 
 from step_6_plan.model import check_plan, iter_nodes
 from step_9_site.info_pages import about_body, terms_body
+from step_7_write_pages.checks import cited_ids
 from step_9_site.references import References
 from utils.config import section
 from utils.okf import render_page, validate_front_matter
@@ -36,6 +42,7 @@ TERMS_FILE = TERMS_CONFIG["file"]
 INFO_FILES = (ABOUT_FILE, TERMS_FILE)
 NavEntry = dict[str, Any]
 Issue = dict[str, str]
+WITHHELD_REFERENCE = "withheld_reference"
 
 
 def page_file(page_id: str) -> str:
@@ -73,7 +80,11 @@ class Site:
     """The published site for one plan + pages pair (see the module docstring)."""
 
     def __init__(
-        self, plan: dict[str, Any], pages: dict[str, dict[str, Any]], groups: list[dict[str, Any]]
+        self,
+        plan: dict[str, Any],
+        pages: dict[str, dict[str, Any]],
+        groups: list[dict[str, Any]],
+        withheld: Collection[str] = (),
     ) -> None:
         self.plan = check_plan(plan)
         unplanned = sorted(set(pages) - set(plan["pages"]))
@@ -100,6 +111,7 @@ class Site:
                 self._issue("label_not_carried", "", label_id)
         self.related = {page_id: self._resolve_related(page_id) for page_id in self.order}
         self.references = References(groups)
+        self.withheld = frozenset(withheld)
         self.bodies = {page_id: self._resolve_marks(page_id) for page_id in self.order}
         self.nav = self._nav()
         self.files = self._files()
@@ -162,6 +174,9 @@ class Site:
         resolved = self.references.resolve(self.pages[page_id]["body_md"])
         for kind, group_id in resolved.problems:
             self._issue(kind, page_id, group_id)
+        for group_id in cited_ids(resolved.body):
+            if group_id in self.withheld:
+                self._issue(WITHHELD_REFERENCE, page_id, group_id)
         return resolved.body
 
     def resolve_links(self, page_id: str, href: Callable[[str], str], *, report: bool = True) -> str:

@@ -36,8 +36,9 @@ def test_a_manual_contradiction_link_survives_step_5(tmp_path: Path,
     write_json_file(_assign(setup.payload()["groups"], {d1: "agencies", c1: "clinics"}),
                     assignments_path)
     pages = Artifact(tmp_path / "wiki_pages.json", tmp_path / "wiki_pages_edited.json")
+    entities_path = resolve(setup.graph.node("entities"))
     write_pages(aggregated_path=resolve(setup.corpus.artifact), plan_path=plan_path,
-                assignments_path=assignments_path, artifact=pages,
+                assignments_path=assignments_path, entities_path=entities_path, artifact=pages,
                 llm=FakeWriter(respond=long_article), update_llm=FakeWriter("fake-update"))
 
     def linker() -> GroupsStore:
@@ -47,7 +48,7 @@ def test_a_manual_contradiction_link_survives_step_5(tmp_path: Path,
     applier = Applier(pages_artifact=pages,
                       plan_artifact=Artifact(plan_path, tmp_path / "plan_edited.json"),
                       aggregated_path=resolve(setup.corpus.artifact),
-                      assignments_path=assignments_path,
+                      assignments_path=assignments_path, entities_path=entities_path,
                       llm=FakeWriter("fake-apply", respond=corrector("פתיח קצר", "שני צדדים")),
                       linker=linker)
     suggestion = {"kind": "contradiction", "proposal": {

@@ -28,7 +28,7 @@ import copy
 import logging
 import shutil
 from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
@@ -130,13 +130,14 @@ class Applier:
 
     def __init__(self, *, pages_artifact: Artifact = WIKI_PAGES, plan_artifact: Artifact = PLAN,
                  aggregated_path: Path | None = None, assignments_path: Path | None = None,
-                 llm: LLMClient | None = None,
+                 entities_path: Path | None = None, llm: LLMClient | None = None,
                  linker: Callable[[], GroupLinker] = default_linker,
                  logger: logging.Logger | None = None) -> None:
         self.pages_artifact = pages_artifact
         self.plan_artifact = plan_artifact
         self.aggregated_path = aggregated_path
         self.assignments_path = assignments_path
+        self.entities_path = entities_path
         self._llm = llm
         self.linker = linker
         self.logger = logger or logging.getLogger(__name__)
@@ -151,7 +152,8 @@ class Applier:
     def review(self) -> ReviewInput:
         """The wiki as it is now (effective pages, groups, plan, assignments)."""
         return ReviewInput.load(self.pages_artifact, self.aggregated_path,
-                                resolve(self.plan_artifact), self.assignments_path)
+                                resolve(self.plan_artifact), self.assignments_path,
+                                self.entities_path)
 
     def apply(self, suggestion: Mapping[str, Any]) -> ApplyResult:
         """Carry out ``suggestion`` (its edited proposal when the owner changed it)."""
@@ -221,7 +223,8 @@ class Applier:
             related=text.related, labels=LabelRule(corpus, list(corpus.plan["pages"]))(page_id),
             model=model, generated_at=_now())
         item = {"front_matter": front_matter, "body_md": text.body, "points": text.points,
-                "left_out": text.left_out, "input_fingerprint": page.get("input_fingerprint")}
+                "left_out": corpus.accounted_left_out(page_id, text.left_out),
+                "input_fingerprint": page.get("input_fingerprint")}
         self.logger.info(f"Corrected {page_id}: {_pct(share)} of its sentences kept; report "
                          f"{text.report}")
         return item, share
@@ -259,7 +262,7 @@ class Applier:
         for a, b in pairs:
             for one, other in ((a, b), (b, a)):
                 groups[one]["contradicts"] = sorted({*(groups[one].get("contradicts") or []), other})
-        return Corpus(groups, corpus.plan, corpus.assignments, corpus.sources, corpus.skipped)
+        return replace(corpus, groups=groups)  # withheld groups stay withheld
 
     def _contradiction(self, proposal: Mapping[str, Any], review: ReviewInput) -> ApplyResult:
         pairs = self._pairs(proposal)

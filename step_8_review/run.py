@@ -180,17 +180,19 @@ def run(
     estimate: bool = False,
     llm: LLMClient | None = None,
     count_tokens: TokenCounter | None = None,
+    entities_path: Path | None = None,
 ) -> dict[str, Any]:
     """Review the whole wiki once if anything it reads changed; see the module docstring.
 
-    Inputs default to the effective pages, groups, plan and assignments. ``estimate``: count
+    Inputs default to the effective pages, groups, plan, assignments and entities. ``estimate``: count
     the prompt's tokens, make no review call, write nothing. ``llm`` defaults to the
     ``wiki_review.stage`` client, ``count_tokens`` to the free counting endpoint. Returns
     ``written``, ``calls``, ``input_tokens``, ``raised`` (new suggestions), ``dropped``,
     ``suggestions`` (total), ``backup`` and the review ``note``.
     """
     logger = setup_step_logging(STEP_8)
-    review = ReviewInput.load(pages_artifact, aggregated_path, plan_path, assignments_path)
+    review = ReviewInput.load(pages_artifact, aggregated_path, plan_path, assignments_path,
+                              entities_path)
     gaps = review.warn_about_gaps(logger)
     stage = REVIEW_CONFIG["stage"]
     model = llm.model if llm is not None else LLM_CONFIG["stages"][stage]["model"]

@@ -11,7 +11,9 @@ other pages and labels (``prompts``). Code then enforces what must not be left t
 disputed groups are cited, every main group is accounted for in a point or left out with a
 reason, every point is said, no statement carries more than three marks and no point is told
 again and again (one retry that names the problems, then repair); the OKF front matter is
-written in code (``front_matter``). The body keeps its ``[^g-…]`` marks only: step 9 renders
+written in code (``front_matter``). A negative statement about a named individual that fewer
+than two members reported never reaches the writer (``withhold``): code adds it to its page's
+``left_out`` with reason ``withheld`` and lists it in ``metadata.withheld``. The body keeps its ``[^g-…]`` marks only: step 9 renders
 the references from the groups (a body stored with definitions keeps them until its text
 changes; step 9 ignores them). The points and the groups left out are stored with the page:
 an update starts from them.
@@ -37,8 +39,9 @@ notice then clears).
 
 Output: ``wiki_pages.json`` (C9) ``{pages: {page_id: {front_matter, body_md, points,
 left_out, input_fingerprint}}, metadata: {sources, inputs, pages, as_of, models, config,
-git_commit, generated_at, run, summary}}``; ``points`` = ``[{kind, statement, groups}]``,
-``left_out`` = ``[{group, reason}]``.
+git_commit, generated_at, run, summary, withheld}}``; ``points`` = ``[{kind, statement,
+groups}]``, ``left_out`` = ``[{group, reason}]``; ``withheld`` = ``[{group_id, page_id,
+entity_ids, supporter_count}]`` (ids and numbers only).
 """
 
 from __future__ import annotations
@@ -69,6 +72,7 @@ from step_7_write_pages.inputs import (
 )
 from step_7_write_pages.points import LeftOut, Point
 from step_7_write_pages.prompts import update_prompt, write_prompt
+from step_7_write_pages.withhold import WITHHOLD_CONFIG
 from step_7_write_pages.writer import GroupDelta, PageText, PageWriter, changed_share, current_text
 from utils.embedding_ab import _git_commit
 from utils.llm_client import LLMClient, _flatten
@@ -79,7 +83,7 @@ from utils.reconcile import diff_inputs, load_previous, write_reconciled
 WRITE_CONFIG = PAGES_CONFIG["write"]
 UPDATE_CONFIG = PAGES_CONFIG["update"]
 REFRESH_KEYS = ("front_matter", "input_fingerprint")
-COMPARED_METADATA = ("inputs", "pages")
+COMPARED_METADATA = ("inputs", "pages", "withheld")
 
 
 def _now() -> str:
@@ -226,7 +230,8 @@ class PagesRun:
             related=related, labels=self.labels(job.page_id), model=self.model,
             generated_at=generated_at)
         return {"front_matter": front_matter, "body_md": body, "points": points,
-                "left_out": left_out, "input_fingerprint": input_fingerprint(job.state)}
+                "left_out": self.corpus.accounted_left_out(job.page_id, left_out),
+                "input_fingerprint": input_fingerprint(job.state)}
 
     def _from_text(self, job: Job, text: PageText) -> dict[str, Any]:
         source = job.source
@@ -274,10 +279,12 @@ class PagesRun:
         inputs = {pid: input_fingerprint(states[pid]) for pid in states}
         self.stats["kept"] = sum(1 for job in self.jobs if job.mode == "keep") + len(self.carried)
         reports = [s["report"] for s in states.values() if "report" in s]
+        withheld = self.corpus.withheld_list()
         return {
             "pages": pages,
             "metadata": {
-                "sources": {name: str(path) for name, path in zip(("groups", "plan", "assignments"), sources)},
+                "sources": {name: str(path) for name, path in
+                            zip(("groups", "plan", "assignments", "entities"), sources)},
                 "inputs": inputs,
                 "pages": states,
                 "as_of": self.corpus.as_of,
@@ -295,7 +302,9 @@ class PagesRun:
                                        if "left_out_share" in s.get("report", {})},
                     "unaccounted": sum(len(r.get("unaccounted", [])) for r in reports),
                     "uncited_required": sum(len(r["uncited_required"]) for r in reports),
+                    "withheld": len(withheld),
                 },
+                "withheld": withheld,
             },
         }
 
@@ -322,10 +331,11 @@ def run(
     llm: LLMClient | None = None,
     update_llm: LLMClient | None = None,
     count_tokens: TokenCounter | None = None,
+    entities_path: Path | None = None,
 ) -> dict[str, Any]:
     """Write, update or keep every planned page; see the module docstring.
 
-    Inputs default to the effective (edited) groups, plan and assignments. ``only``: work on
+    Inputs default to the effective (edited) groups, plan, assignments and entities. ``only``: work on
     these page ids only (every other page stays as it is). ``rebuild``: write every page (in
     ``only``) in full; without ``only`` the edited file is backed up and replaced.
     ``estimate``: no writing call; returns the input tokens of every call the run would make.
@@ -334,7 +344,12 @@ def run(
     ``no_groups``, ``failed``, ``skipped_groups``), ``summary``, ``written`` and ``backup``.
     """
     logger = setup_step_logging(STEP_7)
-    corpus = Corpus.load(aggregated_path, plan_path, assignments_path)
+    corpus = Corpus.load(aggregated_path, plan_path, assignments_path, entities_path)
+    withheld = corpus.withheld_list()
+    logger.info(f"Withheld from every page: {len(withheld)} groups (negative, about a named "
+                f"individual, fewer than {WITHHOLD_CONFIG['min_supporters']} members) on "
+                f"{len({w['page_id'] for w in withheld})} pages: "
+                f"{[w['group_id'] for w in withheld]}")
     if corpus.skipped:
         logger.warning(f"{len(corpus.skipped)} claim groups have no assignment record (run the "
                        "assignment step); they are on no page this run")
