@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { Bidi, formatCount, Ltr, Panel, PanelState, useResource } from "@shell";
+import { Bidi, EditableText, formatCount, Ltr, Panel, PanelState, pathTitles, TextArea, textToAliases, useResource } from "@shell";
 import { api, pagePath } from "./api.js";
 import { GROUPS_TAB } from "./assign.js";
 import { ItemGroups, ItemTabs } from "./AssignmentViews.jsx";
 import { ChangeBadge, MergedFrom, Warnings } from "./bits.jsx";
-import { EditableText, TextArea } from "./fields.jsx";
-import { aliasesToText, pathTitles, textToAliases } from "./plan.js";
+import { aliasesToText } from "./plan.js";
 
 // Main column for a page, in two tabs. Details: the scope is the star, a large editor, with
 // the evidence to judge it right next to it, the page's example claim groups (their text,

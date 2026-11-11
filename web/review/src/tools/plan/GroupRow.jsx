@@ -1,5 +1,5 @@
-import { Bidi, formatCount, Ltr, stanceOf } from "@shell";
-import { percent, titleOf } from "./plan.js";
+import { Bidi, formatCount, Ltr, stanceOf, titleOf } from "@shell";
+import { percent } from "./plan.js";
 
 // One claim group in an assignment list: its text, stance, support, last date, labels, the
 // classifier's probability for this page / label, where else it is, a mark for groups the

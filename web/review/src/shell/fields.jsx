@@ -1,9 +1,9 @@
 import { forwardRef, useEffect, useState } from "react";
-import { Bidi } from "@shell";
-import { useIdCheck } from "./api.js";
-import { normalizeId, PERMANENT_ID_NOTE } from "./plan.js";
+import { useIdCheck } from "./planApi.js";
+import { normalizeId, PERMANENT_ID_NOTE } from "./planText.js";
+import { Bidi } from "./text.jsx";
 
-// Form pieces of the plan tool: labelled inputs, the id field that checks the id with the
+// Form pieces: labelled inputs, the id field that checks a new plan id with the plan tool's
 // server while the owner types, and the inline editor of a text in the main column.
 
 export function Field({ label, hint, children }) {

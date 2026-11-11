@@ -6,15 +6,12 @@ import {
   labelItems,
   moveTargets,
   normalizeId,
-  OVERVIEW_ID,
   pathTitles,
-  percent,
-  reorderOp,
   subtreeIds,
   textToAliases,
   titleOf,
-  treeItems,
-} from "../src/tools/plan/plan.js";
+} from "../src/shell/planText.js";
+import { OVERVIEW_ID, percent, reorderOp, treeItems } from "../src/tools/plan/plan.js";
 
 // A synthetic overview in the shape GET /api/plan/plan answers.
 const row = (id, kind, depth, parent, index, siblings, children = []) => ({

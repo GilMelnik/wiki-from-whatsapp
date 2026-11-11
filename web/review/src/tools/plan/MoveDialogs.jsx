@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Bidi, Dialog, formatCount, Ltr } from "@shell";
-import { groupCount, labelChanges, labelShare, nextLabelTarget, pageChoices } from "./assign.js";
-import { labelItems, pathTitles, percent, titleOf } from "./plan.js";
+import { Bidi, Dialog, formatCount, groupCount, labelItems, Ltr, pathTitles, titleOf } from "@shell";
+import { labelChanges, labelShare, nextLabelTarget, pageChoices } from "./assign.js";
+import { percent } from "./plan.js";
 
 // The dialogs of a bulk move: pick a page (the primary one, or a second page) and set labels.
 // `rows` are the picked groups (as the list showed them); `onConfirm(changes)` saves and

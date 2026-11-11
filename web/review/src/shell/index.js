@@ -28,6 +28,15 @@ export { useBanner } from "./Banner.jsx";
 export { ToolLink } from "./navigation.jsx";
 export { JobLog, useStepRun } from "./JobControls.jsx";
 
+// Plan operations, shared by every tool that shows or edits one (plan, suggestions): the pure
+// helpers (also what a tool's pure modules may import, see pure.js), the forms and dialogs,
+// and the plan overview they are built on.
+export * from "./pure.js";
+export { usePlanOverview } from "./planApi.js";
+export { EditableText, IdField, submitOnEnter, TextArea } from "./fields.jsx";
+export { OperationDialog } from "./OperationDialog.jsx";
+export { AddCategoryDialog, AddLabelDialog, AddPageDialog, KindField, MergeDialog, SplitDialog } from "./PlanDialogs.jsx";
+
 // Text, formatting, keyboard, remembered state
 export { Bidi, Ltr } from "./text.jsx";
 export { formatBytes, formatCount, formatDateTime, formatRelative } from "./format.js";

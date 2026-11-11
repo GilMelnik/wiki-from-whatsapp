@@ -1,5 +1,5 @@
-import { Bidi, formatCount, formatDateTime, Ltr, Panel, useJobs, useStepRun } from "@shell";
-import { ASSIGNMENTS_KEY, DETAILS_TAB, findingText, groupCount, GROUPS_TAB, PROPOSALS_ID, UNPLACED_ID, WAITING_ID } from "./assign.js";
+import { Bidi, formatCount, formatDateTime, groupCount, Ltr, Panel, useJobs, useStepRun } from "@shell";
+import { ASSIGNMENTS_KEY, DETAILS_TAB, findingText, GROUPS_TAB, PROPOSALS_ID, UNPLACED_ID, WAITING_ID } from "./assign.js";
 import { Key, Tabs } from "./bits.jsx";
 import { GroupTable } from "./GroupTable.jsx";
 

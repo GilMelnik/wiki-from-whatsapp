@@ -12,8 +12,10 @@ import { useStepRun } from "./JobControls.jsx";
 //   answers 423), log one click away;
 // - a step is rewriting one of its inputs → wait for it (no run button yet);
 // - the last run since the change failed → the banner stays, with the log.
+// A tool lists in `quietStale` (its index.jsx entry) the artifacts whose "out of date, run
+// the step" notice it words itself; for those only the other notices appear here.
 
-function ArtifactBanner({ artifactKey, writes }) {
+function ArtifactBanner({ artifactKey, writes, quiet }) {
   const { byKey } = useArtifactStatus();
   const { stepsByArtifact, latestByStep, runningByArtifact } = useJobs();
   const run = useStepRun();
@@ -27,6 +29,7 @@ function ArtifactBanner({ artifactKey, writes }) {
     feeding: artifact?.upstream.map((key) => runningByArtifact[key]).find(Boolean),
     latest: step ? latestByStep[step.key] : undefined,
     writes,
+    quiet,
   });
   const onAction = () => {
     if (notice?.action === RUN_ACTION) run(step.key);
@@ -44,6 +47,6 @@ export function StaleBanners({ tool }) {
   if (!tool) return null;
   const keys = [...new Set([...tool.reads, ...tool.writes])];
   return keys.map((key) => (
-    <ArtifactBanner key={key} artifactKey={key} writes={tool.writes.includes(key)} />
+    <ArtifactBanner key={key} artifactKey={key} writes={tool.writes.includes(key)} quiet={tool.quietStale.includes(key)} />
   ));
 }

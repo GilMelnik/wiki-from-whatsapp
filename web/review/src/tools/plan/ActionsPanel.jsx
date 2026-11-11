@@ -1,7 +1,7 @@
-import { Bidi, Ltr, Panel } from "@shell";
+import { Bidi, kindOf, Ltr, nodeById, Panel, titleOf } from "@shell";
 import { DETAILS_TAB, GROUPS_TAB, isAssignmentRow } from "./assign.js";
 import { Key } from "./bits.jsx";
-import { kindOf, nodeById, OVERVIEW_ID, reorderOp, titleOf } from "./plan.js";
+import { OVERVIEW_ID, reorderOp } from "./plan.js";
 
 // Side column: what can be done with the selected item. Every button opens a dialog that
 // shows the consequences first, except reordering, which only changes the navigation order.

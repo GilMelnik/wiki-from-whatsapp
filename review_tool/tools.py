@@ -14,6 +14,7 @@ from step_3_extract.reviewer.tool import PiiTool
 from step_4_entities.reviewer.tool import EntitiesTool
 from step_5_aggregate.reviewer.tool import GroupsTool
 from step_6_plan.reviewer.tool import PlanTool
+from step_8_review.reviewer.tool import SuggestionsTool
 from utils.config import DATA_DIR
 
 TOOL_SPECS: tuple[ToolSpec, ...] = (
@@ -22,4 +23,5 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
     EntitiesTool(GRAPH).spec,
     GroupsTool(GRAPH).spec,
     PlanTool(GRAPH).spec,
+    SuggestionsTool(GRAPH).spec,
 )

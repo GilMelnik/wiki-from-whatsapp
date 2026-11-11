@@ -1,14 +1,16 @@
 import { useState } from "react";
-import { Bidi } from "@shell";
 import { Field, IdField, submitOnEnter, TextArea, TextInput } from "./fields.jsx";
 import { OperationDialog } from "./OperationDialog.jsx";
-import { moveTargets, nodeById, textToAliases, titleOf } from "./plan.js";
+import { kindOf, labelItems, moveTargets, nodeById, pathTitles, textToAliases, titleOf } from "./planText.js";
+import { Bidi, Ltr } from "./text.jsx";
 
-// Dialogs that create something: a page, a category, a label, or a page split off another.
-// The owner types the new id (checked while typing) and the texts; the server's dry run shows
-// whether the result is a valid plan. The page and label dialogs also accept a proposal of the
-// assignment step: `initial` prefills the form, `intro` shows the proposal above it and
-// `save` is the acceptance.
+// The plan operation dialogs every tool shares: a new page, category or label, a page split
+// off another, a merge. The owner types the new id (checked while typing) and the texts; the
+// plan tool's dry run shows whether the result is a valid plan. The plan tool saves with
+// them; a dialog can also start from someone else's proposal (the assignment step's, the
+// whole-wiki review's): `initial` (and `merged` / `survivorId` for a merge) prefills the form,
+// `intro` shows the proposal above it, `title` / `confirmLabel` / `note` say what confirming
+// does, and `save(op)` receives the operation as corrected.
 
 const SCOPE_HINT =
   "מה שייך לדף ומה לא. זה מה שהמסווג קורא כדי לשבץ כל טענה, אז כתבו גבולות ברורים: „כולל…”, „לא כולל… (זה בדף …)”.";
@@ -70,12 +72,12 @@ function ParentSelect({ overview, value, onChange, excludeId, allowTop = false }
   );
 }
 
-export function AddPageDialog({ overview, parentId, onClose, save, initial, title = "דף חדש", confirmLabel = "הוספת הדף", intro = null }) {
+export function AddPageDialog({ overview, parentId, onClose, save, initial, title = "דף חדש", confirmLabel = "הוספת הדף", intro = null, note }) {
   const page = usePageForm(initial);
   const [parent, setParent] = useState(parentId);
   const op = { op: "add_page", page_id: page.form.id, parent_id: parent, ...page.fields, position: null };
   return (
-    <OperationDialog title={title} op={op} ready={page.complete && Boolean(parent)} overview={overview} confirmLabel={confirmLabel} onClose={onClose} onConfirm={save}>
+    <OperationDialog title={title} op={op} ready={page.complete && Boolean(parent)} overview={overview} confirmLabel={confirmLabel} note={note} onClose={onClose} onConfirm={save}>
       {intro}
       <ParentSelect overview={overview} value={parent} onChange={setParent} />
       <PageFields page={page} />
@@ -83,10 +85,10 @@ export function AddPageDialog({ overview, parentId, onClose, save, initial, titl
   );
 }
 
-export function SplitDialog({ overview, itemId, onClose, save }) {
+export function SplitDialog({ overview, itemId, onClose, save, initial, title, confirmLabel = "פיצול", intro = null, note }) {
   const original = overview.pages[itemId];
-  const page = usePageForm();
-  const [originalScope, setOriginalScope] = useState(original.scope);
+  const page = usePageForm(initial);
+  const [originalScope, setOriginalScope] = useState(initial?.originalScope ?? original.scope);
   const [parent, setParent] = useState(nodeById(overview, itemId).parent_id);
   const samePlace = parent === nodeById(overview, itemId).parent_id;
   const op = {
@@ -99,14 +101,16 @@ export function SplitDialog({ overview, itemId, onClose, save }) {
   };
   return (
     <OperationDialog
-      title={<>פיצול דף חדש מתוך „<Bidi>{original.title_he}</Bidi>”</>}
+      title={title ?? <>פיצול דף חדש מתוך „<Bidi>{original.title_he}</Bidi>”</>}
       op={op}
       ready={page.complete && Boolean(originalScope.trim())}
       overview={overview}
-      confirmLabel="פיצול"
+      confirmLabel={confirmLabel}
+      note={note}
       onClose={onClose}
       onConfirm={save}
     >
+      {intro}
       <p className="text-slate-600">
         הדף „<Bidi>{original.title_he}</Bidi>” נשאר עם המזהה שלו. הטענות שלו יסווגו מחדש בין שני
         הדפים לפי התחומים, לכן כדאי לצמצם כאן גם את התחום שלו.
@@ -149,7 +153,7 @@ export function AddCategoryDialog({ overview, parentId = null, onClose, save }) 
   );
 }
 
-export function AddLabelDialog({ overview, kind = "", onClose, save, initial = {}, title: dialogTitle = "תווית חדשה", confirmLabel = "הוספת התווית", intro = null }) {
+export function AddLabelDialog({ overview, kind = "", onClose, save, initial = {}, title: dialogTitle = "תווית חדשה", confirmLabel = "הוספת התווית", intro = null, note }) {
   const [id, setId] = useState(initial.id ?? "");
   const [validId, setValidId] = useState(false);
   const [title, setTitle] = useState(initial.title ?? "");
@@ -163,6 +167,7 @@ export function AddLabelDialog({ overview, kind = "", onClose, save, initial = {
       ready={validId && Boolean(title.trim() && description.trim() && labelKind.trim())}
       overview={overview}
       confirmLabel={confirmLabel}
+      note={note}
       onClose={onClose}
       onConfirm={save}
     >
@@ -196,5 +201,69 @@ export function KindField({ overview, value, onChange }) {
         ))}
       </datalist>
     </Field>
+  );
+}
+
+/** Merge pages or labels into one. `merged` / `survivorId` prefill the choice (a suggested merge). */
+export function MergeDialog({ overview, itemId, onClose, save, merged = [], survivorId = itemId, title, confirmLabel = "מיזוג", intro = null, note }) {
+  const isLabel = kindOf(overview, itemId) === "label";
+  const candidates = isLabel
+    ? labelItems(overview).filter((label) => label.id !== itemId)
+    : Object.keys(overview.pages).filter((id) => id !== itemId).map((id) => ({ id, ...overview.pages[id] }));
+  const [others, setOthers] = useState(merged);
+  const [survivor, setSurvivor] = useState(survivorId);
+  const all = [itemId, ...others];
+  const toggle = (id) => {
+    setOthers((list) => (list.includes(id) ? list.filter((other) => other !== id) : [...list, id]));
+    if (survivor === id) setSurvivor(itemId);
+  };
+  const op = { op: "merge", survivor_id: survivor, merged_ids: all.filter((id) => id !== survivor) };
+  const what = isLabel ? "תוויות" : "דפים";
+  return (
+    <OperationDialog
+      title={title ?? <>מיזוג {what}: <Bidi>„{titleOf(overview, itemId)}”</Bidi></>}
+      op={op}
+      ready={others.length > 0}
+      overview={overview}
+      confirmLabel={confirmLabel}
+      tone="danger"
+      note={note}
+      onClose={onClose}
+      onConfirm={save}
+    >
+      {intro}
+      <section>
+        <h3 className="section-title">עם מה למזג</h3>
+        <ul className="max-h-56 space-y-0.5 overflow-y-auto rounded border border-slate-200 p-2">
+          {candidates.map((item) => (
+            <li key={item.id}>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={others.includes(item.id)} onChange={() => toggle(item.id)} />
+                <Bidi>{item.title_he}</Bidi>
+                <Ltr className="text-xs text-slate-400">{item.id}</Ltr>
+                <span className="text-xs text-slate-400">
+                  {isLabel ? item.labelKind : pathTitles(overview, item.id).join(" › ")}
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      </section>
+      <section>
+        <h3 className="section-title">מי נשאר</h3>
+        <p className="mb-2 text-xs text-slate-500">
+          הפריט שנשאר שומר על המזהה, הכותרת, התחום והמקום שלו. השמות של האחרים נוספים לכינויים
+          שלו, והמזהים שלהם יופנו אליו.
+        </p>
+        <div className="space-y-1">
+          {all.map((id) => (
+            <label key={id} className="flex items-center gap-2">
+              <input type="radio" name="survivor" checked={survivor === id} onChange={() => setSurvivor(id)} />
+              <Bidi>„{titleOf(overview, id)}”</Bidi> <Ltr className="text-xs text-slate-400">{id}</Ltr>
+            </label>
+          ))}
+        </div>
+      </section>
+    </OperationDialog>
   );
 }

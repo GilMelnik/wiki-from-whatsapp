@@ -68,9 +68,11 @@ function newestInputChange(artifact, byKey) {
 /**
  * The notice for one artifact a tool reads and/or writes (`writes`), or null. `running`: the
  * job rewriting it; `feeding`: a running job that rewrites one of its inputs; `latest`: the
- * newest job of its step. Returns {tone, text, action: RUN_ACTION | LOG_ACTION | null, actionLabel, jobId?}.
+ * newest job of its step. `quiet`: the tool says itself that the artifact is out of date (a
+ * paid step the owner runs when ready), so only "running", "wait for the input" and "the last
+ * run failed" are shown. Returns {tone, text, action: RUN_ACTION | LOG_ACTION | null, actionLabel, jobId?}.
  */
-export function artifactNotice({ artifact, byKey, step, running, feeding, latest, writes }) {
+export function artifactNotice({ artifact, byKey, step, running, feeding, latest, writes, quiet = false }) {
   if (!artifact) return null;
   if (running) {
     const effect = writes
@@ -106,6 +108,7 @@ export function artifactNotice({ artifact, byKey, step, running, feeding, latest
       jobId: latest.id,
     };
   }
+  if (quiet) return null;
   if (!step.incremental_safe) {
     const how = step.command ? `: ${step.command}` : "";
     return {

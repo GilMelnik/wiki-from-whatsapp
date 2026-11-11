@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "check": "node scripts/check-imports.mjs",
-    "test": "node --test tests/",
+    "test": "node --import ./scripts/shell-alias.mjs --test tests/",
     "build": "npm run check && vite build",
     "preview": "vite preview"
   },

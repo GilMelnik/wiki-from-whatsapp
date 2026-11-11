@@ -1,5 +1,5 @@
-import { Bidi, Ltr } from "@shell";
-import { changeOf, titleOf, warningsFor } from "./plan.js";
+import { Bidi, Ltr, titleOf } from "@shell";
+import { changeOf, warningsFor } from "./plan.js";
 
 // Small pieces shared by the plan tool's rows and views.
 

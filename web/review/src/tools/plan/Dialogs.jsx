@@ -1,10 +1,25 @@
 import { useState } from "react";
-import { Bidi, formatCount, Ltr } from "@shell";
-import { groupCount, proposalForm } from "./assign.js";
-import { IdField, submitOnEnter, TextArea } from "./fields.jsx";
-import { AddCategoryDialog, AddLabelDialog, AddPageDialog, SplitDialog } from "./FormDialogs.jsx";
-import { OperationDialog } from "./OperationDialog.jsx";
-import { KIND_LABELS, kindOf, labelItems, moveTargets, nodeById, pathTitles, titleOf } from "./plan.js";
+import {
+  AddCategoryDialog,
+  AddLabelDialog,
+  AddPageDialog,
+  Bidi,
+  formatCount,
+  groupCount,
+  IdField,
+  kindOf,
+  Ltr,
+  MergeDialog,
+  moveTargets,
+  nodeById,
+  OperationDialog,
+  SplitDialog,
+  submitOnEnter,
+  TextArea,
+  titleOf,
+} from "@shell";
+import { proposalForm } from "./assign.js";
+import { KIND_LABELS } from "./plan.js";
 
 // The one dialog that is open (`dialog.kind`) and the operation it sends. `save(op)` saves
 // and `accept(proposal, op)` accepts a proposal of the assignment step with that operation;
@@ -12,67 +27,6 @@ import { KIND_LABELS, kindOf, labelItems, moveTargets, nodeById, pathTitles, tit
 
 function Quote({ overview, id }) {
   return <Bidi>„{titleOf(overview, id)}”</Bidi>;
-}
-
-function MergeDialog({ overview, itemId, onClose, save }) {
-  const isLabel = kindOf(overview, itemId) === "label";
-  const candidates = isLabel
-    ? labelItems(overview).filter((label) => label.id !== itemId)
-    : Object.keys(overview.pages).filter((id) => id !== itemId).map((id) => ({ id, ...overview.pages[id] }));
-  const [others, setOthers] = useState([]);
-  const [survivor, setSurvivor] = useState(itemId);
-  const all = [itemId, ...others];
-  const toggle = (id) => {
-    setOthers((list) => (list.includes(id) ? list.filter((other) => other !== id) : [...list, id]));
-    if (survivor === id) setSurvivor(itemId);
-  };
-  const op = { op: "merge", survivor_id: survivor, merged_ids: all.filter((id) => id !== survivor) };
-  const what = isLabel ? "תוויות" : "דפים";
-  return (
-    <OperationDialog
-      title={<>מיזוג {what}: <Quote overview={overview} id={itemId} /></>}
-      op={op}
-      ready={others.length > 0}
-      overview={overview}
-      confirmLabel="מיזוג"
-      tone="danger"
-      onClose={onClose}
-      onConfirm={save}
-    >
-      <section>
-        <h3 className="section-title">עם מה למזג</h3>
-        <ul className="max-h-56 space-y-0.5 overflow-y-auto rounded border border-slate-200 p-2">
-          {candidates.map((item) => (
-            <li key={item.id}>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={others.includes(item.id)} onChange={() => toggle(item.id)} />
-                <Bidi>{item.title_he}</Bidi>
-                <Ltr className="text-xs text-slate-400">{item.id}</Ltr>
-                <span className="text-xs text-slate-400">
-                  {isLabel ? item.labelKind : pathTitles(overview, item.id).join(" › ")}
-                </span>
-              </label>
-            </li>
-          ))}
-        </ul>
-      </section>
-      <section>
-        <h3 className="section-title">מי נשאר</h3>
-        <p className="mb-2 text-xs text-slate-500">
-          הפריט שנשאר שומר על המזהה, הכותרת, התחום והמקום שלו. השמות של האחרים נוספים לכינויים
-          שלו, והמזהים שלהם יופנו אליו.
-        </p>
-        <div className="space-y-1">
-          {all.map((id) => (
-            <label key={id} className="flex items-center gap-2">
-              <input type="radio" name="survivor" checked={survivor === id} onChange={() => setSurvivor(id)} />
-              <Quote overview={overview} id={id} /> <Ltr className="text-xs text-slate-400">{id}</Ltr>
-            </label>
-          ))}
-        </div>
-      </section>
-    </OperationDialog>
-  );
 }
 
 function MoveDialog({ overview, itemId, onClose, save }) {

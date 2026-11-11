@@ -1,14 +1,19 @@
-import { Dialog, formatCount } from "@shell";
-import { usePreview } from "./api.js";
-import { assignmentLines } from "./assign.js";
-import { consequenceLines } from "./plan.js";
+import { Dialog } from "./Dialog.jsx";
+import { formatCount } from "./format.js";
+import { usePreview } from "./planApi.js";
+import { assignmentLines, consequenceLines } from "./planText.js";
 
 // The dialog of every structural change. While the owner fills in the form, the server runs
 // the operation as a dry run and the dialog shows what it would mean downstream (what
 // disappears, what is redirected, whose claims are classified again, and once step 6b has
 // run how many claim groups the next assignment run redirects, asks again or takes off a
-// deleted page) or, verbatim, which plan rules it would break. Confirm is possible only after a successful dry run; it saves
-// through `onConfirm(op)` (throws → the error stays in the dialog).
+// deleted page) or, verbatim, which plan rules it would break. Confirm is possible only after
+// a successful dry run; it calls `onConfirm(op)` (throws → the error stays in the dialog).
+// `note` replaces the line under the consequences (what happens after saving) for a dialog
+// that does not save the plan itself (e.g. correcting a suggested operation).
+
+const PLAN_SAVE_NOTE =
+  "אחרי השמירה השלבים שאחרי התוכנית (שיוך הטענות וכתיבת הדפים) יסומנו כלא מעודכנים. אפשר לבטל את השינוי האחרון בכפתור „ביטול” (u).";
 
 const LINE_TONES = {
   info: "border-sky-200 bg-sky-50 text-sky-900",
@@ -48,6 +53,7 @@ export function OperationDialog({
   size = "lg",
   onClose,
   onConfirm,
+  note = PLAN_SAVE_NOTE,
   children,
 }) {
   const { preview, error, pending } = usePreview(ready ? op : null);
@@ -67,10 +73,7 @@ export function OperationDialog({
         <section>
           <h3 className="section-title">מה השינוי יעשה</h3>
           <Consequences preview={preview} error={error} pending={pending} overview={overview} />
-          <p className="mt-2 text-xs text-slate-500">
-            אחרי השמירה השלבים שאחרי התוכנית (שיוך הטענות וכתיבת הדפים) יסומנו כלא מעודכנים. אפשר
-            לבטל את השינוי האחרון בכפתור „ביטול” (u).
-          </p>
+          <p className="mt-2 text-xs text-slate-500">{note}</p>
         </section>
       </div>
     </Dialog>
