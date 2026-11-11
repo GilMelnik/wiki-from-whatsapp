@@ -44,9 +44,16 @@ export function useThreads(tool) {
   ], { watch, keepPrevious: true });
   const wantThread = ready && Boolean(selectedId) && (!gold || view === MESSAGE_VIEWS.conversation);
   const threadParams = gold ? { include: params.include, window: windowIndex } : params;
-  const threadView = useResource(() => (wantThread ? api.get("/view", { thread: selectedId, ...threadParams }) : null), [
-    wantThread, selectedId, JSON.stringify(threadParams),
-  ], { watch, keepPrevious: true });
+  // While an edit is being saved the thread view is not fetched again: the file's change
+  // event can come before the answer, and the open conversation may just have been merged away.
+  const editing = useRef(false);
+  const held = useRef(undefined);
+  const threadView = useResource(
+    () => (!wantThread ? null : editing.current ? held.current : api.get("/view", { thread: selectedId, ...threadParams })),
+    [wantThread, selectedId, JSON.stringify(threadParams)],
+    { watch, keepPrevious: true }
+  );
+  held.current = threadView.data;
 
   // A view answer is used only for what is asked now (a previous one stays while loading).
   const windowData = windowView.data?.subject.index === windowIndex ? windowView.data : undefined;
@@ -82,6 +89,14 @@ export function useThreads(tool) {
     selectWindow: (index) => windows[index] && setWindowStart(windows[index].start),
     loadContext: (range) => range && changeExtra((base) => ({ context: addRange(base.context, range) })),
     keepInView: (threadId) => changeExtra((base) => ({ include: base.include.includes(threadId) ? base.include : [...base.include, threadId] })),
+    saving: async (send) => {
+      editing.current = true;
+      try {
+        return await send();
+      } finally {
+        editing.current = false;
+      }
+    },
     // After an edit; the thread view only when the same conversation stays open (a new one loads by itself).
     reloadAll: (sameThread) => Promise.all([summary.reload(), list.reload(), windowView.reload(), sameThread && threadView.reload()]),
   };

@@ -108,7 +108,7 @@ function ThreadsTool({ tool }) {
     if (locked || busy) return;
     setBusy(true);
     try {
-      await afterEdit(await api.post(path, body), open, path === "/undo");
+      await afterEdit(await data.saving(() => api.post(path, body)), open, path === "/undo");
     } catch (error) {
       toast.error(error);
     } finally {
@@ -122,7 +122,7 @@ function ThreadsTool({ tool }) {
     openMerge: () => data.selectedId && !locked && setMergeOpen(true),
     undo: () => summary?.undo && edit("/undo", undefined, !data.gold),
   };
-  const merge = async (ids) => afterEdit(await api.post("/merge", { thread_ids: ids }), !data.gold);
+  const merge = async (ids) => afterEdit(await data.saving(() => api.post("/merge", { thread_ids: ids })), !data.gold);
   const toggleDone = async () => {
     if (!currentWindow || locked) return;
     try {

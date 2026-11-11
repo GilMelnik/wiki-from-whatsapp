@@ -15,7 +15,7 @@ Runs steps in order:
     9. site      -> docs/ (pages, label pages, wiki_index.json) + mkdocs.yml
 
 Human gates (web UIs, no CLI):
-    step 1 — thread review: ``python -m step_1_threads_split.review``
+    step 1 — conversations (and the gold windows): ``python -m review_tool --tool threads``
     step 3 — PII review: ``python -m review_tool --tool pii``
     step 4 — entity review: ``python -m review_tool --tool entities``
     step 5 — claim-group review: ``python -m review_tool --tool groups``
