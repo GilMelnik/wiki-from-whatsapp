@@ -24,6 +24,7 @@ STEP_6_ASSIGN = "step_6_assign"
 STEP_7 = "step_7_write_pages"
 STEP_8 = "step_8_review"
 STEP_9 = "step_9_site"
+STEP_10 = "step_10_update"
 SHARED = "shared"
 
 
@@ -123,6 +124,18 @@ PLAN_COVERAGE_PATH = step_path(STEP_6, "coverage_report.json")
 DOCS_DIR = PROJECT_ROOT / section("site")["docs_dir"]
 MKDOCS_PATH = PROJECT_ROOT / section("site")["mkdocs_file"]
 WIKI_INDEX_FILE = section("mcp")["index_file"]
+
+# --------------------------------------------------------------- step 10 update
+# Contract C13. Per update ``<stamp>``, all in ``UPDATES_DIR`` (private, like the export):
+# ``<stamp>_<export_filename>`` (the full export), ``<stamp>_new_messages.json`` (what was not
+# seen before), ``<stamp>_report.json`` (config, commit, fingerprint, each step's summary) and
+# ``<stamp>_update.log``.
+UPDATE_STATE_PATH = step_path(STEP_10, "state.json")
+# Held (``flock``) by a running update; names the step it runs (``utils.step_lease``).
+UPDATE_LEASE_PATH = step_path(STEP_10, "running.json")
+NEW_MESSAGES_SUFFIX = "new_messages.json"
+UPDATE_REPORT_SUFFIX = "report.json"
+UPDATE_LOG_SUFFIX = "update.log"
 
 # ------------------------------------------------------------------- shared
 BACKUPS_DIR = step_path(SHARED, "backups")

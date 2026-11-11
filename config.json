@@ -673,5 +673,36 @@
       "match_weights": {"exact": 1.0, "text_prefix": 0.8, "wildcard": 0.6, "query_prefix": 0.5}
     }
   },
-  "update": {}
+  "update": {
+    "stamp_format": "%Y_%m_%d_%H%M%S",
+    "overlap_messages": 20,
+    "max_gap_days": 62,
+    "review_hints": {
+      "pii": "the new claims (privacy: names, phone numbers, details about people)",
+      "entities": "the new entities and their kinds (people, providers, places)",
+      "groups": "the new claim groups (merges and splits)",
+      "plan": "the pending proposals for new pages and labels",
+      "suggestions": "the review's suggestions (accept or reject, then apply the accepted ones)"
+    },
+    "estimate": {
+      "chars_per_token": 3.0,
+      "batch_discount": 0.5,
+      "output_tokens_per_call": {
+        "extract": 1500,
+        "write": 13000,
+        "update": 6000,
+        "review": 22000,
+        "propose": 4000
+      },
+      "proposal_input_tokens": 30000,
+      "classifier_tokens_per_group": 12200,
+      "usd_per_million_tokens": {
+        "claude-opus-5-5": {"input": 4.0, "output": 20.0},
+        "claude-sonnet-5-5": {"input": 2.0, "output": 10.0},
+        "claude-haiku-5-5": {"input": 0.1, "output": 0.5},
+        "jev-latest": {"input": 0.042, "output": 0.0},
+        "gemini-embedding-001": {"input": 0.15, "output": 0.0}
+      }
+    }
+  }
 }
