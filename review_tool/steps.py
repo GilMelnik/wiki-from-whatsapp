@@ -50,6 +50,10 @@ STEP_SPECS: tuple[StepSpec, ...] = (
         incremental_safe=True, paid=True,
     ),
     StepSpec("pages", "שלב 7 · כתיבת הדפים", "step_7_write_pages.run", incremental_safe=True, paid=True),
+    StepSpec(
+        "suggestions", "שלב 8 · סקירת הוויקי כולו", "step_8_review.run",
+        incremental_safe=True, paid=True,
+    ),
     StepSpec("site", "שלב 9 · בניית האתר", "step_9_site.run", incremental_safe=True),
 )
 
