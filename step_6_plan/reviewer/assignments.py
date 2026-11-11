@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from step_6_plan.assign_rules import PlanChanges, follow, redecide, redirects
 from step_6_plan.reviewer.history import AssignmentsBefore, Record
+from step_6_plan.reviewer.requests import quote
 from utils.json_io import write_json_file
 from utils.reconcile import backup_file, fingerprint
 
@@ -35,7 +36,7 @@ MAX_PAGES = 2  # C8: a primary page and at most one second page
 
 
 class AssignmentsConflict(Exception):
-    """A change of the assignments that cannot be made (409); ``args[0]`` is Hebrew."""
+    """A change of the assignments that cannot be made (409); ``args[0]`` is English."""
 
 
 class GroupChange(BaseModel):
@@ -113,9 +114,9 @@ def check_changes(changes: Sequence[GroupChange], plan: Mapping[str, Any]) -> No
 
     for change in changes:
         if change.action in PAGE_ACTIONS and change.page_id not in plan["pages"]:
-            raise AssignmentsConflict(f"אין בתוכנית דף עם המזהה {change.page_id}.")
+            raise AssignmentsConflict(f"The plan has no page with the id {change.page_id}.")
         if change.action in LABEL_ACTIONS and change.label_id not in plan["labels"]:
-            raise AssignmentsConflict(f"אין בתוכנית תווית עם המזהה {change.label_id}.")
+            raise AssignmentsConflict(f"The plan has no label with the id {change.label_id}.")
 
 
 RECORD_FIELDS = {"pages": list, "labels": list, "p": dict, "label_p": dict}
@@ -153,7 +154,7 @@ class AssignmentsFile:
             self.data = {"proposals": [], "metadata": {}, **data}
         except (json.JSONDecodeError, TypeError, AttributeError) as exc:
             logger.warning(f"{self.source} cannot be read as C8 assignments: {exc!r}")
-            self.problem = f"הקובץ {self.source} אינו קובץ שיוך תקין ({exc})."
+            self.problem = f"The file {self.source} is not a valid assignments file ({exc})."
         self.fingerprint = fingerprint(self.data)
 
     @property
@@ -175,8 +176,8 @@ class AssignmentsFile:
     def require(self) -> None:
         if not self.exists:
             raise AssignmentsConflict(
-                "אין עדיין קובץ שיוך: הריצו את שלב השיוך (6ב, python -m step_6_plan.assign) "
-                "אחרי בדיקת התוכנית."
+                "There is no assignments file yet: run the assignment step (6b, "
+                "python -m step_6_plan.assign) after reviewing the plan."
             )
         if self.problem:
             raise AssignmentsConflict(self.problem)
@@ -208,24 +209,24 @@ class AssignmentsFile:
 
 
 ACTION_PHRASES = {
-    "set_primary": "העברה לדף {page}",
-    "add_page": "הוספת הדף {page} כדף נוסף",
-    "remove_page": "הסרה מהדף {page}",
-    "unplace": "הורדה מכל הדפים",
-    "add_label": "הוספת התווית {label}",
-    "remove_label": "הסרת התווית {label}",
-    "unpin": "החזרה לשיוך אוטומטי",
+    "set_primary": "moved to the page {page}",
+    "add_page": "added the page {page} as a second page",
+    "remove_page": "removed from the page {page}",
+    "unplace": "taken off every page",
+    "add_label": "added the label {label}",
+    "remove_label": "removed the label {label}",
+    "unpin": "back to automatic assignment",
 }
 
 
 def describe_edit(edit: GroupEdit, title: Callable[[str], str]) -> str:
-    """The edit in Hebrew, for the toast, the undo button and the log."""
+    """The edit in English, for the toast, the undo button and the log."""
 
     def quoted(item_id: str | None) -> str:
-        return f"„{title(item_id or '')}”"
+        return quote(title(item_id or ""))
 
     actions = ", ".join(ACTION_PHRASES[change.action].format(page=quoted(change.page_id),
                                                              label=quoted(change.label_id))
                         for change in edit.changes)
     count = len(edit.group_ids)
-    return f"{actions} ({'קבוצה אחת' if count == 1 else f'{count} קבוצות'})"
+    return f"{actions[:1].upper()}{actions[1:]} ({'1 group' if count == 1 else f'{count} groups'})"

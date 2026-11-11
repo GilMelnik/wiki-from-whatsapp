@@ -1,6 +1,6 @@
 """The plan tool's changes as request bodies: one model per kind of change, told apart by
 ``op``. Each calls exactly one function of ``step_6_plan.operations`` (which validates the
-result) and names itself in Hebrew for the undo button and the log.
+result) and names itself in English for the toast, the undo button and the log.
 """
 
 from __future__ import annotations
@@ -14,13 +14,7 @@ from step_6_plan.model import PlanError, find_node, iter_nodes
 from step_6_plan.operations import PlanEdit
 
 Position = Annotated[int | None, Field(default=None, ge=0)]
-FIELD_NAMES = {
-    "description": "התיאור",
-    "scope": "התחום",
-    "aliases": "הכינויים",
-    "kind": "הסוג",
-    "example_group_ids": "הקבוצות לדוגמה",
-}
+FIELD_NAMES = {"example_group_ids": "example groups"}
 
 
 def title_of(plan: dict[str, Any], item_id: str) -> str:
@@ -35,8 +29,16 @@ def title_of(plan: dict[str, Any], item_id: str) -> str:
         return item_id
 
 
+def quote(text: str) -> str:
+    """A title (or any content) inside an English sentence: English quotes around a bidi
+    isolate (U+2068 … U+2069), so a Hebrew title keeps its own direction and does not reorder
+    the words, ids or commas around it."""
+
+    return f"“\u2068{text}\u2069”"
+
+
 def _q(plan: dict[str, Any], item_id: str) -> str:
-    return f"„{title_of(plan, item_id)}”"
+    return quote(title_of(plan, item_id))
 
 
 class Aliases(BaseModel):
@@ -58,7 +60,7 @@ class AddCategory(BaseModel):
                             position=self.position)
 
     def describe(self, plan: dict[str, Any]) -> str:
-        return f"הוספת הקטגוריה „{self.title_he}”"
+        return f"Added the category {quote(self.title_he)}"
 
 
 class AddPage(BaseModel):
@@ -78,7 +80,7 @@ class AddPage(BaseModel):
                             position=self.position)
 
     def describe(self, plan: dict[str, Any]) -> str:
-        return f"הוספת הדף „{self.title_he}”"
+        return f"Added the page {quote(self.title_he)}"
 
 
 class AddLabel(BaseModel):
@@ -93,7 +95,7 @@ class AddLabel(BaseModel):
                              description=self.description, kind=self.kind)
 
     def describe(self, plan: dict[str, Any]) -> str:
-        return f"הוספת התווית „{self.title_he}”"
+        return f"Added the label {quote(self.title_he)}"
 
 
 class Rename(BaseModel):
@@ -105,7 +107,7 @@ class Rename(BaseModel):
         return ops.rename(plan, self.item_id, self.title_he)
 
     def describe(self, plan: dict[str, Any]) -> str:
-        return f"שינוי השם {_q(plan, self.item_id)} ל„{self.title_he}”"
+        return f"Renamed {_q(plan, self.item_id)} to {quote(self.title_he)}"
 
 
 class Edit(BaseModel):
@@ -117,8 +119,8 @@ class Edit(BaseModel):
         return ops.edit(plan, self.item_id, self.changes)
 
     def describe(self, plan: dict[str, Any]) -> str:
-        fields = " ו".join(FIELD_NAMES.get(name, name) for name in self.changes)
-        return f"עריכת {fields} של {_q(plan, self.item_id)}"
+        fields = " and ".join(FIELD_NAMES.get(name, name) for name in self.changes)
+        return f"Edited the {fields} of {_q(plan, self.item_id)}"
 
 
 class Delete(BaseModel):
@@ -129,7 +131,7 @@ class Delete(BaseModel):
         return ops.delete(plan, self.item_id)
 
     def describe(self, plan: dict[str, Any]) -> str:
-        return f"מחיקת {_q(plan, self.item_id)}"
+        return f"Deleted {_q(plan, self.item_id)}"
 
 
 class Merge(BaseModel):
@@ -142,7 +144,7 @@ class Merge(BaseModel):
 
     def describe(self, plan: dict[str, Any]) -> str:
         merged = ", ".join(_q(plan, item_id) for item_id in self.merged_ids)
-        return f"מיזוג {merged} לתוך {_q(plan, self.survivor_id)}"
+        return f"Merged {merged} into {_q(plan, self.survivor_id)}"
 
 
 class Split(BaseModel):
@@ -163,7 +165,7 @@ class Split(BaseModel):
                               parent_id=self.parent_id, original_scope=self.original_scope)
 
     def describe(self, plan: dict[str, Any]) -> str:
-        return f"פיצול „{self.title_he}” מתוך {_q(plan, self.page_id)}"
+        return f"Split {quote(self.title_he)} off {_q(plan, self.page_id)}"
 
 
 class Move(BaseModel):
@@ -179,9 +181,9 @@ class Move(BaseModel):
         parents = {node["id"]: (ancestors[-1] if ancestors else None)
                    for node, ancestors in iter_nodes(plan["tree"])}
         if parents.get(self.item_id, self.parent_id) == self.parent_id:
-            return f"שינוי הסדר: {_q(plan, self.item_id)}"
-        target = "לרמה העליונה" if self.parent_id is None else f"אל {_q(plan, self.parent_id)}"
-        return f"העברת {_q(plan, self.item_id)} {target}"
+            return f"Reordered {_q(plan, self.item_id)}"
+        target = "to the top level" if self.parent_id is None else f"into {_q(plan, self.parent_id)}"
+        return f"Moved {_q(plan, self.item_id)} {target}"
 
 
 class ChangeId(BaseModel):
@@ -193,7 +195,7 @@ class ChangeId(BaseModel):
         return ops.change_id(plan, self.item_id, self.new_id)
 
     def describe(self, plan: dict[str, Any]) -> str:
-        return f"החלפת המזהה של {_q(plan, self.item_id)} ל-{self.new_id}"
+        return f"Changed the id of {_q(plan, self.item_id)} to {self.new_id}"
 
 
 Operation = Annotated[

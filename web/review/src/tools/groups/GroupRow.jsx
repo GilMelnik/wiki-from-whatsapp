@@ -1,13 +1,13 @@
-import { Bidi, formatCount, Ltr } from "@shell";
-import { dateRange, stanceOf } from "./groups.js";
+import { Bidi, countText, formatCount, Ltr, stanceOf } from "@shell";
+import { dateRange } from "./groups.js";
 
 /** People and dates of a group, one line. */
 export function GroupNumbers({ group }) {
   return (
     <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500">
       <span>
-        {formatCount(group.size)} טענות · תומכים {formatCount(group.supporter_count)} · מתנגדים{" "}
-        {formatCount(group.opposer_count)}
+        {countText(group.size, "claim", formatCount)} · {countText(group.supporter_count, "supporter", formatCount)} ·{" "}
+        {countText(group.opposer_count, "opposer", formatCount)}
       </span>
       <Ltr>{dateRange(group.first_date, group.last_date)}</Ltr>
     </div>
@@ -20,10 +20,10 @@ export function GroupBadges({ group }) {
   return (
     <span className="flex flex-wrap items-center gap-1">
       <span className={`badge ${stance.badge}`}>{stance.label}</span>
-      {group.size > 1 && <span className="badge badge-sky">{formatCount(group.size)} טענות</span>}
-      {group.contradiction_count > 0 && <span className="badge badge-rose">סותרת {formatCount(group.contradiction_count)}</span>}
-      {group.suggestion_count > 0 && <span className="badge badge-amber">הצעות {formatCount(group.suggestion_count)}</span>}
-      {group.merged_count > 0 && <span className="badge badge-slate">מוזגה</span>}
+      {group.size > 1 && <span className="badge badge-sky">{countText(group.size, "claim", formatCount)}</span>}
+      {group.contradiction_count > 0 && <span className="badge badge-rose">Contradicts {formatCount(group.contradiction_count)}</span>}
+      {group.suggestion_count > 0 && <span className="badge badge-amber">{countText(group.suggestion_count, "suggestion", formatCount)}</span>}
+      {group.merged_count > 0 && <span className="badge badge-slate">Merged</span>}
     </span>
   );
 }

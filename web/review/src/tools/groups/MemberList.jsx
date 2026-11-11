@@ -1,5 +1,5 @@
-import { Bidi, formatCount, Ltr } from "@shell";
-import { dateRange, stanceOf } from "./groups.js";
+import { Bidi, countText, formatCount, Ltr, stanceOf } from "@shell";
+import { dateRange } from "./groups.js";
 
 // The member claims of a group, each with its own text, stance, dates and people. With `on`
 // (the group detail) each claim can be picked (for a split or a move) or made the
@@ -9,7 +9,7 @@ function Member({ member, picked, saving, on }) {
   if (member.missing) {
     return (
       <li className="rounded border border-amber-200 bg-amber-50 p-3 text-amber-900">
-        <Ltr>{member.claim_id}</Ltr> כבר אינה בקובץ הטענות (ריצה של שלב 5 תוציא אותה מהקבוצה).
+        <Ltr>{member.claim_id}</Ltr> is no longer in the claims file (a step 5 run will take it out of the group).
       </li>
     );
   }
@@ -21,7 +21,7 @@ function Member({ member, picked, saving, on }) {
           <input
             type="checkbox"
             className="mt-1"
-            aria-label="בחירת הטענה"
+            aria-label="Pick the claim"
             checked={picked}
             disabled={saving}
             onChange={() => on.togglePick(member.claim_id)}
@@ -33,9 +33,9 @@ function Member({ member, picked, saving, on }) {
           </Bidi>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
             <span className={`badge ${stance.badge}`}>{stance.label}</span>
-            {member.is_representative && <span className="badge badge-sky">הטקסט המייצג</span>}
+            {member.is_representative && <span className="badge badge-sky">Representative text</span>}
             <span>
-              תומכים {formatCount(member.supporter_count)} · מתנגדים {formatCount(member.opposer_count)}
+              {countText(member.supporter_count, "supporter", formatCount)} · {countText(member.opposer_count, "opposer", formatCount)}
             </span>
             <Ltr>{dateRange(member.first_date, member.last_date)}</Ltr>
             <Ltr className="text-slate-400">{member.claim_id}</Ltr>
@@ -48,7 +48,7 @@ function Member({ member, picked, saving, on }) {
         </div>
         {on && !member.is_representative && (
           <button type="button" className="btn btn-sm shrink-0" disabled={saving} onClick={() => on.setRepresentative(member.claim_id)}>
-            לטקסט המייצג
+            Make representative
           </button>
         )}
       </div>

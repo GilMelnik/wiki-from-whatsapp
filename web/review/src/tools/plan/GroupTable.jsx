@@ -15,24 +15,24 @@ import { TOOL_ID } from "./plan.js";
 // Render it with `key` = the list (scope + id), so a new list starts on page one, unpicked.
 
 const EMPTY_TEXTS = {
-  page: "אין קבוצות בדף הזה.",
-  label: "אין קבוצות עם התווית הזו.",
-  unplaced: "כל הקבוצות שובצו בדף.",
-  waiting: "אין קבוצות שממתינות להרצת השיוך.",
+  page: "No groups on this page.",
+  label: "No groups with this label.",
+  unplaced: "Every group is placed on a page.",
+  waiting: "No groups are waiting for the assignment run.",
 };
 
 function ActionBar({ scope, count, busy, locked, act, open, clear }) {
-  const removeLabel = scope === "label" ? "הסרת התווית הזו" : "הסרה מהדף הזה";
+  const removeLabel = scope === "label" ? "Remove this label" : "Remove from this page";
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-blue-200 bg-blue-50 px-3 py-2 text-xs">
-      <span className="font-medium text-blue-900">נבחרו: {groupCount(count, formatCount)}</span>
-      <button type="button" className="btn btn-sm" onClick={clear}>ניקוי</button>
+      <span className="font-medium text-blue-900">Picked: {groupCount(count, formatCount)}</span>
+      <button type="button" className="btn btn-sm" onClick={clear}>Clear</button>
       <span className="flex-1" />
       <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={() => open("primary")}>
-        העברה לדף… <Key>p</Key>
+        Move to a page… <Key>p</Key>
       </button>
       <button type="button" className="btn btn-sm" disabled={busy} onClick={() => open("second")}>
-        דף נוסף… <Key>2</Key>
+        Second page… <Key>2</Key>
       </button>
       {(scope === "page" || scope === "label") && (
         <button type="button" className="btn btn-sm" disabled={busy} onClick={act.removeHere}>
@@ -40,15 +40,15 @@ function ActionBar({ scope, count, busy, locked, act, open, clear }) {
         </button>
       )}
       <button type="button" className="btn btn-sm" disabled={busy} onClick={() => act.run([{ action: "unplace" }])}>
-        מכל הדפים <Key>o</Key>
+        Off every page <Key>o</Key>
       </button>
       <button type="button" className="btn btn-sm" disabled={busy} onClick={() => open("labels")}>
-        תוויות… <Key>b</Key>
+        Labels… <Key>b</Key>
       </button>
-      <button type="button" className="btn btn-sm" disabled={busy} onClick={() => act.run([{ action: "unpin" }])} title="שלב השיוך יחליט עליהן שוב בהרצה הבאה">
-        חזרה לאוטומטי <Key>r</Key>
+      <button type="button" className="btn btn-sm" disabled={busy} onClick={() => act.run([{ action: "unpin" }])} title="The assignment step will decide them again at its next run">
+        Back to automatic <Key>r</Key>
       </button>
-      {locked && <span className="basis-full text-amber-800">שלב רץ כעת ומעדכן את הקבצים: אפשר לעיין, ההעברות ייפתחו כשיסתיים.</span>}
+      {locked && <span className="basis-full text-amber-800">A step is running and updating the files: you can look around; moves open again when it finishes.</span>}
     </div>
   );
 }
@@ -92,20 +92,20 @@ export function GroupTable({ overview, scope, itemId = null, watch, locked, savi
   };
   const open = (kind) => can && setDialog(kind);
   useShortcuts([
-    { keys: "a", label: "בחירת כל הקבוצות המוצגות, או ביטול הבחירה", run: () => picking.setMany(visible, shown !== "all") },
-    { keys: "p", label: "העברת הקבוצות שנבחרו לדף אחר", run: () => open("primary") },
-    { keys: "2", label: "הוספת דף נוסף לקבוצות שנבחרו", run: () => open("second") },
-    { keys: "x", label: "הסרת הקבוצות שנבחרו מהדף / מהתווית שמוצגים", run: () => can && (scope === "page" || scope === "label") && act.removeHere() },
-    { keys: "o", label: "הורדת הקבוצות שנבחרו מכל הדפים", run: () => can && act.run([{ action: "unplace" }]) },
-    { keys: "b", label: "תוויות לקבוצות שנבחרו", run: () => open("labels") },
-    { keys: "r", label: "החזרת הקבוצות שנבחרו לשיוך אוטומטי", run: () => can && act.run([{ action: "unpin" }]) },
-    { keys: "f", label: "חיפוש בקבוצות", run: () => searchRef.current?.focus() },
+    { keys: "a", label: "Pick every shown group, or unpick them", run: () => picking.setMany(visible, shown !== "all") },
+    { keys: "p", label: "Move the picked groups to another page", run: () => open("primary") },
+    { keys: "2", label: "Add a second page to the picked groups", run: () => open("second") },
+    { keys: "x", label: "Remove the picked groups from the shown page / label", run: () => can && (scope === "page" || scope === "label") && act.removeHere() },
+    { keys: "o", label: "Take the picked groups off every page", run: () => can && act.run([{ action: "unplace" }]) },
+    { keys: "b", label: "Labels of the picked groups", run: () => open("labels") },
+    { keys: "r", label: "Put the picked groups back to automatic assignment", run: () => can && act.run([{ action: "unpin" }]) },
+    { keys: "f", label: "Search the groups", run: () => searchRef.current?.focus() },
   ]);
 
   return (
     <div className="flex min-h-0 flex-col rounded border border-slate-200 bg-white">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-3 py-2 text-xs text-slate-600">
-        <label className="flex items-center gap-1" title="בחירת כל הקבוצות המוצגות (a)">
+        <label className="flex items-center gap-1" title="Pick every shown group (a)">
           <input
             type="checkbox"
             checked={shown === "all"}
@@ -113,27 +113,27 @@ export function GroupTable({ overview, scope, itemId = null, watch, locked, savi
             disabled={visible.length === 0}
             onChange={() => picking.setMany(visible, shown !== "all")}
           />
-          כל המוצגות <Key>a</Key>
+          All shown <Key>a</Key>
         </label>
         <input
           ref={searchRef}
           dir="auto"
           className="field min-w-40 flex-1"
-          placeholder="סינון לפי טקסט, ישות או מזהה (f)"
+          placeholder="Filter by text, entity or id (f)"
           value={view.q}
           onChange={(event) => changeView({ q: event.target.value })}
         />
-        <Select label="סדר" value={view.sort} options={SORT_OPTIONS} onChange={(sort) => changeView({ sort })} />
+        <Select label="Order" value={view.sort} options={SORT_OPTIONS} onChange={(sort) => changeView({ sort })} />
         {scope === "page" && (
           <Select
-            label="הצג"
+            label="Show"
             value={view.role}
             options={ROLE_OPTIONS.map((option) => ({ ...option, label: `${option.label} (${formatCount(data?.counts?.[option.value] ?? 0)})` }))}
             onChange={(role) => changeView({ role })}
           />
         )}
         <span>
-          {formatCount(data?.total ?? 0)} קבוצות{data?.manual ? ` · ${formatCount(data.manual)} ידני` : ""}
+          {groupCount(data?.total ?? 0, formatCount)}{data?.manual ? ` · ${formatCount(data.manual)} manual` : ""}
         </span>
         {data && <Pager offset={data.offset} limit={data.limit} total={data.total} onChange={setOffset} />}
       </div>
@@ -146,7 +146,7 @@ export function GroupTable({ overview, scope, itemId = null, watch, locked, savi
         hasData={Boolean(data)}
         onRetry={list.reload}
         empty={Boolean(data) && rows.length === 0}
-        emptyText={view.q.trim() ? "אין קבוצות שמתאימות לסינון." : EMPTY_TEXTS[scope]}
+        emptyText={view.q.trim() ? "No groups match the filter." : EMPTY_TEXTS[scope]}
       >
         <ul className={`divide-y divide-slate-100 ${list.loading ? "opacity-60" : ""}`}>
           {rows.map((row) => (

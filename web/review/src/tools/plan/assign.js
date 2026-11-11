@@ -4,7 +4,7 @@
 // shape requests and texts. Functions that write numbers take the shell's `formatCount` as
 // `format` (this file is tested with only the shell's pure helpers: scripts/shell-alias.mjs).
 
-import { groupCount, prefixed, titleOf } from "@shell";
+import { groupCount, quote, titleOf } from "@shell";
 import { percent } from "./plan.js";
 
 export const UNPLACED_ID = "__unplaced";
@@ -15,18 +15,18 @@ export const DETAILS_TAB = "details";
 export const GROUPS_TAB = "groups";
 
 export const SORT_OPTIONS = [
-  { value: "uncertain", label: "הכי פחות בטוחות קודם" },
-  { value: "date", label: "החדשות קודם" },
-  { value: "support", label: "הכי הרבה תומכים" },
+  { value: "uncertain", label: "Least certain first" },
+  { value: "date", label: "Newest first" },
+  { value: "support", label: "Most supporters first" },
 ];
 export const ROLE_OPTIONS = [
-  { value: "all", label: "כל הקבוצות" },
-  { value: "primary", label: "שהדף ראשי עבורן" },
-  { value: "mention", label: "שרק מזכירות את הדף" },
+  { value: "all", label: "All groups" },
+  { value: "primary", label: "Primary on this page" },
+  { value: "mention", label: "Only mention this page" },
 ];
 export const DEFAULT_GROUP_VIEW = { sort: "uncertain", role: "all", q: "" };
-export const PROPOSAL_KINDS = { page: "דף חדש", label: "תווית חדשה", scope: "הרחבת תחום" };
-export const STATUS_LABELS = { pending: "ממתינה", accepted: "התקבלה", rejected: "נדחתה" };
+export const PROPOSAL_KINDS = { page: "New page", label: "New label", scope: "Wider scope" };
+export const STATUS_LABELS = { pending: "Pending", accepted: "Accepted", rejected: "Rejected" };
 
 /** The rows the tree list shows above the tree: groups on no page, waiting, proposals. */
 export function assignmentRows(overview) {
@@ -117,11 +117,11 @@ export function proposalForm(proposal, overview) {
   };
 }
 
-/** A label that attaches to very few groups or to a very large share, in Hebrew. */
+/** A label that attaches to very few groups or to a very large share, in words. */
 export function findingText(finding, overview, format = String) {
-  const title = `„${titleOf(overview, finding.label_id)}”`;
+  const title = quote(titleOf(overview, finding.label_id));
   if (finding.finding === "large") {
-    return `התווית ${title} מודבקת ל-${percent(finding.share)} מהקבוצות (${format(finding.count)}): כמסנן היא כמעט לא מצמצמת.`;
+    return `The label ${title} is attached to ${percent(finding.share)} of the groups (${format(finding.count)}): as a filter it hardly narrows anything.`;
   }
-  return `התווית ${title} מודבקת רק ${prefixed("ל", finding.count, format)}: אולי היא צרה מדי, או שהתיאור שלה לא ברור למסווג.`;
+  return `The label ${title} is attached to only ${groupCount(finding.count, format)}: maybe it is too narrow, or its description is unclear to the classifier.`;
 }

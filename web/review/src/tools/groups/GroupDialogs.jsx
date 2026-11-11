@@ -1,4 +1,4 @@
-import { Dialog, formatCount } from "@shell";
+import { countText, Dialog, formatCount } from "@shell";
 import { api, groupPath } from "./api.js";
 import { GroupPicker } from "./GroupPicker.jsx";
 import { pickedIn } from "./groups.js";
@@ -17,36 +17,36 @@ export function DialogHost({ dialog, group, picked, close, act }) {
     case "merge":
       return (
         <GroupPicker
-          title="מיזוג עם קבוצה אחרת"
-          description="הטענות של שתי הקבוצות יהיו קבוצה אחת; נשמר המזהה של הקבוצה הוותיקה יותר."
+          title="Merge with another group"
+          description="The claims of both groups become one group; the older group's id is kept."
           excludeId={group.group_id}
           suggested={suggested}
-          confirmLabel="מיזוג"
+          confirmLabel="Merge"
           onClose={close}
-          onConfirm={(otherId) => act(() => api.post("/groups/merge", { group_ids: [group.group_id, otherId] }), "הקבוצות מוזגו")}
+          onConfirm={(otherId) => act(() => api.post("/groups/merge", { group_ids: [group.group_id, otherId] }), "Groups merged")}
         />
       );
     case "move":
       return (
         <GroupPicker
-          title="העברת הטענה לקבוצה אחרת"
-          description={group.size === 1 ? "זו הטענה היחידה בקבוצה: הקבוצה תתמזג לתוך הקבוצה שתבחרו." : "הטענה תעבור לקבוצה שתבחרו."}
+          title="Move the claim to another group"
+          description={group.size === 1 ? "This is the only claim in the group: the group will merge into the group you choose." : "The claim will move to the group you choose."}
           excludeId={group.group_id}
           suggested={suggested}
-          confirmLabel="העברה"
+          confirmLabel="Move"
           onClose={close}
-          onConfirm={(targetId) => act(() => api.post(`${path}/move`, { claim_id: chosen[0], target_id: targetId }), "הטענה הועברה")}
+          onConfirm={(targetId) => act(() => api.post(`${path}/move`, { claim_id: chosen[0], target_id: targetId }), "Claim moved")}
         />
       );
     case "link":
       return (
         <GroupPicker
-          title="הוספת קישור סתירה"
-          description="שתי הקבוצות יסומנו כסותרות זו את זו (שלב 5 ישמור את הקישור)."
+          title="Add a contradiction link"
+          description="The two groups will be marked as contradicting each other (step 5 keeps the link)."
           excludeId={group.group_id}
-          confirmLabel="קישור"
+          confirmLabel="Link"
           onClose={close}
-          onConfirm={(otherId) => act(() => api.post(`${path}/contradictions`, { group_id: otherId, linked: true }), "קישור הסתירה נוסף")}
+          onConfirm={(otherId) => act(() => api.post(`${path}/contradictions`, { group_id: otherId, linked: true }), "Contradiction link added")}
         />
       );
     case "split":
@@ -54,14 +54,14 @@ export function DialogHost({ dialog, group, picked, close, act }) {
         <Dialog
           open
           tone="danger"
-          title="פיצול לקבוצה חדשה"
-          confirmLabel="פיצול"
+          title="Split into a new group"
+          confirmLabel="Split"
           onClose={close}
-          onConfirm={() => act(() => api.post(`${path}/split`, { claim_ids: chosen }), "הקבוצה פוצלה")}
+          onConfirm={() => act(() => api.post(`${path}/split`, { claim_ids: chosen }), "Group split")}
         >
           <p>
-            {formatCount(chosen.length)} הטענות שנבחרו יעברו לקבוצה חדשה, ו-{formatCount(group.size - chosen.length)} יישארו כאן.
-            השתיים לא יוצעו למיזוג שוב.
+            {countText(chosen.length, "picked claim", formatCount)} will move to a new group, and{" "}
+            {formatCount(group.size - chosen.length)} will stay here. The two will not be suggested for a merge again.
           </p>
         </Dialog>
       );

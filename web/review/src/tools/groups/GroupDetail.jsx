@@ -1,4 +1,4 @@
-import { Bidi, formatCount, Ltr, Panel, PanelState } from "@shell";
+import { Bidi, countText, formatCount, Ltr, Panel, PanelState } from "@shell";
 import { GroupBadges, GroupNumbers } from "./GroupRow.jsx";
 import { dateRange, formatScore, pickedIn } from "./groups.js";
 import { MemberList } from "./MemberList.jsx";
@@ -22,13 +22,13 @@ function QueueNav({ queue, onSelect }) {
   return (
     <>
       <button type="button" className="btn btn-sm" disabled={!queue.prev_id} onClick={() => onSelect(queue.prev_id)}>
-        ‹ הקודמת
+        ‹ Previous
       </button>
       <span className="text-xs text-slate-500">
         {formatCount(queue.position + 1)} / {formatCount(queue.total)}
       </span>
       <button type="button" className="btn btn-sm" disabled={!queue.next_id} onClick={() => onSelect(queue.next_id)}>
-        הבאה ›
+        Next ›
       </button>
     </>
   );
@@ -43,7 +43,7 @@ function LinkRow({ link, actionLabel, onOpen, onAction, saving }) {
         </Bidi>
         <span className="text-xs text-slate-500">
           <Ltr>{link.group_id}</Ltr>
-          {link.manual && <span className="badge badge-sky ms-2">ידני</span>}
+          {link.manual && <span className="badge badge-sky ms-2">Manual</span>}
         </span>
       </button>
       <button type="button" className="btn btn-sm shrink-0" disabled={saving} onClick={() => onAction(link.group_id)}>
@@ -55,22 +55,22 @@ function LinkRow({ link, actionLabel, onOpen, onAction, saving }) {
 
 function Contradictions({ group, saving, on }) {
   return (
-    <Section title="סותרת את">
+    <Section title="Contradicts">
       {group.contradicts.length === 0 ? (
-        <p className="text-slate-400">אין קישורי סתירה.</p>
+        <p className="text-slate-400">No contradiction links.</p>
       ) : (
         <ul className="space-y-1">
           {group.contradicts.map((link) => (
-            <LinkRow key={link.group_id} link={link} actionLabel="הסרת הקישור" saving={saving} onOpen={on.open} onAction={(id) => on.link(id, false)} />
+            <LinkRow key={link.group_id} link={link} actionLabel="Remove the link" saving={saving} onOpen={on.open} onAction={(id) => on.link(id, false)} />
           ))}
         </ul>
       )}
       {group.contradicts_rejected.length > 0 && (
         <>
-          <p className="mb-1 mt-3 text-xs text-slate-500">קישורים שהוסרו ידנית (שלב 5 לא יחזיר אותם):</p>
+          <p className="mb-1 mt-3 text-xs text-slate-500">Links removed by hand (step 5 will not bring them back):</p>
           <ul className="space-y-1">
             {group.contradicts_rejected.map((link) => (
-              <LinkRow key={link.group_id} link={link} actionLabel="החזרה" saving={saving} onOpen={on.open} onAction={(id) => on.link(id, true)} />
+              <LinkRow key={link.group_id} link={link} actionLabel="Restore" saving={saving} onOpen={on.open} onAction={(id) => on.link(id, true)} />
             ))}
           </ul>
         </>
@@ -82,7 +82,7 @@ function Contradictions({ group, saving, on }) {
 function Partners({ group, saving, on }) {
   if (group.partners.length === 0) return null;
   return (
-    <Section title="הצעות מיזוג לקבוצה הזו">
+    <Section title="Merge suggestions for this group">
       <ul className="space-y-1">
         {group.partners.map((pair) => {
           const other = pair.a.group_id === group.group_id ? pair.b : pair.a;
@@ -95,15 +95,15 @@ function Partners({ group, saving, on }) {
               </button>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
                 <span>
-                  דמיון מזערי <Ltr>{formatScore(pair.min_cosine)}</Ltr>
+                  Lowest similarity <Ltr>{formatScore(pair.min_cosine)}</Ltr>
                 </span>
                 <GroupNumbers group={other} />
                 <span className="ms-auto flex gap-1">
                   <button type="button" className="btn btn-sm" disabled={saving} onClick={() => on.mergeWith(other.group_id)}>
-                    מיזוג
+                    Merge
                   </button>
                   <button type="button" className="btn btn-sm" disabled={saving} onClick={() => on.notSame(other.group_id)}>
-                    לא אותו דבר
+                    Not the same
                   </button>
                 </span>
               </div>
@@ -116,7 +116,7 @@ function Partners({ group, saving, on }) {
 }
 
 export function GroupDetail({ detail, selectedId, picked, saving, on }) {
-  if (!selectedId) return <PanelState empty emptyText="בחרו קבוצה מהרשימה" />;
+  if (!selectedId) return <PanelState empty emptyText="Select a group in the list" />;
   const group = detail.data?.group;
   return (
     <PanelState loading={detail.loading} error={detail.error} hasData={Boolean(group)} onRetry={detail.reload}>
@@ -127,32 +127,32 @@ export function GroupDetail({ detail, selectedId, picked, saving, on }) {
           actions={<QueueNav queue={detail.data.queue} onSelect={on.open} />}
         >
           <div className="space-y-6 p-4 text-sm">
-            <Section title={group.representative_manual ? "הטקסט המייצג (נבחר ידנית)" : "הטקסט המייצג"}>
+            <Section title={group.representative_manual ? "Representative text (chosen by hand)" : "Representative text"}>
               <Bidi as="p" className="text-base leading-relaxed">
                 {group.claim_text}
               </Bidi>
             </Section>
-            <Section title="אנשים ותאריכים">
+            <Section title="People and dates">
               <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
-                <dt className="text-slate-500">תומכים</dt>
-                <dd>{formatCount(group.supporter_count)} אנשים שונים</dd>
-                <dt className="text-slate-500">מתנגדים</dt>
-                <dd>{formatCount(group.opposer_count)} אנשים שונים</dd>
-                <dt className="text-slate-500">תאריכים</dt>
+                <dt className="text-slate-500">Supporters</dt>
+                <dd>{countText(group.supporter_count, "different person", formatCount, "different people")}</dd>
+                <dt className="text-slate-500">Opposers</dt>
+                <dd>{countText(group.opposer_count, "different person", formatCount, "different people")}</dd>
+                <dt className="text-slate-500">Dates</dt>
                 <dd>
                   <Ltr>{dateRange(group.first_date, group.last_date)}</Ltr>
                 </dd>
-                <dt className="text-slate-500">שיחות</dt>
+                <dt className="text-slate-500">Threads</dt>
                 <dd>{formatCount(group.thread_count)}</dd>
               </dl>
             </Section>
-            <Section title={`הטענות בקבוצה (${formatCount(group.size)})`}>
+            <Section title={`Claims in the group (${formatCount(group.size)})`}>
               <MemberList members={group.members} picked={pickedIn(picked, group.group_id)} saving={saving} on={on} />
             </Section>
-            <Section title="לפי חודש">
+            <Section title="By month">
               <Timeline months={group.timeline} />
             </Section>
-            <Section title="ישויות">
+            <Section title="Entities">
               {group.entities.length === 0 ? (
                 <p className="text-slate-400">—</p>
               ) : (
@@ -168,7 +168,7 @@ export function GroupDetail({ detail, selectedId, picked, saving, on }) {
             <Contradictions group={group} saving={saving} on={on} />
             <Partners group={group} saving={saving} on={on} />
             {group.merged_from.length > 0 && (
-              <Section title="קבוצות שמוזגו לתוכה">
+              <Section title="Groups merged into it">
                 <p className="flex flex-wrap gap-2">
                   {group.merged_from.map((id) => (
                     <Ltr key={id} className="text-slate-500">

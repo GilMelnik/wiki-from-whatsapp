@@ -1,4 +1,4 @@
-import { Bidi, formatCount, Ltr } from "@shell";
+import { Bidi, countText, formatCount, groupCount, Ltr } from "@shell";
 import { ChangeBadge } from "./bits.jsx";
 import { warningsFor } from "./plan.js";
 
@@ -7,9 +7,9 @@ import { warningsFor } from "./plan.js";
 // groups they hold.
 
 const ASSIGNMENT_ROWS = {
-  unplaced: { title: "קבוצות בלי דף", count: (summary) => summary.counts.unplaced },
-  waiting: { title: "ממתינות להרצת השיוך", count: (summary) => summary.counts.waiting },
-  proposals: { title: "הצעות לשינוי התוכנית", count: (summary) => summary.proposals.pending },
+  unplaced: { title: "Groups on no page", count: (summary) => summary.counts.unplaced },
+  waiting: { title: "Waiting for the assignment run", count: (summary) => summary.counts.waiting },
+  proposals: { title: "Proposals to change the plan", count: (summary) => summary.proposals.pending },
 };
 
 function GroupBadge({ count, title, warn = false }) {
@@ -30,9 +30,9 @@ function AssignmentRow({ overview, item }) {
       <span aria-hidden className="text-amber-600">◆</span>
       <span>{row.title}</span>
       {count === null ? (
-        <span className="ms-auto text-xs text-slate-400">6ב לא רץ</span>
+        <span className="ms-auto text-xs text-slate-400">6b has not run</span>
       ) : (
-        <GroupBadge count={count} warn={count > 0} title={item.kind === "proposals" ? "הצעות שממתינות להחלטה" : "קבוצות טענות"} />
+        <GroupBadge count={count} warn={count > 0} title={item.kind === "proposals" ? "Proposals waiting for a decision" : "Claim groups"} />
       )}
     </span>
   );
@@ -44,7 +44,7 @@ function WarningDot({ overview, id }) {
   const count = warningsFor(overview, id).length;
   if (count === 0) return null;
   return (
-    <span className="badge badge-amber" title={`${count} אזהרות`}>
+    <span className="badge badge-amber" title={countText(count, "warning")}>
       !
     </span>
   );
@@ -56,9 +56,9 @@ export function TreeRow({ overview, item }) {
     const { budget } = overview;
     return (
       <span className="flex items-center justify-between gap-2">
-        <span className="font-semibold">סקירת התוכנית</span>
+        <span className="font-semibold">Plan overview</span>
         <span className={`badge ${budget.pages >= budget.max_pages ? "badge-amber" : "badge-slate"}`}>
-          {formatCount(budget.pages)}/{formatCount(budget.max_pages)} דפים
+          {formatCount(budget.pages)}/{formatCount(budget.max_pages)} pages
         </span>
       </span>
     );
@@ -78,7 +78,7 @@ export function TreeRow({ overview, item }) {
         {sizes && (
           <GroupBadge
             count={sizes.all}
-            title={`${formatCount(sizes.primary)} קבוצות שהדף ראשי עבורן, ${formatCount(sizes.all - sizes.primary)} שרק מזכירות אותו, ${formatCount(sizes.manual)} שויכו ביד`}
+            title={`${groupCount(sizes.primary, formatCount)} primary on the page, ${formatCount(sizes.all - sizes.primary)} that only mention it, ${formatCount(sizes.manual)} assigned by hand`}
           />
         )}
       </span>
@@ -102,7 +102,7 @@ export function LabelRow({ overview, item }) {
           <GroupBadge
             count={summary.labels[item.id] ?? 0}
             warn={Boolean(finding)}
-            title={finding ? (finding.finding === "large" ? "מודבקת לחלק גדול מאוד מהקבוצות" : "מודבקת למעט מאוד קבוצות") : "קבוצות עם התווית"}
+            title={finding ? (finding.finding === "large" ? "Attached to a very large share of the groups" : "Attached to very few groups") : "Groups with the label"}
           />
         )}
       </span>

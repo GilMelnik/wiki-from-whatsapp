@@ -1,4 +1,4 @@
-import { formatCount, Ltr, Panel, PanelState } from "@shell";
+import { countText, formatCount, Ltr, Panel, PanelState } from "@shell";
 import { pickedIn } from "./groups.js";
 import { Key } from "./Key.jsx";
 
@@ -12,47 +12,47 @@ export function GroupActions({ detail, picked, saving, on }) {
   const footer = group && (
     <>
       <button type="button" className="btn btn-primary btn-block" disabled={saving} onClick={on.merge}>
-        מיזוג עם קבוצה אחרת
+        Merge with another group
         <Key>m</Key>
       </button>
       <button type="button" className="btn btn-block" disabled={saving || !canSplit} onClick={on.split}>
-        {canSplit ? `פיצול ${formatCount(chosen.length)} טענות לקבוצה חדשה` : "פיצול (בחרו טענות)"}
+        {canSplit ? `Split ${countText(chosen.length, "claim", formatCount)} into a new group` : "Split (pick claims)"}
         <Key>x</Key>
       </button>
       <button type="button" className="btn btn-block" disabled={saving || chosen.length !== 1} onClick={on.move}>
-        העברת הטענה שנבחרה לקבוצה אחרת
+        Move the picked claim to another group
         <Key>v</Key>
       </button>
       <button type="button" className="btn btn-block" disabled={saving} onClick={on.addLink}>
-        הוספת קישור סתירה
+        Add a contradiction link
         <Key>c</Key>
       </button>
       {group.representative_manual && (
         <button type="button" className="btn btn-sm btn-block" disabled={saving} onClick={() => on.setRepresentative(null)}>
-          בחירה אוטומטית של הטקסט המייצג
+          Choose the representative text automatically
         </button>
       )}
     </>
   );
   return (
     <Panel
-      title="פעולות"
+      title="Actions"
       subtitle={
         <>
-          נשמר מיד בקובץ <Ltr>claims_aggregated_edited.json</Ltr>
+          Saved at once to <Ltr>claims_aggregated_edited.json</Ltr>
         </>
       }
       footer={footer}
     >
-      <PanelState empty={!group} emptyText="אין קבוצה נבחרת">
+      <PanelState empty={!group} emptyText="No group selected">
         {group && (
           <div className="space-y-3 p-4 text-sm text-slate-600">
             <p>
-              נבחרו {formatCount(chosen.length)} מתוך {formatCount(group.size)} טענות.
+              {formatCount(chosen.length)} of {countText(group.size, "claim", formatCount)} picked.
             </p>
             <p className="text-xs text-slate-500">
-              מיזוג שומר את הקבוצה הוותיקה יותר. פיצול יוצר קבוצה חדשה, והשתיים לא יוצעו למיזוג שוב. המספרים
-              מחושבים מחדש מיד, כמו בריצה של שלב 5.
+              A merge keeps the older group. A split creates a new group, and the two will not be suggested for
+              a merge again. The numbers are recomputed at once, as in a step 5 run.
             </p>
           </div>
         )}

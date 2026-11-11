@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import { formatCount, Ltr, Select } from "@shell";
+import { countText, formatCount, Ltr, Select } from "@shell";
 import { entityOptions, ORDERS, SORTS, STANCE_FILTERS } from "./groups.js";
 
 // Toolbar of the groups view: search, filters, order, counters and the file read.
@@ -18,15 +18,15 @@ export function Counters({ summary }) {
   return (
     <div className="ms-auto flex flex-wrap items-center gap-2 text-xs text-slate-600">
       <span>
-        {formatCount(summary.group_count)} קבוצות · {formatCount(summary.multi_count)} עם כמה טענות ·{" "}
-        {formatCount(summary.claim_count)} טענות
+        {countText(summary.group_count, "group", formatCount)} · {formatCount(summary.multi_count)} with several claims ·{" "}
+        {countText(summary.claim_count, "claim", formatCount)}
       </span>
       {summary.ungrouped_claims > 0 && (
-        <span className="badge badge-amber">טענות מחוץ לקבוצות: {formatCount(summary.ungrouped_claims)}</span>
+        <span className="badge badge-amber">Claims outside groups: {formatCount(summary.ungrouped_claims)}</span>
       )}
-      <span className="badge badge-rose">עם סתירות: {formatCount(summary.contradiction_groups)}</span>
-      <span title={summary.edited_exists ? undefined : "השינוי הראשון ייצור את העותק הערוך"}>
-        קורא מ-<Ltr>{summary.file}</Ltr>
+      <span className="badge badge-rose">With contradictions: {formatCount(summary.contradiction_groups)}</span>
+      <span title={summary.edited_exists ? undefined : "The first change will create the edited copy"}>
+        Reading <Ltr>{summary.file}</Ltr>
       </span>
     </div>
   );
@@ -41,17 +41,17 @@ export const GroupsToolbar = forwardRef(function GroupsToolbar({ modeTabs, query
         type="search"
         dir="auto"
         className="field w-56"
-        placeholder="חיפוש בטקסט, ישות… (f)"
+        placeholder="Search text, entities… (f)"
         value={query}
         onChange={(event) => onQuery(event.target.value)}
       />
-      <Flag label="כמה טענות" checked={view.multi} onChange={(multi) => onView({ multi })} />
-      <Flag label="עם סתירות" checked={view.contradictions} onChange={(contradictions) => onView({ contradictions })} />
-      <Flag label="עם הצעות מיזוג" checked={view.suggested} onChange={(suggested) => onView({ suggested })} />
-      <Select label="ישות" value={view.entity} options={entityOptions(summary?.entities)} onChange={(entity) => onView({ entity })} />
-      <Select label="עמדה" value={view.stance} options={STANCE_FILTERS} onChange={(stance) => onView({ stance })} />
-      <Select label="מיון" value={view.sort} options={SORTS} onChange={(sort) => onView({ sort })} />
-      <Select label="כיוון" value={view.order} options={ORDERS} onChange={(order) => onView({ order })} />
+      <Flag label="Several claims" checked={view.multi} onChange={(multi) => onView({ multi })} />
+      <Flag label="With contradictions" checked={view.contradictions} onChange={(contradictions) => onView({ contradictions })} />
+      <Flag label="With merge suggestions" checked={view.suggested} onChange={(suggested) => onView({ suggested })} />
+      <Select label="Entity" value={view.entity} options={entityOptions(summary?.entities)} onChange={(entity) => onView({ entity })} />
+      <Select label="Stance" value={view.stance} options={STANCE_FILTERS} onChange={(stance) => onView({ stance })} />
+      <Select label="Sort" value={view.sort} options={SORTS} onChange={(sort) => onView({ sort })} />
+      <Select label="Order" value={view.order} options={ORDERS} onChange={(order) => onView({ order })} />
       <Counters summary={summary} />
     </>
   );

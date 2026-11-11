@@ -53,7 +53,7 @@ class GroupNotFound(Exception):
 
 
 class EditConflict(Exception):
-    """The edit does not fit the current groups; the message says why (Hebrew, for the UI)."""
+    """The edit does not fit the current groups; the message says why (English, for the UI)."""
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -85,12 +85,12 @@ class GroupsStore:
         self.source = groups.effective
         if not self.source.is_file():
             raise FileNotFoundError(
-                f"אין עדיין קבוצות טענות ({self.source.name}): הריצו את שלב 5 ואז טענו מחדש"
+                f"There are no claim groups yet ({self.source.name}): run step 5, then reload"
             )
         claims_file = claims.effective
         if not claims_file.is_file():
             raise FileNotFoundError(
-                f"קובץ הטענות {claims_file.name} חסר: הריצו את שלב 3 ואז את שלב 5"
+                f"The claims file {claims_file.name} is missing: run step 3, then step 5"
             )
         self.payload = _read(self.source)
         self.groups: list[Group] = self.payload.setdefault("groups", [])
@@ -134,22 +134,23 @@ class GroupsStore:
         if group is not None:
             return group
         if group_id in self.holder:
-            raise GroupNotFound(f"הקבוצה {group_id} מוזגה לתוך {self.holder[group_id]}")
-        raise GroupNotFound(f"אין קבוצה {group_id}")
+            raise GroupNotFound(f"The group {group_id} was merged into {self.holder[group_id]}")
+        raise GroupNotFound(f"There is no group {group_id}")
 
     # ------------------------------------------------------------------ saving
 
     def _require_editable(self, groups: Iterable[Group]) -> ClaimScorer:
         if self.scorer is None:
             raise EditConflict(
-                f"ל-{self.missing_embeddings} טענות אין עדיין וקטור: הריצו את שלב 5 לפני עריכה"
+                f"Claims without a vector yet: {self.missing_embeddings}. Run step 5 before editing"
             )
         unknown = [
             c for g in groups for c in g["member_claim_ids"] if c not in self.inputs.claims
         ]
         if unknown:
             raise EditConflict(
-                f"בקבוצה יש טענה שכבר אינה בקובץ הטענות ({unknown[0]}): הריצו את שלב 5 לפני עריכה"
+                f"The group has a claim that is no longer in the claims file ({unknown[0]}): "
+                "run step 5 before editing"
             )
         return self.scorer
 
@@ -191,7 +192,7 @@ class GroupsStore:
 
         ids = list(dict.fromkeys(group_ids))
         if len(ids) < 2:
-            raise EditConflict("למיזוג צריך לפחות שתי קבוצות שונות")
+            raise EditConflict("A merge needs at least two different groups")
         groups = sorted((self.group(gid) for gid in ids), key=lambda g: self.position[g["group_id"]])
         scorer = self._require_editable(groups)
         survivor, others = groups[0], groups[1:]
@@ -214,11 +215,11 @@ class GroupsStore:
         members = group["member_claim_ids"]
         part_set = set(claim_ids)
         if not part_set:
-            raise EditConflict("בחרו את הטענות שיעברו לקבוצה החדשה")
+            raise EditConflict("Pick the claims that move to the new group")
         if not part_set <= set(members):
-            raise EditConflict(f"לא כל הטענות שנבחרו שייכות לקבוצה {group_id}")
+            raise EditConflict(f"Not every picked claim belongs to the group {group_id}")
         if part_set == set(members):
-            raise EditConflict("פיצול חייב להשאיר לפחות טענה אחת בקבוצה המקורית")
+            raise EditConflict("A split must leave at least one claim in the original group")
         scorer = self._require_editable([group])
         part = claim_order(self.inputs.claims, part_set)
         new_id = allocate_group_id(part[0], used_group_ids(self.groups))
@@ -237,9 +238,9 @@ class GroupsStore:
 
         source, target = self.group(group_id), self.group(target_id)
         if source is target:
-            raise EditConflict("הטענה כבר בקבוצה הזו")
+            raise EditConflict("The claim is already in this group")
         if claim_id not in source["member_claim_ids"]:
-            raise EditConflict(f"הטענה {claim_id} אינה בקבוצה {group_id}")
+            raise EditConflict(f"The claim {claim_id} is not in the group {group_id}")
         scorer = self._require_editable([source, target])
         source["member_claim_ids"] = [c for c in source["member_claim_ids"] if c != claim_id]
         target["member_claim_ids"] = [*target["member_claim_ids"], claim_id]
@@ -259,7 +260,7 @@ class GroupsStore:
 
         group = self.group(group_id)
         if claim_id is not None and claim_id not in group["member_claim_ids"]:
-            raise EditConflict(f"הטענה {claim_id} אינה בקבוצה {group_id}")
+            raise EditConflict(f"The claim {claim_id} is not in the group {group_id}")
         scorer = self._require_editable([group])
         if claim_id is None:
             group.pop("representative_manual", None)
@@ -274,7 +275,7 @@ class GroupsStore:
 
         group, other = self.group(group_id), self.group(other_id)
         if group is other:
-            raise EditConflict("קבוצה אינה יכולה לסתור את עצמה")
+            raise EditConflict("A group cannot contradict itself")
         scorer = self._require_editable([])
         add, drop = LINK_KEYS if linked else reversed(LINK_KEYS)
         for one, two in ((group, other), (other, group)):
@@ -302,7 +303,7 @@ class GroupsStore:
 
         first, second = self.group(a), self.group(b)
         if first is second:
-            raise EditConflict("אלו אותה קבוצה")
+            raise EditConflict("These are the same group")
         scorer = self._require_editable([])
         record = self._record_not_same(
             first["member_claim_ids"], second["member_claim_ids"], [a, b], "suggestion"
@@ -315,7 +316,7 @@ class GroupsStore:
 
         record = next((r for r in self.not_same if r.get("id") == record_id), None)
         if record is None:
-            raise GroupNotFound(f"אין החלטת \"לא אותו דבר\" מספר {record_id}")
+            raise GroupNotFound(f"There is no “not the same” decision number {record_id}")
         scorer = self._require_editable([])
         self.not_same.remove(record)
         self._save([], scorer)

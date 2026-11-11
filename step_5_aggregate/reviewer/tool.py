@@ -88,7 +88,7 @@ class NotSameRequest(BaseModel):
 
 class GroupsTool:
     NAME = "groups"
-    TITLE = "קבוצות טענות"
+    TITLE = "Claim groups"
     READS = (GROUPS_KEY, CLAIMS_KEY, ENTITIES_KEY)
     WRITES = (GROUPS_KEY,)
 

@@ -11,7 +11,7 @@ labels (which pins them) and decides on the step's proposals. Endpoints, under `
   kind, page budget, branch depths, warnings, coverage, changes since the proposal, undo)
 - ``GET  /pages/{page_id}``       the page's example groups with their claim text + coverage
 - ``GET  /coverage/unplaced``     sampled groups the coverage check could not place
-- ``GET  /ids?id=``               whether an id can be given to a new item (Hebrew reason)
+- ``GET  /ids?id=``               whether an id can be given to a new item (English reason)
 - ``POST /operations/preview``    an operation (``{op, ...}``, see ``requests``) → what it
   would do downstream (``edit``: created, removed_pages, removed_labels, redirects, reassign)
 - ``POST /operations``            the same operation, saved → ``{overview, label, edit, focus}``
@@ -28,7 +28,7 @@ labels (which pins them) and decides on the step's proposals. Endpoints, under `
   assignments) → ``{overview, label, focus}``
 
 Unknown page / label / proposal → 404; a change that breaks the plan's rules, a move or a
-decision that does not fit (or nothing to undo) → 409 in Hebrew; missing plan, or no
+decision that does not fit (or nothing to undo) → 409 in English; missing plan, or no
 assignments file for the assignment endpoints → 409; a file locked by a step → 423. The
 assignments are an optional file (step 6b runs after the plan review), so they are a write of
 the tool, watched by hand, not a read: without them the plan tool works as before.
@@ -65,7 +65,7 @@ Sort = Literal[SORTS]
 
 class PlanTool:
     NAME = "plan"
-    TITLE = "תוכנית הוויקי"
+    TITLE = "Wiki plan"
     READS = (PLAN_KEY, GROUPS_KEY)
     WRITES = (PLAN_KEY, ASSIGNMENTS_KEY)
 

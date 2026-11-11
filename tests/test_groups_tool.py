@@ -32,7 +32,7 @@ def test_missing_files_register_and_answer_409(tmp_path: Path, monkeypatch: pyte
     assert tools[0]["name"] == "groups" and tools[0]["missing"] == ["groups", "claims", "entities"]
     for path in ("/summary", "/groups?limit=5", "/groups/g-1", "/suggestions?limit=5"):
         response = groups.client.get(f"/api/groups{path}")
-        assert response.status_code == 409 and "שלב 5" in response.json()["detail"]
+        assert response.status_code == 409 and "step 5" in response.json()["detail"]
     groups.run_step()  # step 5 ran: picked up without a restart
     assert groups.get("/summary")["group_count"] == 9
 
@@ -133,7 +133,7 @@ def test_missing_vectors_keep_views_but_block_edits(groups: GroupsSetup) -> None
     assert groups.get(f"/groups/{groups.gid('a1')}")["group"]["size"] == 3
     stamp = groups.edited.stat().st_mtime_ns
     refused = groups.client.post("/api/groups/groups/merge", json={"group_ids": [groups.gid("d1"), groups.gid("c1")]})
-    assert refused.status_code == 409 and "שלב 5" in refused.json()["detail"]
+    assert refused.status_code == 409 and "step 5" in refused.json()["detail"]
     assert groups.edited.stat().st_mtime_ns == stamp
 
 

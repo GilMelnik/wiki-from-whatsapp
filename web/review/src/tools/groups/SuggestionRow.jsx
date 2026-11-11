@@ -7,8 +7,8 @@ export function SuggestionRow({ pair }) {
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
         <span>
-          {formatCount(pair.a.size)} + {formatCount(pair.b.size)} טענות
-          {pair.shared_entity && <span className="badge badge-slate ms-2">ישות משותפת</span>}
+          {formatCount(pair.a.size)} + {formatCount(pair.b.size)} claims
+          {pair.shared_entity && <span className="badge badge-slate ms-2">Shared entity</span>}
         </span>
         <Ltr>{formatScore(pair.min_cosine)}</Ltr>
       </div>

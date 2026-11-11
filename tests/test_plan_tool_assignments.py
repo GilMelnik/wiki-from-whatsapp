@@ -18,6 +18,7 @@ import pytest
 
 from step_6_plan.assign import run
 from step_6_plan.coverage import NONE
+from step_6_plan.reviewer.requests import quote
 from tests.assign_fixtures import FakeClassifier, topic
 from tests.plan_fixtures import FakeLLM
 from tests.review_tool_support import locked_elsewhere
@@ -121,10 +122,10 @@ def test_without_assignments_the_plan_tool_works_as_before(tmp_path: Path) -> No
     assert overview["assignments"]["exists"] is False and overview["budget"]["pages"] == 4
     for path in ("/assignments/groups?scope=unplaced", "/proposals"):
         response = setup.client.get(f"/api/plan{path}")
-        assert response.status_code == 409 and "שלב השיוך" in response.json()["detail"]
+        assert response.status_code == 409 and "the assignment step" in response.json()["detail"]
     assert setup.post("/operations/preview", {"op": "delete", "item_id": "hospital"})["assignments"] is None
     setup.apply({"op": "rename", "item_id": "costs", "title_he": "עלויות"})
-    assert setup.post("/undo")["label"].startswith("שינוי השם")
+    assert setup.post("/undo")["label"].startswith("Renamed")
     setup.run_step(FakeLLM([PROPOSALS]))  # step 6b ran: picked up without a restart
     assert setup.get("/plan")["assignments"]["counts"]["unplaced"] == 3
 
@@ -195,7 +196,7 @@ def test_moving_one_group_pins_it_in_the_edited_file_only(setup: AssignSetup) ->
     original = setup.artifact.original.read_bytes()
     before = setup.assignments()["assignments"]["g-00000000"]
     answer = setup.edit(["g-00000000"], {"action": "set_primary", "page_id": "clinics"})
-    assert answer["changed"] == 1 and "„כותרת clinics”" in answer["label"]
+    assert answer["changed"] == 1 and quote("כותרת clinics") in answer["label"]
     after = setup.assignments()["assignments"]["g-00000000"]
     assert after == {**before, "pages": ["clinics"], "manual": True}
     assert setup.artifact.original.read_bytes() == original
@@ -307,5 +308,5 @@ def test_locked_assignments_are_423(setup: AssignSetup) -> None:
 def test_an_unreadable_assignments_file_is_reported(setup: AssignSetup) -> None:
     write_json_file({"assignments": {"g-00000000": {"pages": "agencies"}}}, setup.artifact.edited)
     summary = setup.get("/plan")["assignments"]
-    assert summary["exists"] and "אינו קובץ שיוך תקין" in summary["problem"]
+    assert summary["exists"] and "is not a valid assignments file" in summary["problem"]
     setup.groups(status=409, scope="unplaced")
