@@ -91,7 +91,8 @@ class PageWriter:
         return self._complete(self.write_llm, system, user, WRITE_SCHEMA, rules, context,
                               task=f"write:{context.page_id}", current=None)
 
-    def update(self, context: PageContext, current: Mapping[str, Any], delta: GroupDelta) -> PageText:
+    def update(self, context: PageContext, current: Mapping[str, Any], delta: GroupDelta,
+               request: str = "") -> PageText:
         """The page updated from ``current`` (stage ``update``).
 
         ``current``: the current EFFECTIVE page as ``current_text`` returns it (body with marks
@@ -100,14 +101,17 @@ class PageWriter:
         (``context`` holds the page's groups now). Returns the whole updated page, or the
         current one with ``changed=False`` when the model answers "no change needed". Checks:
         citations and links as for a write, every disputed / contradicted group of the page
-        cited, and the cited share measured over the new and changed main groups.
+        cited, and the cited share measured over the new and changed main groups. ``request``:
+        a free-text correction to carry out (step 8 applies an accepted review suggestion
+        with an empty ``delta`` and a request); the checks are the same.
         """
         touched = set(delta.new) | set(delta.changed)
         mains = [gid for gid in context.main_ids if gid in touched]
         rules = rules_for(context.page_id, context.records, self.plan,
                           required=context.required_ids(), coverage_ids=mains)
         system, user = update_prompt(context, current, new=delta.new, changed=delta.changed,
-                                     removed=delta.removed, brief_changed=delta.brief_changed)
+                                     removed=delta.removed, brief_changed=delta.brief_changed,
+                                     request=request)
         return self._complete(self.update_llm, system, user, UPDATE_SCHEMA, rules, context,
                               task=f"update:{context.page_id}", current=current)
 

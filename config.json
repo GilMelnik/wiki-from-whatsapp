@@ -268,6 +268,64 @@
     ],
     "footnote": {"said_in": "נאמר ב{when}", "said_between": "נאמר בין {first} ל{last}"}
   },
+  "wiki_review": {
+    "stage": "review",
+    "prompt_version": 1,
+    "max_output_tokens": 100000,
+    "context_window_tokens": 1000000,
+    "max_suggestions": 12,
+    "id_prefix": "sug-",
+    "id_hash_chars": 8,
+    "edited_by": "wiki_review",
+    "apply": {
+      "stage": "apply",
+      "max_output_tokens": 64000,
+      "min_kept_sentence_share": 0.8,
+      "max_link_pairs": 6
+    },
+    "kind_names": {
+      "split": "פיצול דף",
+      "merge": "מיזוג דפים",
+      "add_page": "דף חדש",
+      "add_label": "תווית חדשה",
+      "contradiction": "סתירה בין דפים",
+      "mistake": "טעות בדף"
+    },
+    "status_names": {
+      "pending": "ממתינה להחלטה",
+      "accepted": "התקבלה וטרם בוצעה",
+      "rejected": "נדחתה",
+      "applied": "כבר בוצעה"
+    },
+    "page_marks": {
+      "changed": "הדף השתנה מאז שההצעה הועלתה",
+      "gone": "הדף כבר אינו בוויקי"
+    },
+    "actions": {
+      "accept": "לקבל אותה",
+      "reject": "לדחות אותה",
+      "reopen": "להחזיר אותה להמתנה",
+      "edit": "לערוך אותה",
+      "apply": "לבצע אותה"
+    },
+    "messages": {
+      "not_found": "אין הצעה עם המזהה {id}.",
+      "wrong_status": "ההצעה {id} {status}, ולכן אי אפשר {action}.",
+      "bad_proposal": "ההצעה אינה תקינה: {errors}",
+      "plan_refused": "השינוי בתוכנית לא בוצע, כי התוכנית שתתקבל שוברת את הכללים: {errors}",
+      "page_missing": "הדף {page_id} אינו בוויקי (נמחק מהתוכנית, או שעוד לא נכתב).",
+      "sentence_missing": "המשפט שההצעה מתקנת כבר אינו בדף {page_id} (הדף השתנה מאז).",
+      "groups_missing": "הקבוצות האלה אינן בדף או בקובץ הקבוצות: {ids}",
+      "no_change": "כותב הדפים לא מצא מה לשנות בדף {page_id} לפי ההצעה (ייתכן שהקבוצות אינן תומכות בתיקון).",
+      "failed_checks": "התיקון של הדף {page_id} לא עבר את הבדיקות: {problems}",
+      "too_much_changed": "התיקון של הדף {page_id} שינה יותר מדי: רק {kept} מהמשפטים נשארו מילה במילה (נדרש לפחות {required}).",
+      "groups_refused": "קישור הסתירה לא נשמר: {error}",
+      "plan_applied": "השינוי נשמר בתוכנית. הריצו את שלב השיוך (6ב) ואחריו את שלב 7, כדי שהדפים יתעדכנו.",
+      "page_applied": "הדף {page_id} תוקן ({kept} מהמשפטים נשארו מילה במילה).",
+      "page_unchanged": "הדף {page_id} כבר הציג את שני הצדדים ולא שונה.",
+      "link_applied": "קישור הסתירה נשמר בקבוצות הטענות."
+    }
+  },
   "review": {
     "host": "127.0.0.1",
     "port": 8780,

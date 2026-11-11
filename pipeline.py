@@ -9,6 +9,8 @@ Runs steps in order:
     6. plan      -> data/wiki_plan.json (contract C7; planned once, then curated by hand)
     6b. assign   -> data/assignments.json (contract C8; groups on pages + labels, proposals)
     7. write pages -> data/wiki_pages.json (contract C9; one call per page, incremental)
+    8. review    -> data/suggestions.json (contract C12; one call over the whole wiki, only when
+                    a page or the plan changed)
     9. site      -> docs/ (pages, label pages, wiki_index.json) + mkdocs.yml
 
 Human gates (web UIs, no CLI):
@@ -17,6 +19,7 @@ Human gates (web UIs, no CLI):
     step 4 — entity review: ``python -m review_tool --tool entities``
     step 5 — claim-group review: ``python -m review_tool --tool groups``
     step 6 — plan review: ``python -m review_tool --tool plan``
+    step 8 — the review's suggestions: accept / reject / correct each one (``step_8_review.store``)
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ from step_5_aggregate.run import run as aggregate
 from step_6_plan.assign import run as assign
 from step_6_plan.run import run as plan
 from step_7_write_pages.run import run as write_pages
+from step_8_review.run import run as review_wiki
 from step_9_site.run import run as site
 from utils.llm_client import LLMClient
 from utils.logging_setup import setup_step_logging
@@ -41,6 +45,7 @@ from utils.paths import (
     STEP_5,
     STEP_6,
     STEP_7,
+    STEP_8,
     STEP_9,
 )
 
@@ -51,6 +56,7 @@ def _stage_clients(logger: logging.Logger) -> dict[str, LLMClient]:
         "plan": LLMClient.for_stage("plan", logger=logger),
         "write": LLMClient.for_stage("write", logger=logger),
         "update": LLMClient.for_stage("update", logger=logger),
+        "review": LLMClient.for_stage("review", logger=logger),
     }
 
 
@@ -137,6 +143,18 @@ def run(
     )
     logger.info(
         "    -> Review the pages before the site step."
+    )
+
+    logger = setup_step_logging(STEP_8)
+    logger.info("[8] Reviewing the whole wiki (one call, only when a page or the plan changed)...")
+    r_meta = review_wiki()
+    logger.info(
+        f"    {r_meta['raised']} new suggestions ({r_meta['calls']} calls, "
+        f"{r_meta['input_tokens']} input tokens); {r_meta['suggestions']} in the file"
+    )
+    logger.info(
+        "    -> Decide on the suggestions (accept / reject / correct) and apply the accepted "
+        "ones before the site step; structural ones need steps 6b and 7 again."
     )
 
     logger = setup_step_logging(STEP_9)

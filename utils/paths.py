@@ -23,6 +23,7 @@ STEP_6 = "step_6_plan"
 # The assignment step's id in the review tool's step registry; it writes into STEP_6's folder.
 STEP_6_ASSIGN = "step_6_assign"
 STEP_7 = "step_7_write_pages"
+STEP_8 = "step_8_review"
 STEP_9 = "step_9_site"
 SHARED = "shared"
 
@@ -80,6 +81,10 @@ ASSIGNMENTS = Artifact(
 )
 WIKI_PAGES = Artifact(
     step_path(STEP_7, "wiki_pages.json"), step_path(STEP_7, "wiki_pages_edited.json")
+)
+# The whole-wiki review's suggestions and the owner's decisions on them (contract C12).
+SUGGESTIONS = Artifact(
+    step_path(STEP_8, "suggestions.json"), step_path(STEP_8, "suggestions_edited.json")
 )
 
 # ponytail: named aliases for call-site readability
