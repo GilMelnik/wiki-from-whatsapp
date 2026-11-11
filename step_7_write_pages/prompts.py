@@ -258,26 +258,38 @@ def _current_block(current: Mapping[str, Any]) -> str:
     ])
 
 
+_REQUEST = (
+    "editor request (a correction the wiki's editor asks for after reviewing the whole wiki: "
+    "carry it out exactly and only where it applies, using only what <groups> say; change "
+    "nothing else, keep every other sentence word for word; if the groups do not support the "
+    "requested correction, set `no_change` to true): "
+)
+
+
 def _changes_block(context: PageContext, new: Sequence[str], changed: Sequence[str],
-                   removed: Sequence[str], brief_changed: bool) -> str:
+                   removed: Sequence[str], brief_changed: bool, request: str = "") -> str:
     by_id = {record["id"]: record for record in context.records}
     lines = [f"new: {group_line(by_id[gid])}" for gid in new]
     lines += [f"changed: {group_line(by_id[gid])}" for gid in changed]
     lines += [f"removed: {gid}" for gid in removed]
     if brief_changed:
         lines.append("the page's title, description or scope changed (see <page>)")
+    if request:
+        lines.append(_REQUEST + " ".join(request.split()))
     return "<changes>\n" + "\n".join(lines) + "\n</changes>"
 
 
 def update_prompt(context: PageContext, current: Mapping[str, Any], *, new: Sequence[str],
                   changed: Sequence[str], removed: Sequence[str],
-                  brief_changed: bool) -> tuple[str, list[CacheSegment]]:
+                  brief_changed: bool, request: str = "") -> tuple[str, list[CacheSegment]]:
     """``(system, user)`` of an update. ``current``: body (marks, no definitions), summary,
-    questions, related of the current effective page."""
+    questions, related of the current effective page. ``request``: a free-text correction
+    the editor asks for (step 8 applies an accepted review suggestion this way); it goes into
+    <changes> after the group changes, and an update without one is unchanged."""
     tail = "\n\n".join([
         _page_block(context),
         _current_block(current),
-        _changes_block(context, new, changed, removed, brief_changed),
+        _changes_block(context, new, changed, removed, brief_changed, request),
         _groups_block(context.records),
         "Update the article.",
     ])

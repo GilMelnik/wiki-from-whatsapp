@@ -18,7 +18,7 @@ from step_7_write_pages.inputs import (
     page_state,
     writer_fingerprint,
 )
-from step_7_write_pages.prompts import write_prompt
+from step_7_write_pages.prompts import update_prompt, write_prompt
 from step_7_write_pages.writer import GroupDelta, PageWriter
 from tests.pages_fixtures import SECRET, FakeWriter, PagesWorkspace, article, group_ids_in
 from utils.llm_client import _flatten
@@ -202,6 +202,24 @@ def test_update_sends_the_current_page_and_the_changes(corpus: Corpus) -> None:
     assert set(group_ids_in(update.calls[0]["user"])) == context.ids
     assert not text.changed and "עריכה ידנית של הבעלים." in text.body
     assert text.summary == "תקציר"
+
+
+def test_an_editor_request_goes_into_the_changes_and_leaves_other_updates_alone(corpus: Corpus) -> None:
+    context = _context(corpus)
+    current = {"body": article(sorted(context.ids), "agencies"), "summary": "תקציר",
+               "questions": [], "related": []}
+    kwargs = {"new": (), "changed": ("g-00000000",), "removed": (), "brief_changed": False}
+    plain = update_prompt(context, current, **kwargs)
+    assert update_prompt(context, current, request="", **kwargs) == plain
+    assert "editor request" not in _flatten(plain[1])
+    system, user = update_prompt(context, current, request="לתקן   את התאריך", **kwargs)
+    changes = _flatten(user).split("<changes>")[1].split("</changes>")[0]
+    assert system == plain[0] and "changed: g-00000000 |" in changes
+    assert changes.rstrip().endswith("לתקן את התאריך") and "editor request" in changes
+    update = FakeWriter("fake-update")
+    PageWriter(FakeWriter(), update, corpus.plan, LOGGER).update(
+        context, current, GroupDelta(), request="להוסיף את שני הצדדים")
+    assert "להוסיף את שני הצדדים" in _flatten(update.calls[0]["user"])
 
 
 # ------------------------------------------------------------------- front matter
