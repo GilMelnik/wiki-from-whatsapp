@@ -12,6 +12,7 @@ never reach the audit, so they count for nobody. The public file carries counts 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -121,13 +122,42 @@ class GroupDeriver:
         return out
 
 
+@dataclass(frozen=True)
+class CounterLinks:
+    """What the claims' ``counters`` (step 3: a member disputed another) mean for the groups."""
+
+    group_pairs: tuple[tuple[str, str], ...]  # groups whose members dispute each other
+    # Claim pairs that dispute each other inside one group: only a reviewer's merge puts them
+    # there (the grouping never does), and the merge wins: no link.
+    within_group: tuple[tuple[str, str], ...]
+
+
+def counter_links(groups: list[Group], scorer: ClaimScorer) -> CounterLinks:
+    """The group pairs linked by the claims' counter links (claims in no group are ignored)."""
+
+    group_of = {cid: g["group_id"] for g in groups for cid in g["member_claim_ids"]}
+    pairs: set[tuple[str, str]] = set()
+    within: list[tuple[str, str]] = []
+    for a, b in scorer.counter_pairs():
+        group_a, group_b = group_of.get(a), group_of.get(b)
+        if group_a is None or group_b is None:
+            continue
+        if group_a == group_b:
+            within.append((a, b))
+        else:
+            pairs.add((min(group_a, group_b), max(group_a, group_b)))
+    return CounterLinks(tuple(sorted(pairs)), tuple(within))
+
+
 def link_contradictions(groups: list[Group], scorer: ClaimScorer) -> int:
     """Set ``contradicts`` on every group (symmetric); returns the number of links.
 
-    Two groups contradict when a member of one and a member of the other have opposite
-    stances, mention a common canonical entity and reach
-    ``aggregate.contradiction_threshold`` cosine. Embeddings cannot tell "X is great" from
-    "X is bad" well, so this is kept to stance-opposed pairs only, and conservative.
+    Two groups contradict when a member of one disputes a member of the other (C3
+    ``counters``, recorded by step 3 where one member answered another; see
+    ``counter_links``), or when a member of one and a member of the other have opposite
+    stances, mention a common canonical entity and reach ``aggregate.contradiction_threshold``
+    cosine. Embeddings cannot tell "X is great" from "X is bad" well, so the second rule is
+    kept to stance-opposed pairs only, and conservative.
 
     A reviewer's overrides then apply, both symmetric: ``contradicts_manual`` (group ids) adds
     links, ``contradicts_rejected`` removes links. An id that was merged away stands for the
@@ -151,6 +181,9 @@ def link_contradictions(groups: list[Group], scorer: ClaimScorer) -> int:
             if not same_group and scorer.shares_entity(row, scorer.row[other]):
                 links[group_of[claim_id]].add(group_of[other])
                 links[group_of[other]].add(group_of[claim_id])
+    for group_a, group_b in counter_links(groups, scorer).group_pairs:
+        links[group_a].add(group_b)
+        links[group_b].add(group_a)
     _apply_overrides(groups, links)
     for group in groups:
         group["contradicts"] = sorted(links[group["group_id"]])

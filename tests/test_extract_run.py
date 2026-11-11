@@ -58,9 +58,10 @@ class FakeLLM:
         return out
 
 
-def _claim(text: str, supporting: list[int], opposing: list[int] = ()) -> dict:
+def _claim(text: str, supporting: list[int], opposing: list[int] = (), **links: list[int]) -> dict:
+    """One claim of a model answer; ``links`` = ``counters`` / ``counters_existing``."""
     return {"text": text, "entities": ["Alpha"], "stance": "positive",
-            "supporting": supporting, "opposing": list(opposing)}
+            "supporting": supporting, "opposing": list(opposing), "counters": [], **links}
 
 
 def answer_by_text(user: str, schema: dict) -> dict:
@@ -78,7 +79,7 @@ def answer_by_text(user: str, schema: dict) -> dict:
         return {"claims": claims}
     assert schema == UPDATE_SCHEMA
     new = [int(line[1:line.index("]")]) for line in user.splitlines() if "(חדשה)" in line]
-    return {"claims": [_claim("Alpha answers fast", new)],
+    return {"claims": [_claim("Alpha answers fast", new, counters_existing=[])],
             "existing": [{"claim": 1, "supporting": new, "opposing": []}]}
 
 

@@ -51,8 +51,10 @@ class Corpus:
         text: str | None = None,
         supporters: Sequence[tuple[str, str]] = (),
         opposers: Sequence[tuple[str, str]] = (),
+        counters: Sequence[str] = (),
     ) -> None:
-        """One claim; ``supporters`` / ``opposers`` are ``(person, date)`` audit events."""
+        """One claim; ``supporters`` / ``opposers`` are ``(person, date)`` audit events;
+        ``counters`` are the claims it disputes (C3; ``link`` makes a link mutual)."""
 
         # Digits are spelled as letters: quoted numbers would trigger the number rule.
         text = text or f"claim {claim_id.translate(_DIGITS_AS_LETTERS)}"
@@ -67,6 +69,7 @@ class Corpus:
                 "last_date": date,
                 "supporter_count": len({p for p, _ in supporters}),
                 "opposer_count": len({p for p, _ in opposers}),
+                "counters": list(counters),
             }
         )
         vector = np.zeros(DIM, dtype=np.float32)
@@ -81,6 +84,13 @@ class Corpus:
 
     def claim(self, claim_id: str) -> dict[str, Any]:
         return next(c for c in self.claims if c["claim_id"] == claim_id)
+
+    def link(self, a: str, b: str) -> None:
+        """``a`` and ``b`` dispute each other, as step 3 writes it (both sides list it)."""
+
+        for one, other in ((a, b), (b, a)):
+            if other not in self.claim(one)["counters"]:
+                self.claim(one)["counters"].append(other)
 
     def embed(self, texts: Sequence[str], kind: str) -> np.ndarray:
         return np.stack([self.vectors[t] for t in texts])

@@ -1,11 +1,18 @@
 """Turn the model's small JSON into C3 claims, and keep claims' derived fields current.
 
 A claim record (C3) is ``{claim_id, thread_id, claim_text, entities, stance,
-supporting_message_ids, opposing_message_ids, first_date, last_date, supporter_count,
-opposer_count, reaction_summary, _redactions?}``. The model supplies text, entities, stance
-and message numbers; everything in ``DERIVED_KEYS`` is computed here from the thread. A claim
-id is ``<thread_id>-<sha1[:8](text as extracted)>`` and is assigned once: later runs carry the
-record and only recompute its derived fields.
+supporting_message_ids, opposing_message_ids, counters, first_date, last_date,
+supporter_count, opposer_count, reaction_summary, _redactions?}``. The model supplies text,
+entities, stance, message numbers and the claims a claim disputes; everything in
+``DERIVED_KEYS`` is computed or maintained here. A claim id is
+``<thread_id>-<sha1[:8](text as extracted)>`` and is assigned once: later runs carry the record
+and only recompute its derived fields.
+
+``counters`` holds the ids of the claims of the same thread that this claim disputes (a member
+answered another one). The link is mutual (if B counters A, A counters B), is set only from
+the model's answers (a new claim may dispute an existing one in update mode), and loses an id
+when that claim leaves the output. It is a derived key: a manual edit of the claim survives
+when a later dissent adds a link to it.
 
 ``ThreadClaims`` works on one thread whose messages already carry quotes and reactions
 (``utils.threads_io.with_export``).
@@ -29,6 +36,7 @@ EXTRACT_CONFIG = section("extract")
 DERIVED_KEYS = (
     "supporting_message_ids",
     "opposing_message_ids",
+    "counters",
     "first_date",
     "last_date",
     "supporter_count",
@@ -100,7 +108,9 @@ def validate_output(data: Any, *, update: bool) -> None:
             f"{where}.entities must be a list of strings",
         )
         _require(claim.get("stance") in STANCES, f"{where}.stance must be one of {STANCES}")
-        _check_numbers(claim, ("supporting", "opposing"), where)
+        _check_numbers(claim, ("supporting", "opposing", "counters"), where)
+        if update:
+            _check_numbers(claim, ("counters_existing",), where)
     if update:
         existing = data.get("existing")
         _require(isinstance(existing, list), "existing must be a list")
@@ -129,6 +139,7 @@ class ThreadClaims:
         self._position = {message_id: i for i, message_id in enumerate(self.messages_by_id)}
         self.rendered, self.refs = render_thread_for_llm(thread, new_ids=new_ids)
         self.ungrounded = 0  # new claims dropped for lacking (new) supporting evidence
+        self.invalid_counters: list[str] = []  # dropped ``counters`` references, explained
 
     def prompt(self, existing: list[dict[str, Any]]) -> str:
         if existing:
@@ -161,6 +172,7 @@ class ThreadClaims:
         records = [dict(c) for c in existing]
         by_id = {c["claim_id"]: c for c in records}
         existing_ids = set(by_id)
+        resolved: list[dict[str, Any] | None] = []  # the record of each answered claim
         for entry in data.get("existing", []) if update else []:
             if 1 <= entry["claim"] <= len(records):
                 self._add_evidence(
@@ -178,12 +190,14 @@ class ThreadClaims:
                 or (update and not supporting & self.new_ids)
             ):
                 self.ungrounded += 1
+                resolved.append(None)
                 continue
             claim_id = claim_id_for(self.thread_id, text)
             if claim_id in by_id:  # the same text again: one claim, more evidence
                 if claim_id in existing_ids:  # an existing claim gains new messages only
                     supporting, opposing = supporting & self.new_ids, opposing & self.new_ids
                 self._add_evidence(by_id[claim_id], supporting, opposing)
+                resolved.append(by_id[claim_id])
                 continue
             record: dict[str, Any] = {
                 "claim_id": claim_id,
@@ -193,10 +207,43 @@ class ThreadClaims:
                 "stance": raw["stance"],
                 "supporting_message_ids": self._ordered(supporting),
                 "opposing_message_ids": self._ordered(opposing),
+                "counters": [],
             }
             by_id[claim_id] = record
             records.append(record)
+            resolved.append(record)
+        self._link_counters(data["claims"], resolved, records[: len(existing)])
         return records
+
+    def _link_counters(
+        self,
+        raws: list[dict[str, Any]],
+        resolved: list[dict[str, Any] | None],
+        existing: list[dict[str, Any]],
+    ) -> None:
+        """Turn each answered claim's ``counters`` (numbers in the answer) and
+        ``counters_existing`` (numbers of existing claims) into mutual links between records.
+        A reference to no claim, to a dropped claim or to the claim itself is dropped and
+        explained in ``invalid_counters``."""
+
+        for index, (raw, record) in enumerate(zip(raws, resolved)):
+            targets = [
+                ("counters", ref, resolved[ref - 1] if 1 <= ref <= len(resolved) else None)
+                for ref in raw["counters"]
+            ] + [
+                ("counters_existing", ref, existing[ref - 1] if 1 <= ref <= len(existing) else None)
+                for ref in raw.get("counters_existing") or []
+            ]
+            for field, ref, target in targets:
+                where = f"claims[{index}].{field} {ref}"
+                if record is None:
+                    self.invalid_counters.append(f"{where}: the claim itself was dropped")
+                elif target is None:
+                    self.invalid_counters.append(f"{where}: no such claim (or it was dropped)")
+                elif target is record:
+                    self.invalid_counters.append(f"{where}: a claim cannot dispute itself")
+                else:
+                    _link(record, target)
 
     def _add_evidence(
         self, record: dict[str, Any], supporting: set[str], opposing: set[str]
@@ -231,6 +278,7 @@ class ThreadClaims:
         derived = {
             "supporting_message_ids": self._ordered(supporting),
             "opposing_message_ids": self._ordered(opposing),
+            "counters": list(record.get("counters") or []),
             "first_date": evidence.first_date or (min(span) if span else None),
             "last_date": evidence.last_date or (max(span) if span else None),
             "supporter_count": evidence.supporter_count,
@@ -247,3 +295,62 @@ class ThreadClaims:
             "opposers": evidence.opposers,
         }
         return claim, audit
+
+    def finalize_all(
+        self, records: list[dict[str, Any]]
+    ) -> tuple[list[tuple[dict[str, Any], dict[str, Any]]], int]:
+        """``finalize`` every record of the thread; ``counters`` then keep only claims that
+        are still in the output. Returns the ``(claim, audit)`` pairs and the number of
+        claims dropped."""
+
+        kept = [pair for pair in map(self.finalize, records) if pair is not None]
+        ids = {claim["claim_id"] for claim, _ in kept}
+        for claim, _ in kept:
+            claim["counters"] = [cid for cid in claim["counters"] if cid in ids]
+        return kept, len(records) - len(kept)
+
+
+def _link(a: dict[str, Any], b: dict[str, Any]) -> None:
+    """Make ``a`` and ``b`` counter each other (new lists: records are shallow copies)."""
+
+    for one, other in ((a, b), (b, a)):
+        ids = list(one.get("counters") or [])
+        if other["claim_id"] not in ids:
+            one["counters"] = [*ids, other["claim_id"]]
+
+
+def check_counters(claims: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """Where the opposing evidence and the counter links of one thread's claims disagree
+    (not an error: logged and counted). Keys:
+
+    - ``opposed_without_counter_claim``: claims with opposing messages but no counter claim
+      (a bare count; right when the dissent said nothing beyond "no");
+    - ``opposing_not_in_counter``: claims with counters some of whose opposing messages are in
+      the supporting of none of them;
+    - ``link_without_shared_message``: ``"<a> <b>"`` pairs linked by counters where neither
+      claim's opposing messages are among the other's supporting.
+    """
+
+    by_id = {c["claim_id"]: c for c in claims}
+    found: dict[str, list[str]] = {
+        "opposed_without_counter_claim": [],
+        "opposing_not_in_counter": [],
+        "link_without_shared_message": [],
+    }
+    for claim in claims:
+        opposing = set(claim["opposing_message_ids"])
+        others = [by_id[cid] for cid in claim["counters"] if cid in by_id]
+        answered = {m for other in others for m in other["supporting_message_ids"]}
+        if opposing and not others:
+            found["opposed_without_counter_claim"].append(claim["claim_id"])
+        elif opposing - answered and others:
+            found["opposing_not_in_counter"].append(claim["claim_id"])
+        for other in others:
+            if claim["claim_id"] < other["claim_id"] and not (
+                opposing & set(other["supporting_message_ids"])
+                or set(other["opposing_message_ids"]) & set(claim["supporting_message_ids"])
+            ):
+                found["link_without_shared_message"].append(
+                    f"{claim['claim_id']} {other['claim_id']}"
+                )
+    return found

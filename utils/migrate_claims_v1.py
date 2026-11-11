@@ -15,7 +15,8 @@ claim id is computed from the text as the model extracted it (audit ``raw_claim_
 reviewed text of the claims file is kept as ``claim_text``. Identical texts in one thread
 collapse into one claim. ``metadata.legacy_claim_ids`` maps each new id to its v1 ids. A v1
 claim the old model did not tie to any message is kept with empty evidence, zero counts and
-its thread's date span (``metadata.migration.claims_without_evidence``).
+its thread's date span (``metadata.migration.claims_without_evidence``). v1 did not link a
+dissent to the claim it disputes, so every migrated claim has ``counters: []``.
 """
 
 from __future__ import annotations
@@ -87,6 +88,7 @@ def _answer(
                 "stance": claim.get("stance") if claim.get("stance") in STANCES else "neutral",
                 "supporting": numbers(record.get("local_message_ids") or []),
                 "opposing": numbers(record.get("opposing_local_message_ids") or []),
+                "counters": [],
             }
         )
     return {"claims": answer}
@@ -134,11 +136,9 @@ def migrate(backup_dir: Path, out_dir: Path) -> dict[str, Any]:
                 record["claim_text"] = old_claim["claim_text"]  # the reviewed text
                 if old_claim.get("_redactions"):
                     record["_redactions"] = old_claim["_redactions"]
-        for record in records:
-            finalized = job.finalize(record)
-            if finalized is not None:
-                claims.append(finalized[0])
-                audit_out.append(finalized[1])
+        kept, _ = job.finalize_all(records)
+        claims.extend(claim for claim, _ in kept)
+        audit_out.extend(record for _, record in kept)
         inputs[thread_id] = input_fingerprint(thread)
         fingerprints[thread_id] = message_fingerprints(thread)
 
