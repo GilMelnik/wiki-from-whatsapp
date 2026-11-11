@@ -1,4 +1,5 @@
 import { Bidi, Ltr, Panel } from "@shell";
+import { DETAILS_TAB, GROUPS_TAB, isAssignmentRow } from "./assign.js";
 import { Key } from "./bits.jsx";
 import { kindOf, nodeById, OVERVIEW_ID, reorderOp, titleOf } from "./plan.js";
 
@@ -73,9 +74,30 @@ function LabelActions({ id, overview, saving, on }) {
   );
 }
 
-export function ActionsPanel({ overview, selectedId, labelsView, saving, on }) {
+function GroupsTab({ tab, on }) {
+  const groups = tab === GROUPS_TAB;
+  return (
+    <Button onClick={() => on.showTab(groups ? DETAILS_TAB : GROUPS_TAB)}>
+      {groups ? "חזרה לפרטים" : "קבוצות הטענות ששויכו…"} <Key>g</Key>
+    </Button>
+  );
+}
+
+function MoveHelp() {
+  return (
+    <div className="space-y-1 text-xs text-slate-600">
+      <p>בוחרים קבוצות בתיבות (או <Key>a</Key> לכל המוצגות) ואז:</p>
+      <p><Key>p</Key> העברה לדף · <Key>2</Key> דף נוסף · <Key>x</Key> הסרה מכאן · <Key>o</Key> מכל הדפים</p>
+      <p><Key>b</Key> תוויות · <Key>r</Key> חזרה לשיוך אוטומטי · <Key>f</Key> חיפוש · <Key>u</Key> ביטול</p>
+      <p>כל העברה נשמרת מיד ומסמנת את הקבוצה כמשויכת ביד: שלב השיוך לא יחליט עליה מחדש.</p>
+    </div>
+  );
+}
+
+export function ActionsPanel({ overview, selectedId, labelsView, saving, tab, on }) {
   const kind = kindOf(overview, selectedId);
   const node = nodeById(overview, selectedId);
+  const special = !labelsView && isAssignmentRow(selectedId);
   return (
     <Panel
       title="פעולות"
@@ -102,11 +124,13 @@ export function ActionsPanel({ overview, selectedId, labelsView, saving, on }) {
       }
     >
       <div className="space-y-2 p-4 text-sm">
+        {(kind === "page" || kind === "label") && <GroupsTab tab={tab} on={on} />}
         {kind === "page" && <PageActions id={selectedId} saving={saving} on={on} />}
         {kind === "category" && <CategoryActions node={node} saving={saving} on={on} />}
         {kind === "label" && <LabelActions id={selectedId} overview={overview} saving={saving} on={on} />}
         {node && <Reorder node={node} saving={saving} on={on} />}
-        {!kind && (
+        {(special || ((kind === "page" || kind === "label") && tab === GROUPS_TAB)) && <MoveHelp />}
+        {!kind && !special && (
           <p className="text-slate-500">
             בחרו דף, קטגוריה או תווית ברשימה. שינויי טקסט נשמרים מיד; שינויי מבנה ותחום נפתחים בחלון
             שמראה קודם מה ייעלם, מה יופנה ואילו טענות יסווגו מחדש.

@@ -1,12 +1,14 @@
 import { useState } from "react";
-import { Bidi, Ltr } from "@shell";
-import { IdField, submitOnEnter } from "./fields.jsx";
+import { Bidi, formatCount, Ltr } from "@shell";
+import { groupCount, proposalForm } from "./assign.js";
+import { IdField, submitOnEnter, TextArea } from "./fields.jsx";
 import { AddCategoryDialog, AddLabelDialog, AddPageDialog, SplitDialog } from "./FormDialogs.jsx";
 import { OperationDialog } from "./OperationDialog.jsx";
 import { KIND_LABELS, kindOf, labelItems, moveTargets, nodeById, pathTitles, titleOf } from "./plan.js";
 
 // The one dialog that is open (`dialog.kind`) and the operation it sends. `save(op)` saves
-// and throws on failure (the dialog shows the error and stays open).
+// and `accept(proposal, op)` accepts a proposal of the assignment step with that operation;
+// both throw on failure (the dialog shows the error and stays open).
 
 function Quote({ overview, id }) {
   return <Bidi>„{titleOf(overview, id)}”</Bidi>;
@@ -156,16 +158,22 @@ function DeleteDialog({ overview, itemId, onClose, save }) {
   );
 }
 
-function ScopeDialog({ overview, itemId, scope, onClose, save }) {
+/** A scope edit, old next to new. `editable`: the new scope can still be corrected (when
+ * accepting a proposal, which `intro` shows). */
+export function ScopeDialog({ overview, itemId, scope, onClose, save, editable = false, title, confirmLabel = "שמירת התחום", intro = null }) {
+  const [draft, setDraft] = useState(scope);
+  const newScope = editable ? draft.trim() : scope;
   return (
     <OperationDialog
-      title={<>שינוי התחום של <Quote overview={overview} id={itemId} /></>}
-      op={{ op: "edit", item_id: itemId, changes: { scope } }}
+      title={title ?? <>שינוי התחום של <Quote overview={overview} id={itemId} /></>}
+      op={{ op: "edit", item_id: itemId, changes: { scope: newScope } }}
+      ready={Boolean(newScope)}
       overview={overview}
-      confirmLabel="שמירת התחום"
+      confirmLabel={confirmLabel}
       onClose={onClose}
       onConfirm={save}
     >
+      {intro}
       <div className="grid gap-3 md:grid-cols-2">
         <section>
           <h3 className="section-title">התחום עכשיו</h3>
@@ -175,13 +183,47 @@ function ScopeDialog({ overview, itemId, scope, onClose, save }) {
         </section>
         <section>
           <h3 className="section-title">התחום החדש</h3>
-          <Bidi as="p" className="whitespace-pre-line rounded bg-sky-50 p-2 leading-relaxed">
-            {scope}
-          </Bidi>
+          {editable ? (
+            <TextArea value={draft} onChange={setDraft} rows={8} />
+          ) : (
+            <Bidi as="p" className="whitespace-pre-line rounded bg-sky-50 p-2 leading-relaxed">
+              {scope}
+            </Bidi>
+          )}
         </section>
       </div>
     </OperationDialog>
   );
+}
+
+function Intro({ proposal }) {
+  return (
+    <div className="rounded border border-sky-200 bg-sky-50 p-3 text-sky-900">
+      <p>
+        ההצעה: <Bidi className="font-medium">{proposal.title_he}</Bidi>. <Bidi>{proposal.reason}</Bidi>
+      </p>
+      <p className="mt-1 text-xs">
+        אפשר לתקן כל שדה לפני הקבלה. הקבלה שומרת את השינוי בתוכנית ומסמנת את ההצעה כמקובלת; את{" "}
+        {groupCount(proposal.groups.length, formatCount)} שלה ישבץ שלב השיוך בהרצה הבאה.
+      </p>
+    </div>
+  );
+}
+
+function AcceptDialog({ proposal, overview, onClose, accept }) {
+  const form = proposalForm(proposal, overview);
+  const common = {
+    overview,
+    onClose,
+    save: (op) => accept(proposal, op),
+    title: <>קבלת ההצעה: <Bidi>„{proposal.title_he}”</Bidi></>,
+    confirmLabel: "קבלת ההצעה",
+    intro: <Intro proposal={proposal} />,
+  };
+  const initial = { id: form.id, title: form.title, description: form.description, scope: form.scope };
+  if (proposal.kind === "page") return <AddPageDialog {...common} parentId={form.parentId} initial={initial} />;
+  if (proposal.kind === "label") return <AddLabelDialog {...common} kind={form.kind} initial={initial} />;
+  return <ScopeDialog {...common} itemId={proposal.target.page_id} scope={form.scope} editable />;
 }
 
 const DIALOGS = {
@@ -194,12 +236,16 @@ const DIALOGS = {
   addPage: AddPageDialog,
   addCategory: AddCategoryDialog,
   addLabel: AddLabelDialog,
+  accept: AcceptDialog,
 };
 
-export function DialogHost({ dialog, overview, close, save }) {
+/** `dialog = {type, itemId, ...props}`: `type` picks the dialog, the rest are its props (a
+ * new label's `kind`, a split's page, a proposal). */
+export function DialogHost({ dialog, overview, close, save, accept }) {
   if (!dialog || !overview?.nodes) return null;
+  const { type, ...props } = dialog;
   // The item went away meanwhile (a re-plan underneath): nothing to act on.
-  if (dialog.itemId && !kindOf(overview, dialog.itemId)) return null;
-  const Component = DIALOGS[dialog.kind];
-  return <Component {...dialog} overview={overview} onClose={close} save={save} />;
+  if (props.itemId && !kindOf(overview, props.itemId)) return null;
+  const Component = DIALOGS[type];
+  return <Component {...props} overview={overview} onClose={close} save={save} accept={accept} />;
 }

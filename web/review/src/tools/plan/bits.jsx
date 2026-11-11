@@ -74,3 +74,23 @@ export function Key({ children }) {
     </kbd>
   );
 }
+
+/** A row of tabs (`tabs` = [{id, label}]); the chosen one is `value`. */
+export function Tabs({ tabs, value, onChange, className = "" }) {
+  return (
+    <div className={`flex w-fit rounded border border-slate-300 ${className}`} role="tablist">
+      {tabs.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          role="tab"
+          aria-selected={value === option.id}
+          className={`px-3 py-1 text-sm ${value === option.id ? "bg-blue-600 text-white" : "bg-white hover:bg-slate-100"}`}
+          onClick={() => onChange(option.id)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}

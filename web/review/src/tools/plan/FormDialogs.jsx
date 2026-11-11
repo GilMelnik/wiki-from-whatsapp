@@ -6,7 +6,9 @@ import { moveTargets, nodeById, textToAliases, titleOf } from "./plan.js";
 
 // Dialogs that create something: a page, a category, a label, or a page split off another.
 // The owner types the new id (checked while typing) and the texts; the server's dry run shows
-// whether the result is a valid plan.
+// whether the result is a valid plan. The page and label dialogs also accept a proposal of the
+// assignment step: `initial` prefills the form, `intro` shows the proposal above it and
+// `save` is the acceptance.
 
 const SCOPE_HINT =
   "מה שייך לדף ומה לא. זה מה שהמסווג קורא כדי לשבץ כל טענה, אז כתבו גבולות ברורים: „כולל…”, „לא כולל… (זה בדף …)”.";
@@ -68,12 +70,13 @@ function ParentSelect({ overview, value, onChange, excludeId, allowTop = false }
   );
 }
 
-export function AddPageDialog({ overview, parentId, onClose, save }) {
-  const page = usePageForm();
+export function AddPageDialog({ overview, parentId, onClose, save, initial, title = "דף חדש", confirmLabel = "הוספת הדף", intro = null }) {
+  const page = usePageForm(initial);
   const [parent, setParent] = useState(parentId);
   const op = { op: "add_page", page_id: page.form.id, parent_id: parent, ...page.fields, position: null };
   return (
-    <OperationDialog title="דף חדש" op={op} ready={page.complete && Boolean(parent)} overview={overview} confirmLabel="הוספת הדף" onClose={onClose} onConfirm={save}>
+    <OperationDialog title={title} op={op} ready={page.complete && Boolean(parent)} overview={overview} confirmLabel={confirmLabel} onClose={onClose} onConfirm={save}>
+      {intro}
       <ParentSelect overview={overview} value={parent} onChange={setParent} />
       <PageFields page={page} />
     </OperationDialog>
@@ -146,23 +149,24 @@ export function AddCategoryDialog({ overview, parentId = null, onClose, save }) 
   );
 }
 
-export function AddLabelDialog({ overview, kind = "", onClose, save }) {
-  const [id, setId] = useState("");
+export function AddLabelDialog({ overview, kind = "", onClose, save, initial = {}, title: dialogTitle = "תווית חדשה", confirmLabel = "הוספת התווית", intro = null }) {
+  const [id, setId] = useState(initial.id ?? "");
   const [validId, setValidId] = useState(false);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [title, setTitle] = useState(initial.title ?? "");
+  const [description, setDescription] = useState(initial.description ?? "");
   const [labelKind, setLabelKind] = useState(kind);
   const op = { op: "add_label", label_id: id, title_he: title.trim(), description: description.trim(), kind: labelKind.trim() };
   return (
     <OperationDialog
-      title="תווית חדשה"
+      title={dialogTitle}
       op={op}
       ready={validId && Boolean(title.trim() && description.trim() && labelKind.trim())}
       overview={overview}
-      confirmLabel="הוספת התווית"
+      confirmLabel={confirmLabel}
       onClose={onClose}
       onConfirm={save}
     >
+      {intro}
       <IdField value={id} onChange={setId} onValid={setValidId} />
       <Field label="כותרת">
         <TextInput value={title} onChange={setTitle} />

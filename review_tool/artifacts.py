@@ -7,7 +7,9 @@ pipeline in order; a task that introduces a new artifact adds one ``ArtifactNode
 
 Staleness is purely mtime-based: an artifact is stale because of an upstream key when that
 upstream's effective file (edited copy if present, else original) is newer than this
-artifact's original.
+artifact's original. A ``curated`` artifact (the wiki plan: the owner's, re-made only on
+request) keeps its upstream keys for job ordering but is never stale: re-running its step
+would not change it.
 """
 
 from __future__ import annotations
@@ -55,13 +57,21 @@ class ArtifactNode:
     edited: Path | None = None
     step: str | None = None
     upstream: tuple[str, ...] = ()
+    curated: bool = False
 
     @classmethod
     def from_pair(
-        cls, key: str, title: str, pair: Artifact, step: str, upstream: tuple[str, ...]
+        cls,
+        key: str,
+        title: str,
+        pair: Artifact,
+        step: str,
+        upstream: tuple[str, ...],
+        *,
+        curated: bool = False,
     ) -> ArtifactNode:
         """Node for a reviewed artifact (``utils.paths.Artifact`` original/edited pair)."""
-        return cls(key, title, pair.original, pair.edited, step, upstream)
+        return cls(key, title, pair.original, pair.edited, step, upstream, curated)
 
     @property
     def files(self) -> dict[str, Path]:
@@ -153,7 +163,7 @@ class ArtifactGraph:
         original = stamps[node.key][ORIGINAL]
         edited = stamps[node.key].get(EDITED)
         stale_because: list[str] = []
-        if original is not None:
+        if original is not None and not node.curated:
             for upstream_key in node.upstream:
                 upstream = stamps[upstream_key]
                 effective = upstream.get(EDITED) or upstream[ORIGINAL]
@@ -192,7 +202,9 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
             STEP_5,
             ("claims", "entities", "claim_aggregations"),
         ),
-        ArtifactNode.from_pair("plan", "תוכנית הויקי", PLAN, STEP_6, ("groups",)),
+        # Curated: a normal step-6 run keeps the owner's plan as is, so new groups never make
+        # it stale; the assignment step places them.
+        ArtifactNode.from_pair("plan", "תוכנית הויקי", PLAN, STEP_6, ("groups",), curated=True),
         ArtifactNode.from_pair(
             "assignments", "שיוך קבוצות לדפים", ASSIGNMENTS, STEP_6_ASSIGN, ("groups", "plan")
         ),

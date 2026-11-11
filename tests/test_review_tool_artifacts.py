@@ -103,6 +103,30 @@ def test_editing_the_upstream_copy_makes_downstream_stale(tmp_path: Path) -> Non
     assert status_by_key(graph)["claims"].stale_because == ("threads",)
 
 
+def test_a_curated_artifact_is_never_stale_but_its_downstream_is(tmp_path: Path) -> None:
+    """The plan: new groups do not make it stale (a step-6 run would keep it as is), they
+    make the assignments stale (the assignment step places them)."""
+    graph = ArtifactGraph([
+        ArtifactNode("groups", "Groups", tmp_path / "groups.json", step="step_5"),
+        ArtifactNode("plan", "Plan", tmp_path / "plan.json", step="step_6", upstream=("groups",),
+                     curated=True),
+        ArtifactNode("assignments", "Assignments", tmp_path / "assignments.json",
+                     step="step_6b", upstream=("groups", "plan")),
+    ])
+    write_file(tmp_path / "plan.json", {}, mtime=2000)
+    write_file(tmp_path / "assignments.json", {}, mtime=3000)
+    write_file(tmp_path / "groups.json", {}, mtime=5000)
+    status = status_by_key(graph)
+    assert status["plan"].stale_because == ()
+    assert status["assignments"].stale_because == ("groups",)
+    assert graph.node("plan").upstream == ("groups",)  # still ordered after step 5's jobs
+
+
+def test_the_pipeline_plan_is_curated() -> None:
+    assert GRAPH.node("plan").curated and GRAPH.node("plan").upstream == ("groups",)
+    assert not any(node.curated for node in GRAPH.nodes if node.key != "plan")
+
+
 def test_edited_copy_is_the_effective_upstream_file(tmp_path: Path) -> None:
     graph = build_graph(tmp_path)
     write_file(tmp_path / "threads.json", {}, mtime=5000)  # newer than claims, but superseded

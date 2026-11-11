@@ -7,6 +7,8 @@
 const LETTER_CODE = /^Key([A-Z])$/;
 const DIGIT_CODE = /^Digit([0-9])$/;
 const TYPING_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
+// Inputs that take no text: a shortcut pressed right after ticking a box still works.
+const CLICK_INPUTS = new Set(["checkbox", "radio", "button", "submit", "reset"]);
 
 export function comboFromEvent(event) {
   const letter = LETTER_CODE.exec(event.code ?? "");
@@ -24,7 +26,9 @@ export function comboFromEvent(event) {
 
 /** True when the user is typing into a field, where plain keys must not trigger shortcuts. */
 export function isTypingTarget(target) {
-  return Boolean(target) && (target.isContentEditable === true || TYPING_TAGS.has(target.tagName));
+  if (!target) return false;
+  if (target.tagName === "INPUT" && CLICK_INPUTS.has(target.type)) return false;
+  return target.isContentEditable === true || TYPING_TAGS.has(target.tagName);
 }
 
 /** The binding (see useShortcuts) that a combo triggers, or undefined. */

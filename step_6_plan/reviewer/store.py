@@ -1,24 +1,26 @@
-"""The plan tool's store: a thin layer over ``step_6_plan.operations``.
+"""The plan tool's store: a thin layer over ``step_6_plan.operations`` and the assignments.
 
 It reads the effective plan (edited copy, else the original the planning step wrote), the
-effective claim groups (for the example texts) and the coverage report of the planning run.
-A change runs one operation; the operation validates the whole new plan, so an invalid plan
-is never written. A valid result is written to the edited file only, after backing up the
-previous edited file (``guarded_write`` semantics; the caller already holds the lock). The
-original file is never touched, so it always holds the model's proposal, which the views
-compare against.
+effective claim groups (for the texts), the coverage report of the planning run and, when
+step 6b has run, the effective assignments (``assignments.AssignmentsFile``). A plan change
+runs one operation; the operation validates the whole new plan, so an invalid plan is never
+written. A group move or a proposal decision changes the assignments. Every change is
+written to the edited files only, after backing up the previous edited file
+(``guarded_write`` semantics; the caller already holds the locks). The original files are
+never touched: the plan's keeps the model's proposal, which the views compare against, the
+assignments' what the assignment step decided.
 
-Undo: ``PlanHistory`` keeps the plan before and after each change of this session. It is
-owned by the tool, not the store, so it survives reloads caused by other files (a step-5 run);
-an entry is offered only while the plan on disk is still the one that change wrote, so a
-re-plan or an outside edit can never be overwritten by an undo.
+Saving a plan operation never rewrites the assignments: the next assignment run follows
+merges, clears deleted ids and asks again what the change affects; until then the views read
+the assignments through today's plan (``assignment_views``).
+
+Undo: ``history.PlanHistory`` (owned by the tool, so it survives reloads) covers both files.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -32,7 +34,18 @@ from step_6_plan.model import (
     validation_errors,
 )
 from step_6_plan.operations import PlanEdit, kind_of
+from step_6_plan.reviewer import proposals as decisions
+from step_6_plan.reviewer.assignment_views import AssignmentView
+from step_6_plan.reviewer.assignments import (
+    AssignmentsConflict,
+    AssignmentsFile,
+    GroupEdit,
+    changed_record,
+    check_changes,
+    describe_edit,
+)
 from step_6_plan.reviewer.checks import plan_warnings
+from step_6_plan.reviewer.history import PlanHistory, UndoEntry
 from step_6_plan.reviewer.requests import Delete, Merge, Operation, title_of
 from step_6_plan.reviewer.views import (
     branches,
@@ -86,37 +99,6 @@ def _edit_fields(edit: PlanEdit) -> dict[str, Any]:
     }
 
 
-@dataclass(frozen=True)
-class UndoEntry:
-    before: dict[str, Any]
-    after: dict[str, Any]
-    label: str
-    focus: str | None
-    at: str
-
-
-class PlanHistory:
-    """The changes of this session, newest last (at most ``plan.review.undo_depth``)."""
-
-    def __init__(self, depth: int = PLAN_CONFIG["review"]["undo_depth"]) -> None:
-        self.depth = depth
-        self._entries: list[UndoEntry] = []
-
-    def record(self, entry: UndoEntry) -> None:
-        self._entries = [*self._entries, entry][-self.depth:]
-
-    def latest(self, current: dict[str, Any]) -> UndoEntry | None:
-        """The newest change, if the plan is still exactly what it wrote; otherwise the
-        history no longer applies and is forgotten."""
-
-        if self._entries and self._entries[-1].after != current:
-            self._entries = []
-        return self._entries[-1] if self._entries else None
-
-    def pop(self) -> None:
-        self._entries.pop()
-
-
 class PlanStore:
     def __init__(
         self,
@@ -124,6 +106,8 @@ class PlanStore:
         plan_edited: Path,
         groups_original: Path,
         groups_edited: Path,
+        assignments_original: Path,
+        assignments_edited: Path,
         coverage_path: Path,
         history: PlanHistory,
     ) -> None:
@@ -141,15 +125,31 @@ class PlanStore:
             if groups_path.is_file() else None
         )
         self.coverage_report = _read(coverage_path) if coverage_path.is_file() else None
+        self.assignments = AssignmentsFile(assignments_original, assignments_edited)
         self.history = history
+        self._view: AssignmentView | None = None
 
     # --- reads ------------------------------------------------------------------
 
+    def _latest(self) -> UndoEntry | None:
+        return self.history.latest(self.plan, self.assignments.fingerprint)
+
+    @property
+    def view(self) -> AssignmentView:
+        """The assignments read through today's plan (``AssignmentsConflict`` without a
+        usable assignments file)."""
+
+        self.assignments.require()
+        if self._view is None:
+            self._view = AssignmentView(self.plan, self.assignments.data, self.groups)
+        return self._view
+
     def overview(self) -> dict[str, Any]:
-        """Everything the tool shows about the plan except the example texts."""
+        """Everything the tool shows about the plan except the example texts and the lists
+        of groups."""
 
         plan = self.plan
-        latest = self.history.latest(plan)
+        latest = self._latest()
         answer = {
             "file": str(self.source),
             "edited_exists": self.plan_edited.is_file(),
@@ -176,10 +176,32 @@ class PlanStore:
                     group_ids=set(self.groups) if self.groups is not None else None,
                     coverage=coverage,
                 ),
+                "newer_groups": self._newer_groups(),
+                "assignments": self._assignments_overview(),
             }
         except _UNREADABLE as exc:
             logger.warning(f"{self.source} cannot be shown as a C7 plan: {exc!r}")
             return {**answer, "unreadable": True}
+
+    def _assignments_overview(self) -> dict[str, Any]:
+        """Whether step 6b has run, and its numbers read against today's plan."""
+
+        files = self.assignments
+        answer = {"exists": files.exists, "file": str(files.source),
+                  "edited_exists": files.edited.is_file(), "problem": files.problem}
+        return {**answer, **self.view.summary()} if files.usable else answer
+
+    def _newer_groups(self) -> dict[str, int] | None:
+        """Groups the planning model never saw (newer than the plan) and how many of them the
+        assignment step has placed already; ``None`` when the plan does not say."""
+
+        planned = self.plan["metadata"].get("planned_group_ids")
+        if planned is None or self.groups is None:
+            return None
+        planned_ids = set(planned)
+        newer = [gid for gid in self.groups if gid not in planned_ids]
+        records = self.assignments.records if self.assignments.usable else {}
+        return {"count": len(newer), "assigned": sum(1 for gid in newer if gid in records)}
 
     def _readable_proposal(self) -> dict[str, Any] | None:
         if self.proposal is None or validation_errors(self.proposal):
@@ -218,6 +240,22 @@ class PlanStore:
             "unsure": self._summaries(report.get("unsure_group_ids") or []),
         }
 
+    def groups_list(self, *, scope: str, item_id: str | None, role: str, sort: str, q: str,
+                    offset: int, limit: int) -> dict[str, Any]:
+        """One page of the groups on a page / with a label / on no page / waiting."""
+
+        view = self.view
+        if scope in ("page", "label"):
+            items = self.plan["pages"] if scope == "page" else self.plan["labels"]
+            if item_id not in items:
+                kind = "דף" if scope == "page" else "תווית"
+                raise ItemNotFound(f"אין בתוכנית {kind} עם המזהה {item_id}.")
+        return view.groups_list(scope=scope, item_id=item_id, role=role, sort=sort, q=q,
+                                offset=offset, limit=limit)
+
+    def proposals(self) -> dict[str, Any]:
+        return self.view.proposals_view(self.check_id)
+
     def check_id(self, item_id: str) -> dict[str, Any]:
         """Whether ``item_id`` can be given to a new item, with the reason in Hebrew."""
 
@@ -237,7 +275,7 @@ class PlanStore:
                        "ישנים לא יצביעו על משהו אחר.")
         return {"id": item_id, "ok": problem is None, "problem": problem}
 
-    # --- changes ----------------------------------------------------------------
+    # --- plan changes -------------------------------------------------------------
 
     def _run(self, op: Operation, lead: str) -> PlanEdit:
         try:
@@ -246,10 +284,12 @@ class PlanStore:
             raise _conflict(lead, exc) from exc
 
     def preview(self, op: Operation) -> dict[str, Any]:
-        """What ``op`` would do, without saving (``PlanConflict`` if it cannot be done)."""
+        """What ``op`` would do, without saving (``PlanConflict`` if it cannot be done), also
+        to the assignments (``None`` before step 6b has run)."""
 
         edit = self._run(op, "השינוי הזה אינו אפשרי, כי התוכנית שתתקבל שוברת את הכללים:")
-        return {"label": op.describe(self.plan), "edit": _edit_fields(edit)}
+        effect = self.view.plan_edit_effect(edit) if self.assignments.usable else None
+        return {"label": op.describe(self.plan), "edit": _edit_fields(edit), "assignments": effect}
 
     def apply(self, op: Operation) -> dict[str, Any]:
         """Run ``op`` and save the result; answers the new overview, what the change means
@@ -260,7 +300,8 @@ class PlanStore:
         focus = self._focus(op, edit)
         before = self.plan
         after = self._save(edit.plan)
-        self.history.record(UndoEntry(before, after, label, focus, _now()))
+        self.history.record(UndoEntry(label, focus, _now(), after, self.assignments.fingerprint,
+                                      plan_before=before))
         logger.info(f"Plan tool: {label} ({op.op}) {_edit_fields(edit)}; saved {self.plan_edited}")
         return {"overview": self.overview(), "label": label, "edit": _edit_fields(edit),
                 "focus": focus}
@@ -279,21 +320,6 @@ class PlanStore:
             return {row["id"]: row["parent_id"] for row in flat_tree(self.plan)}[op.item_id]
         return getattr(op, "item_id", None)
 
-    def undo(self) -> dict[str, Any]:
-        """Put back the plan as it was before the newest change of this session."""
-
-        latest = self.history.latest(self.plan)
-        if latest is None:
-            raise PlanConflict(
-                "אין שינוי לבטל: לא נעשה שינוי בכלי מאז שהשרת עלה, או שהתוכנית השתנתה מחוץ "
-                "לכלי (למשל תכנון מחדש) ולכן הביטול כבר לא בטוח."
-            )
-        self._save(latest.before, stamp=False)
-        self.history.pop()
-        logger.info(f"Plan tool: undid {latest.label}; saved {self.plan_edited}")
-        focus = latest.focus if latest.focus in live_ids(self.plan) else None
-        return {"overview": self.overview(), "label": latest.label, "focus": focus}
-
     def _save(self, plan: dict[str, Any], *, stamp: bool = True) -> dict[str, Any]:
         if stamp:
             plan["metadata"] = {**plan["metadata"], "edited_by": EDITED_BY, "edited_at": _now()}
@@ -301,4 +327,103 @@ class PlanStore:
         write_json_file(plan, self.plan_edited)
         self.plan = plan
         self.source = self.plan_edited
+        self._view = None
         return plan
+
+    # --- assignment changes -------------------------------------------------------
+
+    def _save_assignments(self, label: str, records: dict[str, Any],
+                          proposals: list[dict[str, Any]] | None = None, *,
+                          plan_before: dict[str, Any] | None = None,
+                          focus: str | None = None) -> None:
+        before = self.assignments.save(records, proposals)
+        self._view = None
+        self.history.record(UndoEntry(label, focus, _now(), self.plan, self.assignments.fingerprint,
+                                      plan_before=plan_before, assignments_before=before))
+        logger.info(f"Plan tool: {label}; saved {self.assignments.edited}")
+
+    def edit_groups(self, edit: GroupEdit) -> dict[str, Any]:
+        """Move the given groups (pins them, see ``assignments``); answers the new overview,
+        the change in words and how many records changed (0: nothing to save)."""
+
+        self.view  # noqa: B018 - requires a usable assignments file
+        check_changes(edit.changes, self.plan)
+        records = self.assignments.records
+        unknown = [gid for gid in edit.group_ids if gid not in records]
+        if unknown:
+            raise AssignmentsConflict(
+                "לקבוצות האלה אין עדיין שיוך (הן חדשות מאז הרצת השיוך האחרונה, או שכבר אינן "
+                f"בקובץ הקבוצות); הריצו את שלב השיוך: {', '.join(unknown)}"
+            )
+        changed = {}
+        for gid in dict.fromkeys(edit.group_ids):
+            record = changed_record(records[gid], edit.changes, self.plan)
+            if record != records[gid]:
+                changed[gid] = record
+        label = describe_edit(edit, lambda item_id: title_of(self.plan, item_id))
+        if changed:
+            self._save_assignments(label, changed)
+        return {"overview": self.overview(), "label": label, "changed": len(changed)}
+
+    def _proposal(self, proposal_id: str, wanted: str, action: str) -> dict[str, Any]:
+        self.view  # noqa: B018 - requires a usable assignments file
+        proposal = decisions.find(self.assignments.proposals, proposal_id)
+        if proposal is None:
+            raise ItemNotFound(f"אין הצעה עם המזהה {proposal_id}.")
+        decisions.check_decidable(proposal, wanted, action)
+        return proposal
+
+    def decide(self, proposal_id: str, status: str) -> dict[str, Any]:
+        """Reject a pending proposal, or put a rejected one back to pending."""
+
+        rejecting = status == decisions.REJECTED
+        proposal = self._proposal(proposal_id, decisions.PENDING if rejecting else decisions.REJECTED,
+                                  "לדחות אותה" if rejecting else "להחזיר אותה להמתנה")
+        proposals = decisions.with_status(self.assignments.proposals, proposal_id, status)
+        label = f"{'דחיית ההצעה' if rejecting else 'החזרה להמתנה של ההצעה'} „{proposal.get('title_he', '')}”"
+        self._save_assignments(label, {}, proposals)
+        return {"overview": self.overview(), "label": label}
+
+    def accept(self, proposal_id: str, op: Operation) -> dict[str, Any]:
+        """Save the plan operation the proposal stands for (as the owner corrected it) and
+        mark the proposal accepted, as one change: everything is checked before either file
+        is written, and undo puts back both."""
+
+        proposal = self._proposal(proposal_id, decisions.PENDING, "לקבל אותה")
+        decisions.check_operation(proposal, op, self.plan)
+        edit = self._run(op, "ההצעה לא התקבלה, כי התוכנית שתתקבל שוברת את הכללים:")
+        label = f"קבלת ההצעה „{proposal.get('title_he', '')}”: {op.describe(self.plan)}"
+        focus = self._focus(op, edit)
+        plan_before = self.plan
+        proposals = decisions.with_status(self.assignments.proposals, proposal_id,
+                                          decisions.ACCEPTED)
+        self._save(edit.plan)
+        try:
+            self._save_assignments(label, {}, proposals, plan_before=plan_before, focus=focus)
+        except OSError:
+            self._save(plan_before, stamp=False)
+            raise
+        return {"overview": self.overview(), "label": label, "edit": _edit_fields(edit),
+                "focus": focus}
+
+    # --- undo -----------------------------------------------------------------------
+
+    def undo(self) -> dict[str, Any]:
+        """Put back the plan and / or the assignments as they were before the newest change
+        of this session."""
+
+        latest = self._latest()
+        if latest is None:
+            raise PlanConflict(
+                "אין שינוי לבטל: לא נעשה שינוי בכלי מאז שהשרת עלה, או שהתוכנית או השיוך השתנו "
+                "מחוץ לכלי (למשל תכנון מחדש או הרצה של שלב השיוך) ולכן הביטול כבר לא בטוח."
+            )
+        if latest.plan_before is not None:
+            self._save(latest.plan_before, stamp=False)
+        if latest.assignments_before is not None:
+            self.assignments.restore(latest.assignments_before)
+            self._view = None
+        self.history.pop()
+        logger.info(f"Plan tool: undid {latest.label}")
+        focus = latest.focus if latest.focus in live_ids(self.plan) else None
+        return {"overview": self.overview(), "label": latest.label, "focus": focus}

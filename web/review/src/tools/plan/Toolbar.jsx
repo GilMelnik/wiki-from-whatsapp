@@ -1,5 +1,5 @@
 import { Bidi, formatCount } from "@shell";
-import { Key } from "./bits.jsx";
+import { Key, Tabs } from "./bits.jsx";
 import { LABELS_VIEW, OVERVIEW_ID, TREE_VIEW } from "./plan.js";
 
 // Toolbar: tree / labels, the page budget, warnings and the undo of the last change.
@@ -13,20 +13,7 @@ export function Toolbar({ overview, view, onView, onSelect, onUndo, saving }) {
   const budget = overview?.budget;
   return (
     <>
-      <div className="flex rounded border border-slate-300" role="tablist">
-        {VIEWS.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            role="tab"
-            aria-selected={view === option.id}
-            className={`px-3 py-1 text-sm ${view === option.id ? "bg-blue-600 text-white" : "bg-white hover:bg-slate-100"}`}
-            onClick={() => onView(option.id)}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
+      <Tabs tabs={VIEWS} value={view} onChange={onView} />
       <span className="text-xs text-slate-400">
         <Key>l</Key> מעבר
       </span>
