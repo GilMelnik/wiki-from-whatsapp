@@ -51,11 +51,12 @@ def format_problem(path: Path, payload: Any) -> str | None:
     if found == THREADS_FORMAT and isinstance(payload.get("threads"), list):
         return None
     edited = "edited copy of the conversations" if path.stem.endswith("_edited") else "conversations file"
+    mark = f"its format mark is {found!r}" if found else "it has no format mark"
     return (
-        f"The {edited} ({path.name}) was made by the old splitter or the old tagger "
-        f"(its format is {found!r}, not {THREADS_FORMAT!r}), so it is shown and edited nowhere. "
-        "Move it out of the step folder and run step 1, which writes the conversations "
-        "in the current format; your gold windows and their marks are kept."
+        f"The {edited} ({path.name}) was made by the old splitter or the old tagger ({mark}, "
+        f"not {THREADS_FORMAT!r}), so this tool neither shows nor changes it. Move it out of the "
+        "step folder and run step 1, which writes the conversations in the current format; the "
+        "gold windows and their done marks are kept."
     )
 
 
