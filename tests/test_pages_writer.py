@@ -20,7 +20,15 @@ from step_7_write_pages.inputs import (
 )
 from step_7_write_pages.prompts import update_prompt, write_prompt
 from step_7_write_pages.writer import GroupDelta, PageWriter
-from tests.pages_fixtures import SECRET, FakeWriter, PagesWorkspace, article, group_ids_in
+from tests.pages_fixtures import (
+    SECRET,
+    FakeWriter,
+    PagesWorkspace,
+    article,
+    group_ids_in,
+    main_ids_in,
+    points_of,
+)
 from utils.llm_client import _flatten
 from utils.okf import validate_front_matter
 
@@ -113,29 +121,30 @@ def test_fingerprint_follows_text_inputs_not_the_catalogue(tmp_path: Path, monke
 def _rules(corpus: Corpus, page_id: str = "agencies") -> tuple[PageContext, AnswerRules]:
     context = _context(corpus, page_id)
     return context, rules_for(context.page_id, context.records, corpus.plan,
-                              required=context.required_ids(), coverage_ids=context.main_ids)
+                              required=context.required_ids())
 
 
 def test_problems_name_unknown_ids_links_and_uncited_groups(corpus: Corpus) -> None:
     context, rules = _rules(corpus, "hospital")
     body = "טקסט [^g-00000007][^g-deadbeef] ראו [[nowhere|שם]] ו[[hospital|כאן]] ו[[costs#x|עוגן]]."
-    found = problems({"body": body}, rules)
+    found = problems({"body": body, **points_of(["g-00000007"])}, rules)
     assert any("g-deadbeef" in p for p in found)
     assert any("nowhere" in p and "hospital" in p for p in found)
     assert any("malformed" in p for p in found)
     required = context.required_ids()
     assert required == ["g-00000003", "g-00000007"]
     assert any("disputed or contradicted" in p and "g-00000003" in p for p in found)
-    assert any("main groups are cited" in p for p in found)
+    assert any("in no point and not in left_out" in p and "g-00000003" in p for p in found)
     full = article(sorted(context.ids), "hospital")
-    assert problems({"body": full}, rules) == []
+    assert problems({"body": full, **points_of(context.main_ids)}, rules) == []
 
 
 def test_repair_removes_what_code_can_fix(corpus: Corpus) -> None:
     _, rules = _rules(corpus)
     body = ("---\ntitle: x\n---\n# כותרת\n\nטקסט [^g-00000000][^g-deadbeef] [[nowhere|שם]] "
             "[[costs|עלויות]] [[costs#x|עוגן]] [[label:mars|מאדים]].\n\n[^g-00000000]: הגדרה\n")
-    fixed, repairs = repair({"body": body, "summary": "תקציר [^g-00000000] [[costs|עם קישור]]",
+    fixed, repairs = repair({"body": body, **points_of(["g-00000000"]),
+                             "summary": "תקציר [^g-00000000] [[costs|עם קישור]]",
                              "questions": ["ש?", ""],
                              "related": [{"page_id": "costs", "relation": "See Also"},
                                          {"page_id": "agencies", "relation": "self"},
@@ -155,7 +164,7 @@ def test_repair_removes_what_code_can_fix(corpus: Corpus) -> None:
 def test_the_written_body_keeps_its_marks_and_no_definitions(corpus: Corpus) -> None:
     context = _context(corpus)
     answer = {"body": "א [^g-00000004]. ב [^g-00000000][^g-00000004].\n\n[^g-00000000]: ישן\n",
-              "summary": "", "questions": [], "related": []}
+              "summary": "", "questions": [], "related": [], **points_of(["g-00000000", "g-00000004"])}
     text = PageWriter(FakeWriter(respond=lambda s, u, t: answer), FakeWriter(), corpus.plan,
                       LOGGER).write(context)
     assert "]:" not in text.body and cited_ids(text.body) == ["g-00000004", "g-00000000"]
@@ -181,9 +190,10 @@ def test_the_participant_count_never_reaches_the_prompt(tmp_path: Path) -> None:
 
 def test_one_retry_names_the_problems_then_the_answer_is_repaired(corpus: Corpus) -> None:
     context = _context(corpus, "hospital")
-    answers = iter([{"body": "טקסט [^g-deadbeef].", "summary": "", "questions": [], "related": []},
+    answers = iter([{"body": "טקסט [^g-deadbeef].", "summary": "", "questions": [], "related": [],
+                     "points": [], "left_out": []},
                     {"body": "עדיין [^g-deadbeef][^g-00000007].", "summary": "ס",
-                     "questions": ["ש"], "related": []}])
+                     "questions": ["ש"], "related": [], **points_of(["g-00000007"])}])
     llm = FakeWriter(respond=lambda system, user, task: next(answers))
     text = PageWriter(llm, FakeWriter(), corpus.plan, LOGGER).write(context)
     assert len(llm.calls) == 2
@@ -193,21 +203,27 @@ def test_one_retry_names_the_problems_then_the_answer_is_repaired(corpus: Corpus
     assert text.report["calls"] == 2 and text.report["final_problems"]
     assert "removed citation g-deadbeef" in text.report["repairs"]
     assert text.report["uncited_required"] == ["g-00000003"]  # recorded, not invented
+    assert text.report["unaccounted"] == ["g-00000003"]
+    assert text.points == points_of(["g-00000007"])["points"]
 
 
 def test_a_good_answer_takes_one_call(corpus: Corpus) -> None:
     llm = FakeWriter()
     text = PageWriter(llm, FakeWriter(), corpus.plan, LOGGER).write(_context(corpus))
     assert len(llm.calls) == 1 and llm.calls[0]["task"] == "write:agencies"
-    assert text.report["cited_share"] == 1.0 and text.report["links"] == 2
+    assert text.report["final_problems"] == [] and text.report["links"] == 2
+    assert text.report["points"] == 3 and text.report["unaccounted"] == []
+    assert [p["groups"] for p in text.points] == [["g-00000000"], ["g-00000004"], ["g-00000008"]]
 
 
 def test_update_sends_the_current_page_and_the_changes(corpus: Corpus) -> None:
     context = _context(corpus)
     update = FakeWriter("fake-update", respond=lambda s, u, t: {
-        "no_change": True, "body": "", "summary": "", "questions": [], "related": []})
+        **points_of(main_ids_in(u)), "no_change": True, "body": "", "summary": "",
+        "questions": [], "related": []})
     current = {"body": article(sorted(context.ids), "agencies", "עריכה ידנית של הבעלים."),
-               "summary": "תקציר", "questions": ["ש?"], "related": []}
+               "summary": "תקציר", "questions": ["ש?"], "related": [],
+               **points_of(context.main_ids)}
     text = PageWriter(FakeWriter(), update, corpus.plan, LOGGER).update(
         context, current, GroupDelta(changed=("g-00000000",), removed=("g-000000ff",)))
     user = _flatten(update.calls[0]["user"])
@@ -221,7 +237,7 @@ def test_update_sends_the_current_page_and_the_changes(corpus: Corpus) -> None:
 def test_an_editor_request_goes_into_the_changes_and_leaves_other_updates_alone(corpus: Corpus) -> None:
     context = _context(corpus)
     current = {"body": article(sorted(context.ids), "agencies"), "summary": "תקציר",
-               "questions": [], "related": []}
+               "questions": [], "related": [], **points_of(context.main_ids)}
     kwargs = {"new": (), "changed": ("g-00000000",), "removed": (), "brief_changed": False}
     plain = update_prompt(context, current, **kwargs)
     assert update_prompt(context, current, request="", **kwargs) == plain

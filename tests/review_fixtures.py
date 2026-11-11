@@ -19,7 +19,14 @@ from step_8_review.apply import Applier, GroupLinker
 from step_8_review.proposals import ANSWER_FIELDS
 from step_8_review.run import run
 from step_8_review.store import SuggestionsStore
-from tests.pages_fixtures import FakeWriter, PagesWorkspace, group_ids_in, page_id_in
+from tests.pages_fixtures import (
+    FakeWriter,
+    PagesWorkspace,
+    group_ids_in,
+    main_ids_in,
+    page_id_in,
+    points_of,
+)
 from utils.llm_client import _flatten
 from utils.paths import Artifact, resolve
 
@@ -39,7 +46,8 @@ def long_article(system: Any, user: Any, task: str) -> dict[str, Any]:
     for gid in ids:
         lines.append(f"{sentence_a(gid)} עוד פרט על {gid} מאותה שיחה.[^{gid}]")
     lines.append(f"ראו גם [[{other}|דף אחר]] ו[[label:usa|ארה\"ב]].[^{ids[0]}]")
-    answer = {"body": "\n".join(lines), "summary": f"תקציר {page_id}", "questions": ["שאלה?"],
+    answer = {**points_of(main_ids_in(user)), "body": "\n".join(lines),
+              "summary": f"תקציר {page_id}", "questions": ["שאלה?"],
               "related": [{"page_id": other, "relation": "see_also"}]}
     if task.startswith("update:"):
         answer["no_change"] = False
@@ -56,14 +64,15 @@ def corrector(old: str, new: str) -> Callable[[Any, Any, str], dict[str, Any]]:
 
     def respond(system: Any, user: Any, task: str) -> dict[str, Any]:
         body = current_body(user)
-        return {"no_change": False, "body": body.replace(old, new), "summary": "תקציר מתוקן",
-                "questions": ["שאלה?"], "related": []}
+        return {**points_of(main_ids_in(user)), "no_change": False, "body": body.replace(old, new),
+                "summary": "תקציר מתוקן", "questions": ["שאלה?"], "related": []}
 
     return respond
 
 
 def no_change(system: Any, user: Any, task: str) -> dict[str, Any]:
-    return {"no_change": True, "body": "", "summary": "", "questions": [], "related": []}
+    return {**points_of(main_ids_in(user)), "no_change": True, "body": "", "summary": "",
+            "questions": [], "related": []}
 
 
 def flat(kind: str, **fields: Any) -> dict[str, Any]:
