@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from review_tool.artifacts import ArtifactGraph, ArtifactNode
 from review_tool.tools import TOOL_SPECS
 from step_6_plan import operations as ops
+from step_6_plan.model import PLAN_CONFIG
 from step_6_plan.reviewer.tool import PlanTool
 from tests.plan_fixtures import make_groups, make_plan
 from tests.review_tool_support import BASE_URL, build_app, locked_elsewhere
@@ -126,8 +127,8 @@ def test_overview_shows_tree_budget_labels_and_no_changes(setup: PlanSetup) -> N
         "page_count": 0,
     }
     assert rows["before"]["kind"] == "category" and rows["before"]["page_count"] == 2
-    assert overview["budget"] == {"pages": 4, "labels": 2, "max_pages": 30, "min_depth": 3,
-                                  "max_depth": 4, "slug_max_length": 40}
+    assert overview["budget"] == {"pages": 4, "labels": 2, "max_pages": PLAN_CONFIG["max_pages"],
+                                  "min_depth": 3, "max_depth": 4, "slug_max_length": 40}
     assert overview["branches"] == [
         {"id": "before", "title_he": "לפני", "pages": 2, "depth": 3},
         {"id": "during", "title_he": "במהלך", "pages": 2, "depth": 3}]

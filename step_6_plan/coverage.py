@@ -4,8 +4,8 @@ This measures the owner's requirement that "each claim could easily fit to one" 
 fixed-seed sample of groups goes to the classifier stage ``plan.coverage.stage`` with one
 ``choice`` question over the page ids plus a "none" option; the question text holds only the
 page titles and scopes. The report says how many groups got a confident page, how many fell
-to "none", how the sample spreads over the pages (projected onto all groups), and which pages
-attract almost nothing or far too much. It is part of the run's report, not of the plan.
+to "none", how the sample spreads over the pages (projected onto all groups), and which pages fall outside
+the size guide ``plan.page_groups`` (too small to be a page, too large for one). It is part of the run's report, not of the plan.
 Task 24 builds the real assignment on ``page_question`` and ``group_state``.
 """
 
@@ -20,6 +20,7 @@ from step_6_plan.model import PLAN_CONFIG
 from utils.llm_client import Classifier, Question
 
 COVERAGE_CONFIG = PLAN_CONFIG["coverage"]
+PAGE_GROUPS = PLAN_CONFIG["page_groups"]
 NONE = COVERAGE_CONFIG["none_option"]
 
 
@@ -60,8 +61,10 @@ def summarize(
 
     A group is placed on its most probable option; it is "confident" when that option is a
     page with probability >= ``confident_probability``. Page counts use every group whose top
-    option is a page, confident or not. A page is small when its share is below
-    ``small_page_factor`` x the even share (1 / pages), large above ``large_page_factor`` x.
+    option is a page, confident or not. A page is small when its projected group count is below
+    ``plan.page_groups.fold_below``, large when above ``split_above`` (the size guide the
+    planning prompt gives; the projection is an estimate from the sample, so a page near a
+    limit may be on either side of it).
     """
 
     n = len(picks)
@@ -72,8 +75,8 @@ def summarize(
     none_ids = [gid for gid, top, _ in tops if top == NONE]
     counts = Counter(top for _, top, _ in tops if top != NONE)
     page_counts = {page_id: counts.get(page_id, 0) for page_id in plan["pages"]}
-    even = 1 / len(plan["pages"])
     share = {page_id: count / n for page_id, count in page_counts.items()} if n else {}
+    projected = {pid: round(s * total_groups) for pid, s in share.items()}
     return {
         "sample_size": n,
         "total_groups": total_groups,
@@ -81,9 +84,9 @@ def summarize(
         "none_share": len(none_ids) / n if n else 0.0,
         "unsure_share": (n - len(confident) - len(none_ids)) / n if n else 0.0,
         "page_counts": page_counts,
-        "projected_groups": {pid: round(s * total_groups) for pid, s in share.items()},
-        "small_pages": [pid for pid, s in share.items() if s < COVERAGE_CONFIG["small_page_factor"] * even],
-        "large_pages": [pid for pid, s in share.items() if s > COVERAGE_CONFIG["large_page_factor"] * even],
+        "projected_groups": projected,
+        "small_pages": [pid for pid, size in projected.items() if size < PAGE_GROUPS["fold_below"]],
+        "large_pages": [pid for pid, size in projected.items() if size > PAGE_GROUPS["split_above"]],
         "none_group_ids": none_ids,
         "unsure_group_ids": [gid for gid, top, _ in tops if top != NONE and gid not in confident],
     }
@@ -115,15 +118,19 @@ def findings(report: dict[str, Any], plan: dict[str, Any]) -> list[str]:
             f"{report['unsure_share']:.0%} were uncertain (groups "
             f"{', '.join(report['unsure_group_ids'])})."
         )
-    counts = report["page_counts"]
+    counts, projected = report["page_counts"], report["projected_groups"]
     found += [
         f"Page {pid!r} ({plan['pages'][pid]['title_he']}) attracted only {counts[pid]} of "
-        f"{report['sample_size']} sampled groups."
+        f"{report['sample_size']} sampled groups (about {projected[pid]} of "
+        f"{report['total_groups']}): too small for a page of its own (fewer than "
+        f"{PAGE_GROUPS['fold_below']}); make it a section of a neighbouring page."
         for pid in report["small_pages"]
     ]
     found += [
         f"Page {pid!r} ({plan['pages'][pid]['title_he']}) attracted {counts[pid]} of "
-        f"{report['sample_size']} sampled groups: likely too broad."
+        f"{report['sample_size']} sampled groups (about {projected[pid]} of "
+        f"{report['total_groups']}): likely too broad (more than {PAGE_GROUPS['split_above']}); "
+        "split it by sub-subject."
         for pid in report["large_pages"]
     ]
     return found

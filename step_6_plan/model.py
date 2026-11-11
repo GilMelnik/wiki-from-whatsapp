@@ -22,7 +22,8 @@ never change once assigned. An id merged away (``merged_from``) or deleted
 assignment can never silently point at something new.
 
 Depth counts levels from the top (a top-level node has depth 1); every page sits at a depth
-between ``plan.min_depth`` and ``plan.max_depth``, and there are at most ``plan.max_pages``.
+between ``plan.min_depth`` and ``plan.max_depth``. ``plan.max_pages`` is only a safety ceiling on
+the page count: the planning prompt sizes pages by ``plan.page_groups``, not by a page count.
 """
 
 from __future__ import annotations
@@ -228,7 +229,7 @@ def validation_errors(plan: Any) -> list[str]:
     if errors:
         return errors
     if len(plan["pages"]) > PLAN_CONFIG["max_pages"]:
-        errors.append(f"{len(plan['pages'])} pages; at most {PLAN_CONFIG['max_pages']} (plan.max_pages)")
+        errors.append(f"{len(plan['pages'])} pages; at most {PLAN_CONFIG['max_pages']} (plan.max_pages, the safety ceiling)")
     return errors + _id_errors(plan) + _tree_errors(plan)
 
 

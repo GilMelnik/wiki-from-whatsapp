@@ -33,6 +33,14 @@ def _even_pick(state: str) -> dict[str, float]:
     return {**{p: 0.0 for p in PAGE_IDS}, coverage.NONE: 0.0, page: 0.9}
 
 
+@pytest.fixture(autouse=True)
+def small_corpus_guide(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The size guide scaled to the 12 synthetic groups (the real one is for ~3,000)."""
+
+    for key, value in {"fold_below": 2, "typical_min": 3, "typical_max": 5, "split_above": 8}.items():
+        monkeypatch.setitem(PLAN_CONFIG["page_groups"], key, value)
+
+
 @pytest.fixture
 def setup(tmp_path: Path) -> dict[str, Any]:
     groups_path = tmp_path / "groups.json"
@@ -191,8 +199,10 @@ def test_coverage_findings_trigger_one_revision(setup: dict[str, Any]) -> None:
     assert plan["pages"]["costs"]["scope"] == "a sharper scope"
 
 
-def test_coverage_arithmetic() -> None:
+def test_coverage_arithmetic(monkeypatch: pytest.MonkeyPatch) -> None:
     plan = make_plan()
+    monkeypatch.setitem(PLAN_CONFIG["page_groups"], "fold_below", 10)
+    monkeypatch.setitem(PLAN_CONFIG["page_groups"], "split_above", 50)
     zero = {**{p: 0.0 for p in PAGE_IDS}, coverage.NONE: 0.0}
     picks = (
         [(f"a{i}", {**zero, "agencies": 0.9}) for i in range(6)]
@@ -207,11 +217,12 @@ def test_coverage_arithmetic() -> None:
     assert report["unsure_share"] == pytest.approx(0.1)
     assert report["page_counts"] == {"agencies": 6, "costs": 1, "clinics": 1, "hospital": 0}
     assert report["projected_groups"] == {"agencies": 60, "costs": 10, "clinics": 10, "hospital": 0}
-    assert report["small_pages"] == ["hospital"]  # 0 < 0.25 * 1/4; costs at 0.1 is not
-    assert report["large_pages"] == []  # 0.6 is not above 3 * 1/4
+    assert report["small_pages"] == ["hospital"]  # 0 < 10 groups; costs at exactly 10 is not
+    assert report["large_pages"] == ["agencies"]  # 60 > 50 groups
     assert report["none_group_ids"] == ["n0", "n1"] and report["unsure_group_ids"] == ["b0"]
     found = coverage.findings(report, plan)
     assert any("30% of the sample" in f for f in found) and any("'hospital'" in f for f in found)
+    assert any("'agencies'" in f and "split it by sub-subject" in f for f in found)
 
 
 def test_coverage_question_uses_titles_and_scopes_only() -> None:

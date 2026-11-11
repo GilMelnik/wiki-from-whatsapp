@@ -18,6 +18,7 @@ from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION
 from step_6_plan.model import PLAN_CONFIG, iter_nodes, sync_pages, validation_errors
 
 _EXAMPLES = PLAN_CONFIG["example_group_ids"]
+_GUIDE = PLAN_CONFIG["page_groups"]
 
 PLAN_SYSTEM = f"""\
 You are designing the structure of a Hebrew wiki for an Israeli WhatsApp community of gay \
@@ -42,12 +43,15 @@ the process, the birth, and afterwards. Use that principle, or another one if th
 clearly call for it, and explain the choice in top_level_rationale (a few sentences). Below \
 the top level come categories; below a category come pages, or, where a category is large, \
 one more level of sub-categories and then pages. Pages are always leaves.
-- Pages: at most {PLAN_CONFIG["max_pages"]} in total. Not too many: no thin page for a \
-subject that only a handful of groups touch; fold it into the page it belongs with. Not too \
-general: no few long pages that each cover many subjects. A page is one coherent subject a \
-member would look up and expect to read in one place. Use the counts: a subject with hundreds \
-of groups and many supporters may deserve more than one page; a subject with very few groups \
-is a section of a neighbouring page.
+- Pages: size each page by its material and let the number of pages follow from that; there \
+is no target number of pages. A page is one coherent subject a member would look up and expect \
+to read in one place, and it rests on roughly {_GUIDE["typical_min"]} to \
+{_GUIDE["typical_max"]} claim groups (count the groups of the list that belong to it; the \
+support counts show how much the community cares). A subject with more than about \
+{_GUIDE["split_above"]} groups is too much for one page: split it by sub-subject into pages \
+of their own. A subject with fewer than about {_GUIDE["fold_below"]} groups is not a page: \
+make it a section of the neighbouring page it belongs with. So no few long pages that each \
+cover many subjects, and no thin page for a subject that only a handful of groups touch.
 - Well defined and self-contained: define each page so that every claim group fits one page \
 easily and obviously. Pages must not overlap; where a subject could sit in two places, decide \
 where it goes and say so in both scopes. Together the pages must leave no common kind of \
@@ -80,7 +84,10 @@ Labels are facets that cut across pages and are not pages, so that a reader can 
 example, everything about one country on whichever pages it appears. The owner's example: by \
 country. Propose the label kinds the claims support (for example country, stage of the \
 process, type of provider; your call) and, for each kind, the labels that enough groups would \
-carry. A label is one value of a kind: kind "country", label "usa" titled "ארצות הברית". Each \
+carry. A label describes a facet of the subject (a country, a stage, a kind of provider, a \
+family situation) and never exists to find private or contact details: no label for phone \
+numbers, contact details or who to call. A label is one value of a kind: kind "country", \
+label "usa" titled "ארצות הברית". Each \
 label has an id (slug), a kind (slug), a title_he, and a description: one Hebrew sentence \
 precise enough to decide yes or no for a single claim. Skip labels that only a few groups \
 would carry. A label must not duplicate a page or the tree's top level. Labels are not part \
