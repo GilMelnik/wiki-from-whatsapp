@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { pickState, setPicked, togglePicked } from "../src/shell/picking.js";
-import { assignmentLines, groupCount } from "../src/shell/planText.js";
+import { assignmentLines, countText, groupCount, quote } from "../src/shell/planText.js";
 import { stanceOf } from "../src/shell/stance.js";
 import {
   assignmentRows,
@@ -40,8 +40,8 @@ test("multi-picking: toggle, pick or drop the visible rows, and the box state", 
   assert.equal(pickState([], []), "none");
 });
 
-test("stances read in Hebrew, unknown ones as themselves", () => {
-  assert.deepEqual(stanceOf("negative"), { label: "שלילית", badge: "badge-rose" });
+test("stances read in English, unknown ones as themselves", () => {
+  assert.deepEqual(stanceOf("negative"), { label: "Negative", badge: "badge-rose" });
   assert.equal(stanceOf("odd").label, "odd");
   assert.equal(stanceOf(undefined).label, "—");
 });
@@ -103,14 +103,22 @@ test("what a plan change does to the groups, in words", () => {
   assert.deepEqual(assignmentLines(none, OVERVIEW), []);
   const lines = assignmentLines({ ...none, redirected: 1, reask: 12, screen_pages: ["costs"], manual_lost: 2, manual_reask: 1 }, OVERVIEW);
   assert.deepEqual(lines.map((line) => line.tone), ["info", "warning", "info", "danger", "info"]);
-  assert.match(lines[0].text, /^השיוך של קבוצה אחת יעבור/);
-  assert.match(lines[1].text, /הדף של 12 קבוצות/);
-  assert.match(lines[2].text, /„עלויות”/);
-  assert.match(lines[3].text, /^הדף שנמחק יוסר גם מ-2 קבוצות ששייכתם ביד\. השיוך הידני של קבוצה אחת יתבטל/);
-  assert.equal(groupCount(3133, (n) => n.toLocaleString("en")), "3,133 קבוצות");
+  assert.match(lines[0].text, /^The assignment of 1 group will move/);
+  assert.match(lines[1].text, /the page of 12 groups again/);
+  assert.ok(lines[2].text.endsWith(`do they belong on ${quote("עלויות")}?`));
+  assert.match(lines[3].text, /^The deleted page will also be taken off 2 groups you assigned by hand\. The manual assignment of 1 group will be cancelled/);
+  assert.equal(groupCount(3133, (n) => n.toLocaleString("en")), "3,133 groups");
+});
+
+test("counts and quoted titles read as English", () => {
+  assert.equal(countText(1, "claim"), "1 claim");
+  assert.equal(countText(0, "claim"), "0 claims");
+  assert.equal(countText(2, "different person", String, "different people"), "2 different people");
+  assert.equal(quote("עלויות"), "“\u2068עלויות\u2069”");
 });
 
 test("label findings say what to judge", () => {
-  assert.match(findingText({ label_id: "usa", count: 913, share: 0.29, finding: "large" }, OVERVIEW), /„ארה״ב” מודבקת ל-29% מהקבוצות \(913\)/);
-  assert.match(findingText({ label_id: "georgia", count: 4, share: 0.001, finding: "few" }, OVERVIEW), /רק ל-4 קבוצות/);
+  const large = findingText({ label_id: "usa", count: 913, share: 0.29, finding: "large" }, OVERVIEW);
+  assert.ok(large.startsWith(`The label ${quote("ארה״ב")} is attached to 29% of the groups (913):`));
+  assert.match(findingText({ label_id: "georgia", count: 4, share: 0.001, finding: "few" }, OVERVIEW), /attached to only 4 groups:/);
 });

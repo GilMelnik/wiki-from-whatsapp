@@ -4,9 +4,9 @@ import { comboFromEvent, isTypingTarget, matchBinding } from "./keys.js";
 // Keyboard shortcuts.
 //
 //   useShortcuts([
-//     { keys: "a", label: "אישור", run: accept },
-//     { keys: ["j", "arrowdown"], label: "הפריט הבא", run: next },
-//     { keys: "mod+s", label: "שמירה", run: save },
+//     { keys: "a", label: "Accept", run: accept },
+//     { keys: ["j", "arrowdown"], label: "Next item", run: next },
+//     { keys: "mod+s", label: "Save", run: save },
 //   ]);
 //
 // Rules the shell enforces: plain keys are ignored while the user types in a field (combos

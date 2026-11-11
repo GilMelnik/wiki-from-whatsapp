@@ -1,4 +1,4 @@
-import { useBanner, useJobs, useResource, useShortcuts, useStepRun, useStoredState } from "@shell";
+import { countText, formatCount, useBanner, useJobs, useResource, useShortcuts, useStepRun, useStoredState } from "@shell";
 import { api } from "./api.js";
 import { MODES } from "./groups.js";
 import { GroupsView } from "./GroupsView.jsx";
@@ -46,15 +46,15 @@ function GroupsTool({ tool }) {
     missing > 0
       ? {
           tone: "warning",
-          text: `ל-${missing} טענות אין עדיין וקטור (שלב 5 לא רץ עליהן): אין הצעות מיזוג והעריכה חסומה עד ששלב 5 ירוץ.`,
-          actionLabel: runStep ? "הרצת שלב 5" : undefined,
+          text: `No vector yet for ${countText(missing, "claim", formatCount)} (step 5 has not run on them): there are no merge suggestions, and editing is blocked until step 5 runs.`,
+          actionLabel: runStep ? "Run step 5" : undefined,
           onAction: runStep ?? undefined,
         }
       : null
   );
 
   useShortcuts(
-    MODES.map((option) => ({ keys: option.key, label: `מעבר ל${option.label}`, run: () => setMode(option.value) }))
+    MODES.map((option) => ({ keys: option.key, label: `Show ${option.label.toLowerCase()}`, run: () => setMode(option.value) }))
   );
 
   const modeTabs = <ModeTabs mode={mode} onMode={setMode} />;
@@ -69,4 +69,4 @@ function GroupsTool({ tool }) {
   );
 }
 
-export default { id: ID, title: "קבוצות טענות", Component: GroupsTool };
+export default { id: ID, title: "Claim groups", Component: GroupsTool };

@@ -12,7 +12,7 @@ function Side({ label, group, onOpen }) {
     <section className="min-w-0 space-y-3 rounded border border-slate-200 bg-white p-3">
       <header className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-slate-500">{label}</span>
-        <button type="button" className="text-xs text-slate-400 hover:underline" title="פתיחה בתצוגת הקבוצות" onClick={() => onOpen(group.group_id)}>
+        <button type="button" className="text-xs text-slate-400 hover:underline" title="Open in the groups view" onClick={() => onOpen(group.group_id)}>
           <Ltr>{group.group_id}</Ltr>
         </button>
       </header>
@@ -32,7 +32,7 @@ function Side({ label, group, onOpen }) {
       )}
       {group.size > 1 && (
         <div>
-          <h3 className="section-title">הטענות בקבוצה ({formatCount(group.size)})</h3>
+          <h3 className="section-title">Claims in the group ({formatCount(group.size)})</h3>
           <MemberList members={group.members} />
         </div>
       )}
@@ -44,18 +44,18 @@ function Score({ pair, bars }) {
   const bar = pair.shared_entity ? bars?.shared_entity : bars?.no_shared_entity;
   return (
     <p className="text-sm text-slate-600">
-      הדמיון החלש ביותר בין טענה לטענה: <Ltr>{formatScore(pair.min_cosine)}</Ltr>
+      Weakest similarity between two claims: <Ltr>{formatScore(pair.min_cosine)}</Ltr>
       {pair.max_cosine !== pair.min_cosine && (
         <>
           {" "}
-          (החזק: <Ltr>{formatScore(pair.max_cosine)}</Ltr>)
+          (strongest: <Ltr>{formatScore(pair.max_cosine)}</Ltr>)
         </>
       )}{" "}
-      · {pair.shared_entity ? "ישות משותפת" : "בלי ישות משותפת"}
+      · {pair.shared_entity ? "Shared entity" : "No shared entity"}
       {bar !== undefined && (
         <>
           {" "}
-          · שלב 5 ממזג בעצמו מ-<Ltr>{formatScore(bar)}</Ltr> (פער <Ltr>{formatScore(pair.margin, { signed: true })}</Ltr>)
+          · step 5 merges by itself from <Ltr>{formatScore(bar)}</Ltr> (gap <Ltr>{formatScore(pair.margin, { signed: true })}</Ltr>)
         </>
       )}
     </p>
@@ -70,18 +70,18 @@ export function PairView({ list, pair, position, onOpen }) {
       hasData={Boolean(list.data)}
       onRetry={list.reload}
       empty={!pair}
-      emptyText="אין הצעה נבחרת"
+      emptyText="No suggestion selected"
     >
       {pair && (
         <Panel
-          title={`הצעה ${formatCount(position + 1)} מתוך ${formatCount(list.data.total)}`}
-          subtitle="האם שתי הקבוצות אומרות את אותו הדבר?"
+          title={`Suggestion ${formatCount(position + 1)} of ${formatCount(list.data.total)}`}
+          subtitle="Do the two groups say the same thing?"
         >
           <div className="space-y-4 p-4 text-sm">
             <Score pair={pair} bars={list.data.bars} />
             <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-              <Side label="קבוצה א (הוותיקה, נשמרת במיזוג)" group={pair.a} onOpen={onOpen} />
-              <Side label="קבוצה ב" group={pair.b} onOpen={onOpen} />
+              <Side label="Group A (the older one, kept in a merge)" group={pair.a} onOpen={onOpen} />
+              <Side label="Group B" group={pair.b} onOpen={onOpen} />
             </div>
           </div>
         </Panel>

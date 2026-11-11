@@ -41,7 +41,7 @@ function isPlainLeftClick(event) {
 }
 
 /**
- * Link to another tool: `<ToolLink toolId="pii">בדיקת פרטיות</ToolLink>`. With `newTab` it
+ * Link to another tool: `<ToolLink toolId="pii">Privacy</ToolLink>`. With `newTab` it
  * opens a second tab on the same server. This is the only way a tool refers to another tool.
  */
 export function ToolLink({ toolId, newTab = false, className, children, ...rest }) {

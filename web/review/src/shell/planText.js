@@ -1,16 +1,34 @@
 // Pure helpers about a wiki plan (no React), shared by every tool that shows or edits a plan
 // operation (the plan tool, the suggestions tool): titles and places of plan items, ids as
-// the owner types them, and the Hebrew wording of what an operation means downstream for the
+// the owner types them, counts in words, and the English wording of what an operation means downstream for the
 // plan (`consequenceLines`, from the server's `edit`) and for the claim groups at the next
 // assignment run (`assignmentLines`, from a preview's `assignments`). The server decides what
 // is allowed; these only shape requests and texts. Functions that write numbers take the
-// shell's `formatCount` as `format` (tests run them without the shell).
+// shell's `formatCount` as `format` (tests run them without the shell). A Hebrew title inside
+// an English sentence is `quote`d: English quotes around a bidi isolate (U+2068 … U+2069), so
+// the title keeps its own direction and does not reorder the words, numbers or commas around it.
+import { formatCount } from "./format.js";
 
 export const PREVIEW_DEBOUNCE_MS = 250;
 export const ID_CHECK_DEBOUNCE_MS = 200;
 
 export const PERMANENT_ID_NOTE =
-  "המזהה הוא כתובת הדף בוויקי והמפתח שכל טענה משויכת אליו, ולכן הוא קבוע: אפשר רק להחליף אותו במזהה חדש שמפנה מהישן.";
+  "The id is the page's address in the wiki and the key every claim is assigned to, so it is permanent: it can only be replaced by a new id that the old one redirects to.";
+
+/** Content inside an English string, in a first-strong isolate (its own direction). */
+export function isolate(text) {
+  return `\u2068${text}\u2069`;
+}
+
+/** A title (or any content) inside an English sentence: “title”, isolated. */
+export function quote(text) {
+  return `“${isolate(text)}”`;
+}
+
+/** "1 claim" / "12 claims" (`plural` for a noun that does not just take an "s"). */
+export function countText(count, singular, format = formatCount, plural = `${singular}s`) {
+  return `${format(count)} ${count === 1 ? singular : plural}`;
+}
 
 
 /** The rows of the labels list, grouped by kind (`first` marks a kind's first row). */
@@ -32,7 +50,7 @@ export function kindOf(overview, id) {
 }
 
 export function titleOf(overview, id) {
-  if (id === null || id === undefined) return "הרמה העליונה";
+  if (id === null || id === undefined) return "Top level";
   return overview?.pages?.[id]?.title_he ?? overview?.labels?.[id]?.title_he ?? nodeById(overview, id)?.title_he ?? id;
 }
 
@@ -70,11 +88,11 @@ export function normalizeId(text) {
 }
 
 function names(overview, ids) {
-  return ids.map((id) => `„${titleOf(overview, id)}”`).join(", ");
+  return ids.map((id) => quote(titleOf(overview, id))).join(", ");
 }
 
 /**
- * What a change means downstream, as Hebrew lines `{tone, text}` (tone: info | warning |
+ * What a change means downstream, as English lines `{tone, text}` (tone: info | warning |
  * danger), from the server's `edit` (created, removed_pages, removed_labels, redirects,
  * reassign). `overview` is the plan before the change, for titles.
  */
@@ -88,18 +106,21 @@ export function consequenceLines(edit, overview) {
     for (const id of followed) {
       lines.push({
         tone: "warning",
-        text: `${what} „${titleOf(overview, id)}” (${id}) ייעלם. הטענות והקישורים שלו יעברו אל „${titleOf(overview, redirected(id))}”.`,
+        text: `${what} ${quote(titleOf(overview, id))} (${id}) will disappear. Its claims and links will move to ${quote(titleOf(overview, redirected(id)))}.`,
       });
     }
     if (homeless.length > 0) {
       lines.push({
         tone: "danger",
-        text: `${homeless.length === 1 ? `${what} ${names(overview, homeless)} יימחק` : `יימחקו: ${names(overview, homeless)}`}. המזהה יוצא משימוש לתמיד, והטענות ששויכו אליו יצטרכו שיוך חדש.`,
+        text:
+          homeless.length === 1
+            ? `${what} ${names(overview, homeless)} will be deleted. Its id is retired for good, and the claims assigned to it will need a new assignment.`
+            : `These will be deleted: ${names(overview, homeless)}. Their ids are retired for good, and the claims assigned to them will need a new assignment.`,
       });
     }
   };
-  removed(edit.removed_pages, "הדף");
-  removed(edit.removed_labels, "התווית");
+  removed(edit.removed_pages, "The page");
+  removed(edit.removed_labels, "The label");
   const renamed = Object.entries(edit.redirects).filter(
     ([old]) => !edit.removed_pages.includes(old) && !edit.removed_labels.includes(old)
   );
@@ -107,69 +128,63 @@ export function consequenceLines(edit, overview) {
     lines.push({
       tone: "info",
       text: edit.created.includes(target)
-        ? `שיוכים וקישורים ישנים של ${old} יופנו אל המזהה החדש ${target}; ${old} יוצא משימוש לתמיד.`
-        : `קישורים ושיוכים ישנים של ${old} יופנו אל „${titleOf(overview, target)}”.`,
+        ? `Old assignments of and links to ${old} will be redirected to the new id ${target}; ${old} is retired for good.`
+        : `Old links to and assignments of ${old} will be redirected to ${quote(titleOf(overview, target))}.`,
     });
   }
   if (edit.reassign.length > 0) {
     lines.push({
       tone: "warning",
-      text: `הטענות של ${names(overview, edit.reassign)} יסווגו מחדש בשלב השיוך, לפי התחומים החדשים.`,
+      text: `The claims of ${names(overview, edit.reassign)} will be classified again at the assignment step, by the new scopes.`,
     });
   }
   const fresh = edit.created.filter((id) => !Object.values(edit.redirects).includes(id));
   if (fresh.length > 0) {
-    lines.push({ tone: "info", text: `ייווצר מזהה חדש: ${fresh.join(", ")}. ${PERMANENT_ID_NOTE}` });
+    lines.push({ tone: "info", text: `${fresh.length === 1 ? "A new id will be created" : "New ids will be created"}: ${fresh.join(", ")}. ${PERMANENT_ID_NOTE}` });
   }
-  if (lines.length === 0) lines.push({ tone: "info", text: "אין השלכה על שיוך הטענות." });
+  if (lines.length === 0) lines.push({ tone: "info", text: "No effect on how the claims are assigned." });
   return lines;
 }
 
 
-/** "קבוצה אחת" / "12 קבוצות". */
+/** "1 group" / "12 groups". */
 export function groupCount(count, format = String) {
-  return count === 1 ? "קבוצה אחת" : `${format(count)} קבוצות`;
-}
-
-/** `groupCount` after a one-letter prefix ("מ", "ל"): a hyphen before digits ("ל-12 קבוצות"). */
-export function prefixed(prefix, count, format) {
-  return `${prefix}${count === 1 ? "" : "-"}${groupCount(count, format)}`;
+  return countText(count, "group", format);
 }
 
 
 /**
- * What a plan change does to the claim groups at the next assignment run, as Hebrew lines
+ * What a plan change does to the claim groups at the next assignment run, as English lines
  * `{tone, text}`, from the preview's `assignments` (null before step 6b has run).
  */
 export function assignmentLines(effect, overview, format = String) {
   if (!effect) return [];
   const lines = [];
   const count = (n) => groupCount(n, format);
-  const names = (ids) => ids.map((id) => `„${titleOf(overview, id)}”`).join(", ");
   if (effect.redirected > 0) {
-    lines.push({ tone: "info", text: `השיוך של ${count(effect.redirected)} יעבור אל היעד החדש בהרצת השיוך הבאה, בלי לשאול שוב.` });
+    lines.push({ tone: "info", text: `The assignment of ${count(effect.redirected)} will move to the new target at the next assignment run, without asking again.` });
   }
   if (effect.reask > 0) {
-    lines.push({ tone: "warning", text: `בהרצת השיוך הבאה המסווג יחליט מחדש על הדף של ${count(effect.reask)} (בתשלום).` });
+    lines.push({ tone: "warning", text: `At the next assignment run the classifier will decide the page of ${count(effect.reask)} again (paid).` });
   }
   if (effect.screen_pages.length > 0) {
-    lines.push({ tone: "info", text: `על שאר הקבוצות המסווג ישאל שאלת כן/לא זולה: האם הן שייכות ל${names(effect.screen_pages)}.` });
+    lines.push({ tone: "info", text: `For the other groups the classifier will ask a cheap yes/no question: do they belong on ${names(overview, effect.screen_pages)}?` });
   }
   if (effect.asked_labels.length > 0) {
-    lines.push({ tone: "info", text: `המסווג ישאל על כל הקבוצות אם התווית ${names(effect.asked_labels)} מתאימה להן.` });
+    lines.push({ tone: "info", text: `The classifier will ask of every group whether the label ${names(overview, effect.asked_labels)} fits it.` });
   }
   if (effect.pages_cleared > 0) {
-    lines.push({ tone: "warning", text: `הדף שנמחק יוסר מהשיוך של ${count(effect.pages_cleared)}.` });
+    lines.push({ tone: "warning", text: `The deleted page will be taken off the assignment of ${count(effect.pages_cleared)}.` });
   }
   if (effect.labels_cleared > 0) {
-    lines.push({ tone: "warning", text: `התווית שנמחקה תוסר מהשיוך של ${count(effect.labels_cleared)}.` });
+    lines.push({ tone: "warning", text: `The deleted label will be taken off the assignment of ${count(effect.labels_cleared)}.` });
   }
   if (effect.manual_lost > 0) {
-    const back = effect.manual_reask > 0 ? ` השיוך הידני של ${count(effect.manual_reask)} יתבטל, כי לא יישאר להן דף, והמסווג יחליט עליהן מחדש.` : "";
-    lines.push({ tone: "danger", text: `הדף שנמחק יוסר גם ${prefixed("מ", effect.manual_lost, format)} ששייכתם ביד.${back}` });
+    const back = effect.manual_reask > 0 ? ` The manual assignment of ${count(effect.manual_reask)} will be cancelled, because they will have no page left, and the classifier will decide on them again.` : "";
+    lines.push({ tone: "danger", text: `The deleted page will also be taken off ${count(effect.manual_lost)} you assigned by hand.${back}` });
   }
   if (lines.length > 0) {
-    lines.push({ tone: "info", text: "הכלי לא משנה את השיוך עכשיו: שלב השיוך יעשה זאת בהרצה הבאה, וההודעה למעלה תציע אותה." });
+    lines.push({ tone: "info", text: "The tool does not change the assignment now: the assignment step does it at its next run, which the banner at the top will offer." });
   }
   return lines;
 }

@@ -32,15 +32,13 @@ export { JobLog, useStepRun } from "./JobControls.jsx";
 // helpers (also what a tool's pure modules may import, see pure.js), the forms and dialogs,
 // and the plan overview they are built on.
 export * from "./pure.js";
-export { usePlanOverview } from "./planApi.js";
+export { usePlanOverview, usePreview } from "./planApi.js";
 export { EditableText, IdField, submitOnEnter, TextArea } from "./fields.jsx";
-export { OperationDialog } from "./OperationDialog.jsx";
+export { Consequences, OperationDialog } from "./OperationDialog.jsx";
 export { AddCategoryDialog, AddLabelDialog, AddPageDialog, KindField, MergeDialog, SplitDialog } from "./PlanDialogs.jsx";
 
 // Text, formatting, keyboard, remembered state
-export { Bidi, Ltr } from "./text.jsx";
-export { formatBytes, formatCount, formatDateTime, formatRelative } from "./format.js";
-export { STANCES, stanceOf } from "./stance.js";
+export { Bidi, Kbd, Ltr } from "./text.jsx";
 export { useNow } from "./useNow.js";
 export { useShortcuts } from "./useShortcuts.js";
 export { useStoredState } from "./storage.js";

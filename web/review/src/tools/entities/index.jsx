@@ -1,16 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  ItemList,
-  Layout,
-  Pager,
-  PanelState,
-  useBanner,
-  usePagedSelection,
-  useResource,
-  useShortcuts,
-  useStoredState,
-  useToast,
-} from "@shell";
+import { countText, ItemList, Layout, Pager, PanelState, useBanner, usePagedSelection, useResource, useShortcuts, useStoredState, useToast } from "@shell";
 import { api, entityPath } from "./api.js";
 import { DialogHost } from "./Dialogs.jsx";
 import { EditPanel } from "./EditPanel.jsx";
@@ -33,7 +22,7 @@ import { Toolbar } from "./Toolbar.jsx";
 
 const ID = "entities";
 
-const CONTACT_TOASTS = { accept: "הפרט שויך לישות", reject: "הפרט נדחה", restore: "הדחייה בוטלה" };
+const CONTACT_TOASTS = { accept: "Contact attached to the entity", reject: "Contact rejected", restore: "Rejection undone" };
 
 function EntitiesTool({ tool }) {
   const toast = useToast();
@@ -90,7 +79,7 @@ function EntitiesTool({ tool }) {
     fallback > 0
       ? {
           tone: "info",
-          text: `${fallback} טענות חדשות או שהשתנו מאז הריצה האחרונה של שלב 4: האזכורים בהן מודגשים לפי מילים שלמות בלבד, עד ששלב 4 ירוץ שוב.`,
+          text: `New or changed since step 4 last ran: ${countText(fallback, "claim")}. Their mentions are highlighted by whole words only until step 4 runs again.`,
         }
       : null
   );
@@ -123,15 +112,15 @@ function EntitiesTool({ tool }) {
   const on = {
     open: setSelectedId,
     setStatus: (status) =>
-      post("/status", { status, view }, status === "accepted" ? "הישות אושרה" : "הישות חזרה להצעה"),
-    rename: (name) => post("/rename", { canonical_name: name }, "השם עודכן"),
-    setCanonical: (name) => post("/rename", { canonical_name: name }, "השם הקנוני עודכן"),
-    saveContacts: (contacts) => post("/contacts", contacts, "פרטי הקשר נשמרו"),
+      post("/status", { status, view }, status === "accepted" ? "Entity accepted" : "Entity back to suggested"),
+    rename: (name) => post("/rename", { canonical_name: name }, "Name updated"),
+    setCanonical: (name) => post("/rename", { canonical_name: name }, "Canonical name updated"),
+    saveContacts: (contacts) => post("/contacts", contacts, "Contacts saved"),
     resolveContact: (body) => post("/contact", body, CONTACT_TOASTS[body.action]),
-    confirm: (name) => post("/members/confirm", { name }, "השיוך אושר"),
+    confirm: (name) => post("/members/confirm", { name }, "Attachment confirmed"),
     exclude: (name, claimIds) =>
-      post("/claims/exclude", { name, claim_ids: claimIds }, claimIds.length === 1 ? "הטענה סומנה כלא קשורה" : "הטענות סומנו כלא קשורות"),
-    include: (name, claimIds) => post("/claims/include", { name, claim_ids: claimIds }, "הטענה הוחזרה לשם"),
+      post("/claims/exclude", { name, claim_ids: claimIds }, claimIds.length === 1 ? "Claim marked as unrelated" : "Claims marked as unrelated"),
+    include: (name, claimIds) => post("/claims/include", { name, claim_ids: claimIds }, "Claim returned to the name"),
     togglePick: (name, claim) => setPicked((previous) => togglePicked(previous, entity.entity_id, name, claim)),
     moveMember: (name) => setDialog({ kind: "moveMember", name }),
     claims: (mode, name, claimIds) => setDialog({ kind: "claims", mode, name, claimIds }),
@@ -148,13 +137,13 @@ function EntitiesTool({ tool }) {
 
   const ready = Boolean(entity) && !saving;
   useShortcuts([
-    { keys: "a", label: "אישור הישות", run: () => ready && entity.status !== "accepted" && on.setStatus("accepted") },
-    { keys: "m", label: "מיזוג לישות אחרת", run: () => ready && on.merge() },
-    { keys: "x", label: "דחיית האיחוד (פירוק לשמות)", run: () => ready && on.reject() },
-    { keys: "g", label: "איחוד הטענות שנבחרו", run: () => ready && on.aggregate() },
-    { keys: "delete", label: "מחיקת הישות", run: () => ready && on.remove() },
-    { keys: "e", label: "עריכת השם הקנוני", run: () => nameRef.current?.focus() },
-    { keys: "f", label: "חיפוש ישות", run: () => searchRef.current?.focus() },
+    { keys: "a", label: "Accept the entity", run: () => ready && entity.status !== "accepted" && on.setStatus("accepted") },
+    { keys: "m", label: "Merge into another entity", run: () => ready && on.merge() },
+    { keys: "x", label: "Reject the grouping (split into names)", run: () => ready && on.reject() },
+    { keys: "g", label: "Combine the picked claims", run: () => ready && on.aggregate() },
+    { keys: "delete", label: "Delete the entity", run: () => ready && on.remove() },
+    { keys: "e", label: "Edit the canonical name", run: () => nameRef.current?.focus() },
+    { keys: "f", label: "Search entities", run: () => searchRef.current?.focus() },
   ]);
 
   const listPanel = (
@@ -164,7 +153,7 @@ function EntitiesTool({ tool }) {
       hasData={Boolean(list.data)}
       onRetry={list.reload}
       empty={list.data?.total === 0}
-      emptyText={view.q ? "אין ישויות שמתאימות לחיפוש" : "אין ישויות בסינון הזה"}
+      emptyText={view.q ? "No entities match the search" : "No entities match this filter"}
     >
       <ItemList
         items={list.data?.items ?? []}
@@ -214,4 +203,4 @@ function EntitiesTool({ tool }) {
   );
 }
 
-export default { id: ID, title: "איחוד ישויות", Component: EntitiesTool };
+export default { id: ID, title: "Entities", Component: EntitiesTool };

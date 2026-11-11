@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bidi, formatCount, formatDateTime, groupCount, Ltr, Panel, PanelState, useResource } from "@shell";
+import { Bidi, countText, formatCount, formatDateTime, groupCount, Ltr, Panel, PanelState, useResource } from "@shell";
 import { api } from "./api.js";
 import { UNPLACED_ID } from "./assign.js";
 import { AssignmentSummary } from "./AssignmentViews.jsx";
@@ -17,19 +17,19 @@ function Budget({ overview }) {
   const full = budget.pages >= budget.max_pages;
   return (
     <section>
-      <h3 className="section-title">היקף</h3>
+      <h3 className="section-title">Size</h3>
       <p className="mb-2">
         <span className={`text-2xl font-semibold ${full ? "text-amber-700" : ""}`}>
-          {formatCount(budget.pages)} מתוך {formatCount(budget.max_pages)}
+          {formatCount(budget.pages)} of {formatCount(budget.max_pages)}
         </span>{" "}
-        דפים · {formatCount(budget.labels)} תוויות · דפים בעומק {budget.min_depth}–{budget.max_depth}
+        pages · {countText(budget.labels, "label", formatCount)} · pages at depth {budget.min_depth}–{budget.max_depth}
       </p>
       <table className="w-full text-start">
         <thead className="text-xs text-slate-500">
           <tr>
-            <th className="py-1 text-start font-medium">ענף</th>
-            <th className="py-1 text-start font-medium">דפים</th>
-            <th className="py-1 text-start font-medium">עומק</th>
+            <th className="py-1 text-start font-medium">Branch</th>
+            <th className="py-1 text-start font-medium">Pages</th>
+            <th className="py-1 text-start font-medium">Depth</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -65,9 +65,9 @@ function Unplaced({ reads }) {
     <PanelState loading={unplaced.loading} error={unplaced.error} hasData={Boolean(unplaced.data)} onRetry={unplaced.reload}>
       {unplaced.data && (
         <div className="space-y-3">
-          <h4 className="text-xs font-medium text-slate-600">לא מתאימות לאף דף</h4>
+          <h4 className="text-xs font-medium text-slate-600">Fit no page</h4>
           <GroupList groups={unplaced.data.none} />
-          <h4 className="text-xs font-medium text-slate-600">לא ברור לאיזה דף</h4>
+          <h4 className="text-xs font-medium text-slate-600">Unclear which page</h4>
           <GroupList groups={unplaced.data.unsure} />
         </div>
       )}
@@ -77,25 +77,25 @@ function Unplaced({ reads }) {
 
 function Coverage({ coverage, unplaced, reads, onSelect }) {
   const [open, setOpen] = useState(false);
-  if (!coverage) return <p className="text-slate-400">אין דוח כיסוי (הוא נוצר כשהתוכנית מתוכננת).</p>;
+  if (!coverage) return <p className="text-slate-400">No coverage report (it is made at planning time).</p>;
   return (
     <div className="space-y-2">
       {unplaced !== null && (
         <p className="rounded bg-slate-50 p-2 text-xs text-slate-600">
-          הבדיקה הזו מתארת את הדגימה של התכנון. הרשימה האמיתית אחרי שלב השיוך:{" "}
+          This check describes the planning's sample. The real list after the assignment step:{" "}
           <button type="button" className="badge badge-amber" onClick={() => onSelect(UNPLACED_ID)}>
-            {groupCount(unplaced, formatCount)} בלי דף
+            {groupCount(unplaced, formatCount)} on no page
           </button>
         </p>
       )}
       <p>
-        המסווג הזול שיבץ {formatCount(coverage.sample_size)} קבוצות מתוך {formatCount(coverage.total_groups)} לפי
-        הכותרות והתחומים בלבד: <b>{percent(coverage.confident_share)}</b> בביטחון,{" "}
-        {percent(coverage.unsure_share)} בלי ביטחון ({formatCount(coverage.unsure_count)}),{" "}
-        {percent(coverage.none_share)} לאף דף ({formatCount(coverage.none_count)}).
+        The cheap classifier placed {formatCount(coverage.sample_size)} of {groupCount(coverage.total_groups, formatCount)} by
+        the titles and scopes alone: <b>{percent(coverage.confident_share)}</b> with confidence,{" "}
+        {percent(coverage.unsure_share)} without confidence ({formatCount(coverage.unsure_count)}),{" "}
+        {percent(coverage.none_share)} on no page ({formatCount(coverage.none_count)}).
       </p>
       <p className="text-xs text-slate-500">
-        נבדק {formatDateTime(coverage.generated_at)} על התוכנית כפי שהמודל הציע; שינויים מאז לא נמדדו.
+        Checked {formatDateTime(coverage.generated_at)} on the plan as the model proposed it; changes since are not measured.
       </p>
       {coverage.findings?.length > 0 && (
         <ul className="list-disc space-y-1 ps-5 text-xs text-slate-600" dir="ltr">
@@ -105,7 +105,7 @@ function Coverage({ coverage, unplaced, reads, onSelect }) {
         </ul>
       )}
       <button type="button" className="btn btn-sm" onClick={() => setOpen(!open)}>
-        {open ? "הסתרת" : "הצגת"} הטענות שלא שובצו בביטחון
+        {open ? "Hide" : "Show"} the claims not placed with confidence
       </button>
       {open && <Unplaced reads={reads} />}
     </div>
@@ -114,10 +114,10 @@ function Coverage({ coverage, unplaced, reads, onSelect }) {
 
 function Changes({ changes, onSelect }) {
   const count = Object.keys(changes.items).length;
-  if (count === 0 && changes.removed.length === 0) return <p className="text-slate-500">התוכנית עדיין כפי שהמודל הציע.</p>;
+  if (count === 0 && changes.removed.length === 0) return <p className="text-slate-500">The plan is still as the model proposed it.</p>;
   return (
     <div className="space-y-2">
-      <p>{formatCount(count)} פריטים חדשים או שנערכו (מסומנים ברשימה).</p>
+      <p>{countText(count, "item", formatCount)} new or edited (marked in the list).</p>
       {changes.removed.length > 0 && (
         <ul className="space-y-1">
           {changes.removed.map((item) => (
@@ -125,13 +125,13 @@ function Changes({ changes, onSelect }) {
               <Bidi>{item.title_he}</Bidi> <Ltr className="text-xs text-slate-400">{item.id}</Ltr>{" "}
               {item.redirect ? (
                 <>
-                  ← מופנה אל{" "}
+                  → redirected to{" "}
                   <button type="button" className="badge badge-sky" onClick={() => onSelect(item.redirect)}>
                     <Ltr>{item.redirect}</Ltr>
                   </button>
                 </>
               ) : (
-                <span className="badge badge-rose">נמחק</span>
+                <span className="badge badge-rose">Deleted</span>
               )}
             </li>
           ))}
@@ -145,36 +145,36 @@ export function Overview({ overview, reads, on }) {
   const { metadata } = overview;
   return (
     <Panel
-      title="סקירת התוכנית"
+      title="Plan overview"
       subtitle={
         <>
-          {metadata.model && <Ltr>{metadata.model}</Ltr>} · תוכננה {formatDateTime(metadata.generated_at)}
-          {metadata.edited_at && <> · נערכה {formatDateTime(metadata.edited_at)}</>} · <Ltr>{overview.file}</Ltr>
+          {metadata.model && <Ltr>{metadata.model}</Ltr>} · planned {formatDateTime(metadata.generated_at)}
+          {metadata.edited_at && <> · edited {formatDateTime(metadata.edited_at)}</>} · <Ltr>{overview.file}</Ltr>
         </>
       }
     >
       <div className="space-y-6 p-4 text-sm">
         {metadata.top_level_rationale && (
           <section>
-            <h3 className="section-title">למה המבנה הזה (מהמודל)</h3>
+            <h3 className="section-title">Why this structure (from the model)</h3>
             <Bidi as="p" className="leading-relaxed">{metadata.top_level_rationale}</Bidi>
           </section>
         )}
         <Budget overview={overview} />
         <section>
-          <h3 className="section-title">שיוך הקבוצות לדפים (שלב 6ב)</h3>
+          <h3 className="section-title">Groups assigned to pages (step 6b)</h3>
           <AssignmentSummary overview={overview} onSelect={on.select} />
         </section>
         <section>
-          <h3 className="section-title">אזהרות ({formatCount(overview.warnings.length)})</h3>
-          {overview.warnings.length === 0 ? <p className="text-slate-500">אין אזהרות.</p> : <Warnings overview={overview} warnings={overview.warnings} onSelect={on.select} />}
+          <h3 className="section-title">Warnings ({formatCount(overview.warnings.length)})</h3>
+          {overview.warnings.length === 0 ? <p className="text-slate-500">No warnings.</p> : <Warnings overview={overview} warnings={overview.warnings} onSelect={on.select} />}
         </section>
         <section>
-          <h3 className="section-title">בדיקת הכיסוי של התכנון</h3>
+          <h3 className="section-title">Coverage check of the planning</h3>
           <Coverage coverage={overview.coverage} unplaced={overview.assignments?.counts?.unplaced ?? null} reads={reads} onSelect={on.select} />
         </section>
         <section>
-          <h3 className="section-title">שינויים מאז ההצעה</h3>
+          <h3 className="section-title">Changes since the proposal</h3>
           <Changes changes={overview.changes} onSelect={on.select} />
         </section>
       </div>

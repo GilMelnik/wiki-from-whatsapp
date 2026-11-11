@@ -40,7 +40,7 @@ function useShellBanners(tool, servedState) {
   useBanner(
     "shell.connection",
     connection === RECONNECTING
-      ? { tone: "danger", text: "אין חיבור לשרת. מנסה להתחבר מחדש; ייתכן שהתצוגה אינה עדכנית." }
+      ? { tone: "danger", text: "No connection to the server. Trying to reconnect; what you see may be out of date." }
       : null
   );
   const unknownToServer = tool && servedState.loaded && !servedState.served;
@@ -49,7 +49,7 @@ function useShellBanners(tool, servedState) {
     unknownToServer
       ? {
           tone: "danger",
-          text: `השרת שפועל כעת לא מכיר את הכלי "${tool.title}" (הוא הופעל מגרסה ישנה יותר). עצרו אותו והריצו שוב python -m review_tool.`,
+          text: `The running server does not know the tool “${tool.title}” (it was started from an older version). Stop it and run python -m review_tool again.`,
         }
       : null
   );
@@ -59,7 +59,7 @@ function useShellBanners(tool, servedState) {
     missing.length > 0
       ? {
           tone: "warning",
-          text: `חסרים קבצים שהכלי קורא: ${missing.map((key) => byKey[key]?.title ?? key).join(", ")}. הריצו קודם את השלב שמייצר אותם.`,
+          text: `Files this tool reads are missing: ${missing.map((key) => byKey[key]?.title ?? key).join(", ")}. Run the step that makes them first.`,
         }
       : null
   );
@@ -69,7 +69,7 @@ function UnknownTool({ toolId, tools }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-sm text-slate-600">
       <p>
-        אין כלי בשם <bdi className="font-mono">{toolId}</bdi>. הכלים הקיימים:
+        There is no tool called <bdi className="font-mono">{toolId}</bdi>. The tools are:
       </p>
       <ul className="flex flex-wrap gap-2">
         {tools.map((tool) => (
@@ -101,7 +101,7 @@ function Frame({ tools }) {
   const served = servedTools.find((candidate) => candidate.name === toolId);
   const tool = entry ? toolProps(entry, served) : null;
   useShellBanners(tool, { loaded: !loading && !error, served });
-  useShortcuts([{ keys: "?", label: "קיצורי מקלדת", run: () => setHelpOpen(true) }]);
+  useShortcuts([{ keys: "?", label: "Keyboard shortcuts", run: () => setHelpOpen(true) }]);
 
   useEffect(() => {
     document.title = tool ? `${tool.title} · ${APP_TITLE}` : APP_TITLE;

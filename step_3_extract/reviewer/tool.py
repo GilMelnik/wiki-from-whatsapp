@@ -54,7 +54,7 @@ class DecisionRequest(BaseModel):
 
 class PiiTool:
     NAME = "pii"
-    TITLE = "בדיקת פרטיות בטענות"
+    TITLE = "Privacy"
     READS = (CLAIMS_KEY,)
     WRITES = (CLAIMS_KEY,)
 

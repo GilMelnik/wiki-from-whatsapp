@@ -17,20 +17,20 @@ function Bar({ value, max, tone, label }) {
 }
 
 export function Timeline({ months }) {
-  if (months.length === 0) return <p className="text-slate-400">אין אירועי תמיכה או התנגדות עם תאריך.</p>;
+  if (months.length === 0) return <p className="text-slate-400">No dated support or opposition events.</p>;
   const max = Math.max(...months.map((month) => Math.max(month.supporters, month.opposers)));
   return (
     <table className="text-sm">
       <thead>
         <tr className="text-xs text-slate-500">
-          <th className="pe-4 text-start font-normal">חודש</th>
+          <th className="pe-4 text-start font-normal">Month</th>
           <th className="pe-4 text-start font-normal">
             <span className="me-1 inline-block h-2 w-2 rounded-sm bg-teal-600" />
-            תומכים
+            Supporters
           </th>
           <th className="text-start font-normal">
             <span className="me-1 inline-block h-2 w-2 rounded-sm bg-rose-600" />
-            מתנגדים
+            Opposers
           </th>
         </tr>
       </thead>
@@ -41,10 +41,10 @@ export function Timeline({ months }) {
               <Ltr>{month.month}</Ltr>
             </td>
             <td className="pe-4">
-              <Bar value={month.supporters} max={max} tone="bg-teal-600" label="תומכים" />
+              <Bar value={month.supporters} max={max} tone="bg-teal-600" label="Supporters" />
             </td>
             <td>
-              <Bar value={month.opposers} max={max} tone="bg-rose-600" label="מתנגדים" />
+              <Bar value={month.opposers} max={max} tone="bg-rose-600" label="Opposers" />
             </td>
           </tr>
         ))}

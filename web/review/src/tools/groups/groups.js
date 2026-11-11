@@ -1,37 +1,32 @@
 // Labels and pure helpers of the claim-groups tool (no React, so node --test can import them).
 
+import { isolate, STANCES } from "@shell";
+
 export const PAGE_SIZE = 100;
 export const SUGGESTION_PAGE_SIZE = 50;
 export const SEARCH_DEBOUNCE_MS = 250;
 export const PICKER_LIMIT = 30;
 
 export const MODES = [
-  { value: "suggestions", label: "הצעות מיזוג", key: "p" },
-  { value: "groups", label: "כל הקבוצות", key: "g" },
+  { value: "suggestions", label: "Merge suggestions", key: "p" },
+  { value: "groups", label: "All groups", key: "g" },
 ];
 
-export const STANCES = {
-  positive: { label: "חיובית", badge: "badge-emerald" },
-  negative: { label: "שלילית", badge: "badge-rose" },
-  neutral: { label: "ניטרלית", badge: "badge-slate" },
-  factual: { label: "עובדתית", badge: "badge-sky" },
-};
-
 export const STANCE_FILTERS = [
-  { value: "", label: "כל העמדות" },
+  { value: "", label: "All stances" },
   ...Object.entries(STANCES).map(([value, { label }]) => ({ value, label })),
 ];
 
 export const SORTS = [
-  { value: "size", label: "מספר טענות" },
-  { value: "supporters", label: "תומכים" },
-  { value: "last_date", label: "תאריך אחרון" },
-  { value: "created", label: "סדר יצירה" },
+  { value: "size", label: "Number of claims" },
+  { value: "supporters", label: "Supporters" },
+  { value: "last_date", label: "Last date" },
+  { value: "created", label: "Creation order" },
 ];
 
 export const ORDERS = [
-  { value: "desc", label: "יורד" },
-  { value: "asc", label: "עולה" },
+  { value: "desc", label: "Descending" },
+  { value: "asc", label: "Ascending" },
 ];
 
 export const DEFAULT_VIEW = {
@@ -50,10 +45,6 @@ export function viewParams(view) {
   return Object.fromEntries(Object.entries(view).filter(([, value]) => value !== false && value !== ""));
 }
 
-export function stanceOf(stance) {
-  return STANCES[stance] ?? { label: stance || "—", badge: "badge-slate" };
-}
-
 /** "2024-01-05" or "2024-01-05 – 2024-02-01" (C6 / C3 dates are YYYY-MM-DD). */
 export function dateRange(first, last) {
   if (!first) return "—";
@@ -70,8 +61,8 @@ export function formatScore(value, { signed = false } = {}) {
 /** The entity filter's options: every entity that some group mentions, most groups first. */
 export function entityOptions(entities = []) {
   return [
-    { value: "", label: "כל הישויות" },
-    ...entities.map((entity) => ({ value: entity.entity_id, label: `${entity.name} (${entity.groups})` })),
+    { value: "", label: "All entities" },
+    ...entities.map((entity) => ({ value: entity.entity_id, label: `${isolate(entity.name)} (${entity.groups})` })),
   ];
 }
 

@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from step_6_plan.reviewer.requests import quote
 from tests.plan_fixtures import FakeLLM
 from tests.test_plan_tool_assignments import (
     NEW_PAGE,
@@ -56,7 +57,7 @@ def test_accepting_a_page_proposal_saves_both_files_and_the_run_places_its_group
     proposal = setup.proposal("page")
     answer = setup.accept(proposal["id"], add_page_op())
     assert answer["focus"] == NEW_PAGE and answer["edit"]["created"] == [NEW_PAGE]
-    assert answer["label"].startswith("קבלת ההצעה „קרנות פוריות”")
+    assert answer["label"].startswith(f"Accepted the proposal {quote('קרנות פוריות')}")
     assert NEW_PAGE in setup.saved()["pages"]
     assert setup.proposal("page")["status"] == "accepted"
     records = setup.assignments()["assignments"]
@@ -81,7 +82,7 @@ def test_accepting_label_and_scope_proposals(setup: AssignSetup) -> None:
 
 
 @pytest.mark.parametrize("kind, operation, words", [
-    ("page", add_page_op("agencies"), "שוברת את הכללים"),  # the proposer's id is taken
+    ("page", add_page_op("agencies"), "breaks the rules"),  # the proposer's id is taken
     ("page", {"op": "add_label", "label_id": "x-label", "title_he": "x", "description": "x",
               "kind": "country"}, "add_page"),
     ("scope", {"op": "edit", "item_id": "costs", "changes": {"scope": "אחר"}}, "hospital"),
@@ -99,9 +100,9 @@ def test_a_refused_acceptance_changes_neither_file(setup: AssignSetup, kind: str
 def test_reject_reopen_and_refusals(setup: AssignSetup) -> None:
     proposal_id = setup.proposal("scope")["id"]
     answer = setup.post(f"/proposals/{proposal_id}/reject")
-    assert answer["label"].startswith("דחיית ההצעה")
+    assert answer["label"].startswith("Rejected the proposal")
     assert setup.proposal("scope")["status"] == "rejected"
-    assert "כבר נדחתה" in setup.post(f"/proposals/{proposal_id}/reject", status=409)["detail"]
+    assert "was already rejected" in setup.post(f"/proposals/{proposal_id}/reject", status=409)["detail"]
     setup.accept(proposal_id, {"op": "edit", "item_id": "hospital", "changes": {"scope": "x"}},
                  status=409)
     setup.post(f"/proposals/{proposal_id}/reopen")
@@ -122,7 +123,7 @@ def test_undo_puts_back_both_files_of_an_accepted_proposal(setup: AssignSetup) -
     proposal_id = setup.proposal("page")["id"]
     setup.accept(proposal_id, add_page_op())
     answer = setup.post("/undo")
-    assert answer["label"].startswith("קבלת ההצעה") and answer["focus"] is None
+    assert answer["label"].startswith("Accepted the proposal") and answer["focus"] is None
     assert NEW_PAGE not in setup.saved()["pages"]
     assert setup.proposal("page")["status"] == "pending"
     assert setup.original.read_text(encoding="utf-8") == plan_before
@@ -147,7 +148,7 @@ def test_undo_is_refused_after_the_assignments_changed_outside(setup: AssignSetu
     payload["metadata"]["note"] = "an assignment run wrote this"
     write_json_file(payload, setup.artifact.edited)
     assert setup.get("/plan")["undo"] is None
-    assert "השיוך השתנו מחוץ לכלי" in setup.post("/undo", status=409)["detail"]
+    assert "changed outside the tool" in setup.post("/undo", status=409)["detail"]
     setup.post("/undo", status=409)  # the older plan change is not offered either
 
 

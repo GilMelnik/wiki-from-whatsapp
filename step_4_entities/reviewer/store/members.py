@@ -52,19 +52,19 @@ class MembersMixin:
         """The given claims the member currently stands for (at least one, or a conflict)."""
 
         if not claim_ids:
-            raise ReviewConflict("לא נבחרו טענות")
+            raise ReviewConflict("No claims were picked")
         member = self.member_of(entity, name)
         owned = set(member.get("claim_ids") or []) - set(member.get("excluded_claim_ids") or [])
         chosen = [c for c in dict.fromkeys(claim_ids) if c in owned]
         if not chosen:
-            raise ReviewConflict(f'אף אחת מהטענות שנבחרו כבר לא שייכת לשם "{name}"')
+            raise ReviewConflict(f"None of the picked claims belongs to the name “{name}” any more")
         return chosen
 
     def _target(self, target_id: str | None, source_id: str) -> dict[str, Any]:
         """An existing target entity, or (``None``) a new one the owner creates by hand."""
 
         if target_id == source_id:
-            raise ReviewConflict("ישות המקור וישות היעד זהות")
+            raise ReviewConflict("The source and target entities are the same")
         if target_id is not None:
             return self.find(target_id)
         created = new_entity(allocate_entity_id(self.payload), [], status="accepted")
@@ -101,7 +101,7 @@ class MembersMixin:
 
         member = self.member_of(self.find(entity_id), name)
         if member.pop("attached_by", None) is None:
-            raise ReviewConflict(f'השם "{name}" לא צורף אוטומטית, אין מה לאשר')
+            raise ReviewConflict(f"The name “{name}” was not attached automatically; there is nothing to confirm")
         self.save()
         return entity_id
 
@@ -155,7 +155,7 @@ class MembersMixin:
         excluded = set(member.get("excluded_claim_ids") or [])
         including = [c for c in claim_ids if c in excluded]
         if not including:
-            raise ReviewConflict("הטענות שנבחרו לא מסומנות כלא קשורות")
+            raise ReviewConflict("The picked claims are not marked as unrelated")
         self.rebuild(member, {*member["claim_ids"], *including}, excluded - set(including))
         refresh_entity(entity)
         self.save()
@@ -166,9 +166,9 @@ class MembersMixin:
         every member and from its claim aggregation."""
 
         if self.claims.claim(claim_id) is None:
-            raise EntityNotFound(f"הטענה {claim_id} לא קיימת")
+            raise EntityNotFound(f"Claim {claim_id} does not exist")
         if claim_id in self.deleted_claims:
-            raise ReviewConflict(f"הטענה {claim_id} כבר נמחקה")
+            raise ReviewConflict(f"Claim {claim_id} has already been deleted")
         self.deleted_claims.add(claim_id)
         for entity in self.entities:
             touched = False

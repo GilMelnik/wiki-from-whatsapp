@@ -4,46 +4,48 @@ import {
   Layout,
   PanelState,
   useArtifactStatus,
-  useEvents,
+  useJobs,
   useNow,
   useResource,
   useShortcuts,
   useStoredState,
-  useToast,
 } from "@shell";
 import { ArtifactDetail } from "./ArtifactDetail.jsx";
 import { ArtifactRow } from "./ArtifactRow.jsx";
-import { StepPanel } from "./StepPanel.jsx";
-import { ToolsPanel } from "./ToolsPanel.jsx";
+import { artifactState, firstToShow } from "./status.js";
 
-// Pipeline status: every artifact in pipeline order (list), the selected one's files,
-// staleness and metadata (main), the step that produces it with its run buttons and last
-// run, and the tools that read or write it (side). Everything follows the files on disk
-// live: the shell refetches GET /api/artifacts on every `artifact_changed`, and the detail
-// is watched by its artifact key.
+// Pipeline status. Decided here: which step to run next (or by hand), and which tool to open
+// to review a file. The list is the pipeline in order with one state per file (running, last
+// run failed, out of date, not made yet, up to date) and when it last changed; the main
+// column says why and offers the run, with the review tools, the inputs that changed, the
+// last run's log, and folded away the files and metadata. Everything follows the files on
+// disk live: the shell refetches GET /api/artifacts on every `artifact_changed`, and the
+// detail is watched by its artifact key.
 
 const ID = "status";
 const api = createApi(ID);
 
 function StatusTool({ tool }) {
   const status = useArtifactStatus();
-  const toast = useToast();
+  const { stepsByArtifact, runningByArtifact, latestByStep } = useJobs();
   const now = useNow();
+  const contextOf = (artifact) => {
+    const step = stepsByArtifact[artifact.key];
+    return { step, running: runningByArtifact[artifact.key], latest: step ? latestByStep[step.key] : undefined };
+  };
+  const stateOf = (artifact) => artifactState(artifact, contextOf(artifact));
   const [stored, setSelectedKey] = useStoredState(ID, "selected", null);
-  const selectedKey = status.byKey[stored] ? stored : status.artifacts[0]?.key ?? null;
+  const selectedKey = status.byKey[stored] ? stored : firstToShow(status.artifacts, stateOf);
   const detail = useResource(
     () => (selectedKey ? api.get(`/artifacts/${encodeURIComponent(selectedKey)}`) : null),
     [selectedKey],
     { watch: selectedKey ? [selectedKey] : [] }
   );
 
-  useEvents("artifact_changed", (event) => {
-    toast.info(`${status.byKey[event.key]?.title ?? event.key}: הקובץ השתנה`);
-  });
   useShortcuts([
     {
       keys: "r",
-      label: "רענון",
+      label: "Refresh",
       run: () => {
         status.refresh();
         detail.reload();
@@ -58,13 +60,14 @@ function StatusTool({ tool }) {
       hasData={status.artifacts.length > 0}
       onRetry={status.refresh}
       empty={status.artifacts.length === 0}
+      emptyText="The server lists no files"
     >
       <ItemList
         items={status.artifacts}
         getKey={(artifact) => artifact.key}
         selectedKey={selectedKey}
         onSelect={setSelectedKey}
-        renderItem={(artifact) => <ArtifactRow artifact={artifact} now={now} />}
+        renderItem={(artifact) => <ArtifactRow artifact={artifact} state={stateOf(artifact)} now={now} />}
       />
     </PanelState>
   );
@@ -76,6 +79,7 @@ function StatusTool({ tool }) {
       main={
         <ArtifactDetail
           artifact={artifact}
+          {...(artifact ? { state: stateOf(artifact), ...contextOf(artifact) } : {})}
           detail={detail}
           byKey={status.byKey}
           artifacts={status.artifacts}
@@ -83,20 +87,9 @@ function StatusTool({ tool }) {
           onSelect={setSelectedKey}
         />
       }
-      side={
-        <div className="flex min-h-0 flex-1 flex-col divide-y divide-slate-200">
-          <div className="flex min-h-0 flex-[2] flex-col">
-            <StepPanel artifact={artifact} />
-          </div>
-          <div className="flex min-h-0 flex-1 flex-col">
-            <ToolsPanel artifact={artifact} />
-          </div>
-        </div>
-      }
-      listWidth={{ initial: 320 }}
-      sideWidth={{ initial: 300 }}
+      listWidth={{ initial: 300 }}
     />
   );
 }
 
-export default { id: ID, title: "מצב הצינור", Component: StatusTool };
+export default { id: ID, title: "Status", Component: StatusTool };

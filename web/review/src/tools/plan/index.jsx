@@ -71,13 +71,13 @@ function PlanTool({ tool }) {
     overview?.errors?.length
       ? {
           tone: "danger",
-          text: `הקובץ ${overview.file} אינו תוכנית תקינה, ולכן כל שינוי יידחה עד שהבעיות יתוקנו: ${overview.errors.join(" · ")}`,
+          text: `The file ${overview.file} is not a valid plan, so every change will be refused until the problems are fixed: ${overview.errors.join(" · ")}`,
         }
       : null
   );
   useBanner(
     "plan.assignments-unreadable",
-    overview?.assignments?.problem ? { tone: "danger", text: `${overview.assignments.problem} תצוגות השיוך לא זמינות עד שהקובץ יתוקן או ייכתב מחדש.` } : null
+    overview?.assignments?.problem ? { tone: "danger", text: `${overview.assignments.problem} The assignment views are unavailable until the file is fixed or written again.` } : null
   );
 
   const show = (result) => {
@@ -111,7 +111,7 @@ function PlanTool({ tool }) {
       const result = await api.post("/assignments/edit", { group_ids: groupIds, changes });
       plan.setData(result.overview);
       if (result.changed > 0) toast.success(result.label);
-      else toast.info("לא היה מה לשנות: הקבוצות כבר כך.");
+      else toast.info("Nothing to change: the groups are already like that.");
       return result;
     });
   const accept = (proposal, op) =>
@@ -134,7 +134,7 @@ function PlanTool({ tool }) {
     try {
       const result = await api.post("/undo");
       show(result);
-      toast.success(`בוטל: ${result.label}`);
+      toast.success(`Undone: ${result.label}`);
     } catch (error) {
       toast.error(error);
       plan.reload();
@@ -169,19 +169,19 @@ function PlanTool({ tool }) {
     else open("addCategory", null, { parentId: null });
   };
   useShortcuts([
-    { keys: "m", label: "מיזוג (דף או תווית)", run: () => can && (kind === "page" || kind === "label") && open("merge", selectedId) },
-    { keys: "s", label: "פיצול דף חדש מהדף", run: () => can && kind === "page" && open("split", selectedId) },
-    { keys: "t", label: "העברה לקטגוריה אחרת", run: () => can && node && open("move", selectedId) },
-    { keys: "alt+arrowup", label: "הזזה למעלה", run: () => can && node && on.reorder(node.id, -1) },
-    { keys: "alt+arrowdown", label: "הזזה למטה", run: () => can && node && on.reorder(node.id, 1) },
-    { keys: "n", label: "הוספה (דף, תווית או קטגוריה)", run: () => can && addNew() },
-    { keys: "delete", label: "מחיקה", run: () => can && kind && !(kind === "category" && node.children.length) && open("delete", selectedId) },
-    { keys: "e", label: "עריכת התחום של הדף", run: () => scopeRef.current?.focus() },
-    { keys: "u", label: "ביטול השינוי האחרון", run: undo },
-    { keys: "l", label: "מעבר בין עץ הדפים לתוויות", run: () => setView(labelsView ? TREE_VIEW : LABELS_VIEW) },
+    { keys: "m", label: "Merge (a page or a label)", run: () => can && (kind === "page" || kind === "label") && open("merge", selectedId) },
+    { keys: "s", label: "Split a new page off the page", run: () => can && kind === "page" && open("split", selectedId) },
+    { keys: "t", label: "Move to another category", run: () => can && node && open("move", selectedId) },
+    { keys: "alt+arrowup", label: "Move up", run: () => can && node && on.reorder(node.id, -1) },
+    { keys: "alt+arrowdown", label: "Move down", run: () => can && node && on.reorder(node.id, 1) },
+    { keys: "n", label: "Add (a page, label or category)", run: () => can && addNew() },
+    { keys: "delete", label: "Delete", run: () => can && kind && !(kind === "category" && node.children.length) && open("delete", selectedId) },
+    { keys: "e", label: "Edit the page's scope", run: () => scopeRef.current?.focus() },
+    { keys: "u", label: "Undo the last change", run: undo },
+    { keys: "l", label: "Switch between the page tree and the labels", run: () => setView(labelsView ? TREE_VIEW : LABELS_VIEW) },
     {
       keys: "g",
-      label: "מעבר בין פרטי הדף / התווית לקבוצות הטענות שלו",
+      label: "Switch between the page / label details and its claim groups",
       run: () => (kind === "page" || kind === "label") && setTab(tab === GROUPS_TAB ? DETAILS_TAB : GROUPS_TAB),
     },
   ]);
@@ -193,7 +193,7 @@ function PlanTool({ tool }) {
       hasData={ready}
       onRetry={plan.reload}
       empty={ready && items.length === 0}
-      emptyText={labelsView ? "אין תוויות בתוכנית" : "אין דפים בתוכנית"}
+      emptyText={labelsView ? "No labels in the plan" : "No pages in the plan"}
     >
       <ItemList
         items={items}
@@ -207,7 +207,7 @@ function PlanTool({ tool }) {
 
   const groups = { overview, watch, locked, saving, editGroups };
   let main = null;
-  if (overview?.unreadable) main = <PanelState error={{ message: `הקובץ ${overview.file} אינו בצורה של תוכנית (C7).` }} />;
+  if (overview?.unreadable) main = <PanelState error={{ message: `The file ${overview.file} does not have the shape of a plan (C7).` }} />;
   else if (!ready) main = <PanelState loading={plan.loading} error={plan.error} onRetry={plan.reload} />;
   else if (!labelsView && selectedId === OVERVIEW_ID) main = <Overview overview={overview} reads={watch} on={on} />;
   else if (!labelsView && (selectedId === UNPLACED_ID || selectedId === WAITING_ID)) {
@@ -218,7 +218,7 @@ function PlanTool({ tool }) {
     main = <PageView overview={overview} pageId={selectedId} saving={saving} reads={watch} scopeRef={scopeRef} tab={tab} groups={groups} on={on} />;
   } else if (kind === "category") main = <CategoryView overview={overview} nodeId={selectedId} saving={saving} on={on} />;
   else if (kind === "label") main = <LabelView overview={overview} labelId={selectedId} saving={saving} tab={tab} groups={groups} on={on} />;
-  else main = <PanelState empty emptyText="בחרו פריט מהרשימה" />;
+  else main = <PanelState empty emptyText="Select an item in the list" />;
 
   return (
     <>
@@ -235,4 +235,4 @@ function PlanTool({ tool }) {
   );
 }
 
-export default { id: ID, title: "תוכנית הוויקי", Component: PlanTool };
+export default { id: ID, title: "Wiki plan", Component: PlanTool };

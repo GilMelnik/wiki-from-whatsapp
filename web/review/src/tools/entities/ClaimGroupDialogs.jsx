@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bidi, Dialog, Ltr } from "@shell";
+import { Bidi, countText, Dialog, Ltr } from "@shell";
 
 // Manual claim groups (near-duplicates step 5 merges under one representative): creating one
 // from the picked claims, and looking at / changing an existing one.
@@ -10,13 +10,14 @@ export function CreateGroupDialog({ claimIds, texts, onClose, onConfirm }) {
     <Dialog
       open
       size="lg"
-      title={`איחוד ${claimIds.length} טענות`}
-      confirmLabel="איחוד"
+      title={`Combine ${countText(claimIds.length, "claim")}`}
+      confirmLabel="Combine"
       onClose={onClose}
       onConfirm={() => onConfirm(representative)}
     >
       <p className="mb-3 text-slate-600">
-        בחרו את הטענה שתייצג את הקבוצה. השאר יוסתרו כאן, ושלב 5 יאחד אותן איתה.
+        Choose the claim that will represent the group. The others are hidden here, and step 5 merges
+        them into it.
       </p>
       <ul className="space-y-1">
         {claimIds.map((claimId) => (
@@ -45,7 +46,7 @@ export function CreateGroupDialog({ claimIds, texts, onClose, onConfirm }) {
 
 export function GroupDialog({ group, saving, onClose, onRepresentative, onDecouple, onDissolve }) {
   return (
-    <Dialog open size="lg" title={`טענות מאוחדות (${group.count})`} onClose={onClose}>
+    <Dialog open size="lg" title={`Combined claims (${group.count})`} onClose={onClose}>
       <ul className="space-y-1">
         {group.members.map((member) => (
           <li key={member.claim_id} className="flex items-start gap-2 rounded bg-slate-50 p-2">
@@ -56,20 +57,20 @@ export function GroupDialog({ group, saving, onClose, onRepresentative, onDecoup
               <Ltr className="text-xs text-slate-400">{member.claim_id}</Ltr>
             </span>
             {member.claim_id === group.representative ? (
-              <span className="badge badge-sky shrink-0">מייצגת</span>
+              <span className="badge badge-sky shrink-0">Representative</span>
             ) : (
               <button type="button" className="btn btn-sm shrink-0" disabled={saving} onClick={() => onRepresentative(member.claim_id)}>
-                קביעה כמייצגת
+                Make representative
               </button>
             )}
             <button type="button" className="btn btn-sm shrink-0" disabled={saving} onClick={() => onDecouple(member.claim_id)}>
-              הוצאה מהקבוצה
+              Remove from group
             </button>
           </li>
         ))}
       </ul>
       <button type="button" className="btn btn-sm mt-3 text-rose-700" disabled={saving} onClick={onDissolve}>
-        פירוק הקבוצה
+        Dissolve the group
       </button>
     </Dialog>
   );

@@ -2,17 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Shared look of every tool. Use these classes instead of re-styling buttons, rows and
-   panel chrome inside a tool; tool-specific styles stay in Tailwind utilities. */
+/* Shared look of every tool. Use these classes instead of re-styling buttons, rows, notes and
+   panel chrome inside a tool; tool-specific styles stay in Tailwind utilities. Every colour is
+   a theme token (src/shell/palette.js), so all of this reads right in both themes. */
 
 body {
   margin: 0;
   min-height: 100vh;
 }
 
+/* Content from the chat or the wiki (the shell's <Bidi> marks Hebrew with lang="he"). */
+:lang(he) {
+  @apply font-hebrew;
+}
+
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-1 rounded border border-slate-300 bg-white px-4 py-2 text-sm text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500;
+    @apply inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-blue-500;
   }
   .btn-sm {
     @apply px-2 py-1 text-xs;
@@ -26,9 +32,17 @@ body {
   .btn-danger {
     @apply border-rose-600 bg-rose-600 text-white hover:bg-rose-700;
   }
+  .btn-quiet {
+    @apply border-transparent bg-transparent hover:bg-slate-100;
+  }
+
+  /* The key that triggers a button, shown on it: <Kbd>a</Kbd>. */
+  .kbd {
+    @apply inline-flex min-w-[1.25rem] items-center justify-center rounded border border-current px-1 font-mono text-[10px] leading-4 opacity-60;
+  }
 
   .field {
-    @apply rounded border border-slate-300 bg-white px-2 py-1 text-sm focus:border-blue-500 focus:outline-none;
+    @apply rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500;
   }
 
   .badge {
@@ -50,6 +64,31 @@ body {
     @apply bg-emerald-100 text-emerald-700;
   }
 
+  /* A standing remark inside a panel: <p className="note note-warning">. */
+  .note {
+    @apply rounded-md border p-3 text-sm;
+  }
+  .note-info {
+    @apply border-sky-200 bg-sky-50 text-sky-900;
+  }
+  .note-warning {
+    @apply border-amber-200 bg-amber-50 text-amber-900;
+  }
+  .note-danger {
+    @apply border-rose-200 bg-rose-50 text-rose-900;
+  }
+  .note-success {
+    @apply border-emerald-200 bg-emerald-50 text-emerald-900;
+  }
+  .note-plain {
+    @apply border-slate-200 bg-white text-slate-700;
+  }
+
+  /* A bordered block of content (a claim group, a page, a paragraph). */
+  .card {
+    @apply rounded-md border border-slate-200 bg-white p-3;
+  }
+
   .panel-header {
     @apply shrink-0 border-b border-slate-200 bg-white px-4 py-3;
   }
@@ -57,7 +96,7 @@ body {
     @apply shrink-0 space-y-2 border-t border-slate-200 bg-white p-4;
   }
   .section-title {
-    @apply mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500;
+    @apply mb-2 text-xs font-semibold text-slate-500;
   }
 
   .list-row {
@@ -66,6 +105,9 @@ body {
   .list-row-selected {
     @apply border-blue-500 bg-blue-50 hover:bg-blue-50;
   }
+  .list-section {
+    @apply sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500;
+  }
 }
 
 body.panel-resize-active {
@@ -73,10 +115,11 @@ body.panel-resize-active {
   user-select: none;
 }
 
+/* A 1px line inside a 7px grab area. */
 .panel-resize-handle {
-  width: 6px;
+  width: 7px;
   cursor: col-resize;
-  background: #cbd5e1;
+  background: linear-gradient(to right, transparent 3px, rgb(var(--c-slate-200)) 3px, rgb(var(--c-slate-200)) 4px, transparent 4px);
   transition: background-color 0.15s ease;
   position: relative;
   z-index: 20;
@@ -85,5 +128,5 @@ body.panel-resize-active {
 
 .panel-resize-handle:hover,
 body.panel-resize-active .panel-resize-handle {
-  background: #3b82f6;
+  background: rgb(var(--c-blue-500));
 }

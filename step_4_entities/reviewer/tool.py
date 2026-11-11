@@ -131,7 +131,7 @@ class ClaimRequest(BaseModel):
 
 class EntitiesTool:
     NAME = "entities"
-    TITLE = "איחוד ישויות"
+    TITLE = "Entities"
     READS = (CLAIMS_KEY, ENTITIES_KEY)
     # The claim aggregations file is the tool's own (created by the first claim group), so it
     # is not a read the frame reports as missing; the store still loads and follows it.

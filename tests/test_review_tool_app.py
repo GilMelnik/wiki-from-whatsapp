@@ -128,7 +128,10 @@ def test_registry_rejects_duplicate_names() -> None:
 def test_tool_errors_have_one_shape(tmp_path: Path) -> None:
     client = client_for(tmp_path, specs=(demo_spec(),))
     missing = client.get("/api/demo/needs-file")
-    assert (missing.status_code, missing.json()) == (409, {"detail": "missing file: claims.json"})
+    assert missing.status_code == 409
+    assert missing.json() == {
+        "detail": "A file this needs is missing (claims.json). Run the step that makes it first."
+    }
     locked = client.post("/api/demo/busy")
     assert locked.status_code == 423
     assert locked.json() == {"detail": "claims.json is locked by another process"}

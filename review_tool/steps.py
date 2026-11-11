@@ -2,7 +2,7 @@
 review tool may start it.
 
 One row per step that produces an artifact of ``review_tool.artifacts.GRAPH``. A row names the
-artifact key it produces (the step id is that node's ``step``), a Hebrew title, the module
+artifact key it produces (the step id is that node's ``step``), an English title, the module
 behind ``python -m <module>`` (``None`` while the step has no command line), and two flags:
 
 - ``incremental_safe``: the step follows contract C14 (it reprocesses only new and changed
@@ -37,24 +37,24 @@ class StepSpec:
 
 
 STEP_SPECS: tuple[StepSpec, ...] = (
-    StepSpec("threads", "שלב 1 · פיצול לשיחות", None),
-    StepSpec("classified", "שלב 2 · סיווג שיחות", "step_2_classify.run", incremental_safe=True),
-    StepSpec("claims", "שלב 3 · חילוץ טענות", "step_3_extract.run", incremental_safe=True, paid=True),
-    StepSpec("entities", "שלב 4 · זיהוי ישויות", "step_4_entities.run", incremental_safe=True),
-    StepSpec("groups", "שלב 5 · קיבוץ טענות", "step_5_aggregate.run", incremental_safe=True),
+    StepSpec("threads", "Step 1 · Split into conversations", None),
+    StepSpec("classified", "Step 2 · Classify conversations", "step_2_classify.run", incremental_safe=True),
+    StepSpec("claims", "Step 3 · Extract claims", "step_3_extract.run", incremental_safe=True, paid=True),
+    StepSpec("entities", "Step 4 · Find entities", "step_4_entities.run", incremental_safe=True),
+    StepSpec("groups", "Step 5 · Group claims", "step_5_aggregate.run", incremental_safe=True),
     StepSpec(
-        "plan", "שלב 6 · תכנון הוויקי", "step_6_plan.run", incremental_safe=True, paid=True
+        "plan", "Step 6 · Plan the wiki", "step_6_plan.run", incremental_safe=True, paid=True
     ),
     StepSpec(
-        "assignments", "שלב 6ב · שיוך קבוצות לדפים", "step_6_plan.assign",
+        "assignments", "Step 6b · Assign groups to pages", "step_6_plan.assign",
         incremental_safe=True, paid=True,
     ),
-    StepSpec("pages", "שלב 7 · כתיבת הדפים", "step_7_write_pages.run", incremental_safe=True, paid=True),
+    StepSpec("pages", "Step 7 · Write the pages", "step_7_write_pages.run", incremental_safe=True, paid=True),
     StepSpec(
-        "suggestions", "שלב 8 · סקירת הוויקי כולו", "step_8_review.run",
+        "suggestions", "Step 8 · Review the whole wiki", "step_8_review.run",
         incremental_safe=True, paid=True,
     ),
-    StepSpec("site", "שלב 9 · בניית האתר", "step_9_site.run", incremental_safe=True),
+    StepSpec("site", "Step 9 · Build the site", "step_9_site.run", incremental_safe=True),
 )
 
 

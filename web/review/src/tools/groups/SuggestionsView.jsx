@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ItemList, Layout, Pager, PanelState, useResource, useShortcuts, useStoredState, useToast } from "@shell";
+import { countText, formatCount, ItemList, Layout, Pager, PanelState, useResource, useShortcuts, useStoredState, useToast } from "@shell";
 import { api } from "./api.js";
 import { DecisionPanel } from "./DecisionPanel.jsx";
 import { Counters } from "./GroupsToolbar.jsx";
@@ -58,16 +58,16 @@ export function SuggestionsView({ tool, toolId, modeTabs, summary, onOpenGroup, 
     }
   };
   const groupIds = pair ? [pair.a.group_id, pair.b.group_id] : [];
-  const merge = () => decide(() => api.post("/groups/merge", { group_ids: groupIds }), "הקבוצות מוזגו");
+  const merge = () => decide(() => api.post("/groups/merge", { group_ids: groupIds }), "Groups merged");
   const notSame = () =>
-    decide(() => api.post("/not-same", { group_ids: groupIds }), "סומן: לא אותו דבר", (result) =>
+    decide(() => api.post("/not-same", { group_ids: groupIds }), "Marked: not the same", (result) =>
       setLastNotSame({ id: result.record.id, key: pair.key })
     );
   const skip = () => {
     if (!pair) return;
     if (index + 1 < items.length) setSelectedKey(items[index + 1].key);
     else if (offset + SUGGESTION_PAGE_SIZE < (list.data?.total ?? 0)) goToPage(offset + SUGGESTION_PAGE_SIZE);
-    else toast.info("זו ההצעה האחרונה");
+    else toast.info("This is the last suggestion");
   };
   const undo = async () => {
     if (!lastNotSame || saving) return;
@@ -80,7 +80,7 @@ export function SuggestionsView({ tool, toolId, modeTabs, summary, onOpenGroup, 
       await list.reload();
       setSelectedKey(lastNotSame.key);
       setLastNotSame(null);
-      toast.success("ההחלטה בוטלה, הזוג יוצע שוב");
+      toast.success("Decision undone; the pair will be suggested again");
     } catch (error) {
       toast.error(error);
     } finally {
@@ -89,10 +89,10 @@ export function SuggestionsView({ tool, toolId, modeTabs, summary, onOpenGroup, 
   };
 
   useShortcuts([
-    { keys: "m", label: "מיזוג הזוג (אותו דבר)", run: merge },
-    { keys: "n", label: "לא אותו דבר (לא להציע שוב)", run: notSame },
-    { keys: "s", label: "דילוג להצעה הבאה", run: skip },
-    { keys: "u", label: 'ביטול ה"לא אותו דבר" האחרון', run: undo },
+    { keys: "m", label: "Merge the pair (the same)", run: merge },
+    { keys: "n", label: "Not the same (do not suggest again)", run: notSame },
+    { keys: "s", label: "Skip to the next suggestion", run: skip },
+    { keys: "u", label: "Undo the last “not the same”", run: undo },
   ]);
 
   const unavailable = list.data && !list.data.available;
@@ -107,16 +107,17 @@ export function SuggestionsView({ tool, toolId, modeTabs, summary, onOpenGroup, 
         unavailable ? (
           <span className="space-y-3">
             <span className="block">
-              ל-{list.data.missing_embeddings} טענות אין עדיין וקטור, ולכן אין הצעות. שלב 5 יחשב אותם.
+              No vector yet for {countText(list.data.missing_embeddings, "claim", formatCount)}, so there are no
+              suggestions. Step 5 will compute them.
             </span>
             {runStep && (
               <button type="button" className="btn btn-sm" onClick={runStep}>
-                הרצת שלב 5
+                Run step 5
               </button>
             )}
           </span>
         ) : (
-          "אין הצעות מיזוג: כל הזוגות הקרובים כבר הוכרעו"
+          "No merge suggestions: every close pair is already decided"
         )
       }
     >

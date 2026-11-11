@@ -77,13 +77,13 @@ class EntityStore(ViewsMixin, EditsMixin, MembersMixin):
         for entity in self.entities:
             if entity["entity_id"] == entity_id:
                 return entity
-        raise EntityNotFound(f"הישות {entity_id} לא קיימת (אולי מוזגה או נמחקה)")
+        raise EntityNotFound(f"Entity {entity_id} does not exist (it may have been merged or deleted)")
 
     def member_of(self, entity: dict[str, Any], name: str) -> dict[str, Any]:
         for member in entity.get("members") or []:
             if member["name"] == name:
                 return member
-        raise EntityNotFound(f'השם "{name}" כבר לא שייך לישות {entity["entity_id"]}')
+        raise EntityNotFound(f"The name “{name}” no longer belongs to entity {entity['entity_id']}")
 
     def text_of(self, claim_id: str) -> str:
         return (self.claims.claim(claim_id) or {}).get("claim_text", "")

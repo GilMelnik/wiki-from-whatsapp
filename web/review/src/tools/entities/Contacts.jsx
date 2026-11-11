@@ -20,10 +20,10 @@ function UncertainRow({ kind, value, saving, onResolve }) {
         disabled={saving || !draft.trim()}
         onClick={() => onResolve({ kind, value, action: "accept", new_value: corrected })}
       >
-        שיוך
+        Attach
       </button>
       <button type="button" className="btn btn-sm text-rose-700" disabled={saving} onClick={() => onResolve({ kind, value, action: "reject" })}>
-        דחייה
+        Reject
       </button>
     </li>
   );
@@ -53,11 +53,11 @@ export function Contacts({ entity, saving, onSave, onResolve }) {
     <>
       <section className="space-y-2">
         <h3 className="section-title">
-          פרטי קשר {entity.contacts_manual && <span className="badge badge-sky ms-1">נערכו ידנית</span>}
+          Contacts {entity.contacts_manual && <span className="badge badge-sky ms-1">Edited by hand</span>}
         </h3>
         {CONTACT_KINDS.map(({ key, label }) => (
           <label key={key} className="block">
-            <span className="text-xs text-slate-500">{label} (ערך בכל שורה)</span>
+            <span className="text-xs text-slate-500">{label} (one value per line)</span>
             <textarea
               dir="ltr"
               rows={2}
@@ -68,14 +68,14 @@ export function Contacts({ entity, saving, onSave, onResolve }) {
           </label>
         ))}
         <button type="button" className="btn btn-sm" disabled={saving || !dirty} onClick={() => onSave(formToContacts(form))}>
-          שמירת פרטי הקשר
+          Save contacts
         </button>
       </section>
       {hasAny(entity.contacts_uncertain) && (
         <section className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3">
-          <h3 className="section-title text-amber-800">פרטי קשר לא ודאיים</h3>
+          <h3 className="section-title text-amber-800">Uncertain contacts</h3>
           <p className="text-xs text-amber-900">
-            הופיעו רק בטענות שמזכירות כמה ישויות, ולכן לא ברור למי הם שייכים.
+            Seen only in claims that mention several entities, so it is not clear whom they belong to.
           </p>
           <ByKind
             contacts={entity.contacts_uncertain}
@@ -85,14 +85,14 @@ export function Contacts({ entity, saving, onSave, onResolve }) {
       )}
       {hasAny(entity.contacts_rejected) && (
         <section className="space-y-2">
-          <h3 className="section-title">פרטי קשר שנדחו</h3>
+          <h3 className="section-title">Rejected contacts</h3>
           <ByKind
             contacts={entity.contacts_rejected}
             render={(kind, value) => (
               <li key={value} className="flex items-center gap-2">
                 <Ltr className="flex-1 break-all text-slate-500 line-through">{value}</Ltr>
                 <button type="button" className="btn btn-sm" disabled={saving} onClick={() => onResolve({ kind, value, action: "restore" })}>
-                  ביטול הדחייה
+                  Undo rejection
                 </button>
               </li>
             )}

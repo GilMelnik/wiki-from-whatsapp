@@ -67,7 +67,7 @@ export function Layout({ toolId, toolbar, list, main, side, listWidth, sideWidth
               {list}
             </Column>
             <ResizeHandle
-              label="שינוי רוחב הרשימה"
+              label="Drag to resize the list"
               onResize={resize("list", "start")}
               onResizeEnd={remember}
             />
@@ -77,7 +77,7 @@ export function Layout({ toolId, toolbar, list, main, side, listWidth, sideWidth
         {side && (
           <>
             <ResizeHandle
-              label="שינוי רוחב הפאנל הצדדי"
+              label="Drag to resize the side panel"
               onResize={resize("side", "end")}
               onResizeEnd={remember}
             />

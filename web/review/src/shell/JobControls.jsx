@@ -39,7 +39,7 @@ export function useStepRun() {
       return;
     }
     startJob(stepKey).then(
-      (job) => toast.info(`"${job.title}" התחיל לרוץ`),
+      (job) => toast.info(`${job.title} started`),
       (error) => toast.error(error)
     );
   };
@@ -49,24 +49,34 @@ function JobBadge({ job }) {
   return <span className={`badge ${JOB_STATE_BADGES[job.state]}`}>{JOB_STATE_LABELS[job.state]}</span>;
 }
 
-/** Header: the newest job of this server session (running / done / failed); click → log. */
+/**
+ * Header: a running step (pulsing) or a failed last run stays in view; a finished run is
+ * already told by its toast, so then only a quiet "Runs" button opens the panel with the logs.
+ */
 export function JobIndicator() {
   const { jobs } = useJobs();
   const newest = jobs[0];
   if (!newest) return null;
   const running = jobs.filter((job) => job.state === RUNNING);
   const shown = running[0] ?? newest;
+  const loud = shown.state === RUNNING || shown.state === FAILED;
   return (
     <button
       type="button"
-      className="btn btn-sm gap-2"
-      title="הרצות שלבים: יומן ומצב"
+      className={`btn btn-sm gap-2 ${loud ? "" : "btn-quiet"}`}
+      title="Step runs: state and log"
       onClick={() => openJobPanel(shown.id)}
     >
       {shown.state === RUNNING && <span aria-hidden="true" className="h-2 w-2 animate-pulse rounded-full bg-sky-500" />}
-      <span>{shown.title}</span>
-      <JobBadge job={shown} />
-      {running.length > 1 && <span className="text-slate-500">+{running.length - 1}</span>}
+      {loud ? (
+        <>
+          <span>{shown.title}</span>
+          <JobBadge job={shown} />
+          {running.length > 1 && <span className="text-slate-500">+{running.length - 1}</span>}
+        </>
+      ) : (
+        "Runs"
+      )}
     </button>
   );
 }
@@ -85,28 +95,28 @@ export function JobLog({ jobId, className = "max-h-[50vh]" }) {
   }, [lineCount]);
 
   if (error) return <p dir="auto" className="text-rose-700">{error.message}</p>;
-  if (!job) return <p className="text-slate-400">{loading ? "טוען…" : "אין הרצה להצגה"}</p>;
-  const cancel = () => cancelJob(job.id).then(() => toast.info("ביקשתי לעצור את ההרצה"), (failure) => toast.error(failure));
+  if (!job) return <p className="text-slate-400">{loading ? "Loading…" : "No run to show"}</p>;
+  const cancel = () => cancelJob(job.id).then(() => toast.info("Asked the run to stop"), (failure) => toast.error(failure));
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">{job.title}</span>
         <JobBadge job={job} />
-        {job.rebuild && <span className="badge badge-rose">בנייה מחדש</span>}
+        {job.rebuild && <span className="badge badge-rose">Rebuild</span>}
         <span className="text-xs text-slate-500">
           {formatDateTime(job.started_at)}
           {job.ended_at && ` – ${formatDateTime(job.ended_at)}`}
-          {job.exit_code !== null && <> · קוד יציאה <Ltr>{job.exit_code}</Ltr></>}
+          {job.exit_code !== null && <> · exit code <Ltr>{job.exit_code}</Ltr></>}
         </span>
         {job.state === RUNNING && (
           <button type="button" className="btn btn-sm ms-auto" disabled={job.cancel_requested} onClick={cancel}>
-            {job.cancel_requested ? "עוצר…" : "עצירה"}
+            {job.cancel_requested ? "Stopping…" : "Stop"}
           </button>
         )}
       </div>
       {job.highlights.length > 0 && (
-        <div role="alert" className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-900">
-          <p className="mb-1 font-medium">עריכות ידניות הוחלפו בתוצאה חדשה (הן נשמרו בגיבוי):</p>
+        <div role="alert" className="note note-warning">
+          <p className="mb-1 font-medium">Manual edits were replaced by a new result (they are kept in the backup):</p>
           {job.highlights.map((line, index) => (
             <Ltr key={index} className="block whitespace-pre-wrap break-all text-xs">
               {line}
@@ -121,10 +131,10 @@ export function JobLog({ jobId, className = "max-h-[50vh]" }) {
           const element = event.currentTarget;
           atBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 24;
         }}
-        className={`overflow-auto whitespace-pre-wrap break-all rounded border border-slate-200 bg-slate-900 p-3 text-start text-xs text-slate-100 ${className}`}
+        className={`overflow-auto whitespace-pre-wrap break-all rounded-md border border-slate-200 bg-slate-100 p-3 text-start text-xs text-slate-800 ${className}`}
       >
-        {log.start > 0 && <span className="text-slate-400">{`… ${formatCount(log.start)} שורות קודמות לא מוצגות\n`}</span>}
-        {log.lines.length > 0 ? log.lines.join("\n") : "(עדיין אין פלט)"}
+        {log.start > 0 && <span className="text-slate-500">{`… ${formatCount(log.start)} earlier lines not shown\n`}</span>}
+        {log.lines.length > 0 ? log.lines.join("\n") : "(no output yet)"}
       </pre>
     </div>
   );
@@ -134,7 +144,7 @@ function JobPanel({ selectedId }) {
   const { jobs, stepsByKey } = useJobs();
   const run = useStepRun();
   const selected = jobs.find((job) => job.id === selectedId) ?? jobs[0];
-  if (!selected) return <p className="text-slate-400">עוד לא הורץ שום שלב מהשרת הזה.</p>;
+  if (!selected) return <p className="text-slate-400">No step has run from this server yet.</p>;
   const jobId = selected.id;
   const step = stepsByKey[selected.step];
   const runAgain = selected.state !== RUNNING && step?.incremental_safe;
@@ -142,7 +152,7 @@ function JobPanel({ selectedId }) {
     <div className="space-y-4">
       {runAgain && (
         <button type="button" className="btn btn-sm" onClick={() => run(step.key)}>
-          הרצה שוב של "{step.title}"
+          Run {step.title} again
         </button>
       )}
       {jobs.length > 1 && (
@@ -174,27 +184,27 @@ function ConfirmRun({ request }) {
   return (
     <Dialog
       open={Boolean(request)}
-      title={rebuild ? `בנייה מחדש: ${step?.title}` : `הרצת ${step?.title}`}
-      confirmLabel={rebuild ? "בנייה מחדש" : "הרצה"}
+      title={rebuild ? `Rebuild: ${step?.title}` : `Run ${step?.title}`}
+      confirmLabel={rebuild ? "Rebuild" : "Run"}
       tone={rebuild ? "danger" : "primary"}
       onClose={closeConfirm}
       onConfirm={async () => {
         const job = await startJob(step.key, { rebuild });
-        toast.info(`"${job.title}" התחיל לרוץ`);
+        toast.info(`${job.title} started`);
         openJobPanel(job.id);
       }}
     >
       <div className="space-y-3">
         {rebuild && (
-          <p className="rounded border border-rose-200 bg-rose-50 p-3 text-rose-900">
-            בנייה מחדש מעבדת את כל הפריטים מההתחלה ומחליפה את העותק הערוך. עריכות ידניות לא יישארו בקובץ
-            (העותק הערוך נשמר קודם בגיבוי).
+          <p className="note note-danger">
+            A rebuild processes every item from the start and replaces the edited copy. Manual edits will not stay in the
+            file (the edited copy is backed up first).
           </p>
         )}
-        {step?.paid && <p>השלב שולח בקשות ל-API בתשלום{rebuild ? " על כל הפריטים" : ", רק על פריטים חדשים או כאלה שהשתנו"}.</p>}
+        {step?.paid && <p>This step makes paid API calls{rebuild ? " for every item" : ", only for items that are new or changed"}.</p>}
         {changed.length > 0 && (
           <div>
-            <p>קבצים שהשתנו מאז הריצה האחרונה:</p>
+            <p>Files changed since the last run:</p>
             <ul className="ms-5 list-disc">
               {changed.map((key) => (
                 <li key={key}>
@@ -206,7 +216,7 @@ function ConfirmRun({ request }) {
         )}
         {step?.command && (
           <p className="text-xs text-slate-500">
-            פקודה: <Ltr>{rebuild ? step.rebuild_command : step.command}</Ltr>
+            Command: <Ltr>{rebuild ? step.rebuild_command : step.command}</Ltr>
           </p>
         )}
       </div>
@@ -219,13 +229,13 @@ export function JobHost() {
   const ui = useJobUi();
   const toast = useToast();
   useEvents("job_finished", ({ payload }) => {
-    if (payload.state === SUCCEEDED) toast.success(`"${payload.title}" הסתיים`);
-    else if (payload.state === FAILED) toast.error(`"${payload.title}" נכשל (קוד יציאה ${payload.exit_code})`);
-    else toast.info(`"${payload.title}" בוטל`);
+    if (payload.state === SUCCEEDED) toast.success(`${payload.title} finished`);
+    else if (payload.state === FAILED) toast.error(`${payload.title} failed (exit code ${payload.exit_code})`);
+    else toast.info(`${payload.title} was stopped`);
   });
   return (
     <>
-      <Dialog open={ui.panelOpen} title="הרצות שלבים" size="lg" onClose={closeJobPanel}>
+      <Dialog open={ui.panelOpen} title="Step runs" size="lg" onClose={closeJobPanel}>
         <JobPanel selectedId={ui.panelJobId} />
       </Dialog>
       <ConfirmRun request={ui.confirm} />

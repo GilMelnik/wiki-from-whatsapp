@@ -49,7 +49,7 @@ test("scores, dates, bars and entity options are formatted for the page", () => 
   assert.equal(barPercent(1, 100), 4);
   assert.equal(barPercent(10, 10), 100);
   assert.deepEqual(entityOptions([{ entity_id: "e1", name: "Alpha", groups: 2 }]), [
-    { value: "", label: "כל הישויות" },
-    { value: "e1", label: "Alpha (2)" },
+    { value: "", label: "All entities" },
+    { value: "e1", label: "\u2068Alpha\u2069 (2)" },
   ]);
 });

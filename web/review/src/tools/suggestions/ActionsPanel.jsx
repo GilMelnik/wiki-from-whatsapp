@@ -1,31 +1,30 @@
-import { Bidi, formatCount, Panel } from "@shell";
+import { Bidi, formatCount, Kbd, Panel } from "@shell";
 import { actionTargets, queuePlace, STRUCTURAL } from "./suggestions.js";
 
-// The side column: what can be done with the selected suggestion, or with the marked ones
-// (each button says how many of them it moves), and "apply every accepted suggestion".
-// Applying runs in the background (a text correction is a model call of a minute or two);
-// while a step rewrites a file the tool writes, every button is off and the panel says why.
+// The side column: the decision on the selected suggestion, or on the marked ones (each
+// button says how many it moves). Only the actions that fit the suggestion's status are
+// shown, each with its key; under them, what applying it will do. The footer applies every
+// accepted suggestion. While a step rewrites a file the tool writes, every button is off and
+// the panel says why.
 
-function Key({ children }) {
-  return <kbd className="rounded border border-slate-300 bg-white px-1 font-mono text-[10px] text-slate-500">{children}</kbd>;
-}
-
-function ActionButton({ label, keyName, count, primary = false, disabled, onClick }) {
+function ActionButton({ label, keyName, count, primary = false, danger = false, disabled, onClick }) {
+  const tone = primary ? "btn-primary" : danger ? "text-rose-700" : "";
   return (
-    <button type="button" className={`btn btn-block justify-between ${primary ? "btn-primary" : ""}`} disabled={disabled || count === 0} onClick={onClick}>
+    <button type="button" className={`btn btn-block justify-between ${tone}`} disabled={disabled || count === 0} onClick={onClick}>
       <span>
         {label}
         {count !== undefined && count !== null && ` (${formatCount(count)})`}
       </span>
-      <Key>{keyName}</Key>
+      <Kbd>{keyName}</Kbd>
     </button>
   );
 }
 
 function Locked({ lockedBy }) {
   return (
-    <p className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">
-      „<Bidi>{lockedBy.title}</Bidi>” רץ כעת ומעדכן קובץ שהכלי כותב. אפשר לעיין; ההחלטות והביצוע ייפתחו כשההרצה תסתיים.
+    <p className="note note-warning p-2 text-xs">
+      <Bidi>{lockedBy.title}</Bidi> is running and rewriting a file this tool writes. You can read; deciding and applying
+      open again when it finishes.
     </p>
   );
 }
@@ -35,16 +34,27 @@ function ForMarked({ targets, act, disabled, clear }) {
   return (
     <div className="space-y-2">
       <p className="text-xs text-slate-600">
-        {formatCount(targets.length)} הצעות מסומנות.{" "}
+        {formatCount(targets.length)} marked.{" "}
         <button type="button" className="underline" onClick={clear}>
-          ניקוי הסימון
+          Clear the marks
         </button>
       </p>
-      <ActionButton label="קבלה" keyName="a" count={count("accept")} disabled={disabled} onClick={() => act.decide("accept")} />
-      <ActionButton label="דחייה" keyName="x" count={count("reject")} disabled={disabled} onClick={() => act.decide("reject")} />
-      <ActionButton label="החזרה להמתנה" keyName="o" count={count("reopen")} disabled={disabled} onClick={() => act.decide("reopen")} />
-      <ActionButton label="ביצוע" keyName="y" count={count("apply")} primary disabled={disabled} onClick={() => act.apply()} />
+      <ActionButton label="Accept" keyName="a" count={count("accept")} disabled={disabled} onClick={() => act.decide("accept")} />
+      <ActionButton label="Reject" keyName="x" count={count("reject")} disabled={disabled} onClick={() => act.decide("reject")} />
+      <ActionButton label="Back to pending" keyName="o" count={count("reopen")} disabled={disabled} onClick={() => act.decide("reopen")} />
+      <ActionButton label="Apply" keyName="y" count={count("apply")} primary disabled={disabled} onClick={() => act.apply()} />
     </div>
+  );
+}
+
+function WhatApplyDoes({ item }) {
+  if (item.status !== "pending" && item.status !== "accepted") return null;
+  return (
+    <p className="text-xs text-slate-500">
+      {STRUCTURAL.includes(item.kind)
+        ? "Applying changes the plan at once. Then steps 6b and 7 run (offered here) so the pages follow."
+        : "Applying is one paid model call (a minute or two) that rewrites only this part of the page, in the background."}
+    </p>
   );
 }
 
@@ -55,34 +65,24 @@ function ForOne({ item, applies, act, disabled }) {
   return (
     <div className="space-y-2">
       {place && (
-        <div className="space-y-1 rounded border border-sky-200 bg-sky-50 p-2 text-xs text-sky-900">
-          <p>{place === "running" ? "ההצעה מתבצעת עכשיו ברקע. אפשר להמשיך לעיין בהצעות אחרות; התוצאה תופיע כאן." : "ההצעה בתור לביצוע."}</p>
+        <div className="note note-info space-y-1 p-2 text-xs">
+          <p>{place === "running" ? "Being applied now, in the background. You can go on with other suggestions; the outcome shows here." : "Waiting in the apply queue."}</p>
           {place === "queued" && (
             <button type="button" className="btn btn-sm" onClick={() => act.withdraw(item.id)}>
-              הוצאה מהתור
+              Take it out of the queue
             </button>
           )}
         </div>
       )}
-      <ActionButton label="קבלה" keyName="a" primary={item.status === "pending"} disabled={disabled || !can("accept")} onClick={() => act.decide("accept")} />
-      <ActionButton label="דחייה" keyName="x" disabled={disabled || !can("reject")} onClick={() => act.decide("reject")} />
-      <ActionButton label="החזרה להמתנה" keyName="o" disabled={disabled || !can("reopen")} onClick={() => act.decide("reopen")} />
-      <ActionButton label="תיקון ההצעה…" keyName="e" disabled={disabled || !editable} onClick={() => act.edit()} />
-      <ActionButton
-        label={item.paid ? "ביצוע… (בתשלום)" : "ביצוע"}
-        keyName="y"
-        primary={item.status === "accepted"}
-        disabled={disabled || !can("apply")}
-        onClick={() => act.apply()}
-      />
-      {item.status === "applied" && <p className="text-xs text-slate-500">ההצעה בוצעה; זה סופי. מה השתנה מוצג באמצע.</p>}
-      {item.status === "pending" && (
-        <p className="text-xs text-slate-500">
-          {STRUCTURAL.includes(item.kind)
-            ? "שינוי בתוכנית: הביצוע מיידי, ואחריו מריצים את שלב השיוך ואת שלב 7."
-            : "תיקון טקסט: הביצוע הוא קריאה אחת למודל (דקה עד שתיים), ברקע."}
-        </p>
+      {can("accept") && <ActionButton label="Accept" keyName="a" primary disabled={disabled} onClick={() => act.decide("accept")} />}
+      {can("apply") && (
+        <ActionButton label={item.paid ? "Apply… (paid)" : "Apply"} keyName="y" primary disabled={disabled} onClick={() => act.apply()} />
       )}
+      {editable && <ActionButton label="Correct the proposal…" keyName="e" disabled={disabled} onClick={() => act.edit()} />}
+      {can("reject") && <ActionButton label="Reject" keyName="x" danger disabled={disabled} onClick={() => act.decide("reject")} />}
+      {can("reopen") && <ActionButton label="Back to pending" keyName="o" disabled={disabled} onClick={() => act.decide("reopen")} />}
+      <WhatApplyDoes item={item} />
+      {item.status === "applied" && <p className="text-xs text-slate-500">Applied; this is final. What it changed is in the middle column.</p>}
     </div>
   );
 }
@@ -91,9 +91,11 @@ export function ActionsPanel({ item, targets, marked, applies, accepted, act, lo
   const disabled = Boolean(lockedBy) || saving;
   return (
     <Panel
-      title="פעולות"
+      title="Decide"
       footer={
-        <ActionButton label="ביצוע כל ההצעות שהתקבלו" keyName="shift+y" count={accepted.length} disabled={disabled} onClick={() => act.applyAll()} />
+        accepted.length > 0 && (
+          <ActionButton label="Apply every accepted one" keyName="shift+y" count={accepted.length} disabled={disabled} onClick={() => act.applyAll()} />
+        )
       }
     >
       <div className="space-y-4 p-4 text-sm">
@@ -103,7 +105,9 @@ export function ActionsPanel({ item, targets, marked, applies, accepted, act, lo
         ) : item ? (
           <ForOne item={item} applies={applies} act={act} disabled={disabled} />
         ) : (
-          <p className="text-slate-500">בחרו הצעה ברשימה (j / k), או סמנו כמה (רווח) כדי להחליט על כולן יחד.</p>
+          <p className="text-slate-500">
+            Pick a suggestion in the list (<Kbd>j</Kbd> / <Kbd>k</Kbd>), or mark several (<Kbd>Space</Kbd>) to decide on them together.
+          </p>
         )}
       </div>
     </Panel>

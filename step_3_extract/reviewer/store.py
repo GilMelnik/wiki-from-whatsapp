@@ -164,7 +164,7 @@ class PiiReviewStore:
         redactions = claim.get("_redactions") or []
         if not redactions:
             raise ReviewConflict(
-                f"הטענה {claim_id} כבר נבדקה. כדי לשנות את ההחלטה בטלו אותה קודם."
+                f"Claim {claim_id} has already been reviewed. To change the decision, undo it first."
             )
         chosen = self._restore_choice(claim, redactions, decision, restore)
         before = [item["claim_id"] for item in self._queue(view)]
@@ -186,12 +186,12 @@ class PiiReviewStore:
         """Make a reviewed claim pending again, with the original file's text and redactions."""
         claim = self._review_item(claim_id)
         if review_status(claim) not in REVIEWED:
-            raise ReviewConflict(f"הטענה {claim_id} עוד לא נבדקה, אין החלטה לבטל.")
+            raise ReviewConflict(f"Claim {claim_id} has not been reviewed yet; there is no decision to undo.")
         original = self._originals.get(claim_id)
         if not original or not original.get("_redactions"):
             raise ReviewConflict(
-                f"אי אפשר לבטל: בקובץ המקורי אין לטענה {claim_id} פרטים שהוסרו "
-                "(אולי שלב 3 רץ מחדש ושינה אותה)."
+                f"Cannot undo: in the original file, claim {claim_id} has no removed details "
+                "(step 3 may have run again and changed it)."
             )
         claim["claim_text"] = original["claim_text"]
         claim["_redactions"] = [dict(item) for item in original["_redactions"]]
@@ -206,8 +206,8 @@ class PiiReviewStore:
         claim = self._claims.get(claim_id)
         if claim is None or review_status(claim) is None:
             raise ClaimNotFound(
-                f"הטענה {claim_id} לא נמצאה בין הטענות לבדיקת פרטיות "
-                "(אולי שלב 3 רץ מחדש והסיר אותה)."
+                f"Claim {claim_id} is not among the claims for privacy review "
+                "(step 3 may have run again and removed it)."
             )
         return claim
 
@@ -222,15 +222,15 @@ class PiiReviewStore:
             return frozenset()
         if claim["claim_text"].count(REDACTION_MARK) != len(redactions):
             raise ReviewConflict(
-                f"בטקסט של {claim['claim_id']} מספר הסימונים {REDACTION_MARK} לא תואם את "
-                "מספר הפרטים שהוסרו, ולכן אי אפשר לדעת איפה להחזיר כל פרט. "
-                "אשרו את ההסרה או תקנו את הטקסט ידנית."
+                f"In the text of {claim['claim_id']}, the number of {REDACTION_MARK} marks does not "
+                "match the number of removed details, so there is no way to know where each "
+                "detail goes back. Accept the removal or fix the text by hand."
             )
         chosen = frozenset(range(len(redactions)) if restore is None else restore)
         if not chosen or not chosen <= set(range(len(redactions))):
             raise ReviewConflict(
-                f"בחירת הפרטים לשחזור לא תקינה: {sorted(chosen)} "
-                f"(לטענה יש {len(redactions)} פרטים, ממוספרים מ-0)."
+                f"Invalid choice of details to restore: {sorted(chosen)} "
+                f"(the claim has {len(redactions)} details, numbered from 0)."
             )
         return chosen
 

@@ -13,7 +13,7 @@ import { assignmentLines, consequenceLines } from "./planText.js";
 // that does not save the plan itself (e.g. correcting a suggested operation).
 
 const PLAN_SAVE_NOTE =
-  "אחרי השמירה השלבים שאחרי התוכנית (שיוך הטענות וכתיבת הדפים) יסומנו כלא מעודכנים. אפשר לבטל את השינוי האחרון בכפתור „ביטול” (u).";
+  "After saving, the steps that follow the plan (assigning the claims and writing the pages) are marked out of date. The last change can be undone with the “Undo” button (u).";
 
 const LINE_TONES = {
   info: "border-sky-200 bg-sky-50 text-sky-900",
@@ -24,13 +24,13 @@ const LINE_TONES = {
 export function Consequences({ preview, error, pending, overview }) {
   if (error) {
     return (
-      <p role="status" dir="auto" className="whitespace-pre-line rounded border border-rose-200 bg-rose-50 p-2 text-rose-800">
+      <p role="status" className="whitespace-pre-line rounded border border-rose-200 bg-rose-50 p-2 text-rose-800">
         {error.message}
       </p>
     );
   }
   if (!preview) {
-    return <p className="text-xs text-slate-400">{pending ? "בודק מה השינוי יעשה…" : "מלאו את הפרטים כדי לראות מה השינוי יעשה."}</p>;
+    return <p className="text-xs text-slate-400">{pending ? "Checking what the change will do…" : "Fill in the details to see what the change will do."}</p>;
   }
   return (
     <ul className={`space-y-1 ${pending ? "opacity-60" : ""}`}>
@@ -71,7 +71,7 @@ export function OperationDialog({
       <div className="space-y-4">
         {children}
         <section>
-          <h3 className="section-title">מה השינוי יעשה</h3>
+          <h3 className="section-title">What the change will do</h3>
           <Consequences preview={preview} error={error} pending={pending} overview={overview} />
           <p className="mt-2 text-xs text-slate-500">{note}</p>
         </section>

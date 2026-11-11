@@ -46,7 +46,7 @@ from step_6_plan.reviewer.assignments import (
 )
 from step_6_plan.reviewer.checks import plan_warnings
 from step_6_plan.reviewer.history import PlanHistory, UndoEntry
-from step_6_plan.reviewer.requests import Delete, Merge, Operation, title_of
+from step_6_plan.reviewer.requests import Delete, Merge, Operation, quote, title_of
 from step_6_plan.reviewer.views import (
     branches,
     budget,
@@ -62,14 +62,14 @@ from utils.reconcile import backup_file
 logger = logging.getLogger(__name__)
 
 EDITED_BY = "plan_tool"
-KIND_NAMES = {"page": "דף", "node": "קטגוריה", "label": "תווית"}
+KIND_NAMES = {"page": "page", "node": "category", "label": "label"}
 METADATA_SHOWN = ("top_level_rationale", "model", "generated_at", "group_count", "edited_at")
 # What a plan file that is not a walkable C7 plan raises while the views are built.
 _UNREADABLE = (KeyError, TypeError, AttributeError, StopIteration)
 
 
 class PlanConflict(Exception):
-    """A change that cannot be made (409); ``args[0]`` is a Hebrew message followed by the
+    """A change that cannot be made (409); ``args[0]`` is an English message followed by the
     rules the change would break, verbatim, one per line."""
 
 
@@ -216,7 +216,7 @@ class PlanStore:
 
         page = self.plan["pages"].get(page_id)
         if page is None:
-            raise ItemNotFound(f"אין בתוכנית דף עם המזהה {page_id}.")
+            raise ItemNotFound(f"The plan has no page with the id {page_id}.")
         coverage = self._coverage()
         return {
             "page_id": page_id,
@@ -248,8 +248,7 @@ class PlanStore:
         if scope in ("page", "label"):
             items = self.plan["pages"] if scope == "page" else self.plan["labels"]
             if item_id not in items:
-                kind = "דף" if scope == "page" else "תווית"
-                raise ItemNotFound(f"אין בתוכנית {kind} עם המזהה {item_id}.")
+                raise ItemNotFound(f"The plan has no {scope} with the id {item_id}.")
         return view.groups_list(scope=scope, item_id=item_id, role=role, sort=sort, q=q,
                                 offset=offset, limit=limit)
 
@@ -257,22 +256,22 @@ class PlanStore:
         return self.view.proposals_view(self.check_id)
 
     def check_id(self, item_id: str) -> dict[str, Any]:
-        """Whether ``item_id`` can be given to a new item, with the reason in Hebrew."""
+        """Whether ``item_id`` can be given to a new item, with the reason in English."""
 
         problem = None
         if not item_id:
-            problem = "הקלידו מזהה."
+            problem = "Type an id."
         elif len(item_id) > PLAN_CONFIG["slug_max_length"]:
-            problem = f"המזהה ארוך מ-{PLAN_CONFIG['slug_max_length']} תווים."
+            problem = f"The id is longer than {PLAN_CONFIG['slug_max_length']} characters."
         elif slug_error(item_id):
-            problem = ("מזהה מורכב מאותיות לטיניות קטנות וספרות, ומילים מופרדות במקף אחד "
-                       "(למשל surrogate-gifts).")
+            problem = ("An id is made of small Latin letters and digits, with words separated by "
+                       "a single hyphen (e.g. surrogate-gifts).")
         elif item_id in live_ids(self.plan):
             kind = KIND_NAMES[kind_of(self.plan, item_id)]
-            problem = f"המזהה כבר בשימוש: {kind} „{title_of(self.plan, item_id)}”."
+            problem = f"The id is already in use: the {kind} {quote(title_of(self.plan, item_id))}."
         elif item_id in retired_ids(self.plan):
-            problem = ("המזהה הוצא משימוש (מוזג או נמחק) ולא יחזור לשימוש, כדי שקישור או שיוך "
-                       "ישנים לא יצביעו על משהו אחר.")
+            problem = ("The id was retired (merged or deleted) and will not be used again, so that "
+                       "old links or assignments do not point at something else.")
         return {"id": item_id, "ok": problem is None, "problem": problem}
 
     # --- plan changes -------------------------------------------------------------
@@ -287,7 +286,7 @@ class PlanStore:
         """What ``op`` would do, without saving (``PlanConflict`` if it cannot be done), also
         to the assignments (``None`` before step 6b has run)."""
 
-        edit = self._run(op, "השינוי הזה אינו אפשרי, כי התוכנית שתתקבל שוברת את הכללים:")
+        edit = self._run(op, "This change is not possible, because the resulting plan breaks the rules:")
         effect = self.view.plan_edit_effect(edit) if self.assignments.usable else None
         return {"label": op.describe(self.plan), "edit": _edit_fields(edit), "assignments": effect}
 
@@ -295,7 +294,7 @@ class PlanStore:
         """Run ``op`` and save the result; answers the new overview, what the change means
         downstream and which item to show next."""
 
-        edit = self._run(op, "השינוי לא נשמר, כי התוכנית שתתקבל שוברת את הכללים:")
+        edit = self._run(op, "The change was not saved, because the resulting plan breaks the rules:")
         label = op.describe(self.plan)
         focus = self._focus(op, edit)
         before = self.plan
@@ -352,8 +351,8 @@ class PlanStore:
         unknown = [gid for gid in edit.group_ids if gid not in records]
         if unknown:
             raise AssignmentsConflict(
-                "לקבוצות האלה אין עדיין שיוך (הן חדשות מאז הרצת השיוך האחרונה, או שכבר אינן "
-                f"בקובץ הקבוצות); הריצו את שלב השיוך: {', '.join(unknown)}"
+                "These groups have no assignment yet (they are new since the last assignment run, "
+                f"or no longer in the groups file); run the assignment step: {', '.join(unknown)}"
             )
         changed = {}
         for gid in dict.fromkeys(edit.group_ids):
@@ -369,7 +368,7 @@ class PlanStore:
         self.view  # noqa: B018 - requires a usable assignments file
         proposal = decisions.find(self.assignments.proposals, proposal_id)
         if proposal is None:
-            raise ItemNotFound(f"אין הצעה עם המזהה {proposal_id}.")
+            raise ItemNotFound(f"There is no proposal with the id {proposal_id}.")
         decisions.check_decidable(proposal, wanted, action)
         return proposal
 
@@ -378,9 +377,10 @@ class PlanStore:
 
         rejecting = status == decisions.REJECTED
         proposal = self._proposal(proposal_id, decisions.PENDING if rejecting else decisions.REJECTED,
-                                  "לדחות אותה" if rejecting else "להחזיר אותה להמתנה")
+                                  "be rejected" if rejecting else "be put back to pending")
         proposals = decisions.with_status(self.assignments.proposals, proposal_id, status)
-        label = f"{'דחיית ההצעה' if rejecting else 'החזרה להמתנה של ההצעה'} „{proposal.get('title_he', '')}”"
+        title = quote(proposal.get("title_he", ""))
+        label = f"Rejected the proposal {title}" if rejecting else f"Put the proposal {title} back to pending"
         self._save_assignments(label, {}, proposals)
         return {"overview": self.overview(), "label": label}
 
@@ -389,10 +389,10 @@ class PlanStore:
         mark the proposal accepted, as one change: everything is checked before either file
         is written, and undo puts back both."""
 
-        proposal = self._proposal(proposal_id, decisions.PENDING, "לקבל אותה")
+        proposal = self._proposal(proposal_id, decisions.PENDING, "be accepted")
         decisions.check_operation(proposal, op, self.plan)
-        edit = self._run(op, "ההצעה לא התקבלה, כי התוכנית שתתקבל שוברת את הכללים:")
-        label = f"קבלת ההצעה „{proposal.get('title_he', '')}”: {op.describe(self.plan)}"
+        edit = self._run(op, "The proposal was not accepted, because the resulting plan breaks the rules:")
+        label = f"Accepted the proposal {quote(proposal.get('title_he', ''))}: {op.describe(self.plan)}"
         focus = self._focus(op, edit)
         plan_before = self.plan
         proposals = decisions.with_status(self.assignments.proposals, proposal_id,
@@ -415,8 +415,9 @@ class PlanStore:
         latest = self._latest()
         if latest is None:
             raise PlanConflict(
-                "אין שינוי לבטל: לא נעשה שינוי בכלי מאז שהשרת עלה, או שהתוכנית או השיוך השתנו "
-                "מחוץ לכלי (למשל תכנון מחדש או הרצה של שלב השיוך) ולכן הביטול כבר לא בטוח."
+                "There is no change to undo: no change was made in the tool since the server "
+                "started, or the plan or the assignments changed outside the tool (for example a "
+                "re-plan or an assignment run), so undoing is no longer safe."
             )
         if latest.plan_before is not None:
             self._save(latest.plan_before, stamp=False)

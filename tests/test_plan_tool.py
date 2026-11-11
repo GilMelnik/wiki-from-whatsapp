@@ -13,6 +13,7 @@ from review_tool.artifacts import ArtifactGraph, ArtifactNode
 from review_tool.tools import TOOL_SPECS
 from step_6_plan import operations as ops
 from step_6_plan.model import PLAN_CONFIG
+from step_6_plan.reviewer.requests import quote
 from step_6_plan.reviewer.tool import PlanTool
 from tests.plan_fixtures import make_groups, make_plan
 from tests.review_tool_support import BASE_URL, build_app, locked_elsewhere
@@ -175,12 +176,12 @@ def test_coverage_is_read_against_todays_plan(setup: PlanSetup) -> None:
     ("item_id", "ok", "problem"),
     [
         ("lawyers", True, None),
-        ("", False, "הקלידו"),
-        ("Bad Id", False, "אותיות לטיניות"),
-        ("x" * 41, False, "ארוך"),
-        ("costs", False, "דף „כותרת costs”"),
-        ("choosing", False, "קטגוריה"),
-        ("usa", False, "תווית"),
+        ("", False, "Type an id"),
+        ("Bad Id", False, "small Latin letters"),
+        ("x" * 41, False, "longer than"),
+        ("costs", False, f"the page {quote('כותרת costs')}"),
+        ("choosing", False, "the category"),
+        ("usa", False, "the label"),
     ],
 )
 def test_check_id(setup: PlanSetup, item_id: str, ok: bool, problem: str | None) -> None:
@@ -191,7 +192,7 @@ def test_check_id(setup: PlanSetup, item_id: str, ok: bool, problem: str | None)
 
 def test_check_id_refuses_retired_ids(setup: PlanSetup) -> None:
     setup.apply({"op": "delete", "item_id": "hospital"})
-    assert "הוצא משימוש" in setup.get("/ids", id="hospital")["problem"]
+    assert "was retired" in setup.get("/ids", id="hospital")["problem"]
 
 
 # ------------------------------------------------------------------ preview
@@ -199,7 +200,7 @@ def test_check_id_refuses_retired_ids(setup: PlanSetup) -> None:
 
 def test_preview_tells_the_consequences_and_saves_nothing(setup: PlanSetup) -> None:
     preview = setup.post("/operations/preview", MERGE)
-    assert preview["label"] == "מיזוג „כותרת costs” לתוך „כותרת agencies”"
+    assert preview["label"] == f"Merged {quote('כותרת costs')} into {quote('כותרת agencies')}"
     assert preview["edit"] == {"created": [], "removed_pages": ["costs"], "removed_labels": [],
                                "redirects": {"costs": "agencies"}, "reassign": []}
     scope = setup.post("/operations/preview",
@@ -213,7 +214,7 @@ def test_invalid_changes_are_409_with_the_rules_verbatim(setup: PlanSetup) -> No
         detail = setup.post(path, {"op": "move", "item_id": "costs", "parent_id": None},
                             status=409)["detail"]
         lead, *rules = detail.split("\n")
-        assert "שוברת את הכללים" in lead
+        assert "breaks the rules" in lead
         assert rules == ["• page 'costs' sits at depth 1; pages must sit between depth 3 and 4"]
     detail = setup.apply({"op": "delete", "item_id": "choosing"}, status=409)["detail"]
     assert "still holds ['agencies', 'costs']" in detail
@@ -283,9 +284,9 @@ def test_every_operation_saves_a_valid_plan_to_the_edited_file(setup: PlanSetup)
 
 def test_moves_are_named_for_the_undo_button(setup: PlanSetup) -> None:
     reorder = {"op": "move", "item_id": "costs", "parent_id": "choosing", "position": 0}
-    assert setup.post("/operations/preview", reorder)["label"] == "שינוי הסדר: „כותרת costs”"
+    assert setup.post("/operations/preview", reorder)["label"] == f"Reordered {quote('כותרת costs')}"
     move = {"op": "move", "item_id": "costs", "parent_id": "medical"}
-    assert setup.post("/operations/preview", move)["label"] == "העברת „כותרת costs” אל „רפואי”"
+    assert setup.post("/operations/preview", move)["label"] == f"Moved {quote('כותרת costs')} into {quote('רפואי')}"
     assert children(setup.apply(reorder)["overview"], "choosing") == ["costs", "agencies"]
 
 
@@ -329,12 +330,12 @@ def test_undo_goes_back_one_change_at_a_time(setup: PlanSetup) -> None:
     setup.post("/undo", status=409)
     setup.apply({"op": "rename", "item_id": "costs", "title_he": "עלויות"})
     merged = setup.apply(MERGE)
-    assert merged["overview"]["undo"]["label"] == "מיזוג „עלויות” לתוך „כותרת agencies”"
+    assert merged["overview"]["undo"]["label"] == f"Merged {quote('עלויות')} into {quote('כותרת agencies')}"
     undone = setup.post("/undo")
     assert undone["label"] == merged["overview"]["undo"]["label"]
     assert undone["focus"] == "agencies"
     assert "costs" in setup.saved()["pages"]
-    assert undone["overview"]["undo"]["label"].startswith("שינוי השם")
+    assert undone["overview"]["undo"]["label"].startswith("Renamed")
     setup.post("/undo")
     assert setup.saved()["pages"]["costs"]["title_he"] == "כותרת costs"
     assert setup.get("/plan")["undo"] is None
@@ -348,7 +349,7 @@ def test_undo_is_refused_after_an_outside_change(setup: PlanSetup) -> None:
     write_json_file(rewritten, setup.edited)
     assert setup.get("/plan")["undo"] is None
     detail = setup.post("/undo", status=409)["detail"]
-    assert "השתנו מחוץ לכלי" in detail
+    assert "changed outside the tool" in detail
     assert setup.saved()["pages"]["hospital"]["scope"] == "תכנון מחדש"
 
 
@@ -368,7 +369,7 @@ def test_an_outside_rewrite_is_picked_up_before_the_next_change(setup: PlanSetup
 def test_a_locked_plan_is_423_and_reads_still_work(setup: PlanSetup) -> None:
     with locked_elsewhere(setup.edited):
         response = setup.client.post("/api/plan/operations", json=MERGE)
-        assert response.status_code == 423 and "locked" in response.json()["detail"]
+        assert response.status_code == 423 and "being written by another process" in response.json()["detail"]
         assert setup.client.post("/api/plan/undo").status_code == 423
         assert setup.get("/plan")["budget"]["pages"] == 4
         assert setup.post("/operations/preview", MERGE)["edit"]["removed_pages"] == ["costs"]

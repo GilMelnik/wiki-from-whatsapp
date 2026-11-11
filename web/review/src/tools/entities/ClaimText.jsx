@@ -6,7 +6,7 @@ import { colour, segments } from "./entities.js";
 
 export function ClaimText({ text, highlights, memberIndex, onOpenEntity }) {
   return (
-    <Bidi as="p" className="leading-relaxed">
+    <Bidi as="p" text={text} className="leading-relaxed">
       {segments(text, highlights).map((piece, index) => {
         const { highlight } = piece;
         if (!highlight) return <span key={index}>{piece.text}</span>;
@@ -21,7 +21,7 @@ export function ClaimText({ text, highlights, memberIndex, onOpenEntity }) {
           <button
             key={index}
             type="button"
-            title={`פתיחת הישות ${highlight.canonical_name}`}
+            title={`Open the entity “${highlight.canonical_name}”`}
             onClick={() => onOpenEntity(highlight.entity_id)}
             className={`rounded px-0.5 font-semibold underline underline-offset-2 hover:opacity-80 ${colour(highlight.color_index).mark}`}
           >

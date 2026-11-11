@@ -44,7 +44,7 @@ def _load_metadata_summary(node: ArtifactNode) -> MetadataSummary:
 
 class StatusTool:
     NAME = "status"
-    TITLE = "מצב הצינור"
+    TITLE = "Status"
 
     def __init__(self, graph: ArtifactGraph, data_dir: Path) -> None:
         self._graph = graph

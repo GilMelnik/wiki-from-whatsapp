@@ -56,9 +56,10 @@ test("contacts go to and from one-value-per-line fields", () => {
 });
 
 test("statuses and colours have fallbacks", () => {
-  assert.equal(statusOf("accepted").label, "אושרה");
+  assert.equal(statusOf("accepted").label, "Accepted");
   assert.equal(statusOf("unknown"), statusOf("suggested"));
   assert.equal(colour(0), colour(8));
   assert.equal(colour(-1), colour(7));
   assert.equal(colour(null), colour(0));
 });
+

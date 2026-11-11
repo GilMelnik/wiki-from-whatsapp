@@ -39,7 +39,7 @@ export function GroupPicker({ title, description, excludeId, suggested = [], con
   );
   const shown = new Set(suggested.map((group) => group.group_id));
   const options = [
-    ...suggested.map((group) => ({ group, hint: "הצעת מיזוג" })),
+    ...suggested.map((group) => ({ group, hint: "Merge suggestion" })),
     ...(results.data?.items ?? [])
       .filter((group) => group.group_id !== excludeId && !shown.has(group.group_id))
       .map((group) => ({ group })),
@@ -65,7 +65,7 @@ export function GroupPicker({ title, description, excludeId, suggested = [], con
         type="search"
         dir="auto"
         className="field mb-3 w-full"
-        placeholder="חיפוש לפי טקסט, ישות או מזהה…"
+        placeholder="Search by text, entity or id…"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={(event) => {
@@ -86,7 +86,7 @@ export function GroupPicker({ title, description, excludeId, suggested = [], con
               onChoose={() => setChoice(option.group.group_id)}
             />
           ))}
-          {options.length === 0 && <li className="p-2 text-slate-500">לא נמצאו קבוצות.</li>}
+          {options.length === 0 && <li className="p-2 text-slate-500">No groups found.</li>}
         </ul>
       </PanelState>
     </Dialog>

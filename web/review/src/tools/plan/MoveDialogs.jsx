@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bidi, Dialog, formatCount, groupCount, labelItems, Ltr, pathTitles, titleOf } from "@shell";
+import { Bidi, countText, Dialog, formatCount, groupCount, labelItems, Ltr, pathTitles, titleOf } from "@shell";
 import { labelChanges, labelShare, nextLabelTarget, pageChoices } from "./assign.js";
 import { percent } from "./plan.js";
 
@@ -8,8 +8,8 @@ import { percent } from "./plan.js";
 // throws on failure (the dialog shows the error and stays open).
 
 const MODES = {
-  primary: { title: "העברה לדף", confirm: "העברה", action: "set_primary" },
-  second: { title: "הוספת דף נוסף", confirm: "הוספה", action: "add_page" },
+  primary: { title: "Move to a page", confirm: "Move", action: "set_primary" },
+  second: { title: "Add a second page", confirm: "Add", action: "add_page" },
 };
 
 function PageOption({ overview, id, checked, onChoose, note }) {
@@ -53,14 +53,14 @@ export function PagePickerDialog({ overview, rows, mode, onClose, onConfirm }) {
       <div className="space-y-3">
         <p className="text-slate-600">
           {mode === "primary"
-            ? "הדף שנבחר יהיה הדף הראשי של הקבוצות (דף נוסף, אם יש, נשאר)."
-            : "הדף שנבחר יתווסף כדף נוסף שרק מזכיר את הקבוצות (במקום דף נוסף קיים)."}{" "}
-          הקבוצות יסומנו כמשויכות ביד, ושלב השיוך לא ישנה אותן.
+            ? "The chosen page becomes the groups' primary page (a second page, if any, stays)."
+            : "The chosen page is added as a second page that only mentions the groups (replacing an existing second page)."}{" "}
+          The groups will be marked as assigned by hand, and the assignment step will not change them.
         </p>
         <input
           dir="auto"
           className="field w-full"
-          placeholder="חיפוש דף לפי שם, מזהה או מקום בעץ"
+          placeholder="Search for a page by name, id or place in the tree"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
@@ -72,7 +72,7 @@ export function PagePickerDialog({ overview, rows, mode, onClose, onConfirm }) {
         />
         {considered.length > 0 && (
           <section>
-            <h3 className="section-title">דפים שהמסווג שקל</h3>
+            <h3 className="section-title">Pages the classifier considered</h3>
             <ul className="space-y-0.5">
               {considered.map(({ id, mean, count }) => (
                 <PageOption
@@ -81,16 +81,16 @@ export function PagePickerDialog({ overview, rows, mode, onClose, onConfirm }) {
                   id={id}
                   checked={current === id}
                   onChoose={setChosen}
-                  note={single ? percent(mean) : `ממוצע ${percent(mean)} · ${formatCount(count)} מתוך ${formatCount(rows.length)}`}
+                  note={single ? percent(mean) : `mean ${percent(mean)} · ${formatCount(count)} of ${formatCount(rows.length)}`}
                 />
               ))}
             </ul>
           </section>
         )}
         <section>
-          <h3 className="section-title">{considered.length > 0 ? "שאר הדפים" : "כל הדפים"}</h3>
+          <h3 className="section-title">{considered.length > 0 ? "Other pages" : "All pages"}</h3>
           {others.length === 0 ? (
-            <p className="text-xs text-slate-400">אין דפים נוספים שמתאימים לחיפוש.</p>
+            <p className="text-xs text-slate-400">No other pages match the search.</p>
           ) : (
             <ul className="max-h-64 space-y-0.5 overflow-y-auto">
               {others.map((id) => (
@@ -113,17 +113,17 @@ export function LabelsDialog({ overview, rows, onClose, onConfirm }) {
   return (
     <Dialog
       open
-      title={`תוויות: ${groupCount(rows.length, formatCount)}`}
+      title={`Labels: ${groupCount(rows.length, formatCount)}`}
       size="lg"
-      confirmLabel={changes.length ? `שמירת ${formatCount(changes.length)} שינויים` : "שמירה"}
+      confirmLabel={changes.length ? `Save ${countText(changes.length, "change", formatCount)}` : "Save"}
       confirmDisabled={changes.length === 0}
       onClose={onClose}
       onConfirm={() => onConfirm(changes)}
     >
       <div className="space-y-3">
         <p className="text-slate-600">
-          סימון מוסיף את התווית לכל הקבוצות שנבחרו, וביטול הסימון מסיר אותה מכולן. תיבה חצי מסומנת:
-          רק לחלק מהן יש התווית, והיא לא תשתנה אם לא תלחצו עליה.
+          Checking adds the label to every picked group, and unchecking removes it from all of them. A
+          half-checked box: only some of them have the label, and it stays so unless you click it.
         </p>
         <ul className="max-h-80 space-y-0.5 overflow-y-auto">
           {labels.map((label) => {
@@ -140,7 +140,7 @@ export function LabelsDialog({ overview, rows, onClose, onConfirm }) {
                   />
                   <Bidi>{label.title_he}</Bidi>
                   <Ltr className="text-[11px] text-slate-400">{label.id}</Ltr>
-                  {targets[label.id] && targets[label.id] !== initial[label.id] && <span className="badge badge-sky">ישתנה</span>}
+                  {targets[label.id] && targets[label.id] !== initial[label.id] && <span className="badge badge-sky">Will change</span>}
                 </label>
               </li>
             );
@@ -148,7 +148,7 @@ export function LabelsDialog({ overview, rows, onClose, onConfirm }) {
         </ul>
         {Object.keys(targets).length > 0 && (
           <button type="button" className="btn btn-sm" onClick={() => setTargets({})}>
-            איפוס
+            Reset
           </button>
         )}
       </div>

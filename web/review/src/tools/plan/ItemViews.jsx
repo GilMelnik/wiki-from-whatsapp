@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bidi, EditableText, formatCount, KindField, Ltr, nodeById, Panel, pathTitles, titleOf } from "@shell";
+import { Bidi, countText, EditableText, formatCount, KindField, Ltr, nodeById, Panel, pathTitles, titleOf } from "@shell";
 import { GROUPS_TAB } from "./assign.js";
 import { ItemGroups, ItemTabs } from "./AssignmentViews.jsx";
 import { ChangeBadge, MergedFrom, Warnings } from "./bits.jsx";
@@ -16,7 +16,7 @@ export function CategoryView({ overview, nodeId, saving, on }) {
       title={<Bidi>{node.title_he}</Bidi>}
       subtitle={
         <span className="flex flex-wrap items-center gap-2">
-          <span className="badge badge-slate">קטגוריה · רמה {node.depth}</span>
+          <span className="badge badge-slate">Category · level {node.depth}</span>
           {path.length > 0 && <Bidi>{path.join(" › ")}</Bidi>}
           <Ltr>{nodeId}</Ltr>
           <ChangeBadge overview={overview} id={nodeId} />
@@ -25,21 +25,21 @@ export function CategoryView({ overview, nodeId, saving, on }) {
     >
       <div className="space-y-6 p-4 text-sm">
         <Warnings overview={overview} id={nodeId} onSelect={on.select} />
-        <EditableText label="כותרת" value={node.title_he} disabled={saving} onSave={(title) => on.rename(nodeId, title)} />
+        <EditableText label="Title" value={node.title_he} disabled={saving} onSave={(title) => on.rename(nodeId, title)} />
         <EditableText
-          label="תיאור"
+          label="Description"
           value={node.description}
           multiline
           disabled={saving}
-          placeholder="אין תיאור"
+          placeholder="No description"
           onSave={(text) => on.edit(nodeId, { description: text })}
         />
         <section>
           <h3 className="section-title">
-            בתוכה: {formatCount(node.children.length)} פריטים, {formatCount(node.page_count)} דפים
+            Inside: {countText(node.children.length, "item", formatCount)}, {countText(node.page_count, "page", formatCount)}
           </h3>
           {node.children.length === 0 ? (
-            <p className="text-slate-400">הקטגוריה ריקה.</p>
+            <p className="text-slate-400">The category is empty.</p>
           ) : (
             <ul className="divide-y divide-slate-100 rounded border border-slate-200 bg-white">
               {node.children.map((childId) => {
@@ -49,7 +49,7 @@ export function CategoryView({ overview, nodeId, saving, on }) {
                     <button type="button" className="list-row" onClick={() => on.select(childId)}>
                       <span className="flex items-center gap-2">
                         <span className={`badge ${child.kind === "page" ? "badge-emerald" : "badge-slate"}`}>
-                          {child.kind === "page" ? "דף" : "קטגוריה"}
+                          {child.kind === "page" ? "Page" : "Category"}
                         </span>
                         <Bidi>{child.title_he}</Bidi>
                         <Ltr className="text-xs text-slate-400">{childId}</Ltr>
@@ -73,9 +73,9 @@ function KindEditor({ overview, label, saving, onSave }) {
     return (
       <section>
         <div className="mb-1 flex items-center justify-between">
-          <h3 className="section-title mb-0">סוג</h3>
+          <h3 className="section-title mb-0">Kind</h3>
           <button type="button" className="btn btn-sm" disabled={saving} onClick={() => setDraft(label.kind)}>
-            שינוי הסוג
+            Change the kind
           </button>
         </div>
         <Ltr>{label.kind}</Ltr>
@@ -96,10 +96,10 @@ function KindEditor({ overview, label, saving, onSave }) {
       <KindField overview={overview} value={draft} onChange={setDraft} />
       <div className="flex gap-2">
         <button type="submit" className="btn btn-sm btn-primary" disabled={saving || !draft.trim() || draft.trim() === label.kind}>
-          שמירה
+          Save
         </button>
         <button type="button" className="btn btn-sm" onClick={() => setDraft(null)}>
-          ביטול
+          Cancel
         </button>
       </div>
     </form>
@@ -114,7 +114,7 @@ export function LabelView({ overview, labelId, saving, tab, groups, on }) {
       title={<Bidi>{label.title_he}</Bidi>}
       subtitle={
         <span className="flex flex-wrap items-center gap-2">
-          <span className="badge badge-sky">תווית</span>
+          <span className="badge badge-sky">Label</span>
           <Ltr>{label.kind}</Ltr>
           <Ltr>{labelId}</Ltr>
           <ChangeBadge overview={overview} id={labelId} />
@@ -138,9 +138,9 @@ function LabelDetails({ overview, label, labelId, saving, on }) {
   return (
     <>
       <Warnings overview={overview} id={labelId} onSelect={on.select} />
-      <EditableText label="כותרת" value={label.title_he} disabled={saving} onSave={(title) => on.rename(labelId, title)} />
+      <EditableText label="Title" value={label.title_he} disabled={saving} onSave={(title) => on.rename(labelId, title)} />
       <EditableText
-        label="תיאור: מתי טענה מקבלת את התווית"
+        label="Description: when a claim gets the label"
         value={label.description}
         multiline
         disabled={saving}
@@ -149,7 +149,7 @@ function LabelDetails({ overview, label, labelId, saving, on }) {
       <KindEditor overview={overview} label={label} saving={saving} onSave={(kind) => on.edit(labelId, { kind })} />
       <MergedFrom ids={label.merged_from} />
       <section>
-        <h3 className="section-title">תוויות מאותו סוג</h3>
+        <h3 className="section-title">Labels of the same kind</h3>
         <p className="flex flex-wrap gap-1">
           {sameKind.map((id) => (
             <button key={id} type="button" className={`badge ${id === labelId ? "badge-sky" : "badge-slate hover:bg-slate-200"}`} onClick={() => on.select(id)}>

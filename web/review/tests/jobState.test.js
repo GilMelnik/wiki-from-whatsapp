@@ -11,23 +11,23 @@ import {
   SUCCEEDED,
 } from "../src/shell/jobState.js";
 
-const threads = { key: "threads", title: "שיחות", mtime: "2026-11-10T10:00:00.000+00:00", edited_mtime: null, stale_because: [] };
-const classified = { key: "classified", title: "סיווג שיחות", mtime: "2026-11-10T09:00:00.000+00:00", stale_because: ["threads"] };
+const threads = { key: "threads", title: "Conversations", mtime: "2026-11-10T10:00:00.000+00:00", edited_mtime: null, stale_because: [] };
+const classified = { key: "classified", title: "Classified conversations", mtime: "2026-11-10T09:00:00.000+00:00", stale_because: ["threads"] };
 const byKey = { threads, classified };
-const safeStep = { key: "step_2", title: "שלב 2", produces: "classified", incremental_safe: true, paid: false, command: "python -m step_2" };
+const safeStep = { key: "step_2", title: "Step 2", produces: "classified", incremental_safe: true, paid: false, command: "python -m step_2" };
 
 test("a stale artifact offers the run button of an incremental-safe step", () => {
   const notice = artifactNotice({ artifact: classified, byKey, step: safeStep });
   assert.equal(notice.tone, "warning");
   assert.equal(notice.action, RUN_ACTION);
-  assert.equal(notice.actionLabel, "הרצת השלב");
-  assert.match(notice.text, /"שיחות" \(.+\) השתנה/);
-  assert.match(notice.text, /שלב 2/);
+  assert.equal(notice.actionLabel, "Run step");
+  assert.match(notice.text, /out of date: “Conversations” \(.+\) changed/);
+  assert.match(notice.text, /Step 2/);
 });
 
 test("a paid step's button says a dialog follows", () => {
   const notice = artifactNotice({ artifact: classified, byKey, step: { ...safeStep, paid: true } });
-  assert.equal(notice.actionLabel, "הרצת השלב…");
+  assert.equal(notice.actionLabel, "Run step…");
 });
 
 test("a step that is not incremental-safe has no button, only how to run it by hand", () => {
@@ -44,21 +44,21 @@ test("nothing to say about an up-to-date artifact or one no step produces", () =
 });
 
 test("a running job replaces the notice; writers are told saves are blocked", () => {
-  const running = { id: "j1", title: "שלב 2", state: RUNNING };
+  const running = { id: "j1", title: "Step 2", state: RUNNING };
   const reader = artifactNotice({ artifact: classified, byKey, step: safeStep, running, writes: false });
   const writer = artifactNotice({ artifact: { ...classified, stale_because: [] }, byKey, step: safeStep, running, writes: true });
   assert.equal(reader.action, LOG_ACTION);
   assert.equal(reader.jobId, "j1");
-  assert.ok(!reader.text.includes("חסומה"));
-  assert.match(writer.text, /חסומה/);
+  assert.ok(!reader.text.includes("blocked"));
+  assert.match(writer.text, /blocked/);
 });
 
 test("while the step that feeds it runs, the notice waits instead of offering a run", () => {
-  const feeding = { id: "j0", title: "שלב 1", produces: "threads", state: RUNNING };
+  const feeding = { id: "j0", title: "Step 1", produces: "threads", state: RUNNING };
   const notice = artifactNotice({ artifact: classified, byKey, step: safeStep, feeding });
   assert.equal(notice.action, LOG_ACTION);
   assert.equal(notice.jobId, "j0");
-  assert.match(notice.text, /"שלב 1" רץ כעת ומעדכן את "שיחות"/);
+  assert.match(notice.text, /Wait for Step 1 to finish, then run Step 2/);
 });
 
 test("a run that failed after the change keeps a danger notice with the log", () => {
@@ -75,7 +75,7 @@ test("a quiet artifact keeps only the running, waiting and failed notices", () =
   assert.equal(artifactNotice({ artifact: classified, byKey, step: safeStep, quiet: true }), null);
   const manual = { ...safeStep, incremental_safe: false };
   assert.equal(artifactNotice({ artifact: classified, byKey, step: manual, quiet: true }), null);
-  const running = { id: "j1", title: "שלב 2", state: RUNNING };
+  const running = { id: "j1", title: "Step 2", state: RUNNING };
   assert.equal(artifactNotice({ artifact: classified, byKey, step: safeStep, running, quiet: true }).action, LOG_ACTION);
   const latest = { id: "j2", state: FAILED, exit_code: 1, started_at: "2026-11-10T10:05:00.000+00:00" };
   assert.equal(artifactNotice({ artifact: classified, byKey, step: safeStep, latest, quiet: true }).tone, "danger");

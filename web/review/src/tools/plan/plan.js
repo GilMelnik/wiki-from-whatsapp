@@ -8,7 +8,7 @@ export const OVERVIEW_ID = "__overview";
 export const TREE_VIEW = "tree";
 export const LABELS_VIEW = "labels";
 
-export const KIND_LABELS = { page: "דף", category: "קטגוריה", label: "תווית" };
+export const KIND_LABELS = { page: "page", category: "category", label: "label" };
 /** The rows of the tree list: the overview row, then every node in display order. */
 export function treeItems(overview) {
   return [{ id: OVERVIEW_ID, kind: "overview" }, ...(overview?.nodes ?? [])];

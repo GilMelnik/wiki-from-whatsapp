@@ -13,7 +13,7 @@ import { Bidi, Ltr } from "./text.jsx";
 // does, and `save(op)` receives the operation as corrected.
 
 const SCOPE_HINT =
-  "מה שייך לדף ומה לא. זה מה שהמסווג קורא כדי לשבץ כל טענה, אז כתבו גבולות ברורים: „כולל…”, „לא כולל… (זה בדף …)”.";
+  "What belongs on the page and what does not. The classifier reads this to place every claim, so write clear boundaries: “Includes…”, “Does not include… (that is on the page …)”.";
 
 function usePageForm(initial = {}) {
   const [form, setForm] = useState({ id: "", title: "", description: "", scope: "", he: "", en: "", ...initial });
@@ -34,21 +34,21 @@ function PageFields({ page, scopeRows = 6 }) {
   return (
     <>
       <IdField value={form.id} onChange={set("id")} onValid={setValidId} />
-      <Field label="כותרת">
+      <Field label="Title">
         <TextInput value={form.title} onChange={set("title")} />
       </Field>
-      <Field label="תיאור קצר (שורה אחת, מוצג בניווט)">
+      <Field label="Short description (one line, shown in the navigation)">
         <TextInput value={form.description} onChange={set("description")} />
       </Field>
-      <Field label="תחום" hint={SCOPE_HINT}>
+      <Field label="Scope" hint={SCOPE_HINT}>
         <TextArea value={form.scope} onChange={set("scope")} rows={scopeRows} />
       </Field>
       <div className="grid gap-3 md:grid-cols-2">
-        <Field label="כינויים בעברית (אחד בשורה, לא חובה)">
+        <Field label="Hebrew aliases (one per line, optional)">
           <TextArea value={form.he} onChange={set("he")} rows={2} />
         </Field>
-        <Field label="כינויים באנגלית (אחד בשורה, לא חובה)">
-          <TextArea value={form.en} onChange={set("en")} rows={2} />
+        <Field label="English aliases (one per line, optional)">
+          <TextArea value={form.en} onChange={set("en")} rows={2} dir="ltr" lang="en" />
         </Field>
       </div>
     </>
@@ -58,9 +58,9 @@ function PageFields({ page, scopeRows = 6 }) {
 function ParentSelect({ overview, value, onChange, excludeId, allowTop = false }) {
   const targets = moveTargets(overview, excludeId);
   return (
-    <Field label="בתוך הקטגוריה">
+    <Field label="In the category">
       <select className="field w-full" value={value ?? ""} onChange={(event) => onChange(event.target.value || null)} onKeyDown={submitOnEnter}>
-        {allowTop && <option value="">הרמה העליונה</option>}
+        {allowTop && <option value="">Top level</option>}
         {targets.map((target) => (
           <option key={target.id} value={target.id}>
             {"  ".repeat(target.depth - 1)}
@@ -72,7 +72,7 @@ function ParentSelect({ overview, value, onChange, excludeId, allowTop = false }
   );
 }
 
-export function AddPageDialog({ overview, parentId, onClose, save, initial, title = "דף חדש", confirmLabel = "הוספת הדף", intro = null, note }) {
+export function AddPageDialog({ overview, parentId, onClose, save, initial, title = "New page", confirmLabel = "Add the page", intro = null, note }) {
   const page = usePageForm(initial);
   const [parent, setParent] = useState(parentId);
   const op = { op: "add_page", page_id: page.form.id, parent_id: parent, ...page.fields, position: null };
@@ -85,7 +85,7 @@ export function AddPageDialog({ overview, parentId, onClose, save, initial, titl
   );
 }
 
-export function SplitDialog({ overview, itemId, onClose, save, initial, title, confirmLabel = "פיצול", intro = null, note }) {
+export function SplitDialog({ overview, itemId, onClose, save, initial, title, confirmLabel = "Split", intro = null, note }) {
   const original = overview.pages[itemId];
   const page = usePageForm(initial);
   const [originalScope, setOriginalScope] = useState(initial?.originalScope ?? original.scope);
@@ -101,7 +101,7 @@ export function SplitDialog({ overview, itemId, onClose, save, initial, title, c
   };
   return (
     <OperationDialog
-      title={title ?? <>פיצול דף חדש מתוך „<Bidi>{original.title_he}</Bidi>”</>}
+      title={title ?? <>Split a new page off “<Bidi>{original.title_he}</Bidi>”</>}
       op={op}
       ready={page.complete && Boolean(originalScope.trim())}
       overview={overview}
@@ -112,11 +112,11 @@ export function SplitDialog({ overview, itemId, onClose, save, initial, title, c
     >
       {intro}
       <p className="text-slate-600">
-        הדף „<Bidi>{original.title_he}</Bidi>” נשאר עם המזהה שלו. הטענות שלו יסווגו מחדש בין שני
-        הדפים לפי התחומים, לכן כדאי לצמצם כאן גם את התחום שלו.
+        The page “<Bidi>{original.title_he}</Bidi>” keeps its id. Its claims will be classified again
+        between the two pages by their scopes, so narrow its scope here too.
       </p>
       <PageFields page={page} scopeRows={5} />
-      <Field label={`התחום של „${original.title_he}” אחרי הפיצול`}>
+      <Field label={<>Scope of “<Bidi>{original.title_he}</Bidi>” after the split</>}>
         <TextArea value={originalScope} onChange={setOriginalScope} rows={5} />
       </Field>
       <ParentSelect overview={overview} value={parent} onChange={setParent} excludeId={itemId} />
@@ -133,27 +133,27 @@ export function AddCategoryDialog({ overview, parentId = null, onClose, save }) 
   const op = { op: "add_category", node_id: id, title_he: title.trim(), description: description.trim(), parent_id: parent, position: null };
   return (
     <OperationDialog
-      title={parent ? <>קטגוריה חדשה בתוך „<Bidi>{titleOf(overview, parent)}</Bidi>”</> : "קטגוריה חדשה ברמה העליונה"}
+      title={parent ? <>New category in “<Bidi>{titleOf(overview, parent)}</Bidi>”</> : "New top-level category"}
       op={op}
       ready={validId && Boolean(title.trim())}
       overview={overview}
-      confirmLabel="הוספת הקטגוריה"
+      confirmLabel="Add the category"
       onClose={onClose}
       onConfirm={save}
     >
       <ParentSelect overview={overview} value={parent} onChange={setParent} allowTop />
       <IdField value={id} onChange={setId} onValid={setValidId} />
-      <Field label="כותרת">
+      <Field label="Title">
         <TextInput value={title} onChange={setTitle} />
       </Field>
-      <Field label="תיאור (לא חובה)">
+      <Field label="Description (optional)">
         <TextInput value={description} onChange={setDescription} />
       </Field>
     </OperationDialog>
   );
 }
 
-export function AddLabelDialog({ overview, kind = "", onClose, save, initial = {}, title: dialogTitle = "תווית חדשה", confirmLabel = "הוספת התווית", intro = null, note }) {
+export function AddLabelDialog({ overview, kind = "", onClose, save, initial = {}, title: dialogTitle = "New label", confirmLabel = "Add the label", intro = null, note }) {
   const [id, setId] = useState(initial.id ?? "");
   const [validId, setValidId] = useState(false);
   const [title, setTitle] = useState(initial.title ?? "");
@@ -173,10 +173,10 @@ export function AddLabelDialog({ overview, kind = "", onClose, save, initial = {
     >
       {intro}
       <IdField value={id} onChange={setId} onValid={setValidId} />
-      <Field label="כותרת">
+      <Field label="Title">
         <TextInput value={title} onChange={setTitle} />
       </Field>
-      <Field label="תיאור: מתי טענה מקבלת את התווית" hint="המסווג קורא את התיאור כדי להחליט אם להדביק את התווית לטענה.">
+      <Field label="Description: when a claim gets the label" hint="The classifier reads the description to decide whether to attach the label to a claim.">
         <TextArea value={description} onChange={setDescription} rows={3} />
       </Field>
       <KindField overview={overview} value={labelKind} onChange={setLabelKind} />
@@ -187,7 +187,7 @@ export function AddLabelDialog({ overview, kind = "", onClose, save, initial = {
 export function KindField({ overview, value, onChange }) {
   const listId = "plan-label-kinds";
   return (
-    <Field label="סוג (קבוצת התוויות, באותיות לטיניות, למשל country)">
+    <Field label="Kind (the group of labels, in Latin letters, e.g. country)">
       <input
         dir="ltr"
         list={listId}
@@ -205,7 +205,7 @@ export function KindField({ overview, value, onChange }) {
 }
 
 /** Merge pages or labels into one. `merged` / `survivorId` prefill the choice (a suggested merge). */
-export function MergeDialog({ overview, itemId, onClose, save, merged = [], survivorId = itemId, title, confirmLabel = "מיזוג", intro = null, note }) {
+export function MergeDialog({ overview, itemId, onClose, save, merged = [], survivorId = itemId, title, confirmLabel = "Merge", intro = null, note }) {
   const isLabel = kindOf(overview, itemId) === "label";
   const candidates = isLabel
     ? labelItems(overview).filter((label) => label.id !== itemId)
@@ -218,10 +218,10 @@ export function MergeDialog({ overview, itemId, onClose, save, merged = [], surv
     if (survivor === id) setSurvivor(itemId);
   };
   const op = { op: "merge", survivor_id: survivor, merged_ids: all.filter((id) => id !== survivor) };
-  const what = isLabel ? "תוויות" : "דפים";
+  const what = isLabel ? "labels" : "pages";
   return (
     <OperationDialog
-      title={title ?? <>מיזוג {what}: <Bidi>„{titleOf(overview, itemId)}”</Bidi></>}
+      title={title ?? <>Merge {what}: “<Bidi>{titleOf(overview, itemId)}</Bidi>”</>}
       op={op}
       ready={others.length > 0}
       overview={overview}
@@ -233,7 +233,7 @@ export function MergeDialog({ overview, itemId, onClose, save, merged = [], surv
     >
       {intro}
       <section>
-        <h3 className="section-title">עם מה למזג</h3>
+        <h3 className="section-title">Merge with</h3>
         <ul className="max-h-56 space-y-0.5 overflow-y-auto rounded border border-slate-200 p-2">
           {candidates.map((item) => (
             <li key={item.id}>
@@ -241,25 +241,27 @@ export function MergeDialog({ overview, itemId, onClose, save, merged = [], surv
                 <input type="checkbox" checked={others.includes(item.id)} onChange={() => toggle(item.id)} />
                 <Bidi>{item.title_he}</Bidi>
                 <Ltr className="text-xs text-slate-400">{item.id}</Ltr>
-                <span className="text-xs text-slate-400">
-                  {isLabel ? item.labelKind : pathTitles(overview, item.id).join(" › ")}
-                </span>
+                {isLabel ? (
+                  <Ltr className="text-xs text-slate-400">{item.labelKind}</Ltr>
+                ) : (
+                  <Bidi className="text-xs text-slate-400">{pathTitles(overview, item.id).join(" › ")}</Bidi>
+                )}
               </label>
             </li>
           ))}
         </ul>
       </section>
       <section>
-        <h3 className="section-title">מי נשאר</h3>
+        <h3 className="section-title">Which one stays</h3>
         <p className="mb-2 text-xs text-slate-500">
-          הפריט שנשאר שומר על המזהה, הכותרת, התחום והמקום שלו. השמות של האחרים נוספים לכינויים
-          שלו, והמזהים שלהם יופנו אליו.
+          The item that stays keeps its id, title, scope and place. The names of the others are
+          added to its aliases, and their ids will redirect to it.
         </p>
         <div className="space-y-1">
           {all.map((id) => (
             <label key={id} className="flex items-center gap-2">
               <input type="radio" name="survivor" checked={survivor === id} onChange={() => setSurvivor(id)} />
-              <Bidi>„{titleOf(overview, id)}”</Bidi> <Ltr className="text-xs text-slate-400">{id}</Ltr>
+              <span>“<Bidi>{titleOf(overview, id)}</Bidi>”</span> <Ltr className="text-xs text-slate-400">{id}</Ltr>
             </label>
           ))}
         </div>

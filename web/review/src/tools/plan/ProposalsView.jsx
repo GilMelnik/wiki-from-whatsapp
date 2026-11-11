@@ -23,14 +23,14 @@ function Groups({ groups }) {
       <ul className="space-y-1">
         {shown.map((group) => (
           <li key={group.group_id} className="rounded border border-slate-200 bg-white p-2 text-xs">
-            {group.missing ? <span className="text-slate-400">הקבוצה כבר לא בקובץ הקבוצות.</span> : <Bidi as="p">{group.claim_text}</Bidi>}
+            {group.missing ? <span className="text-slate-400">The group is no longer in the groups file.</span> : <Bidi as="p">{group.claim_text}</Bidi>}
             <Ltr className="text-slate-400">{group.group_id}</Ltr>
           </li>
         ))}
       </ul>
       {groups.length > SHOWN_GROUPS && (
         <button type="button" className="btn btn-sm" onClick={() => setAll(!all)}>
-          {all ? "פחות" : `עוד ${formatCount(groups.length - SHOWN_GROUPS)}`}
+          {all ? "Fewer" : `${formatCount(groups.length - SHOWN_GROUPS)} more`}
         </button>
       )}
     </div>
@@ -42,25 +42,25 @@ function Target({ proposal, overview }) {
   if (proposal.kind === "scope") {
     return target.page_id ? (
       <p>
-        הרחבת התחום של <Bidi className="font-medium">„{target.title_he}”</Bidi> <Ltr className="text-xs text-slate-400">{target.page_id}</Ltr>
+        Widen the scope of “<Bidi className="font-medium">{target.title_he}</Bidi>” <Ltr className="text-xs text-slate-400">{target.page_id}</Ltr>
       </p>
     ) : (
-      <p className="text-rose-700">הדף <Ltr>{proposal.target_id}</Ltr> כבר לא בתוכנית; אפשר רק לדחות.</p>
+      <p className="text-rose-700">The page <Ltr>{proposal.target_id}</Ltr> is no longer in the plan; the proposal can only be rejected.</p>
     );
   }
   const check = target.id_check;
   return (
     <p className="flex flex-wrap items-center gap-2">
-      <span>מזהה מוצע:</span>
-      {proposal.target_id ? <Ltr>{proposal.target_id}</Ltr> : <span className="text-slate-400">אין</span>}
-      {check && !check.ok && <span className="text-xs text-amber-800">({check.problem} תקנו בחלון הקבלה.)</span>}
+      <span>Proposed id:</span>
+      {proposal.target_id ? <Ltr>{proposal.target_id}</Ltr> : <span className="text-slate-400">none</span>}
+      {check && !check.ok && <span className="text-xs text-amber-800">({check.problem} Fix it in the accept window.)</span>}
       {proposal.kind === "page" && (
         <span>
-          · בקטגוריה{" "}
-          {target.parent_ok ? <Bidi>„{titleOf(overview, proposal.parent_id)}”</Bidi> : <span className="text-amber-800">שלא קיימת (תבחרו בחלון)</span>}
+          · in the category{" "}
+          {target.parent_ok ? <>“<Bidi>{titleOf(overview, proposal.parent_id)}</Bidi>”</> : <span className="text-amber-800">that does not exist (choose one in the window)</span>}
         </span>
       )}
-      {proposal.kind === "label" && <span>· סוג <Ltr>{proposal.label_kind || "—"}</Ltr>{!target.kind_known && " (סוג חדש)"}</span>}
+      {proposal.kind === "label" && <span>· kind <Ltr>{proposal.label_kind || "—"}</Ltr>{!target.kind_known && " (a new kind)"}</span>}
     </p>
   );
 }
@@ -78,34 +78,34 @@ function ProposalCard({ proposal, overview, busy, on }) {
       {proposal.description && <Bidi as="p">{proposal.description}</Bidi>}
       {proposal.reason && (
         <p className="text-slate-600">
-          למה: <Bidi>{proposal.reason}</Bidi>
+          Why: <Bidi>{proposal.reason}</Bidi>
         </p>
       )}
       <Target proposal={proposal} overview={overview} />
       {proposal.scope && (
         <details>
-          <summary className="cursor-pointer text-xs text-slate-600">{proposal.kind === "scope" ? "התחום המוצע" : "התחום של הדף"}</summary>
+          <summary className="cursor-pointer text-xs text-slate-600">{proposal.kind === "scope" ? "Proposed scope" : "The page's scope"}</summary>
           <Bidi as="p" className="mt-1 whitespace-pre-line rounded bg-slate-50 p-2 leading-relaxed">{proposal.scope}</Bidi>
         </details>
       )}
       <section>
-        <h4 className="section-title">הקבוצות שההצעה נועדה להן: {groupCount(proposal.groups.length, formatCount)}</h4>
+        <h4 className="section-title">The groups the proposal is for: {groupCount(proposal.groups.length, formatCount)}</h4>
         <Groups groups={proposal.groups} />
       </section>
       <footer className="flex flex-wrap gap-2">
         {pending && (
           <>
             <button type="button" className="btn btn-sm btn-primary" disabled={busy || (proposal.kind === "scope" && !proposal.target.page_id)} onClick={() => on.openAccept(proposal)}>
-              קבלה…
+              Accept…
             </button>
             <button type="button" className="btn btn-sm btn-danger" disabled={busy} onClick={() => on.decide(proposal, "reject")}>
-              דחייה
+              Reject
             </button>
           </>
         )}
         {proposal.status === "rejected" && (
           <button type="button" className="btn btn-sm" disabled={busy} onClick={() => on.decide(proposal, "reopen")}>
-            החזרה להמתנה
+            Back to pending
           </button>
         )}
       </footer>
@@ -121,14 +121,14 @@ function RunOffer({ offer, onDismiss }) {
   return (
     <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
       <p>
-        <Bidi>{offer.label}</Bidi> — נשמר.{" "}
+        {offer.label}: saved.{" "}
         {ranSince
-          ? `שלב השיוך הורץ מאז (${JOB_STATE_LABELS[latest.state] ?? latest.state}); הקבוצות של ההצעה מופיעות עכשיו לפי התוצאה שלו.`
-          : "הקבוצות של ההצעה ישובצו רק בהרצה הבאה של שלב השיוך: הוא שואל שוב רק את מה שהשינוי נוגע בו (בתשלום, בדרך כלל סנטים)."}
+          ? `The assignment step has run since (${JOB_STATE_LABELS[latest.state] ?? latest.state}); the proposal's groups now show as it placed them.`
+          : "The proposal's groups are placed only at the next run of the assignment step: it asks again only about what the change touches (paid, usually cents)."}
       </p>
       <div className="flex flex-wrap gap-2">
         {!ranSince && <RunAssignButton />}
-        <button type="button" className="btn btn-sm" onClick={onDismiss}>{ranSince ? "סגירה" : "לא עכשיו"}</button>
+        <button type="button" className="btn btn-sm" onClick={onDismiss}>{ranSince ? "Close" : "Not now"}</button>
       </div>
     </div>
   );
@@ -143,11 +143,11 @@ export function ProposalsView({ overview, watch, busy, offer, on }) {
   const counts = summary?.proposals;
   return (
     <Panel
-      title="הצעות לשינוי התוכנית"
+      title="Proposals to change the plan"
       subtitle={
         counts
-          ? `${formatCount(counts.pending)} ממתינות · ${formatCount(counts.accepted)} התקבלו · ${formatCount(counts.rejected)} נדחו · משלב השיוך, ${formatDateTime(summary.generated_at)}`
-          : "משלב השיוך (6ב)"
+          ? `${formatCount(counts.pending)} pending · ${formatCount(counts.accepted)} accepted · ${formatCount(counts.rejected)} rejected · from the assignment step, ${formatDateTime(summary.generated_at)}`
+          : "From the assignment step (6b)"
       }
     >
       <div className="space-y-4 p-4 text-sm">
@@ -155,14 +155,14 @@ export function ProposalsView({ overview, watch, busy, offer, on }) {
         {!summary?.exists ? (
           <NotRunYet />
         ) : (
-          <PanelState loading={listing.loading} error={listing.error} hasData={Boolean(listing.data)} onRetry={listing.reload} empty={Boolean(listing.data) && items.length === 0} emptyText="שלב השיוך לא הציע שינויים: כל קבוצה שלא שובצה נראתה לו בלי נושא משותף.">
-            {pending.length === 0 && <p className="text-slate-500">אין הצעות שממתינות להחלטה.</p>}
+          <PanelState loading={listing.loading} error={listing.error} hasData={Boolean(listing.data)} onRetry={listing.reload} empty={Boolean(listing.data) && items.length === 0} emptyText="The assignment step proposed no changes: it found no shared subject among the groups it did not place.">
+            {pending.length === 0 && <p className="text-slate-500">No proposals are waiting for a decision.</p>}
             {pending.map((proposal) => (
               <ProposalCard key={proposal.id} proposal={proposal} overview={overview} busy={busy} on={on} />
             ))}
             {decided.length > 0 && (
               <details className="rounded border border-slate-200 p-3">
-                <summary className="cursor-pointer text-slate-600">הוחלטו ({formatCount(decided.length)})</summary>
+                <summary className="cursor-pointer text-slate-600">Decided ({formatCount(decided.length)})</summary>
                 <div className="mt-3 space-y-3">
                   {decided.map((proposal) => (
                     <ProposalCard key={proposal.id} proposal={proposal} overview={overview} busy={busy} on={on} />

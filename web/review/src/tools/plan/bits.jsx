@@ -4,24 +4,24 @@ import { changeOf, warningsFor } from "./plan.js";
 // Small pieces shared by the plan tool's rows and views.
 
 const FIELD_LABELS = {
-  title_he: "כותרת",
-  description: "תיאור",
-  scope: "תחום",
-  aliases: "כינויים",
-  path: "מקום",
-  parent_id: "מקום",
-  kind: "סוג",
+  title_he: "title",
+  description: "description",
+  scope: "scope",
+  aliases: "aliases",
+  path: "place",
+  parent_id: "place",
+  kind: "kind",
 };
 
-/** "חדש" / "נערך" next to an item the owner changed since the model's proposal. */
+/** "New" / "Edited" next to an item the owner changed since the model's proposal. */
 export function ChangeBadge({ overview, id }) {
   const change = changeOf(overview, id);
   if (!change) return null;
-  if (change === "new") return <span className="badge badge-sky">חדש</span>;
+  if (change === "new") return <span className="badge badge-sky">New</span>;
   const fields = [...new Set(change.map((name) => FIELD_LABELS[name] ?? name))];
   return (
-    <span className="badge badge-sky" title={`שונה מאז ההצעה: ${fields.join(", ")}`}>
-      נערך
+    <span className="badge badge-sky" title={`Changed since the proposal: ${fields.join(", ")}`}>
+      Edited
     </span>
   );
 }
@@ -57,7 +57,7 @@ export function MergedFrom({ ids }) {
   if (!ids?.length) return null;
   return (
     <p className="text-xs text-slate-500">
-      מזהים ישנים שמופנים לכאן:{" "}
+      Old ids that redirect here:{" "}
       {ids.map((old) => (
         <Ltr key={old} className="me-1">
           {old}

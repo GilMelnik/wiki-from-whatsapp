@@ -99,11 +99,11 @@ export function GroupsView({ tool, toolId, modeTabs, summary }) {
     open: setSelectedId,
     togglePick: (claimId) => setPicked((previous) => togglePick(previous, group.group_id, claimId)),
     setRepresentative: (claimId) =>
-      fire(() => api.post(`${path}/representative`, { claim_id: claimId }), claimId ? "הטקסט המייצג עודכן" : "הטקסט המייצג ייבחר אוטומטית"),
+      fire(() => api.post(`${path}/representative`, { claim_id: claimId }), claimId ? "Representative text updated" : "The representative text will be chosen automatically"),
     link: (otherId, linked) =>
-      fire(() => api.post(`${path}/contradictions`, { group_id: otherId, linked }), linked ? "קישור הסתירה הוחזר" : "קישור הסתירה הוסר"),
-    mergeWith: (otherId) => fire(() => api.post("/groups/merge", { group_ids: [group.group_id, otherId] }), "הקבוצות מוזגו"),
-    notSame: (otherId) => fire(() => api.post("/not-same", { group_ids: [group.group_id, otherId] }), "סומן: לא אותו דבר"),
+      fire(() => api.post(`${path}/contradictions`, { group_id: otherId, linked }), linked ? "Contradiction link restored" : "Contradiction link removed"),
+    mergeWith: (otherId) => fire(() => api.post("/groups/merge", { group_ids: [group.group_id, otherId] }), "Groups merged"),
+    notSame: (otherId) => fire(() => api.post("/not-same", { group_ids: [group.group_id, otherId] }), "Marked: not the same"),
     merge: () => setDialog({ kind: "merge" }),
     split: () => chosen.length > 0 && chosen.length < group.size && setDialog({ kind: "split" }),
     move: () => chosen.length === 1 && setDialog({ kind: "move" }),
@@ -111,11 +111,11 @@ export function GroupsView({ tool, toolId, modeTabs, summary }) {
   };
 
   useShortcuts([
-    { keys: "m", label: "מיזוג עם קבוצה אחרת", run: () => ready && on.merge() },
-    { keys: "x", label: "פיצול הטענות שנבחרו לקבוצה חדשה", run: () => ready && on.split() },
-    { keys: "v", label: "העברת הטענה שנבחרה לקבוצה אחרת", run: () => ready && on.move() },
-    { keys: "c", label: "הוספת קישור סתירה", run: () => ready && on.addLink() },
-    { keys: "f", label: "חיפוש קבוצה", run: () => searchRef.current?.focus() },
+    { keys: "m", label: "Merge with another group", run: () => ready && on.merge() },
+    { keys: "x", label: "Split the picked claims into a new group", run: () => ready && on.split() },
+    { keys: "v", label: "Move the picked claim to another group", run: () => ready && on.move() },
+    { keys: "c", label: "Add a contradiction link", run: () => ready && on.addLink() },
+    { keys: "f", label: "Search for a group", run: () => searchRef.current?.focus() },
   ]);
 
   const listPanel = (
@@ -125,7 +125,7 @@ export function GroupsView({ tool, toolId, modeTabs, summary }) {
       hasData={Boolean(list.data)}
       onRetry={list.reload}
       empty={list.data?.total === 0}
-      emptyText={view.q ? "אין קבוצות שמתאימות לחיפוש" : "אין קבוצות בסינון הזה"}
+      emptyText={view.q ? "No groups match the search" : "No groups in this filter"}
     >
       <ItemList
         items={list.data?.items ?? []}

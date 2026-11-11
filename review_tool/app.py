@@ -167,7 +167,10 @@ class ReviewApp:
     @staticmethod
     def _missing_file(request: Request, exc: FileNotFoundError) -> JSONResponse:
         logger.warning(f"{request.method} {request.url.path}: missing file: {exc}")
-        return JSONResponse({"detail": f"missing file: {exc}"}, status_code=409)
+        return JSONResponse(
+            {"detail": f"A file this needs is missing ({exc}). Run the step that makes it first."},
+            status_code=409,
+        )
 
     @staticmethod
     def _locked(request: Request, exc: ArtifactLockTimeout) -> JSONResponse:

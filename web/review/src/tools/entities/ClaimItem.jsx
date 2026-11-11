@@ -1,6 +1,5 @@
-import { Bidi, Ltr } from "@shell";
+import { Bidi, Ltr, stanceOf } from "@shell";
 import { ClaimText } from "./ClaimText.jsx";
-import { STANCE_LABELS } from "./entities.js";
 
 // One claim under a member: pick box, highlighted text, the facts around it (id, stance,
 // whether the claim tags the name or only mentions it, other entities), and its actions.
@@ -16,7 +15,7 @@ function EntityChips({ label, entities, tagged, onOpenEntity }) {
             key={entity.entity_id}
             type="button"
             className={`badge badge-slate hover:bg-slate-200 ${tagged ? "border border-dashed border-slate-400" : ""}`}
-            title={tagged ? "מסומנת בטענה בלי שהשם מופיע בטקסט" : "פתיחת הישות"}
+            title={tagged ? "Tagged in the claim without the name appearing in the text" : "Open the entity"}
             onClick={() => onOpenEntity(entity.entity_id)}
           >
             <Bidi>{entity.canonical_name}</Bidi>
@@ -25,7 +24,7 @@ function EntityChips({ label, entities, tagged, onOpenEntity }) {
           <Bidi
             key={entity.name}
             className="badge border border-dashed border-slate-300 text-slate-500"
-            title="מסומנת בטענה, אין לה ישות"
+            title="Tagged in the claim; it has no entity"
           >
             {entity.name}
           </Bidi>
@@ -41,7 +40,7 @@ export function ClaimItem({ claim, memberIndex, picked, saving, onTogglePick, on
       <input
         type="checkbox"
         className="mt-1 shrink-0"
-        aria-label={`בחירת הטענה ${claim.claim_id}`}
+        aria-label={`Pick claim ${claim.claim_id}`}
         checked={picked}
         onChange={onTogglePick}
       />
@@ -54,19 +53,19 @@ export function ClaimItem({ claim, memberIndex, picked, saving, onTogglePick, on
         />
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
           <Ltr>{claim.claim_id}</Ltr>
-          {claim.stance && <span>{STANCE_LABELS[claim.stance] ?? claim.stance}</span>}
+          {claim.stance && <span>{stanceOf(claim.stance).label}</span>}
           {!claim.tagged && (
-            <span className="badge badge-sky" title="הטענה לא מסומנת בשם הזה, השם רק מופיע בטקסט שלה">
-              אזכור בטקסט בלבד
+            <span className="badge badge-sky" title="The claim is not tagged with this name; the name only appears in its text">
+              Text mention only
             </span>
           )}
           {claim.aggregation && (
             <button type="button" className="badge badge-sky hover:bg-sky-200" onClick={onShowAggregation}>
-              מאחדת {claim.aggregation.count} טענות
+              Combines {claim.aggregation.count} claims
             </button>
           )}
-          <EntityChips label="ישויות נוספות:" entities={claim.other_entities} onOpenEntity={onOpenEntity} />
-          <EntityChips label="מסומנות בלי אזכור:" entities={claim.related_entities} tagged onOpenEntity={onOpenEntity} />
+          <EntityChips label="Other entities:" entities={claim.other_entities} onOpenEntity={onOpenEntity} />
+          <EntityChips label="Tagged without a mention:" entities={claim.related_entities} tagged onOpenEntity={onOpenEntity} />
         </div>
       </div>
       <div className="flex shrink-0 flex-col gap-1">
@@ -74,19 +73,19 @@ export function ClaimItem({ claim, memberIndex, picked, saving, onTogglePick, on
           type="button"
           className="btn btn-sm"
           disabled={saving}
-          title="הטענה לא שייכת לשם הזה בישות הזאת"
+          title="The claim does not belong to this name in this entity"
           onClick={onExclude}
         >
-          לא קשורה
+          Unrelated
         </button>
         <button
           type="button"
           className="btn btn-sm text-rose-700"
           disabled={saving}
-          title="מחיקת הטענה מכל הצנרת"
+          title="Delete the claim from the whole pipeline"
           onClick={onDelete}
         >
-          מחיקה
+          Delete
         </button>
       </div>
     </li>

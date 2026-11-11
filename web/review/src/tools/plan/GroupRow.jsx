@@ -1,4 +1,4 @@
-import { Bidi, formatCount, Ltr, stanceOf, titleOf } from "@shell";
+import { Bidi, countText, formatCount, Ltr, stanceOf, titleOf } from "@shell";
 import { percent } from "./plan.js";
 
 // One claim group in an assignment list: its text, stance, support, last date, labels, the
@@ -7,22 +7,22 @@ import { percent } from "./plan.js";
 // the step's own bar (its decision rules, from the server) is marked. Clicking the row (or its
 // box) picks it for a bulk move.
 
-function quoted(overview, id) {
-  return `„${titleOf(overview, id)}”`;
+function Quoted({ overview, id }) {
+  return <>“<Bidi>{titleOf(overview, id)}</Bidi>”</>;
 }
 
 function Where({ row, overview, scope, itemId }) {
-  if (!row.record) return <span className="badge badge-amber">חדשה: עוד לא שויכה</span>;
+  if (!row.record) return <span className="badge badge-amber">New: not assigned yet</span>;
   const pages = row.pages ?? [];
-  if (pages.length === 0) return scope === "unplaced" ? null : <span className="badge badge-slate">בלי דף</span>;
+  if (pages.length === 0) return scope === "unplaced" ? null : <span className="badge badge-slate">On no page</span>;
   if (scope === "page") {
-    if (row.role === "mention") return <span>הדף הראשי: <Bidi>{quoted(overview, pages[0])}</Bidi></span>;
-    return pages[1] ? <span>גם בדף <Bidi>{quoted(overview, pages[1])}</Bidi></span> : null;
+    if (row.role === "mention") return <span>Primary page: <Quoted overview={overview} id={pages[0]} /></span>;
+    return pages[1] ? <span>Also on <Quoted overview={overview} id={pages[1]} /></span> : null;
   }
   return (
     <span>
-      בדף <Bidi>{quoted(overview, pages[0])}</Bidi>
-      {pages[1] && <> · גם <Bidi>{quoted(overview, pages[1])}</Bidi></>}
+      On <Quoted overview={overview} id={pages[0]} />
+      {pages[1] && <> · also <Quoted overview={overview} id={pages[1]} /></>}
     </span>
   );
 }
@@ -31,10 +31,10 @@ function Waiting({ row }) {
   const moved = Object.entries(row.redirected ?? {});
   const dropped = row.dropped ?? [];
   if (moved.length === 0 && dropped.length === 0) return null;
-  const title = "המזהים האלה כבר לא בתוכנית; הרצת השיוך הבאה תעדכן את הקבוצה";
+  const title = "These ids are no longer in the plan; the next assignment run will update the group";
   return (
     <span className="badge badge-amber" title={title}>
-      ממתינה להרצת השיוך:{" "}
+      Waiting for the assignment run:{" "}
       {moved.map(([from, to]) => (
         <Ltr key={from} className="me-1">{`${from}→${to}`}</Ltr>
       ))}
@@ -58,12 +58,12 @@ export function GroupRow({ row, overview, scope, itemId, picked, onToggle }) {
         className="mt-1 shrink-0"
         checked={picked}
         disabled={!pickable}
-        aria-label={`בחירת הקבוצה ${row.group_id}`}
+        aria-label={`Pick group ${row.group_id}`}
         onChange={onToggle}
       />
       <div className={`min-w-0 flex-1 ${pickable ? "cursor-pointer" : ""}`} onClick={pickable ? onToggle : undefined}>
         {row.missing ? (
-          <p className="text-slate-400">הקבוצה כבר לא בקובץ הקבוצות; הרצת השיוך הבאה תסיר אותה.</p>
+          <p className="text-slate-400">The group is no longer in the groups file; the next assignment run will remove it.</p>
         ) : (
           <Bidi as="p" className="leading-relaxed">{row.claim_text}</Bidi>
         )}
@@ -71,7 +71,7 @@ export function GroupRow({ row, overview, scope, itemId, picked, onToggle }) {
           {row.certainty !== null && row.certainty !== undefined && (
             <span
               className={`badge ${row.certainty < bar ? "badge-amber" : "badge-slate"}`}
-              title={scope === "unplaced" ? "ההסתברות הגבוהה ביותר שהמסווג נתן לדף כלשהו" : "ההסתברות שהמסווג נתן"}
+              title={scope === "unplaced" ? "The highest probability the classifier gave any page" : "The probability the classifier gave"}
             >
               {percent(row.certainty)}
             </span>
@@ -79,12 +79,12 @@ export function GroupRow({ row, overview, scope, itemId, picked, onToggle }) {
           {row.stance && <span className={`badge ${stance.badge}`}>{stance.label}</span>}
           {!row.missing && (
             <span>
-              {formatCount(row.supporter_count ?? 0)} תומכים · {formatCount(row.opposer_count ?? 0)} מתנגדים
+              {countText(row.supporter_count ?? 0, "supporter", formatCount)} · {countText(row.opposer_count ?? 0, "opposer", formatCount)}
             </span>
           )}
-          {row.last_date && <span>עד <Ltr>{row.last_date}</Ltr></span>}
-          {row.claim_count > 1 && <span>{formatCount(row.claim_count)} טענות</span>}
-          {row.manual && <span className="badge badge-sky" title="שויכה ביד: שלב השיוך לא יחליט עליה מחדש">ידני</span>}
+          {row.last_date && <span>until <Ltr>{row.last_date}</Ltr></span>}
+          {row.claim_count > 1 && <span>{countText(row.claim_count, "claim", formatCount)}</span>}
+          {row.manual && <span className="badge badge-sky" title="Assigned by hand: the assignment step will not decide it again">Manual</span>}
           <Where row={row} overview={overview} scope={scope} itemId={itemId} />
           {labels.map((id) => (
             <Bidi key={id} className="badge badge-slate">{titleOf(overview, id)}</Bidi>

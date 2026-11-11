@@ -5,6 +5,9 @@ import { Bidi } from "./text.jsx";
 
 // Form pieces: labelled inputs, the id field that checks a new plan id with the plan tool's
 // server while the owner types, and the inline editor of a text in the main column.
+// `TextInput` / `TextArea` are for wiki and chat content the owner types (a title, a scope, a
+// correction): right to left, Hebrew font. Pass `dir="auto"` for a search box, `dir="ltr"`
+// for anything else.
 
 export function Field({ label, hint, children }) {
   return (
@@ -17,14 +20,15 @@ export function Field({ label, hint, children }) {
 }
 
 export function TextInput({ value, onChange, ...rest }) {
-  return <input dir="auto" className="field w-full" value={value} onChange={(event) => onChange(event.target.value)} {...rest} />;
+  return <input dir="rtl" lang="he" className="field w-full" value={value} onChange={(event) => onChange(event.target.value)} {...rest} />;
 }
 
 export const TextArea = forwardRef(function TextArea({ value, onChange, rows = 3, ...rest }, ref) {
   return (
     <textarea
       ref={ref}
-      dir="auto"
+      dir="rtl"
+      lang="he"
       rows={rows}
       className="field w-full leading-relaxed"
       value={value}
@@ -44,7 +48,7 @@ export function submitOnEnter(event) {
 
 /** A new, permanent id: normalized while typing and checked with the server. Calls
  * `onValid(ok)` whenever the answer changes. */
-export function IdField({ label = "מזהה (באותיות לטיניות)", value, onChange, onValid }) {
+export function IdField({ label = "Id (Latin letters)", value, onChange, onValid }) {
   const check = useIdCheck(value);
   const ok = Boolean(check?.ok) && check.id === value;
   useEffect(() => onValid(ok), [ok]);
@@ -60,14 +64,14 @@ export function IdField({ label = "מזהה (באותיות לטיניות)", va
       />
       <span className="block text-xs">
         {!value ? null : check === null ? (
-          <span className="text-slate-400">בודק…</span>
+          <span className="text-slate-400">Checking…</span>
         ) : ok ? (
-          <span className="text-emerald-700">המזהה פנוי.</span>
+          <span className="text-emerald-700">The id is free.</span>
         ) : (
-          <span className="text-rose-700">{check.problem}</span>
+          <span className="text-rose-700" dir="auto">{check.problem}</span>
         )}
       </span>
-      <span className="block rounded bg-amber-50 p-2 text-xs text-amber-900">{PERMANENT_ID_NOTE}</span>
+      <span className="block rounded-md bg-amber-50 p-2 text-xs text-amber-900">{PERMANENT_ID_NOTE}</span>
     </Field>
   );
 }
@@ -96,7 +100,7 @@ export function EditableText({ label, value, onSave, multiline = false, rows = 3
         <h3 className="section-title mb-0">{label}</h3>
         {!editing && (
           <button type="button" className="btn btn-sm" disabled={disabled} onClick={() => setDraft(value)}>
-            עריכה
+            Edit
           </button>
         )}
       </div>
@@ -109,10 +113,10 @@ export function EditableText({ label, value, onSave, multiline = false, rows = 3
           )}
           <div className="flex gap-2">
             <button type="submit" className="btn btn-sm btn-primary" disabled={disabled || !draft.trim()}>
-              שמירה
+              Save
             </button>
             <button type="button" className="btn btn-sm" onClick={() => setDraft(null)}>
-              ביטול
+              Cancel
             </button>
           </div>
         </form>
@@ -121,7 +125,7 @@ export function EditableText({ label, value, onSave, multiline = false, rows = 3
           {value}
         </Bidi>
       ) : (
-        <p className="text-slate-400">{placeholder ?? "(ריק)"}</p>
+        <p className="text-slate-400">{placeholder ?? "(empty)"}</p>
       )}
     </section>
   );

@@ -16,7 +16,7 @@ export class ApiError extends Error {
   }
 }
 
-export const NETWORK_ERROR_MESSAGE = "אין חיבור לשרת";
+export const NETWORK_ERROR_MESSAGE = "The server cannot be reached";
 
 function messageFrom(detail, fallback) {
   if (typeof detail === "string" && detail) return detail;

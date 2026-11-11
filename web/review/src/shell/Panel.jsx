@@ -1,6 +1,6 @@
 // A column's content: fixed header, scrolling body, fixed footer for the main actions.
 //
-//   <Panel title="פעולות" subtitle="ההחלטה נשמרת מיד" footer={<button className="btn btn-primary btn-block">אישור</button>}>
+//   <Panel title="Actions" subtitle="Decisions are saved at once" footer={<button className="btn btn-primary btn-block">Accept</button>}>
 //     ...
 //   </Panel>
 

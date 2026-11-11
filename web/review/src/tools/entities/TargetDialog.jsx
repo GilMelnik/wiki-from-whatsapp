@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bidi, Dialog, formatCount, PanelState, useResource } from "@shell";
+import { Bidi, countText, Dialog, PanelState, useResource } from "@shell";
 import { api } from "./api.js";
 import { SEARCH_DEBOUNCE_MS, TARGET_SEARCH_LIMIT } from "./entities.js";
 
@@ -25,10 +25,19 @@ function Option({ chosen, onChoose, title, subtitle }) {
   );
 }
 
-function describe(entity) {
+function Description({ entity }) {
   if (entity.member_count === undefined) return null; // a look-alike reference: name only
-  const names = entity.aliases.length > 1 ? ` · ${entity.aliases.join(" · ")}` : "";
-  return `${formatCount(entity.member_count)} שמות · ${formatCount(entity.total_count)} טענות${names}`;
+  return (
+    <>
+      {countText(entity.member_count, "name")} · {countText(entity.total_count, "claim")}
+      {entity.aliases.length > 1 && (
+        <>
+          {" · "}
+          <Bidi>{entity.aliases.join(" · ")}</Bidi>
+        </>
+      )}
+    </>
+  );
 }
 
 export function TargetDialog({ title, description, allowNew, excludeId, suggested = [], initialTarget, confirmLabel, onClose, onConfirm }) {
@@ -50,7 +59,7 @@ export function TargetDialog({ title, description, allowNew, excludeId, suggeste
   );
   const options = [
     ...(allowNew ? [{ key: NEW }] : []),
-    ...suggested.map((entity) => ({ key: entity.entity_id, entity, hint: "דומה (שלב 4)" })),
+    ...suggested.map((entity) => ({ key: entity.entity_id, entity, hint: "Looks alike (step 4)" })),
     ...found.map((entity) => ({ key: entity.entity_id, entity })),
   ];
   const step = (delta) => {
@@ -74,7 +83,7 @@ export function TargetDialog({ title, description, allowNew, excludeId, suggeste
         type="search"
         dir="auto"
         className="field mb-3 w-full"
-        placeholder="חיפוש ישות לפי שם או כינוי…"
+        placeholder="Search entities by name or alias…"
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={(event) => {
@@ -88,7 +97,7 @@ export function TargetDialog({ title, description, allowNew, excludeId, suggeste
         <ul className="space-y-1">
           {options.map((option) =>
             option.key === NEW ? (
-              <Option key={NEW} chosen={choice === NEW} onChoose={() => setChoice(NEW)} title="+ ישות חדשה" subtitle="ישות נפרדת חדשה, מאושרת" />
+              <Option key={NEW} chosen={choice === NEW} onChoose={() => setChoice(NEW)} title="+ New entity" subtitle="A new, separate entity, accepted" />
             ) : (
               <Option
                 key={option.key}
@@ -100,11 +109,11 @@ export function TargetDialog({ title, description, allowNew, excludeId, suggeste
                     {option.hint && <span className="badge badge-amber ms-2">{option.hint}</span>}
                   </>
                 }
-                subtitle={describe(option.entity) && <Bidi>{describe(option.entity)}</Bidi>}
+                subtitle={<Description entity={option.entity} />}
               />
             )
           )}
-          {options.length === 0 && <li className="p-2 text-slate-500">לא נמצאו ישויות.</li>}
+          {options.length === 0 && <li className="p-2 text-slate-500">No entities found.</li>}
         </ul>
       </PanelState>
     </Dialog>

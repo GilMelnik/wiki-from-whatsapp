@@ -7,6 +7,7 @@ import {
   moveTargets,
   normalizeId,
   pathTitles,
+  quote,
   subtreeIds,
   textToAliases,
   titleOf,
@@ -51,7 +52,7 @@ test("kinds, titles and paths come from the plan", () => {
   assert.equal(titleOf(OVERVIEW, "costs"), "עלויות");
   assert.equal(titleOf(OVERVIEW, "medical"), "כותרת medical");
   assert.equal(titleOf(OVERVIEW, "ghost"), "ghost");
-  assert.equal(titleOf(OVERVIEW, null), "הרמה העליונה");
+  assert.equal(titleOf(OVERVIEW, null), "Top level");
   assert.deepEqual(pathTitles(OVERVIEW, "costs"), ["כותרת before", "כותרת choosing"]);
 });
 
@@ -79,22 +80,23 @@ test("typed ids are nudged towards slugs; aliases are one per line", () => {
 test("consequences name what disappears, what is redirected and what is classified again", () => {
   const merge = consequenceLines({ ...NO_EDIT, removed_pages: ["costs"], redirects: { costs: "agencies", old: "agencies" } }, OVERVIEW);
   assert.equal(merge.length, 2);
-  assert.match(merge[0].text, /„עלויות” \(costs\) ייעלם.*„סוכנויות”/);
+  assert.ok(merge[0].text.startsWith(`The page ${quote("עלויות")} (costs) will disappear.`));
+  assert.ok(merge[0].text.endsWith(`move to ${quote("סוכנויות")}.`));
   assert.equal(merge[0].tone, "warning");
-  assert.match(merge[1].text, /של old יופנו אל „סוכנויות”/);
+  assert.ok(merge[1].text.includes(`of old will be redirected to ${quote("סוכנויות")}`));
 
   const deleted = consequenceLines({ ...NO_EDIT, removed_pages: ["costs"] }, OVERVIEW);
   assert.equal(deleted[0].tone, "danger");
-  assert.match(deleted[0].text, /יימחק.*שיוך חדש/);
+  assert.match(deleted[0].text, /will be deleted\. Its id is retired.*new assignment/);
 
   const split = consequenceLines({ ...NO_EDIT, created: ["labs"], reassign: ["costs"] }, OVERVIEW);
-  assert.match(split[0].text, /„עלויות” יסווגו מחדש/);
-  assert.match(split[1].text, /מזהה חדש: labs/);
+  assert.ok(split[0].text.startsWith(`The claims of ${quote("עלויות")} will be classified again`));
+  assert.match(split[1].text, /^A new id will be created: labs\./);
 
   const renamedId = consequenceLines({ ...NO_EDIT, created: ["fees"], redirects: { costs: "fees" } }, OVERVIEW);
   assert.equal(renamedId.length, 1);
-  assert.match(renamedId[0].text, /של costs יופנו אל המזהה החדש fees/);
+  assert.match(renamedId[0].text, /costs will be redirected to the new id fees; costs is retired/);
 
-  assert.deepEqual(consequenceLines(NO_EDIT, OVERVIEW), [{ tone: "info", text: "אין השלכה על שיוך הטענות." }]);
+  assert.deepEqual(consequenceLines(NO_EDIT, OVERVIEW), [{ tone: "info", text: "No effect on how the claims are assigned." }]);
   assert.deepEqual(consequenceLines(null, OVERVIEW), []);
 });
