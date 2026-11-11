@@ -188,36 +188,36 @@ class ArtifactGraph:
 def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
     """Today's pipeline, in order. Upstream = what the producing step actually reads."""
     return (
-        ArtifactNode("export", "ייצוא הצ'אט", CHAT_ANDROID_PATH),
-        ArtifactNode.from_pair("threads", "שיחות", THREADS, STEP_1, ("export",)),
+        ArtifactNode("export", "Chat export", CHAT_ANDROID_PATH),
+        ArtifactNode.from_pair("threads", "Conversations", THREADS, STEP_1, ("export",)),
         # Hand-tagged, frozen on purpose (``evaluate --freeze-gold``): no step, never stale.
-        ArtifactNode("gold_threads", "שיחות זהב (תיוג ידני)", GOLD_THREADS_PATH),
-        ArtifactNode.from_pair("classified", "סיווג שיחות", CLASSIFIED, STEP_2, ("threads",)),
-        ArtifactNode.from_pair("claims", "טענות", CLAIMS, STEP_3, ("threads", "classified")),
-        ArtifactNode.from_pair("entities", "ישויות", ENTITIES, STEP_4, ("claims",)),
+        ArtifactNode("gold_threads", "Gold conversations (hand-tagged)", GOLD_THREADS_PATH),
+        ArtifactNode.from_pair("classified", "Classified conversations", CLASSIFIED, STEP_2, ("threads",)),
+        ArtifactNode.from_pair("claims", "Claims", CLAIMS, STEP_3, ("threads", "classified")),
+        ArtifactNode.from_pair("entities", "Entities", ENTITIES, STEP_4, ("claims",)),
         # Near-duplicate claims the owner groups by hand in the entity reviewer: no step.
-        ArtifactNode("claim_aggregations", "איחוד טענות ידני", MANUAL_AGGREGATIONS_PATH),
+        ArtifactNode("claim_aggregations", "Claims merged by hand", MANUAL_AGGREGATIONS_PATH),
         ArtifactNode.from_pair(
             "groups",
-            "קבוצות טענות",
+            "Claim groups",
             AGGREGATED,
             STEP_5,
             ("claims", "entities", "claim_aggregations"),
         ),
         # Curated: a normal step-6 run keeps the owner's plan as is, so new groups never make
         # it stale; the assignment step places them.
-        ArtifactNode.from_pair("plan", "תוכנית הויקי", PLAN, STEP_6, ("groups",), curated=True),
+        ArtifactNode.from_pair("plan", "Wiki plan", PLAN, STEP_6, ("groups",), curated=True),
         ArtifactNode.from_pair(
-            "assignments", "שיוך קבוצות לדפים", ASSIGNMENTS, STEP_6_ASSIGN, ("groups", "plan")
+            "assignments", "Groups assigned to pages", ASSIGNMENTS, STEP_6_ASSIGN, ("groups", "plan")
         ),
-        ArtifactNode.from_pair("pages", "דפי הויקי", WIKI_PAGES, STEP_7, ("groups", "plan", "assignments")),
+        ArtifactNode.from_pair("pages", "Wiki pages", WIKI_PAGES, STEP_7, ("groups", "plan", "assignments")),
         # The whole-wiki review's suggestions (a human gate: the owner decides on each one).
         ArtifactNode.from_pair(
-            "suggestions", "הצעות לשיפור הוויקי", SUGGESTIONS, STEP_8, ("plan", "pages")
+            "suggestions", "Review suggestions", SUGGESTIONS, STEP_8, ("plan", "pages")
         ),
         # The published site (docs/ + mkdocs.yml); its index file stands for the whole folder.
         ArtifactNode(
-            "site", "האתר", DOCS_DIR / WIKI_INDEX_FILE, step=STEP_9, upstream=("plan", "pages")
+            "site", "Site", DOCS_DIR / WIKI_INDEX_FILE, step=STEP_9, upstream=("plan", "pages")
         ),
     )
 

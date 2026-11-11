@@ -244,7 +244,7 @@ def test_one_job_per_artifact(runner: JobRunner, fake_step: Callable[..., None])
     job_id = runner.run_step("step_3")["id"]
     with pytest.raises(JobRefused) as refused:
         runner.run_step("step_3")
-    assert refused.value.status == 409 and "כבר רץ" in refused.value.detail
+    assert refused.value.status == 409 and "already running" in refused.value.detail
     runner.cancel(job_id)
     finished(runner, job_id)
     fake_step(hold=0)

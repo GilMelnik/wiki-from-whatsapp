@@ -103,7 +103,8 @@ class WriteGuard:
             produced = job.step.spec.produces
             if produced in writes:
                 return (
-                    f'"{job.step.spec.title}" רץ כעת ומעדכן את "{self._graph.node(produced).title}". '
-                    "אי אפשר לשמור שינויים עד שההרצה תסתיים; נסו שוב אחריה."
+                    f"{job.step.spec.title} is running and rewriting "
+                    f"“{self._graph.node(produced).title}”. Changes cannot be saved until it "
+                    "finishes; try again after it."
                 )
         return None

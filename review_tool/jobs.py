@@ -166,23 +166,23 @@ class JobRunner:
             hint = f" `python -m {spec.module}`" if spec.module else ""
             raise JobRefused(
                 409,
-                f'את "{spec.title}" אי אפשר עדיין להריץ מכאן: הוא לא מעבד רק את מה שהשתנה '
-                f"ועלול לדרוס עריכות ידניות. הריצו אותו ידנית{hint}.",
+                f"{spec.title} cannot run from here yet: it does not process only what changed "
+                f"and could overwrite manual edits. Run it by hand{hint}.",
             )
         with self._lock:
             if self._closed:
-                raise JobRefused(503, "השרת נסגר; אי אפשר להתחיל הרצה חדשה.")
+                raise JobRefused(503, "The server is shutting down; no new run can start.")
             running = self._running_for(spec.produces)
             if running is not None:
                 raise JobRefused(
-                    409, f'"{running.step.spec.title}" כבר רץ ומעדכן את אותו הקובץ.'
+                    409, f"{running.step.spec.title} is already running and rewriting the same file."
                 )
             feeding = next(filter(None, map(self._running_for, step.upstream)), None)
             if feeding is not None:
                 raise JobRefused(
                     409,
-                    f'"{feeding.step.spec.title}" רץ כעת ומעדכן קובץ ש"{spec.title}" קורא; '
-                    "הריצו אותו אחרי שההרצה תסתיים.",
+                    f"{feeding.step.spec.title} is running and rewriting a file that "
+                    f"{spec.title} reads; run it after that run finishes.",
                 )
             job = Job(step, rebuild, self._spawn(step, rebuild), self._settings.log_lines)
             self._jobs[job.id] = job
@@ -212,7 +212,7 @@ class JobRunner:
         with self._lock:
             job = self._get(job_id)
             if job.state != RUNNING:
-                raise JobRefused(409, f'ההרצה של "{job.step.spec.title}" כבר הסתיימה.')
+                raise JobRefused(409, f"The run of {job.step.spec.title} has already finished.")
             job.cancel_requested = True
             self._signal(job, signal.SIGINT)
             summary = job.summary()

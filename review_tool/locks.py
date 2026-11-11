@@ -47,8 +47,8 @@ def _locked(path: Path, timeout: float) -> Iterator[None]:
             stack.enter_context(file_lock(path, timeout=timeout))
         except TimeoutError:
             raise ArtifactLockTimeout(
-                f"{path.name} is locked by another process (a pipeline step or another tool "
-                f"is writing it); gave up after {timeout}s"
+                f"{path.name} is being written by another process (a pipeline step or another "
+                f"tool); gave up after {timeout}s. Try again in a moment."
             ) from None
         depths[path] = 1
         try:

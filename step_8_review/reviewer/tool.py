@@ -75,7 +75,7 @@ class Withdrawal(BaseModel):
 
 class SuggestionsTool:
     NAME = "suggestions"
-    TITLE = "הצעות לשיפור הוויקי"
+    TITLE = "Suggestions"
     READS = ("plan", "assignments", "pages", "groups")
     # The tool saves the suggestions; an apply writes the plan, the pages or the groups.
     WRITES = ("suggestions", "plan", "pages", "groups")

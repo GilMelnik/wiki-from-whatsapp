@@ -157,7 +157,7 @@ def test_artifact_lock_is_reentrant_within_a_thread(tmp_path: Path) -> None:
 def test_lock_contention_times_out_cleanly(tmp_path: Path) -> None:
     target = tmp_path / "claims.json"
     with locked_elsewhere(target):
-        with pytest.raises(ArtifactLockTimeout, match="claims.json is locked"):
+        with pytest.raises(ArtifactLockTimeout, match="claims.json is being written"):
             with artifact_lock(target, timeout=SHORT_TIMEOUT):
                 pytest.fail("the lock must not be granted")
     with artifact_lock(target, timeout=SHORT_TIMEOUT):  # free again, nothing left behind

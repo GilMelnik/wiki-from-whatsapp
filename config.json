@@ -284,56 +284,56 @@
       "max_link_pairs": 6
     },
     "kind_names": {
-      "split": "פיצול דף",
-      "merge": "מיזוג דפים",
-      "add_page": "דף חדש",
-      "add_label": "תווית חדשה",
-      "contradiction": "סתירה בין דפים",
-      "mistake": "טעות בדף"
+      "split": "Page split",
+      "merge": "Page merge",
+      "add_page": "New page",
+      "add_label": "New label",
+      "contradiction": "Contradiction",
+      "mistake": "Mistake"
     },
     "status_names": {
-      "pending": "ממתינה להחלטה",
-      "accepted": "התקבלה וטרם בוצעה",
-      "rejected": "נדחתה",
-      "applied": "כבר בוצעה"
+      "pending": "pending",
+      "accepted": "accepted",
+      "rejected": "rejected",
+      "applied": "applied"
     },
     "page_marks": {
-      "changed": "הדף השתנה מאז שההצעה הועלתה",
-      "gone": "הדף כבר אינו בוויקי"
+      "changed": "The page changed since the suggestion was made",
+      "gone": "The page is no longer in the wiki"
     },
     "actions": {
-      "accept": "לקבל אותה",
-      "reject": "לדחות אותה",
-      "reopen": "להחזיר אותה להמתנה",
-      "edit": "לערוך אותה",
-      "apply": "לבצע אותה"
+      "accept": "accepted",
+      "reject": "rejected",
+      "reopen": "reopened",
+      "edit": "corrected",
+      "apply": "applied"
     },
     "messages": {
-      "not_found": "אין הצעה עם המזהה {id}.",
-      "wrong_status": "ההצעה {id} {status}, ולכן אי אפשר {action}.",
-      "bad_proposal": "ההצעה אינה תקינה: {errors}",
-      "plan_refused": "השינוי בתוכנית לא בוצע, כי התוכנית שתתקבל שוברת את הכללים: {errors}",
-      "page_missing": "הדף {page_id} אינו בוויקי (נמחק מהתוכנית, או שעוד לא נכתב).",
-      "sentence_missing": "המשפט שההצעה מתקנת כבר אינו בדף {page_id} (הדף השתנה מאז).",
-      "groups_missing": "הקבוצות האלה אינן בדף או בקובץ הקבוצות: {ids}",
-      "no_change": "כותב הדפים לא מצא מה לשנות בדף {page_id} לפי ההצעה (ייתכן שהקבוצות אינן תומכות בתיקון).",
-      "failed_checks": "התיקון של הדף {page_id} לא עבר את הבדיקות: {problems}",
-      "too_much_changed": "התיקון של הדף {page_id} שינה יותר מדי: רק {kept} מהמשפטים נשארו מילה במילה (נדרש לפחות {required}).",
-      "groups_refused": "קישור הסתירה לא נשמר: {error}",
-      "plan_applied": "השינוי נשמר בתוכנית. הריצו את שלב השיוך (6ב) ואחריו את שלב 7, כדי שהדפים יתעדכנו.",
-      "page_applied": "הדף {page_id} תוקן ({kept} מהמשפטים נשארו מילה במילה).",
-      "page_unchanged": "הדף {page_id} כבר הציג את שני הצדדים ולא שונה.",
-      "link_applied": "קישור הסתירה נשמר בקבוצות הטענות."
+      "not_found": "There is no suggestion with the id {id}.",
+      "wrong_status": "Suggestion {id} is {status}, so it cannot be {action}.",
+      "bad_proposal": "The proposal is not valid: {errors}",
+      "plan_refused": "The plan was not changed: the resulting plan would break its rules: {errors}",
+      "page_missing": "Page {page_id} is not in the wiki (it was removed from the plan, or is not written yet).",
+      "sentence_missing": "The sentence this corrects is no longer on page {page_id} (the page changed since).",
+      "groups_missing": "These groups are not on the page or not in the groups file: {ids}",
+      "no_change": "The page writer found nothing to change on page {page_id} for this suggestion (the groups may not support the correction).",
+      "failed_checks": "The correction of page {page_id} failed the checks: {problems}",
+      "too_much_changed": "The correction of page {page_id} changed too much: only {kept} of the sentences stayed word for word (at least {required} is required).",
+      "groups_refused": "The contradiction link was not saved: {error}",
+      "plan_applied": "The change is saved in the plan. Run the assignment step (6b) and then step 7 so the pages follow it.",
+      "page_applied": "Page {page_id} was corrected ({kept} of the sentences stayed word for word).",
+      "page_unchanged": "Page {page_id} already showed both sides and was not changed.",
+      "link_applied": "The contradiction link is saved in the claim groups."
     },
     "ui": {
       "apply_outcomes_kept": 20,
       "rerun_cost_usd": 3.7,
       "messages": {
-        "already_queued": "ההצעה {id} כבר ממתינה לביצוע או מתבצעת עכשיו.",
-        "busy": "ההצעה {id} ממתינה לביצוע או מתבצעת עכשיו; הוציאו אותה מהתור, או חכו שהביצוע יסתיים.",
-        "apply_failed": "הביצוע נכשל ושום קובץ לא נכתב; ההצעה נשארה מקובלת. השגיאה: {error}",
-        "nothing_chosen": "לא נבחרה הצעה לביצוע.",
-        "none_accepted": "אין הצעות שהתקבלו וטרם בוצעו."
+        "already_queued": "Suggestion {id} is already waiting to be applied or being applied now.",
+        "busy": "Suggestion {id} is waiting to be applied or being applied now; take it out of the queue, or wait until it is done.",
+        "apply_failed": "The apply failed and no file was written; the suggestion stays accepted. The error: {error}",
+        "nothing_chosen": "No suggestion was chosen to apply.",
+        "none_accepted": "No suggestion is accepted and waiting to be applied."
       }
     }
   },
