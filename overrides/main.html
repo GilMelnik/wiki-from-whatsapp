@@ -1,5 +1,41 @@
 {% extends "base.html" %}
 
+{#- Everything the reader sees on top of Material: the disclaimer, the references toggle, the
+    footer link to the terms. The wording and the settings come from config.json (`site`). -#}
+
+{% block extrahead %}
+  <link rel="stylesheet" href="{{ 'assets/wiki/wiki.css' | url }}">
+  <script src="{{ 'assets/wiki/refs-toggle.js' | url }}" data-storage-key="{{ config.extra.refs_toggle.storage_key | e }}"></script>
+{% endblock %}
+
+{% block hero %}
+  {% set disclaimer = config.extra.disclaimer %}
+  <div class="wiki-disclaimer-bar md-grid">
+    <div class="wiki-disclaimer" role="note">
+      <p><strong>{{ disclaimer.label | e }}</strong>
+        {{ disclaimer.text | e }}
+        <a href="{{ config.extra.terms_path | url }}">{{ disclaimer.terms_link_text | e }}</a>
+        &middot; {{ disclaimer.contact_label | e }}
+        <a dir="ltr" href="mailto:{{ config.extra.contact_email | e }}">{{ config.extra.contact_email | e }}</a></p>
+    </div>
+  </div>
+{% endblock %}
+
+{#- Only wiki pages carry claims in their front matter: they are the pages with references. -#}
+{% block content %}
+  {% if page and page.meta and page.meta.claims %}
+    {% set toggle = config.extra.refs_toggle %}
+    <div class="wiki-tools">
+      <button type="button" class="wiki-refs-toggle" aria-pressed="false">
+        <span class="wiki-refs-toggle__label">{{ toggle.label | e }}:</span>
+        <span class="wiki-refs-toggle__state wiki-refs-toggle__state--on">{{ toggle.state_on | e }}</span>
+        <span class="wiki-refs-toggle__state wiki-refs-toggle__state--off">{{ toggle.state_off | e }}</span>
+      </button>
+    </div>
+  {% endif %}
+  {{ super() }}
+{% endblock %}
+
 {% block footer %}
   {% if config.extra.coffee_url %}
     <div class="md-coffee">
@@ -9,5 +45,8 @@
       </p>
     </div>
   {% endif %}
+  <div class="md-coffee">
+    <p class="md-coffee__text"><a href="{{ config.extra.terms_path | url }}">{{ config.extra.terms_footer_text | e }}</a></p>
+  </div>
   {{ super() }}
 {% endblock %}

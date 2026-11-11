@@ -6,6 +6,8 @@ Reads the effective plan and the effective written pages, then writes:
   mkdocs) + body with its wiki links resolved;
 - ``docs/<labels_dir>/<label_id>.md``: one page per label that a published page carries;
 - ``docs/index.md``: the home page, the plan's tree with each page's one-line description;
+- ``docs/about.md`` ("how this wiki was made", linked only from the home page) and
+  ``docs/terms.md`` (the terms, linked from the banner and the footer); neither is in the nav;
 - a redirect stub at the old id of every merged page / label;
 - ``docs/wiki_index.json``: the MCP index (contract C11);
 - ``mkdocs.yml``: the navigation in the plan's order plus the site settings of ``config.json``.
@@ -30,7 +32,7 @@ from typing import Any
 import yaml
 
 from step_9_site import hebrew_search
-from step_9_site.content import NavEntry, Site
+from step_9_site.content import INFO_FILES, NavEntry, Site
 from step_9_site.index import index_text
 from utils.config import PROJECT_ROOT, section
 from utils.logging_setup import setup_step_logging
@@ -74,9 +76,15 @@ def build_config(
         "plugins": base["plugins"],
         "markdown_extensions": base["markdown_extensions"],
         "extra": {
+            **base.get("extra", {}),
             "coffee_text": SITE_CONFIG["coffee_text"],
             "coffee_link_text": SITE_CONFIG["coffee_link_text"],
             "coffee_url": SITE_CONFIG["coffee_url"],
+            "contact_email": SITE_CONFIG["contact_email"],
+            "disclaimer": SITE_CONFIG["disclaimer"],
+            "refs_toggle": SITE_CONFIG["refs_toggle"],
+            "terms_path": SITE_CONFIG["terms"]["file"].removesuffix(".md") + "/",
+            "terms_footer_text": SITE_CONFIG["terms"]["footer_link_text"],
         },
         "extra_css": [HEBREW_CSS],
     }
@@ -155,7 +163,10 @@ def run(
     site = Site(plan, pages)
     files = {**site.files, WIKI_INDEX_FILE: index_text(site, docs_dir / WIKI_INDEX_FILE)}
     config = build_config(
-        site.nav, docs_dir=docs_dir, mkdocs_path=mkdocs_path, not_in_nav=site.redirect_files
+        site.nav,
+        docs_dir=docs_dir,
+        mkdocs_path=mkdocs_path,
+        not_in_nav=[*site.redirect_files, *INFO_FILES],
     )
     config_text = yaml.safe_dump(config, allow_unicode=True, sort_keys=False)
     written, removed = sync_docs(docs_dir, files)
