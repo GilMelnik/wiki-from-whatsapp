@@ -541,6 +541,22 @@
       "field": "variants",
       "boost": 0.5
     },
+    "agent_markdown": {
+      "dir": "_agent",
+      "twin_file": "index.md",
+      "llms_file": "llms.txt",
+      "page_line": "Web page: {url}",
+      "disclaimer": "{label} {text} [{terms_link_text}]({terms_url}) {contact_label} {email}",
+      "updated_line": "Page generated {updated}.",
+      "claims_line": "It rests on {total} claims from the group's conversations (members backing them: {supporting}, disputing them: {opposing}).",
+      "claims_dates_line": "The claims are dated {first} to {last}.",
+      "llms": {
+        "summary": "A Hebrew-language community wiki about surrogacy for gay parents. An AI summarised the conversations of a WhatsApp group of community members; the pages reflect their personal experience and are not professional advice. Every page is also available as plain markdown (the links below).",
+        "mcp_line": "MCP server (read-only, no login): {mcp_url} - search the wiki, read a page, walk the links between pages, list labels.",
+        "optional_heading": "Optional",
+        "about_heading": "About this site"
+      }
+    },
     "mkdocs": {
       "site_name": "ויקי פונדקאות לגייז",
       "site_description": "ידע קהילתי אנונימי על תהליכי פונדקאות",

@@ -5,6 +5,7 @@
 
 {% block extrahead %}
   <link rel="stylesheet" href="{{ 'assets/wiki/wiki.css' | url }}">
+  {% if page and page.meta and page.meta.markdown_twin %}<link rel="alternate" type="text/markdown" href="{{ page.canonical_url }}{{ page.meta.markdown_twin }}">{% endif %}
   <script src="{{ 'assets/wiki/refs-toggle.js' | url }}" data-storage-key="{{ config.extra.refs_toggle.storage_key | e }}"></script>
 {% endblock %}
 

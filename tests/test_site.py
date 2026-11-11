@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from step_6_plan import operations
+from step_9_site.agent_pages import twin_docs_path
 from step_9_site.hebrew_search import prefix_variants
 from step_9_site.run import sync_docs
 from tests.site_fixtures import issues_of, make_page, make_site_plan, run_site
@@ -170,7 +171,8 @@ def test_changed_page_rewrites_only_what_depends_on_it(tmp_path: Path) -> None:
     run_site(tmp_path, plan, _pages(plan))
     pages = _pages(plan)
     pages["clinics"]["body_md"] = "## מרפאות\n\nטקסט חדש.\n"
-    assert run_site(tmp_path, plan, pages)["written"] == ["clinics.md", "wiki_index.json"]
+    written = run_site(tmp_path, plan, pages)["written"]
+    assert written == sorted([twin_docs_path("clinics.md"), "clinics.md", "wiki_index.json"])
 
 
 def test_files_the_step_did_not_write_are_removed_except_the_keep_list(tmp_path: Path) -> None:

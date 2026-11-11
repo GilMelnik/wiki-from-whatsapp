@@ -14,6 +14,7 @@ references under a page are rendered from the groups (``step_9_site.references``
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 import yaml
@@ -163,8 +164,12 @@ class Site:
             self._issue(kind, page_id, group_id)
         return resolved.body
 
-    def _resolve_links(self, page_id: str) -> str:
-        source = page_file(page_id)
+    def resolve_links(self, page_id: str, href: Callable[[str], str], *, report: bool = True) -> str:
+        """The page's body with every wiki link turned into a markdown link to ``href(docs file)``.
+
+        A link to anything not published becomes its plain text. With ``report`` the problems
+        found go to ``issues`` (turn it off to render the same body a second time).
+        """
 
         def resolve(link: WikiLink) -> str:
             if link.kind == "page":
@@ -174,13 +179,14 @@ class Site:
                 target = self._label_target(link.target)
                 found = target and (self.plan["labels"][target]["title_he"], label_file(target))
             if not found:
-                self._issue(f"broken_{link.kind}_link", page_id, link.target)
+                if report:
+                    self._issue(f"broken_{link.kind}_link", page_id, link.target)
                 planned = self.plan["pages" if link.kind == "page" else "labels"].get(link.target)
                 return link.text or (planned["title_he"] if planned else link.target)
-            if target != link.target:
+            if target != link.target and report:
                 self._issue(f"merged_{link.kind}_link", page_id, link.target)
             title, file = found
-            return f"[{link.text or title}]({_href(source, file)})"
+            return f"[{link.text or title}]({href(file)})"
 
         return replace_wiki_links(self.bodies[page_id], resolve)
 
@@ -223,7 +229,8 @@ class Site:
         files = {HOME_FILE: self._home(), **self._info_pages()}
         for page_id in self.order:
             front_matter = self.pages[page_id]["front_matter"]
-            body = self.references.with_references(self._resolve_links(page_id))
+            source = page_file(page_id)
+            body = self.references.with_references(self.resolve_links(page_id, lambda file: _href(source, file)))
             files[page_file(page_id)] = render_page(front_matter, body)
         for label_id in self.labels:
             files[label_file(label_id)] = self._label_page(label_id)
@@ -245,9 +252,11 @@ class Site:
             TERMS_FILE: with_front_matter({"title": TERMS_CONFIG["title"], "search": search}, terms_body()),
         }
 
+    def description(self, page_id: str) -> str:
+        return self.pages[page_id]["front_matter"]["description"]
+
     def _page_item(self, source: str, page_id: str) -> str:
-        description = self.pages[page_id]["front_matter"]["description"]
-        return f"- [{self.title(page_id)}]({_href(source, page_file(page_id))}): {description}"
+        return f"- [{self.title(page_id)}]({_href(source, page_file(page_id))}): {self.description(page_id)}"
 
     def _home(self) -> str:
         mkdocs = SITE_CONFIG["mkdocs"]
@@ -257,16 +266,19 @@ class Site:
             "description": mkdocs["site_description"],
         }
         about_link = f"[{ABOUT_CONFIG['home_link_text']}]({ABOUT_FILE})"
-        lines = [SITE_CONFIG["home_intro"], "", about_link, *self._home_nodes(self.plan["tree"], 2)]
+        tree = self.tree_lines(self.plan["tree"], 2, lambda page_id: self._page_item(HOME_FILE, page_id))
+        lines = [SITE_CONFIG["home_intro"], "", about_link, *tree]
         return with_front_matter(meta, "\n".join(lines))
 
-    def _home_nodes(self, nodes: list[dict[str, Any]], level: int) -> list[str]:
+    def tree_lines(self, nodes: list[dict[str, Any]], level: int, item: Callable[[str], str]) -> list[str]:
+        """The plan's tree as markdown: a heading and description per category, ``item(page_id)``
+        per published page; categories without published pages are left out."""
         lines: list[str] = []
         for node in nodes:
             if node["id"] in self.pages:
-                lines.append(self._page_item(HOME_FILE, node["id"]))
+                lines.append(item(node["id"]))
             elif node["id"] not in self.plan["pages"]:
-                inner = self._home_nodes(node["children"], level + 1)
+                inner = self.tree_lines(node["children"], level + 1, item)
                 if inner:
                     heading = f"{'#' * min(level, 6)} {node['title_he']}"
                     lines += ["", heading, "", node["description"], "", *inner]

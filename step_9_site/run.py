@@ -10,6 +10,8 @@ the references), then writes:
 - ``docs/index.md``: the home page, the plan's tree with each page's one-line description;
 - ``docs/about.md`` ("how this wiki was made", linked only from the home page) and
   ``docs/terms.md`` (the terms, linked from the banner and the footer); neither is in the nav;
+- ``docs/<agent_markdown.dir>/…/index.md`` (a markdown twin of every content page, shipped by the
+  hook ``agent_hook.py``) and ``docs/llms.txt``: the site for AI agents (``agent_pages.py``);
 - a redirect stub at the old id of every merged page / label;
 - ``docs/wiki_index.json``: the MCP index (contract C11);
 - ``mkdocs.yml``: the navigation in the plan's order plus the site settings of ``config.json``.
@@ -33,7 +35,8 @@ from typing import Any
 
 import yaml
 
-from step_9_site import hebrew_search
+from step_9_site import agent_hook, hebrew_search
+from step_9_site.agent_pages import AgentPages
 from step_9_site.content import INFO_FILES, NavEntry, Site
 from step_9_site.index import index_text
 from utils.config import PROJECT_ROOT, section
@@ -51,6 +54,7 @@ from utils.rtl import HEBREW_CSS
 
 logger = logging.getLogger(__name__)
 SITE_CONFIG = section("site")
+AGENT_CONFIG = SITE_CONFIG["agent_markdown"]
 SEARCH_CONFIG = section("mcp")["search"]
 
 
@@ -88,12 +92,15 @@ def build_config(
             "refs_toggle": SITE_CONFIG["refs_toggle"],
             "terms_path": SITE_CONFIG["terms"]["file"].removesuffix(".md") + "/",
             "terms_footer_text": SITE_CONFIG["terms"]["footer_link_text"],
+            "agent_markdown": {key: AGENT_CONFIG[key] for key in ("dir", "twin_file")},
         },
         "extra_css": [HEBREW_CSS],
+        "exclude_docs": f"/{AGENT_CONFIG['dir']}/",
+        "hooks": [_config_path(Path(agent_hook.__file__), mkdocs_path)],
     }
     search = SITE_CONFIG["hebrew_search"]
     if search["enabled"]:
-        config["hooks"] = [_config_path(Path(hebrew_search.__file__), mkdocs_path)]
+        config["hooks"].append(_config_path(Path(hebrew_search.__file__), mkdocs_path))
         for plugin in config["plugins"]:
             if isinstance(plugin, dict) and "search" in plugin:
                 plugin["search"]["fields"] = {search["field"]: {"boost": search["boost"]}}
@@ -166,7 +173,7 @@ def run(
     pages = _load(pages_path or resolve_wiki_pages_path(), "written pages (step 7)")["pages"]
     groups = _load(groups_path or resolve_aggregated_path(), "claim groups (step 5)")["groups"]
     site = Site(plan, pages, groups)
-    files = {**site.files, WIKI_INDEX_FILE: index_text(site, docs_dir / WIKI_INDEX_FILE)}
+    files = {**site.files, **AgentPages(site).files(), WIKI_INDEX_FILE: index_text(site, docs_dir / WIKI_INDEX_FILE)}
     config = build_config(
         site.nav,
         docs_dir=docs_dir,
