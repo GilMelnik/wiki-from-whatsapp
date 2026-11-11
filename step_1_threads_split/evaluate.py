@@ -11,7 +11,10 @@ format and the C1 format score identically.
 - ``--suggest-windows [N] [--hours H] [--seed S]``: propose windows to tag;
 - ``--freeze-gold [--add | --force] [--done-only]``: build the gold file from
   ``threads_edited.json`` and ``config.json`` ``threads.gold_windows``; ``--done-only``
-  keeps only the windows marked done in the thread tagger (``gold_progress.json``).
+  keeps only the windows marked done in the thread tagger (``gold_progress.json``);
+- ``--add-context --tagged PATH [--shown PATH ...]``: add the context part (the owner's tags
+  outside the windows, ``step_1_threads_split.gold_context``) to the gold file;
+- ``--context`` (with the scoring mode): also report the "window + context" score.
 
 Each mode logs one markdown report (console and step log file).
 """
@@ -37,6 +40,7 @@ from step_1_threads_split.gold import (
     load_gold,
     message_moment,
 )
+from step_1_threads_split.gold_context import add_context_to_file, all_labels, scored_ids
 from step_1_threads_split.review.gold_windows import GoldProgress
 from utils.config import PROJECT_ROOT, section
 from utils.logging_setup import setup_step_logging
@@ -121,7 +125,9 @@ class ClusterCounts:
         }
 
 
-def evaluate(pred_threads: list[dict[str, Any]], gold: dict[str, Any]) -> dict[str, Any]:
+def evaluate(
+    pred_threads: list[dict[str, Any]], gold: dict[str, Any], *, with_context: bool = False
+) -> dict[str, Any]:
     """Score a thread split against the frozen gold clustering.
 
     ``pred_threads`` is the ``threads`` list of a threads file (old or C1 shape; only
@@ -132,10 +138,12 @@ def evaluate(pred_threads: list[dict[str, Any]], gold: dict[str, Any]) -> dict[s
     own (``missing_in_pred``); a predicted message inside a window that has no gold label
     is ignored (``unlabelled_in_pred``). Returns ``{"windows": [{"start", "end",
     **metrics}], "micro": metrics}`` where ``micro`` pools the counts of all windows.
+    ``with_context`` also scores each window's context messages (the wider score of
+    ``step_1_threads_split.gold_context``).
     """
     gold_windows = sorted(gold["windows"], key=lambda window: window["start"])
     window_set = WindowSet(Window.from_dict(window) for window in gold_windows)
-    labels: dict[str, str] = gold["messages"]
+    labels: dict[str, str] = all_labels(gold) if with_context else gold["messages"]
     pred_cluster: dict[str, int] = {}
     unlabelled: Counter[int] = Counter()
     for thread_index, thread in enumerate(pred_threads):
@@ -152,7 +160,7 @@ def evaluate(pred_threads: list[dict[str, Any]], gold: dict[str, Any]) -> dict[s
 
     per_window: list[ClusterCounts] = []
     for window_index, window in enumerate(gold_windows):
-        wa_ids = window["message_ids"]
+        wa_ids = scored_ids(gold, window, with_context)
         counts = ClusterCounts.from_labels(
             [pred_cluster.get(wa_id, wa_id) for wa_id in wa_ids],
             [labels[wa_id] for wa_id in wa_ids],
@@ -339,13 +347,31 @@ def _freeze_report(args: argparse.Namespace) -> str:
 
 
 def _evaluation_report(args: argparse.Namespace) -> str:
-    result = evaluate(load_threads(args.pred)["threads"], load_gold(args.gold))
-    if result["micro"]["missing_in_pred"]:
-        logger.warning(
-            f"{result['micro']['missing_in_pred']} gold messages are not in {args.pred}; "
-            "each was scored as a predicted thread of its own"
-        )
-    return format_evaluation(result)
+    threads = load_threads(args.pred)["threads"]
+    gold = load_gold(args.gold)
+    parts = []
+    for with_context in (False, True) if args.context else (False,):
+        result = evaluate(threads, gold, with_context=with_context)
+        if result["micro"]["missing_in_pred"]:
+            logger.warning(
+                f"{result['micro']['missing_in_pred']} gold messages are not in {args.pred}; "
+                "each was scored as a predicted thread of its own"
+            )
+        title = "window + context" if with_context else "window"
+        parts.append(f"{title}:\n{format_evaluation(result)}")
+    return "\n\n".join(parts)
+
+
+def _context_report(args: argparse.Namespace) -> str:
+    """Add the context part to the gold file (backed up first); see ``gold_context``."""
+    if args.tagged is None:
+        raise ValueError("--add-context needs --tagged: the owner's tagged threads file")
+    updated = add_context_to_file(args.gold, args.tagged, args.shown)
+    rows = [
+        [_span(window), len(window["message_ids"]), len(window["context_message_ids"])]
+        for window in updated["windows"]
+    ]
+    return _markdown_table(["window", "messages", "context messages"], rows)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -407,13 +433,36 @@ def main(argv: Sequence[str] | None = None) -> None:
         action="store_true",
         help="with --freeze-gold: freeze only the windows marked done in the thread tagger",
     )
+    parser.add_argument(
+        "--context",
+        action="store_true",
+        help="also score each window together with its context messages",
+    )
+    parser.add_argument(
+        "--add-context",
+        action="store_true",
+        help="add the context part to the gold file from --tagged (and --shown)",
+    )
+    parser.add_argument(
+        "--tagged", type=Path, help="with --add-context: the owner's tagged threads file"
+    )
+    parser.add_argument(
+        "--shown",
+        type=Path,
+        nargs="*",
+        default=[],
+        help="with --add-context: further threads files whose threads the tagger showed",
+    )
     args = parser.parse_args(argv)
     if (args.add or args.force or args.done_only) and not args.freeze_gold:
         parser.error("--add, --force and --done-only only apply to --freeze-gold")
     if args.add and args.force:
         parser.error("--add and --force are mutually exclusive")
-    if args.freeze_gold and args.suggest_windows is not None:
-        parser.error("--freeze-gold and --suggest-windows are separate runs")
+    modes = [args.freeze_gold, args.suggest_windows is not None, args.add_context]
+    if sum(modes) > 1:
+        parser.error("--freeze-gold, --suggest-windows and --add-context are separate runs")
+    if (args.tagged or args.shown) and not args.add_context:
+        parser.error("--tagged and --shown only apply to --add-context")
 
     setup_step_logging(STEP_1)
     random.seed(args.seed)
@@ -423,6 +472,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
     if args.freeze_gold:
         report = _freeze_report(args)
+    elif args.add_context:
+        report = _context_report(args)
     elif args.suggest_windows is not None:
         report = _suggest_report(args)
     else:

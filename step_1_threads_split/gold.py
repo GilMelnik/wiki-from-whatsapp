@@ -156,6 +156,18 @@ def load_gold(gold_path: Path) -> dict[str, Any]:
             f"{gold_path} is inconsistent: its windows list {len(listed)} message ids "
             f"({len(set(listed))} distinct) but {len(gold['messages'])} messages are labelled"
         )
+    if "context_messages" in gold:
+        context = [wa_id for window in gold["windows"] for wa_id in window["context_message_ids"]]
+        if (
+            len(context) != len(set(context))
+            or set(context) != set(gold["context_messages"])
+            or set(context) & set(listed)
+        ):
+            raise ValueError(
+                f"{gold_path} has an inconsistent context part: its windows list "
+                f"{len(context)} context ids ({len(set(context))} distinct) but "
+                f"{len(gold['context_messages'])} context messages are labelled"
+            )
     return gold
 
 
@@ -188,6 +200,10 @@ def freeze_gold(
                 "merge new windows into it, or --force to rebuild it from scratch."
             )
     kept = existing["windows"] if existing else []
+    if existing and "context_messages" in existing:
+        # The context part depends on every window; it is rebuilt with --add-context.
+        kept = [{k: v for k, v in w.items() if k != "context_message_ids"} for w in kept]
+        logger.warning(f"{gold_path}: the context part is dropped; run --add-context again")
     kept_spans = [Window.from_dict(window) for window in kept]
     fresh_spans = WindowSet(window for window in windows if window not in kept_spans)
     # Raises when a new window overlaps one that is already frozen.
