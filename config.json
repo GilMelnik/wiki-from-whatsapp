@@ -303,6 +303,10 @@
         "off_scope": "about another page's subject and adds nothing here"
       }
     },
+    "consolidation_check": {
+      "pages": ["flights-and-travel", "surrogate-matching-and-contract", "destinations-and-legality"],
+      "report_file": "consolidation_check.html"
+    },
     "max_entities": 30,
     "default_relation": "see_also",
     "labels": {"min_groups": 3, "min_page_share": 0.2, "min_label_share": 0.2, "min_lift": 2.0},
