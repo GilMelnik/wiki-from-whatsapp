@@ -5,7 +5,9 @@ no definitions. At build time each cited group gets one definition, in order of 
 citation, worded by ``site.references``: the group id, when it was said (one Hebrew month, or
 first – last) and how many people wrote in the conversation(s) its claims come from, e.g.
 ``g-1a2b3c4d · מאי 2024 · 7 משתתפים בשיחה``. No claim text. A group without a known count
-shows its id and date only. The result is ordinary python-markdown footnotes, so the
+shows its id and date only. Each reference starts with ``start_mark`` (a right-to-left mark):
+the site lays out every paragraph by its first strong character, and the reference must read
+right to left with the id first, not as a left-to-right line that starts with the id. The result is ordinary python-markdown footnotes, so the
 references toggle of the site (``sup[id^="fnref"]``, ``.footnote``) works unchanged.
 
 A body stored with definitions (step 7 before this change) is read without them. A mark of a
@@ -56,7 +58,7 @@ def _participants(group: Mapping[str, Any]) -> str | None:
 def reference_text(group: Mapping[str, Any]) -> str:
     """One reference: group id · when · participants (the parts that are known)."""
     parts = [group["group_id"], _when(group), _participants(group)]
-    return REFERENCES_CONFIG["separator"].join(part for part in parts if part)
+    return REFERENCES_CONFIG["start_mark"] + REFERENCES_CONFIG["separator"].join(part for part in parts if part)
 
 
 @dataclass(frozen=True)

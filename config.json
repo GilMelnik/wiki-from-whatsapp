@@ -419,6 +419,7 @@
         "storage_key": "wiki-show-references"
       },
       "references": {
+        "start_mark": "‏",
         "separator": " · ",
         "date_range": "{first} – {last}",
         "participants_one": "משתתף אחד",

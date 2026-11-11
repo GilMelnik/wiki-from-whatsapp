@@ -87,7 +87,8 @@ def test_wiki_links_are_resolved_outside_code(built: tuple[Path, dict[str, Any]]
     assert "[כאן](agencies.md)" in body
     assert "`[[costs]]`" in body and "```\n[[clinics]]\n```" in body
     # a body stored with its definition (older step 7): the stored text gives way to the reference
-    assert "[^g-00000001]: g-00000001 · " in body and "קבוצה." not in body
+    reference = f"[^g-00000001]: {section('site')['references']['start_mark']}g-00000001 · "
+    assert reference in body and "קבוצה." not in body
 
 
 def test_front_matter_round_trips_unchanged(built: tuple[Path, dict[str, Any]]) -> None:
