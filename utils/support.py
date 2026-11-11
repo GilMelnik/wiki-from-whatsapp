@@ -8,8 +8,7 @@ toward neither side. Emoji sentiment is independent of claim stance — a 👎 n
 a supporter. A user is never double-counted within the same side.
 
 ``collect_evidence`` derives a claim's supporters / opposers / dates from its evidence
-message ids (step 3). The ``*_audit*`` readers below understand the v1 audit records
-still read by the old steps 5 and 7.
+message ids (step 3); ``summarize_reactions`` and ``person_key`` serve the thread reader.
 """
 
 from __future__ import annotations
@@ -19,17 +18,10 @@ from collections import Counter
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal, TypedDict
-
-from utils.paths import AUDIT_PATH
+from typing import Any, Literal
 
 ReactionSentiment = Literal["positive", "neutral", "negative"]
 _SENTIMENT_PATH = Path(__file__).with_name("reaction_sentiment.json")
-
-
-class ClaimEngagement(TypedDict):
-    supporter_count: int
-    opposer_count: int
 
 
 @lru_cache(maxsize=1)
@@ -48,37 +40,6 @@ def reaction_sentiment(emoji: str) -> ReactionSentiment:
     if category in ("positive", "neutral", "negative"):
         return category
     return "neutral"
-
-
-def _reaction_senders(
-    reactions: list[dict[str, Any]] | None,
-    *,
-    sentiment: ReactionSentiment | None = None,
-) -> set[str]:
-    senders: set[str] = set()
-    for reaction in reactions or []:
-        emoji = reaction.get("emoji") or ""
-        if sentiment is not None and reaction_sentiment(emoji) != sentiment:
-            continue
-        for sender in reaction.get("senders") or []:
-            if sender:
-                senders.add(sender)
-    return senders
-
-
-def reaction_senders_from_messages(
-    message_reactions: list[dict[str, Any]],
-    *,
-    sentiment: ReactionSentiment,
-) -> set[str]:
-    """Distinct users who reacted with the given emoji sentiment on linked messages."""
-
-    senders: set[str] = set()
-    for entry in message_reactions:
-        senders.update(
-            _reaction_senders(entry.get("reactions"), sentiment=sentiment)
-        )
-    return senders
 
 
 def summarize_reactions(reactions: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -100,123 +61,7 @@ def summarize_reactions(reactions: list[dict[str, Any]] | None) -> list[dict[str
     return out
 
 
-def aggregate_reaction_summary(
-    message_reactions: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Sum reaction counts by emoji across all linked messages."""
-
-    counts: Counter[str] = Counter()
-    for entry in message_reactions:
-        for reaction in entry.get("reactions") or []:
-            emoji = reaction.get("emoji") or ""
-            if emoji:
-                counts[emoji] += len(reaction.get("senders") or [])
-    return [
-        {
-            "emoji": emoji,
-            "count": count,
-            "sentiment": reaction_sentiment(emoji),
-        }
-        for emoji, count in counts.items()
-    ]
-
-
-def load_audit_records(
-    audit_path: Path | str = AUDIT_PATH,
-) -> dict[str, dict[str, Any]]:
-    """claim_id -> private audit record (supporter identities + reactions)."""
-
-    path = Path(audit_path)
-    if not path.exists():
-        return {}
-    with path.open(encoding="utf-8") as f:
-        audit = json.load(f)
-    return {rec["claim_id"]: rec for rec in audit.get("audit") or []}
-
-
 EngagementSide = Literal["supporter", "opposer"]
-
-
-def participants_from_audit(
-    record: dict[str, Any], *, side: EngagementSide
-) -> set[str]:
-    """Distinct users on one side of a claim (statements + matching emoji reactions)."""
-
-    if side == "supporter":
-        statement_key = "supporting_senders"
-        sentiment: ReactionSentiment = "positive"
-    else:
-        statement_key = "opposing_senders"
-        sentiment = "negative"
-
-    participants = set(record.get(statement_key) or [])
-    message_reactions = record.get("message_reactions")
-    if message_reactions is not None:
-        participants.update(
-            reaction_senders_from_messages(message_reactions, sentiment=sentiment)
-        )
-        return participants
-
-    if side == "supporter":
-        # Legacy audit rows may list every reactor in reaction_senders; without
-        # per-emoji detail we cannot re-filter, so ignore that field.
-        if record.get("all_supporters") and not record.get("reaction_senders"):
-            return set(record["all_supporters"])
-        return participants
-
-    if record.get("reaction_opposers"):
-        participants.update(record["reaction_opposers"])
-    return participants
-
-
-def engagement_for_claim(
-    claim_id: str, audit_by_id: dict[str, dict[str, Any]]
-) -> ClaimEngagement:
-    record = audit_by_id.get(claim_id)
-    if not record:
-        return {"supporter_count": 1, "opposer_count": 0}
-    supporters = participants_from_audit(record, side="supporter")
-    opposers = participants_from_audit(record, side="opposer")
-    return {
-        "supporter_count": max(len(supporters), 1),
-        "opposer_count": len(opposers),
-    }
-
-
-def supporter_count_for_claims(
-    claim_ids: list[str],
-    audit_by_id: dict[str, dict[str, Any]],
-) -> int:
-    """Distinct supporters backing a set of claims, deduped by identity."""
-
-    supporters: set[str] = set()
-    for cid in claim_ids:
-        record = audit_by_id.get(cid)
-        if record:
-            supporters.update(participants_from_audit(record, side="supporter"))
-    if supporters:
-        return len(supporters)
-    # ponytail: no audit (e.g. mock/offline) — can't dedup, report at least 1.
-    return 1 if claim_ids else 0
-
-
-def engagement_for_claims(
-    claim_ids: list[str],
-    audit_by_id: dict[str, dict[str, Any]],
-) -> ClaimEngagement:
-    """Distinct supporters and opposers across a set of claims."""
-
-    supporters: set[str] = set()
-    opposers: set[str] = set()
-    for cid in claim_ids:
-        record = audit_by_id.get(cid)
-        if record:
-            supporters.update(participants_from_audit(record, side="supporter"))
-            opposers.update(participants_from_audit(record, side="opposer"))
-    return {
-        "supporter_count": max(len(supporters), 1) if claim_ids else 0,
-        "opposer_count": len(opposers),
-    }
 
 
 def person_key(person: Any) -> str:

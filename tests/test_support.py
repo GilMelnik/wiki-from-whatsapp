@@ -1,54 +1,6 @@
 """Support counts: emoji sentiment is independent of claim stance; evidence per claim."""
 
-from utils.support import (
-    collect_evidence,
-    engagement_for_claim,
-    participants_from_audit,
-    person_key,
-    supporter_count_for_claims,
-)
-
-
-def _audit_record(reactions: list[dict], *, opposing: list[str] | None = None) -> dict:
-    return {
-        "supporting_senders": ["author"],
-        "opposing_senders": opposing or [],
-        "message_reactions": [{"reactions": reactions}],
-        "reaction_senders": [s for r in reactions for s in r["senders"]],
-        "all_supporters": ["author"]
-        + [s for r in reactions for s in r["senders"]],
-    }
-
-
-def test_only_positive_emojis_count_as_supporters() -> None:
-    record = _audit_record(
-        [
-            {"emoji": "👍", "senders": ["a"]},
-            {"emoji": "❤️", "senders": ["b"]},
-            {"emoji": "👎", "senders": ["c"]},
-        ]
-    )
-    assert participants_from_audit(record, side="supporter") == {"author", "a"}
-
-
-def test_negative_emojis_count_as_opposers_not_supporters() -> None:
-    record = _audit_record([{"emoji": "👎", "senders": ["c"]}])
-    assert participants_from_audit(record, side="supporter") == {"author"}
-    assert participants_from_audit(record, side="opposer") == {"c"}
-
-
-def test_opposing_message_senders_count_as_opposers() -> None:
-    record = _audit_record([], opposing=["dissenter"])
-    assert participants_from_audit(record, side="opposer") == {"dissenter"}
-
-
-def test_supporter_count_ignores_stale_all_supporters_field() -> None:
-    record = _audit_record([{"emoji": "😢", "senders": ["sympathizer"]}])
-    assert supporter_count_for_claims(["c1"], {"c1": record}) == 1
-    assert engagement_for_claim("c1", {"c1": record}) == {
-        "supporter_count": 1,
-        "opposer_count": 1,
-    }
+from utils.support import collect_evidence, person_key
 
 
 def _messages() -> dict[str, dict]:

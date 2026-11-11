@@ -8,7 +8,7 @@ Runs steps in order:
     5. aggregate -> data/claims_aggregated.json (claim groups, contract C6)
     6. plan      -> data/wiki_plan.json (contract C7; planned once, then curated by hand)
     6b. assign   -> data/assignments.json (contract C8; groups on pages + labels, proposals)
-    7. write pages -> data/wiki_pages.json (agentic, mini-batch over claims)
+    7. write pages -> data/wiki_pages.json (contract C9; one call per page, incremental)
     9. site      -> docs/ (pages, label pages, wiki_index.json) + mkdocs.yml
 
 Human gates (web UIs, no CLI):
@@ -49,7 +49,8 @@ def _stage_clients(logger: logging.Logger) -> dict[str, LLMClient]:
     return {
         "extract": LLMClient.for_stage("extract", logger=logger),
         "plan": LLMClient.for_stage("plan", logger=logger),
-        "generate": LLMClient.for_stage("generate", logger=logger),
+        "write": LLMClient.for_stage("write", logger=logger),
+        "update": LLMClient.for_stage("update", logger=logger),
     }
 
 
@@ -127,11 +128,12 @@ def run(
     )
 
     logger = setup_step_logging(STEP_7)
-    logger.info("[7] Writing wiki pages (agentic, mini-batch)...")
-    cm_meta = write_pages(llm=clients["generate"])
+    logger.info("[7] Writing wiki pages (only new or changed pages cost a model call)...")
+    w_meta = write_pages()
     logger.info(
-        f"    {cm_meta['statements']} statements across {cm_meta['pages']} pages "
-        f"from {cm_meta['claims']} claims ({cm_meta['batches']} batches)"
+        f"    {w_meta['summary']['pages']} pages: {w_meta.get('write', 0)} written, "
+        f"{w_meta.get('update', 0)} updated, {w_meta.get('no_change', 0)} unchanged by the "
+        f"model, {w_meta['kept']} untouched, {len(w_meta['failed'])} failed"
     )
     logger.info(
         "    -> Review the pages before the site step."
