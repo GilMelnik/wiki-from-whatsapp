@@ -40,6 +40,21 @@ def make_groups(count: int = 12) -> list[dict[str, Any]]:
     ]
 
 
+def make_entities(groups: Sequence[dict[str, Any]], kind: str | None = "organisation",
+                  **kinds: str | None) -> dict[str, Any]:
+    """A step-4 entities payload with one entity per entity id of ``groups``: of ``kind``
+    (``None``: no kind yet), or of ``kinds[entity_id]`` for the ids named there."""
+    ids = dict.fromkeys(entity_id for group in groups for entity_id in group.get("entities") or [])
+    entities = []
+    for entity_id in ids:
+        entity = {"entity_id": entity_id, "canonical_name": f"Name {entity_id}", "members": []}
+        chosen = kinds.get(entity_id, kind)
+        if chosen is not None:
+            entity["kind"] = chosen
+        entities.append(entity)
+    return {"entities": entities, "claim_entities": {}, "metadata": {}}
+
+
 def _page(page_id: str, parent: str, examples: Sequence[str]) -> dict[str, Any]:
     return {
         "id": page_id,

@@ -126,13 +126,15 @@ class ReviewWorkspace(PagesWorkspace):
     def review(self, llm: FakeReviewer, **kwargs: Any) -> dict[str, Any]:
         return run(artifact=self.suggestions, pages_artifact=self.artifact,
                    aggregated_path=self.groups_path, plan_path=resolve(self.plan_artifact),
-                   assignments_path=self.assignments_path, llm=llm,
+                   assignments_path=self.assignments_path, entities_path=self.entities_path,
+                   llm=llm,
                    count_tokens=kwargs.pop("count_tokens", count_tokens), **kwargs)
 
     def applier(self, llm: FakeWriter | None = None,
                 linker: Callable[[], GroupLinker] | None = None) -> Applier:
         return Applier(pages_artifact=self.artifact, plan_artifact=self.plan_artifact,
                        aggregated_path=self.groups_path, assignments_path=self.assignments_path,
+                       entities_path=self.entities_path,
                        llm=llm or FakeWriter("fake-apply"), linker=linker or (lambda: self.linker))
 
     def store(self, llm: FakeWriter | None = None,

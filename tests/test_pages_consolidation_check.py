@@ -10,9 +10,9 @@ import pytest
 from step_7_write_pages.consolidation_check import ConsolidationCheck, Measures, _under, main
 from step_7_write_pages.run import run
 from tests.pages_fixtures import FakeWriter, page_assignments, page_groups
-from tests.plan_fixtures import make_plan
+from tests.plan_fixtures import make_entities, make_plan
 from utils.json_io import write_json_file
-from utils.paths import AGGREGATED, ASSIGNMENTS, PLAN, WIKI_PAGES, resolve
+from utils.paths import AGGREGATED, ASSIGNMENTS, ENTITIES, PLAN, WIKI_PAGES, resolve
 
 LOGGER = logging.getLogger("test-check")
 CHRONICLE = "בשנת 2022 חברים המליצו על כך.[^g-00000000] ובמאי 2024 נאמרה אותה המלצה.[^g-00000004]"
@@ -24,9 +24,11 @@ def _source(root: Path) -> Path:
     write_json_file({"groups": groups, "metadata": {}}, _under(AGGREGATED, root).original)
     write_json_file(make_plan(), _under(PLAN, root).original)
     write_json_file(page_assignments(groups), _under(ASSIGNMENTS, root).original)
+    write_json_file(make_entities(groups), _under(ENTITIES, root).original)
     pages = _under(WIKI_PAGES, root)
     run(aggregated_path=_under(AGGREGATED, root).original, plan_path=_under(PLAN, root).original,
-        assignments_path=_under(ASSIGNMENTS, root).original, artifact=pages, llm=FakeWriter(),
+        assignments_path=_under(ASSIGNMENTS, root).original,
+        entities_path=_under(ENTITIES, root).original, artifact=pages, llm=FakeWriter(),
         update_llm=FakeWriter("fake-update"))
     payload = resolve(pages).read_text(encoding="utf-8")
     pages.original.write_text(payload.replace("פתיח קצר על הדף.", f"פתיח קצר על הדף. {CHRONICLE}"),

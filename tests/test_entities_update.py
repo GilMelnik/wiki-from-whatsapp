@@ -11,6 +11,7 @@ import pytest
 from step_4_entities.mentions import SimpleAnalyzer
 from step_4_entities.reviewer.store import EntityStore, EntityView
 from step_4_entities.run import run
+from tests.entities_tool_support import FakeKindClassifier
 from utils.paths import Artifact
 
 
@@ -55,6 +56,7 @@ class Step:
         self.analysis_path = tmp_path / "analysis.json"
         self.seed_path = tmp_path / "no_seed.json"
         self.analyzer = CountingAnalyzer()
+        self.classifier = FakeKindClassifier()
 
     def run(self, claims: list[dict], **kwargs: object) -> dict:
         self.claims_path.write_text(json.dumps({"claims": claims}), encoding="utf-8")
@@ -64,7 +66,7 @@ class Step:
             analyzer=self.analyzer,
             analysis_path=self.analysis_path,
             seed_path=self.seed_path,
-            **kwargs,
+            **{"classifier": self.classifier, **kwargs},
         )
 
     def edited(self) -> dict:

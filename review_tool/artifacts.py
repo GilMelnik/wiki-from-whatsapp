@@ -210,7 +210,10 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
         ArtifactNode.from_pair(
             "assignments", "Groups assigned to pages", ASSIGNMENTS, STEP_6_ASSIGN, ("groups", "plan")
         ),
-        ArtifactNode.from_pair("pages", "Wiki pages", WIKI_PAGES, STEP_7, ("groups", "plan", "assignments")),
+        # Entities: their kinds decide which groups the owner's rule withholds from the pages.
+        ArtifactNode.from_pair(
+            "pages", "Wiki pages", WIKI_PAGES, STEP_7, ("groups", "plan", "assignments", "entities")
+        ),
         # The whole-wiki review's suggestions (a human gate: the owner decides on each one).
         ArtifactNode.from_pair(
             "suggestions", "Review suggestions", SUGGESTIONS, STEP_8, ("plan", "pages")
@@ -218,7 +221,7 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
         # The published site (docs/ + mkdocs.yml); its index file stands for the whole folder.
         ArtifactNode(
             "site", "Site", DOCS_DIR / WIKI_INDEX_FILE, step=STEP_9,
-            upstream=("plan", "pages", "groups"),
+            upstream=("plan", "pages", "groups", "entities"),
         ),
     )
 

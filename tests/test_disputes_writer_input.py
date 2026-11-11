@@ -48,7 +48,7 @@ def _prompt(tmp_path: Path, groups_path: Path, pages: dict[str, list[str]]) -> t
     write_json_file(make_plan(), plan_path)
     write_json_file({"assignments": assignments, "proposals": [], "metadata": {}},
                     assignments_path)
-    corpus = PagesCorpus.load(groups_path, plan_path, assignments_path)
+    corpus = PagesCorpus.load(groups_path, plan_path, assignments_path, tmp_path / "entities.json")
     context = corpus.context("agencies", corpus.catalogue())
     assert set(context.required_ids()) == {by_claim["a1"]} | (
         {by_claim["a2"]} if "agencies" in pages["a2"] else set())

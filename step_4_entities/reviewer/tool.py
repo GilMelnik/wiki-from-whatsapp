@@ -11,7 +11,8 @@ claims, deletes claims and groups near-duplicate claims for step 5. Endpoints, u
 - ``GET  /entities/{id}/claims?name&offset&limit``  another page of one member's claims
 - ``GET  /deleted-names``                        names of deleted entities
 - ``POST /entities/{id}/status`` ``{status, view}`` (accept moves on in the view)
-- ``POST /entities/{id}/reject`` (un-group) · ``/rename`` · ``/contacts`` · ``/contact``
+- ``POST /entities/{id}/reject`` (un-group) · ``/rename`` · ``/kind`` ``{kind}`` (the owner's
+  person / organisation / place / other) · ``/contacts`` · ``/contact``
   · ``/merge`` · ``/members/move`` · ``/members/confirm`` · ``/claims/move`` · ``/claims/copy``
   · ``/claims/exclude`` · ``/claims/include``
 - ``DELETE /entities/{id}?<view>`` · ``DELETE /claims/{claim_id}``
@@ -30,7 +31,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -38,6 +39,7 @@ from pydantic import BaseModel
 from review_tool.artifacts import ArtifactGraph
 from review_tool.registry import ToolSpec
 from review_tool.stores import StoreHandle
+from step_4_entities.kinds import KINDS
 from step_4_entities.reviewer.store import EntityNotFound, EntityStore, EntityView, ReviewConflict
 from step_4_entities.reviewer.store.helpers import (
     ContactAction,
@@ -83,6 +85,10 @@ class StatusRequest(BaseModel):
 
 class RenameRequest(BaseModel):
     canonical_name: str
+
+
+class KindRequest(BaseModel):
+    kind: Literal[KINDS]  # type: ignore[valid-type]  # the kinds of config.json, else 422
 
 
 class ContactsRequest(BaseModel):
@@ -174,6 +180,7 @@ class EntitiesTool:
             ("/entities/{entity_id}/status", self.set_status),
             ("/entities/{entity_id}/reject", self.reject),
             ("/entities/{entity_id}/rename", self.rename),
+            ("/entities/{entity_id}/kind", self.set_kind),
             ("/entities/{entity_id}/contacts", self.set_contacts),
             ("/entities/{entity_id}/contact", self.resolve_contact),
             ("/entities/{entity_id}/merge", self.merge),
@@ -251,6 +258,10 @@ class EntitiesTool:
     def rename(self, entity_id: str, body: RenameRequest) -> dict[str, Any]:
         with self._change() as store:
             return self._answer(store, store.rename(entity_id, body.canonical_name))
+
+    def set_kind(self, entity_id: str, body: KindRequest) -> dict[str, Any]:
+        with self._change() as store:
+            return self._answer(store, store.set_kind(entity_id, body.kind))
 
     def set_contacts(self, entity_id: str, body: ContactsRequest) -> dict[str, Any]:
         with self._change() as store:

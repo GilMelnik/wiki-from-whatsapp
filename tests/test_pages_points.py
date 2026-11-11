@@ -74,7 +74,7 @@ POINTS = [
 
 
 def _context(ws: PagesWorkspace, page_id: str) -> tuple[Corpus, PageContext]:
-    corpus = Corpus.load(ws.groups_path, ws.plan_path, ws.assignments_path)
+    corpus = Corpus.load(*ws.paths())
     return corpus, corpus.context(page_id, corpus.catalogue())
 
 
