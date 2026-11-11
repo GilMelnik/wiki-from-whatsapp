@@ -23,7 +23,10 @@ keep the owner's status; a group already named by a proposal, or already shown t
 proposer, is not proposed again. Nothing is written when nothing changed (unless an input
 file is newer than the output, so the review tool's stale notice clears).
 
-    python -m step_6_plan.assign [--rebuild] [--only GROUP_ID ...]
+    python -m step_6_plan.assign [--rebuild] [--only GROUP_ID ...] [--estimate]
+
+``--estimate`` asks nothing and writes nothing: it counts the groups the classifier would read
+in full and gives an upper bound of the proposal calls (the step's only chat calls).
 
 Output: ``assignments.json`` == ``assignments_edited.json`` (C8)::
 
@@ -39,6 +42,7 @@ import argparse
 import copy
 import json
 import logging
+import math
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
@@ -261,6 +265,33 @@ class AssignmentRun:
                           label_only=len(set(labels) - full - page_only), removed=len(diff.removed),
                           classifier_requests=asker.requests)
 
+    def estimate(self) -> dict[str, Any]:
+        """What ``assign`` + ``propose`` would do at most, without asking anything.
+
+        A proposal candidate is an automatic group, not named by a proposal and not shown to
+        the proposer with its current text, that can be unplaced after the run: any such group
+        when the plan changed, else the groups asked in full and those unplaced now."""
+
+        diff = diff_inputs(
+            {gid: fp for gid, fp in self.old_inputs.items() if self.in_scope(gid)},
+            {gid: fp for gid, fp in self.inputs.items() if self.in_scope(gid)},
+        )
+        full = self.full_set((*diff.new, *diff.changed))
+        changes = plan_changes(self.snapshot, self.plan)
+        plan_changed = self.snapshot is not None and any((
+            changes.created_pages, changes.rescoped_pages, changes.removed_pages,
+            changes.changed_labels, changes.removed_labels))
+        unplaced = {gid for gid, record in self.records.items() if not record["pages"]}
+        reach = self.automatic(self.groups if plan_changed else full | unplaced)
+        named = proposed_group_ids(self.proposals)
+        candidates = [gid for gid in reach
+                      if gid not in named and self.considered.get(gid) != self.inputs[gid]]
+        calls = (0 if len(candidates) < PROPOSALS_CONFIG["min_groups"]
+                 else math.ceil(len(candidates) / PROPOSALS_CONFIG["max_groups_per_call"]))
+        return {"estimate": True, "groups_asked": len(full), "plan_changed": plan_changed,
+                "proposal_candidates_max": len(candidates), "proposal_calls_max": calls,
+                "written": False}
+
     def propose(self, llm: LLMClient | None) -> None:
         """Ask for proposals for unplaced groups not yet named or shown (at least
         ``proposals.min_groups`` of them)."""
@@ -329,6 +360,7 @@ def run(
     rebuild: bool = False,
     classifier: Classifier | None = None,
     llm: LLMClient | None = None,
+    estimate: bool = False,
 ) -> dict[str, Any]:
     """Assign the claim groups to the plan's pages and labels; see the module docstring.
 
@@ -337,6 +369,7 @@ def run(
     and leave every other record and the stored plan snapshot as they are. ``rebuild``: ask
     every automatic group again (manual records and proposals stay). ``classifier`` / ``llm``
     default to the configured stages (the chat client is built only when proposals are due).
+    ``estimate``: ask nothing, write nothing; return ``AssignmentRun.estimate``.
     Returns the run counters (``full``, ``page_only``, ``label_only``, ``classifier_requests``,
     ``proposal_calls``, ...), ``summary``, ``written`` and ``backup``.
     """
@@ -352,6 +385,10 @@ def run(
     base = _read(artifact.original) or {}
     before = _read(artifact.edited) or base
     job = AssignmentRun(groups, plan, before, base, rebuild=rebuild, only=only, logger=logger)
+    if estimate:
+        result = job.estimate()
+        logger.info(f"Assignment estimate: {result}")
+        return result
     classifier = classifier or Classifier.for_stage(ASSIGN_CONFIG["stage"], logger=logger)
     job.assign(classifier)
     job.propose(llm)
@@ -377,8 +414,10 @@ def main(argv: list[str] | None = None) -> None:
                         help="ask every automatic group again (manual records and proposals stay)")
     parser.add_argument("--only", nargs="+", metavar="GROUP_ID",
                         help="(re)assign only these groups")
+    parser.add_argument("--estimate", action="store_true",
+                        help="count what a run would ask; ask nothing, write nothing")
     args = parser.parse_args(argv)
-    run(rebuild=args.rebuild, only=args.only)
+    run(rebuild=args.rebuild, only=args.only, estimate=args.estimate)
 
 
 if __name__ == "__main__":
