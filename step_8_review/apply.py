@@ -202,19 +202,24 @@ class Applier:
     # ------------------------------------------------------------------ pages
 
     def _corrected(self, corpus: Corpus, review: ReviewInput, page_id: str, request: str,
-                   touched: Collection[str], quoted: str = "") -> tuple[dict[str, Any], float]:
+                   touched: Collection[str], quoted: str = "", *, unchanged_ok: bool = False
+                   ) -> tuple[dict[str, Any] | None, float]:
         """The page corrected by step 7's writer, as a C9 item, and the kept share; refused
-        when the writer changed nothing, failed its checks or changed too much."""
+        when the writer failed its checks, changed too much, or changed nothing (unless
+        ``unchanged_ok``: the item is then ``None``)."""
         page = review.all_pages[page_id]
         context = corpus.context(page_id, corpus.catalogue())
         writer = PageWriter(self.llm, self.llm, corpus.plan, self.logger)
         text: PageText = writer.update(context, current_text(page), GroupDelta(), request=request)
-        if strip_definitions(text.body) == strip_definitions(page["body_md"]):
-            raise ApplyRefused(MESSAGES["no_change"].format(page_id=page_id))
         final = text.report.get("final_problems") or []
         if final:
             raise ApplyRefused(MESSAGES["failed_checks"].format(page_id=page_id,
                                                                 problems="; ".join(final)), final)
+        if strip_definitions(text.body) == strip_definitions(page["body_md"]):
+            if unchanged_ok:
+                self.logger.info(f"{page_id}: the writer found nothing to change (checks pass)")
+                return None, 1.0
+            raise ApplyRefused(MESSAGES["no_change"].format(page_id=page_id))
         share = kept_share(page["body_md"], text.body, touched, quoted)
         if share < APPLY_CONFIG["min_kept_sentence_share"]:
             raise ApplyRefused(MESSAGES["too_much_changed"].format(
@@ -273,8 +278,10 @@ class Applier:
                    f"{', '.join(proposal['groups_b'])} contradict each other: {proposal['clash']} "
                    f"{proposal['correction']}")
         touched = [*proposal["groups_a"], *proposal["groups_b"]]
-        corrected = {pid: self._corrected(corpus, review, pid, request, touched)
-                     for pid in proposal["pages"]}
+        pages = [pid for pid in proposal["pages"] if review.pages[pid].group_ids & set(touched)]
+        corrected = {pid: self._corrected(corpus, review, pid, request, touched, unchanged_ok=True)
+                     for pid in pages}
+        items = {pid: item for pid, (item, _) in corrected.items() if item is not None}
         try:
             linker = self.linker()
         except (FileNotFoundError, EditConflict) as exc:
@@ -287,20 +294,20 @@ class Applier:
             _restore(linker.edited, groups_backup)
             raise ApplyRefused(MESSAGES["groups_refused"].format(error=exc)) from exc
         try:
-            backup = self._save_pages({pid: item for pid, (item, _) in corrected.items()})
+            backup = self._save_pages(items) if items else None
         except OSError:
             _restore(linker.edited, groups_backup)
             raise
         self.logger.info(f"Linked {pairs} as contradictions in {linker.edited}; corrected "
                          f"{list(corrected)}")
         message = " ".join([MESSAGES["link_applied"], *(
-            MESSAGES["page_applied"].format(page_id=pid, kept=_pct(share))
-            for pid, (_, share) in corrected.items())])
+            MESSAGES["page_applied" if pid in items else "page_unchanged"].format(
+                page_id=pid, kept=_pct(share)) for pid, (_, share) in corrected.items())])
         return ApplyResult(message, {
             "file": str(self.pages_artifact.edited), "backup": str(backup) if backup else None,
             "groups_file": str(linker.edited),
             "groups_backup": str(groups_backup) if groups_backup else None,
             "links": [list(pair) for pair in pairs],
-            "pages": {pid: {"kept_sentence_share": round(share, 3)}
+            "pages": {pid: {"kept_sentence_share": round(share, 3), "changed": pid in items}
                       for pid, (_, share) in corrected.items()}})
 

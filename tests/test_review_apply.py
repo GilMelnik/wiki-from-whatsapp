@@ -146,9 +146,18 @@ def test_a_contradiction_links_the_groups_and_corrects_both_pages(ws: ReviewWork
 def test_a_contradiction_whose_page_correction_fails_links_nothing(ws: ReviewWorkspace) -> None:
     before = ws.snapshot()
     with pytest.raises(ApplyRefused):
-        ws.applier(FakeWriter("fake-apply", respond=no_change)).apply(
-            _suggestion(ws, "contradiction"))
+        ws.applier(FakeWriter("fake-apply", respond=corrector("[^g-00000000]", "[^g-00000003]"))
+                   ).apply(_suggestion(ws, "contradiction"))
     assert ws.linker.links == [] and ws.snapshot() == before
+
+
+def test_a_contradiction_already_shown_on_the_pages_only_links_the_groups(ws: ReviewWorkspace) -> None:
+    pages = ws.artifact.original.read_bytes()
+    result = ws.applier(FakeWriter("fake-apply", respond=no_change)).apply(
+        _suggestion(ws, "contradiction"))
+    assert ws.linker.links == [("g-00000000", "g-00000002", True)]
+    assert not ws.artifact.edited.exists() and ws.artifact.original.read_bytes() == pages
+    assert result.details["pages"]["agencies"]["changed"] is False
 
 
 def test_kept_share_ignores_the_touched_sentences() -> None:
