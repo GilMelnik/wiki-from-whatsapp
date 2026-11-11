@@ -15,9 +15,10 @@ import { useShortcuts } from "./useShortcuts.js";
 
 // The page: header, banner slot, and the tool named by `?tool=` filling the rest.
 //
-// A tool's Component receives `tool = { id, title, reads, writes, missing }`: `reads` and
-// `writes` are the artifact keys of its Python ToolSpec, `missing` the ones that have no file
-// yet (all three are [] until GET /api/tools answered).
+// A tool's Component receives `tool = { id, title, reads, writes, missing, quietStale }`:
+// `reads` and `writes` are the artifact keys of its Python ToolSpec, `missing` the ones that
+// have no file yet (all three are [] until GET /api/tools answered), `quietStale` what its
+// index.jsx entry lists (see StaleBanners).
 
 const NO_KEYS = [];
 
@@ -28,6 +29,7 @@ function toolProps(entry, served) {
     reads: served?.reads ?? NO_KEYS,
     writes: served?.writes ?? NO_KEYS,
     missing: served?.missing ?? NO_KEYS,
+    quietStale: entry.quietStale ?? NO_KEYS,
   };
 }
 

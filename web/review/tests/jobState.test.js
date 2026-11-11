@@ -71,6 +71,16 @@ test("a run that failed after the change keeps a danger notice with the log", ()
   assert.equal(artifactNotice({ artifact: classified, byKey, step: safeStep, latest: before }).action, RUN_ACTION);
 });
 
+test("a quiet artifact keeps only the running, waiting and failed notices", () => {
+  assert.equal(artifactNotice({ artifact: classified, byKey, step: safeStep, quiet: true }), null);
+  const manual = { ...safeStep, incremental_safe: false };
+  assert.equal(artifactNotice({ artifact: classified, byKey, step: manual, quiet: true }), null);
+  const running = { id: "j1", title: "שלב 2", state: RUNNING };
+  assert.equal(artifactNotice({ artifact: classified, byKey, step: safeStep, running, quiet: true }).action, LOG_ACTION);
+  const latest = { id: "j2", state: FAILED, exit_code: 1, started_at: "2026-11-10T10:05:00.000+00:00" };
+  assert.equal(artifactNotice({ artifact: classified, byKey, step: safeStep, latest, quiet: true }).tone, "danger");
+});
+
 test("jobs index: newest job per step, running job per artifact", () => {
   const jobs = [
     { id: "new", step: "s2", produces: "classified", state: RUNNING },
