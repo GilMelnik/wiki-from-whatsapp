@@ -19,7 +19,7 @@ Human gates (web UIs, no CLI):
     step 4 — entity review: ``python -m review_tool --tool entities``
     step 5 — claim-group review: ``python -m review_tool --tool groups``
     step 6 — plan review: ``python -m review_tool --tool plan``
-    step 8 — the review's suggestions: accept / reject / correct each one (``step_8_review.store``)
+    step 8 — the review's suggestions: ``python -m review_tool --tool suggestions``
 """
 
 from __future__ import annotations
