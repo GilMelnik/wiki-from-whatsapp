@@ -1,0 +1,83 @@
+/* Reader-facing additions of step 9: the disclaimer banner and the references toggle. */
+
+/* ---- disclaimer: calm, always visible, no way to close it ---- */
+.wiki-disclaimer-bar {
+  padding-inline: 0.8rem;
+}
+
+.wiki-disclaimer {
+  margin-block: 0.6rem 0;
+  padding: 0.5rem 0.8rem;
+  border-inline-start: 0.2rem solid var(--md-primary-fg-color);
+  border-radius: 0.1rem;
+  background: var(--md-code-bg-color);
+  color: var(--md-default-fg-color);
+  font-size: 0.68rem;
+  line-height: 1.6;
+  text-align: start;
+}
+
+.wiki-disclaimer p {
+  margin: 0;
+  unicode-bidi: plaintext;
+}
+
+.wiki-disclaimer a {
+  color: var(--md-typeset-a-color);
+  text-decoration: underline;
+}
+
+/* ---- references toggle: off unless html carries wiki-refs-on (set by refs-toggle.js) ----
+   Reference marks and the list at the page end are the footnotes of python-markdown:
+   <sup id="fnref...">  and  <div class="footnote">. */
+html:not(.wiki-refs-on) .md-typeset sup[id^="fnref"],
+html:not(.wiki-refs-on) .md-typeset .footnote {
+  display: none;
+}
+
+/* The toolbar always takes its height, so switching the toggle never moves the page. */
+.wiki-tools {
+  display: flex;
+  align-items: center;
+  min-height: 1.8rem;
+  margin-block-end: 0.4rem;
+  visibility: hidden; /* no script, no working button */
+}
+
+html.wiki-js .wiki-tools {
+  visibility: visible;
+}
+
+.wiki-refs-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.7rem;
+  border: 0.05rem solid var(--md-default-fg-color--lighter);
+  border-radius: 1rem;
+  background: transparent;
+  color: var(--md-default-fg-color--light);
+  font: inherit;
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+
+.wiki-refs-toggle:hover,
+.wiki-refs-toggle[aria-pressed="true"] {
+  border-color: var(--md-accent-fg-color);
+  color: var(--md-default-fg-color);
+}
+
+.wiki-refs-toggle:focus-visible {
+  outline: 0.1rem solid var(--md-accent-fg-color);
+  outline-offset: 0.1rem;
+}
+
+.wiki-refs-toggle__state {
+  font-weight: 700;
+}
+
+html:not(.wiki-refs-on) .wiki-refs-toggle__state--on,
+html.wiki-refs-on .wiki-refs-toggle__state--off {
+  display: none;
+}

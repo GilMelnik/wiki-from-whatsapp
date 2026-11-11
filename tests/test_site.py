@@ -62,7 +62,7 @@ def test_mkdocs_config_keeps_the_site_basics(built: tuple[Path, dict[str, Any]])
     assert config["theme"]["custom_dir"] == str(PROJECT_ROOT / site["custom_dir"])
     assert config["extra"]["coffee_url"] == site["coffee_url"]
     assert "footnotes" in config["markdown_extensions"]
-    assert "not_in_nav" not in config
+    assert config["not_in_nav"] == "/about.md\n/terms.md"  # only the generated info pages
 
 
 def test_missing_things_are_reported(built: tuple[Path, dict[str, Any]]) -> None:
@@ -146,7 +146,7 @@ def test_merged_ids_get_redirect_stubs_and_links_follow_them(tmp_path: Path) -> 
     _, label_stub = _read(docs, "labels/georgia.md")
     assert "url=../../labels/usa/" in label_stub and "[ארצות הברית](../labels/usa.md)" in label_stub
     config = yaml.safe_load((tmp_path / "mkdocs.yml").read_text(encoding="utf-8"))
-    assert config["not_in_nav"] == "/costs.md\n/labels/georgia.md"
+    assert config["not_in_nav"] == "/costs.md\n/labels/georgia.md\n/about.md\n/terms.md"
     assert result["redirects"] == 2
 
 

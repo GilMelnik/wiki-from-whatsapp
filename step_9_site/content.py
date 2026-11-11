@@ -17,6 +17,7 @@ from typing import Any
 import yaml
 
 from step_6_plan.model import check_plan, iter_nodes
+from step_9_site.info_pages import about_body, terms_body
 from utils.config import section
 from utils.okf import render_page, validate_front_matter
 from utils.wiki_links import WikiLink, replace_wiki_links
@@ -24,6 +25,11 @@ from utils.wiki_links import WikiLink, replace_wiki_links
 SITE_CONFIG = section("site")
 PAGES_CONFIG = section("pages")
 HOME_FILE = "index.md"
+ABOUT_CONFIG = SITE_CONFIG["about"]
+TERMS_CONFIG = SITE_CONFIG["terms"]
+ABOUT_FILE = ABOUT_CONFIG["file"]
+TERMS_FILE = TERMS_CONFIG["file"]
+INFO_FILES = (ABOUT_FILE, TERMS_FILE)
 NavEntry = dict[str, Any]
 Issue = dict[str, str]
 
@@ -93,8 +99,9 @@ class Site:
 
     @staticmethod
     def _check_pages(pages: dict[str, dict[str, Any]]) -> None:
-        if HOME_FILE.removesuffix(".md") in pages:
-            raise ValueError(f"a page may not use the id of the home page {HOME_FILE!r}")
+        for reserved in (HOME_FILE, *INFO_FILES):
+            if reserved.removesuffix(".md") in pages:
+                raise ValueError(f"a page may not use the id of the generated page {reserved!r}")
         for page_id, page in pages.items():
             missing = {"front_matter", "body_md"} - page.keys()
             if missing:
@@ -196,10 +203,10 @@ class Site:
     # ---------------------------------------------------------------------- files
 
     def _content_files(self) -> set[str]:
-        return {HOME_FILE, *map(page_file, self.order), *map(label_file, self.labels)}
+        return {HOME_FILE, *INFO_FILES, *map(page_file, self.order), *map(label_file, self.labels)}
 
     def _files(self) -> dict[str, str]:
-        files = {HOME_FILE: self._home()}
+        files = {HOME_FILE: self._home(), **self._info_pages()}
         for page_id in self.order:
             front_matter = self.pages[page_id]["front_matter"]
             files[page_file(page_id)] = render_page(front_matter, self._resolve_links(page_id))
@@ -214,6 +221,15 @@ class Site:
                 files[label_file(old)] = self._stub(label_file(old), label_file(label_id), title)
         return files
 
+    @staticmethod
+    def _info_pages() -> dict[str, str]:
+        """The about and terms pages: not wiki content, so they stay out of the search."""
+        search = {"exclude": True}
+        return {
+            ABOUT_FILE: with_front_matter({"title": ABOUT_CONFIG["title"], "search": search}, about_body()),
+            TERMS_FILE: with_front_matter({"title": TERMS_CONFIG["title"], "search": search}, terms_body()),
+        }
+
     def _page_item(self, source: str, page_id: str) -> str:
         description = self.pages[page_id]["front_matter"]["description"]
         return f"- [{self.title(page_id)}]({_href(source, page_file(page_id))}): {description}"
@@ -225,7 +241,8 @@ class Site:
             "title": mkdocs["site_name"],
             "description": mkdocs["site_description"],
         }
-        lines = [SITE_CONFIG["home_intro"], *self._home_nodes(self.plan["tree"], 2)]
+        about_link = f"[{ABOUT_CONFIG['home_link_text']}]({ABOUT_FILE})"
+        lines = [SITE_CONFIG["home_intro"], "", about_link, *self._home_nodes(self.plan["tree"], 2)]
         return with_front_matter(meta, "\n".join(lines))
 
     def _home_nodes(self, nodes: list[dict[str, Any]], level: int) -> list[str]:
