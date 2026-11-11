@@ -12,6 +12,7 @@ Routes (mounted under ``/api`` by ``review_tool.app``):
 
 ``WriteGuard``: while a job runs, every non-GET request to a tool that writes the artifact
 the job produces is answered 423 with a readable ``detail``, so a tool never races the step.
+The same holds for the step the update driver runs in its own process (``utils.step_lease``).
 Tools need no code for this; their ``ToolSpec.writes`` decides.
 """
 
@@ -107,4 +108,11 @@ class WriteGuard:
                     f"“{self._graph.node(produced).title}”. Changes cannot be saved until it "
                     "finishes; try again after it."
                 )
+        outside = self._runner.outside_step() or {}
+        if outside.get("produces") in writes:
+            return (
+                f"The update (step_10_update) is running {outside.get('title')} and rewriting "
+                f"“{self._graph.node(outside['produces']).title}”. Changes cannot be saved until "
+                "that step finishes; try again after it."
+            )
         return None

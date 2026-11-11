@@ -65,6 +65,15 @@ class PortFinder:
             "pass --port to choose another range"
         )
 
+    def running_port(self, preferred_port: int) -> int | None:
+        """The port of the review server already running for this data directory, else
+        ``None``. Binds nothing (for a process that only wants to talk to the server)."""
+        last_port = preferred_port + self._search_limit - 1
+        return next(
+            (port for port in range(preferred_port, last_port + 1) if self._is_our_server(port)),
+            None,
+        )
+
     def base_url(self, port: int) -> str:
         """URL a browser on this machine uses to reach the server on ``port``."""
         host = "127.0.0.1" if self._host in WILDCARD_HOSTS else self._host
