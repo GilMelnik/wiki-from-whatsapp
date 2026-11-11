@@ -21,7 +21,8 @@ reports. Endpoints, under ``/api/suggestions``:
 - ``POST /applies/withdraw``       ``{ids}`` → the queue without them
 
 Unknown suggestion → 404; a move, an edit or an apply the store refuses, or a suggestion that
-is queued or being applied → 409 with the store's Hebrew message; a step rewriting a file the
+is queued or being applied → 409 with the store's Hebrew message (an invalid plan, which
+keeps the evidence from loading, → 409 too); a step rewriting a file the
 tool writes → 423 (the frame's write guard). The store reads its files afresh on every call
 and locks the file it writes, and the applier writes the wiki's files through their own
 guarded writes, so no ``StoreHandle.mutate`` is held here (it would lock those files a
@@ -44,6 +45,7 @@ from review_tool import events
 from review_tool.artifacts import ArtifactGraph
 from review_tool.registry import ToolSpec
 from review_tool.stores import StoreHandle
+from step_6_plan.model import PlanError
 from step_8_review.inputs import REVIEW_CONFIG, read_json
 from step_8_review.proposals import ACCEPTED
 from step_8_review.reviewer.applies import APPLY_EVENT, ApplyRunner, is_paid
@@ -133,7 +135,7 @@ class SuggestionsTool:
     def detail(self, suggestion_id: str) -> dict[str, Any]:
         with _as_http_errors():
             suggestion = self.store.get(suggestion_id)
-        view = self._view.get()
+            view = self._view.get()
         return {"suggestion": {**suggestion, "paid": is_paid(suggestion["kind"]),
                                "busy": self.applies.busy(suggestion_id)},
                 "evidence": view.evidence(suggestion),
@@ -221,3 +223,5 @@ def _as_http_errors() -> Iterator[None]:
         raise HTTPException(status_code=404, detail=exc.args[0]) from exc
     except SuggestionConflict as exc:
         raise HTTPException(status_code=409, detail=exc.args[0]) from exc
+    except PlanError as exc:  # the wiki cannot be read as a whole (an invalid plan)
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
