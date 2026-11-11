@@ -410,6 +410,7 @@
       "terms": {
         "file": "terms.md",
         "source": "step_9_site/pages/terms.md",
+      "contact_placeholder": "{contact_email}",
         "title": "תנאי שימוש",
         "footer_link_text": "תנאי שימוש ובקשות לתיקון או להסרה"
       },

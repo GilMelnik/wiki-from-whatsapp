@@ -28,11 +28,13 @@ def config_value(path: str) -> Any:
 
 
 def terms_body() -> str:
-    """The terms text, from the source file the owner (task 45) fills."""
+    """The terms text from its source file, with ``{contact_email}`` filled from
+    ``site.contact_email`` (the address lives in config.json only)."""
     source = PROJECT_ROOT / TERMS_CONFIG["source"]
     if not source.is_file():
         raise FileNotFoundError(f"the terms page source is missing: {source}")
-    return source.read_text(encoding="utf-8")
+    text = source.read_text(encoding="utf-8")
+    return text.replace(TERMS_CONFIG["contact_placeholder"], SITE_CONFIG["contact_email"])
 
 
 def _step_lines(number: int, step: dict[str, Any]) -> list[str]:

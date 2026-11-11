@@ -133,12 +133,15 @@ def test_disclaimer_is_in_the_html_of_every_page(built_site: Path) -> None:
         assert f"{SITE['disclaimer']['label']}</strong>" in html, name
 
 
-def test_terms_page_is_a_draft_slot_linked_from_banner_and_footer_not_in_nav(
+def test_terms_page_carries_the_contact_address_and_is_linked_from_banner_and_footer_not_in_nav(
     built_site: Path,
 ) -> None:
     html = _html(built_site, "terms/index.html")
-    assert SITE["terms"]["title"] in html and "טיוטה" in html
-    assert (PROJECT_ROOT / SITE["terms"]["source"]).is_file()
+    assert SITE["terms"]["title"] in html
+    assert f'href="mailto:{SITE["contact_email"]}"' in html
+    assert SITE["terms"]["contact_placeholder"] not in html
+    source = (PROJECT_ROOT / SITE["terms"]["source"]).read_text(encoding="utf-8")
+    assert SITE["terms"]["contact_placeholder"] in source and SITE["contact_email"] not in source
     footer_link = re.compile(
         r'<a href="(?:\.\./|/)*terms/">' + re.escape(SITE["terms"]["footer_link_text"])
     )
