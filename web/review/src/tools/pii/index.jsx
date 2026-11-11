@@ -115,15 +115,15 @@ function PiiTool({ tool }) {
       setLastDecided(null);
       if (undoTarget === selectedId) detail.reload();
       else setSelectedId(undoTarget);
-      toast.success("ההחלטה בוטלה, הטענה ממתינה שוב");
+      toast.success("Decision undone; the claim is pending again");
     });
   };
 
   useShortcuts([
-    { keys: "a", label: "אישור ההסרה", run: () => decide("accept") },
-    { keys: "r", label: "שחזור הפרטים (כולם, או רק המסומנים)", run: () => decide("restore") },
-    { keys: DIGITS, label: "סימון פרט לשחזור לפי מספרו", run: (event) => toggle(Number(event.code.slice(-1)) - 1) },
-    { keys: "u", label: "ביטול ההחלטה האחרונה", run: undo },
+    { keys: "a", label: "Accept the removal", run: () => decide("accept") },
+    { keys: "r", label: "Restore the details (all, or only the marked ones)", run: () => decide("restore") },
+    { keys: DIGITS, label: "Mark a detail to restore by its number", run: (event) => toggle(Number(event.code.slice(-1)) - 1) },
+    { keys: "u", label: "Undo the last decision", run: undo },
   ]);
 
   const listPanel = (
@@ -133,7 +133,7 @@ function PiiTool({ tool }) {
       hasData={Boolean(list.data)}
       onRetry={list.reload}
       empty={list.data?.total === 0}
-      emptyText={filter === "pending" ? "אין טענות שממתינות לבדיקה" : "אין טענות בסינון הזה"}
+      emptyText={filter === "pending" ? "No claims waiting for review" : "No claims match this filter"}
     >
       <ItemList
         items={items}
@@ -180,4 +180,4 @@ function PiiTool({ tool }) {
   );
 }
 
-export default { id: ID, title: "בדיקת פרטיות בטענות", Component: PiiTool };
+export default { id: ID, title: "Privacy", Component: PiiTool };

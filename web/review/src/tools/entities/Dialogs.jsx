@@ -1,4 +1,4 @@
-import { Bidi, Dialog, Ltr } from "@shell";
+import { Bidi, countText, Dialog, Ltr } from "@shell";
 import { api, entityPath } from "./api.js";
 import { CreateGroupDialog, GroupDialog } from "./ClaimGroupDialogs.jsx";
 import { DeletedNamesDialog } from "./DeletedNamesDialog.jsx";
@@ -28,44 +28,48 @@ export function DialogHost({ dialog, entity, view, saving, reads, close, act, fi
     case "merge":
       return (
         <TargetDialog
-          title={<>מיזוג &quot;<Bidi>{entity.canonical_name}</Bidi>&quot; לתוך ישות אחרת</>}
-          description="כל השמות והטענות יעברו לישות שתבחרו, והישות הזאת תיעלם."
+          title={<>Merge “<Bidi>{entity.canonical_name}</Bidi>” into another entity</>}
+          description="Every name and claim moves to the entity you choose, and this entity disappears."
           allowNew={false}
           excludeId={entity.entity_id}
           suggested={entity.conflicts.filter((conflict) => conflict.entity_id)}
           initialTarget={dialog.targetId}
-          confirmLabel="מיזוג"
+          confirmLabel="Merge"
           onClose={close}
-          onConfirm={(targetId) => act(() => api.post(`${path}/merge`, target(targetId)), "הישות מוזגה")}
+          onConfirm={(targetId) => act(() => api.post(`${path}/merge`, target(targetId)), "Entity merged")}
         />
       );
     case "moveMember":
       return (
         <TargetDialog
-          title={<>העברת השם &quot;<Bidi>{dialog.name}</Bidi>&quot;</>}
-          description="השם עובר עם כל הטענות שלו. בחרו ישות קיימת או ישות חדשה."
+          title={<>Move the name “<Bidi>{dialog.name}</Bidi>”</>}
+          description="The name moves with all its claims. Choose an existing entity or a new one."
           allowNew
           excludeId={entity.entity_id}
-          confirmLabel="העברה"
+          confirmLabel="Move"
           onClose={close}
           onConfirm={(targetId) =>
-            act(() => api.post(`${path}/members/move`, { name: dialog.name, ...target(targetId) }), "השם הועבר")
+            act(() => api.post(`${path}/members/move`, { name: dialog.name, ...target(targetId) }), "Name moved")
           }
         />
       );
     case "claims":
       return (
         <TargetDialog
-          title={`${dialog.mode === "copy" ? "העתקת" : "העברת"} ${dialog.claimIds.length} טענות של "${dialog.name}"`}
-          description={dialog.mode === "copy" ? "הטענות יישארו גם כאן." : "הטענות יוסרו מהשם הזה בישות הזאת."}
+          title={
+            <>
+              {dialog.mode === "copy" ? "Copy" : "Move"} {countText(dialog.claimIds.length, "claim")} of “<Bidi>{dialog.name}</Bidi>”
+            </>
+          }
+          description={dialog.mode === "copy" ? "The claims also stay here." : "The claims are removed from this name in this entity."}
           allowNew
           excludeId={entity.entity_id}
-          confirmLabel={dialog.mode === "copy" ? "העתקה" : "העברה"}
+          confirmLabel={dialog.mode === "copy" ? "Copy" : "Move"}
           onClose={close}
           onConfirm={(targetId) =>
             act(
               () => api.post(`${path}/claims/${dialog.mode}`, { name: dialog.name, claim_ids: dialog.claimIds, ...target(targetId) }),
-              dialog.mode === "copy" ? "הטענות הועתקו" : "הטענות הועברו"
+              dialog.mode === "copy" ? "Claims copied" : "Claims moved"
             )
           }
         />
@@ -73,44 +77,47 @@ export function DialogHost({ dialog, entity, view, saving, reads, close, act, fi
     case "reject":
       return (
         <Danger
-          title="דחיית האיחוד"
-          confirmLabel="פירוק הישות"
+          title="Reject the grouping"
+          confirmLabel="Split the entity"
           onClose={close}
-          onConfirm={() => act(() => api.post(`${path}/reject`), "האיחוד נדחה")}
+          onConfirm={() => act(() => api.post(`${path}/reject`), "Grouping rejected")}
         >
           <p>
-            כל שם של &quot;<Bidi>{entity.canonical_name}</Bidi>&quot; יהפוך לישות מוצעת נפרדת, רק עם
-            הטענות שמסומנות בשם הזה (טענות שרק מזכירות אותו בטקסט יוסרו ממנו).
+            Each name of “<Bidi>{entity.canonical_name}</Bidi>” becomes a separate suggested entity, with
+            only the claims tagged with that name (claims that only mention it in their text are removed
+            from it).
           </p>
         </Danger>
       );
     case "remove":
       return (
         <Danger
-          title="מחיקת הישות"
-          confirmLabel="מחיקה"
+          title="Delete the entity"
+          confirmLabel="Delete"
           onClose={close}
-          onConfirm={() => act(() => api.del(path, { params: view }), "הישות נמחקה")}
+          onConfirm={() => act(() => api.del(path, { params: view }), "Entity deleted")}
         >
           <p>
-            &quot;<Bidi>{entity.canonical_name}</Bidi>&quot; תימחק. שמות שלה שאינם בישות אחרת יירשמו
-            כשמות שנמחקו ושלב 4 לא יחזיר אותם; אפשר לשחזר אותם מ„שמות שנמחקו”.
+            “<Bidi>{entity.canonical_name}</Bidi>” will be deleted. Its names that are in no other entity
+            are recorded as deleted names, and step 4 will not bring them back; you can restore them
+            from “Deleted names”.
           </p>
         </Danger>
       );
     case "deleteClaim":
       return (
         <Danger
-          title="מחיקת הטענה"
-          confirmLabel="מחיקת הטענה"
+          title="Delete the claim"
+          confirmLabel="Delete the claim"
           onClose={close}
-          onConfirm={() => act(() => api.del(`/claims/${encodeURIComponent(dialog.claim.claim_id)}`), "הטענה נמחקה")}
+          onConfirm={() => act(() => api.del(`/claims/${encodeURIComponent(dialog.claim.claim_id)}`), "Claim deleted")}
         >
           <Bidi as="p" className="mb-2 rounded bg-slate-50 p-2">
             {dialog.claim.claim_text}
           </Bidi>
           <p>
-            הטענה <Ltr>{dialog.claim.claim_id}</Ltr> תוסר מכל הישויות ומהקבוצות, ושלב 5 ידלג עליה.
+            Claim <Ltr>{dialog.claim.claim_id}</Ltr> will be removed from every entity and group, and step 5
+            will skip it.
           </p>
         </Danger>
       );
@@ -121,7 +128,7 @@ export function DialogHost({ dialog, entity, view, saving, reads, close, act, fi
           texts={dialog.texts}
           onClose={close}
           onConfirm={(representative) =>
-            act(() => api.post("/aggregations", { claim_ids: dialog.claimIds, representative }), "הטענות אוחדו")
+            act(() => api.post("/aggregations", { claim_ids: dialog.claimIds, representative }), "Claims combined")
           }
         />
       );
@@ -133,9 +140,9 @@ export function DialogHost({ dialog, entity, view, saving, reads, close, act, fi
           group={dialog.group}
           saving={saving}
           onClose={close}
-          onRepresentative={(claimId) => then(() => api.post(`${groupPath}/representative`, { claim_id: claimId }), "הטענה המייצגת הוחלפה")}
-          onDecouple={(claimId) => then(() => api.post(`${groupPath}/decouple`, { claim_id: claimId }), "הטענה הוצאה מהקבוצה")}
-          onDissolve={() => then(() => api.del(groupPath), "הקבוצה פורקה")}
+          onRepresentative={(claimId) => then(() => api.post(`${groupPath}/representative`, { claim_id: claimId }), "Representative claim changed")}
+          onDecouple={(claimId) => then(() => api.post(`${groupPath}/decouple`, { claim_id: claimId }), "Claim removed from the group")}
+          onDissolve={() => then(() => api.del(groupPath), "Group dissolved")}
         />
       );
     }
@@ -145,7 +152,7 @@ export function DialogHost({ dialog, entity, view, saving, reads, close, act, fi
           reads={reads}
           saving={saving}
           onClose={close}
-          onRestore={(name) => fire(() => api.post("/deleted-names/restore", { name }), "השם שוחזר כישות חדשה").then(close)}
+          onRestore={(name) => fire(() => api.post("/deleted-names/restore", { name }), "Name restored as a new entity").then(close)}
         />
       );
     default:

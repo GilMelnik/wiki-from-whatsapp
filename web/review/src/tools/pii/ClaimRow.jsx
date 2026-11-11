@@ -17,7 +17,7 @@ export function ClaimRow({ claim }) {
         <span>{typeCounts(claim.redaction_counts)}</span>
         <Ltr>{dateRange(claim.first_date, claim.last_date)}</Ltr>
         <span>
-          תומכים {formatCount(claim.supporter_count ?? 0)} · מתנגדים {formatCount(claim.opposer_count ?? 0)}
+          Supporters {formatCount(claim.supporter_count ?? 0)} · Opposers {formatCount(claim.opposer_count ?? 0)}
         </span>
       </div>
     </div>

@@ -63,7 +63,7 @@ class ClaimAggregations:
         for group in self.groups:
             if group["id"] == group_id:
                 return group
-        raise EntityNotFound(f"קבוצת הטענות {group_id} לא קיימת (אולי כבר פורקה)")
+        raise EntityNotFound(f"Claim group {group_id} does not exist (it may have been dissolved already)")
 
     def _new_id(self) -> str:
         numbers = [int(m.group(1)) for g in self.groups if (m := _ID_RE.fullmatch(g["id"]))]
@@ -74,15 +74,15 @@ class ClaimAggregations:
     ) -> dict[str, Any]:
         ids = list(dict.fromkeys(claim_ids))
         if len(ids) < 2:
-            raise ReviewConflict("כדי לאחד טענות צריך לבחור לפחות שתיים")
+            raise ReviewConflict("To combine claims, pick at least two")
         unknown = [c for c in ids if not usable(c)]
         if unknown:
-            raise ReviewConflict(f"טענות שלא קיימות או שנמחקו: {', '.join(unknown)}")
+            raise ReviewConflict(f"Claims that do not exist or were deleted: {', '.join(unknown)}")
         if representative not in ids:
-            raise ReviewConflict("הטענה המייצגת חייבת להיות אחת מהטענות המאוחדות")
+            raise ReviewConflict("The representative claim must be one of the combined claims")
         taken = [c for c in ids if c in self._by_claim]
         if taken:
-            raise ReviewConflict(f"טענות שכבר שייכות לאיחוד אחר: {', '.join(taken)}")
+            raise ReviewConflict(f"Claims already in another claim group: {', '.join(taken)}")
         group = {"id": self._new_id(), "representative": representative, "claim_ids": ids}
         self.groups.append(group)
         self.save()
@@ -91,7 +91,7 @@ class ClaimAggregations:
     def set_representative(self, group_id: str, claim_id: str) -> dict[str, Any]:
         group = self._find(group_id)
         if claim_id not in (group.get("claim_ids") or []):
-            raise ReviewConflict("הטענה המייצגת חייבת להיות אחת מהטענות המאוחדות")
+            raise ReviewConflict("The representative claim must be one of the combined claims")
         group["representative"] = claim_id
         self.save()
         return group
@@ -101,7 +101,7 @@ class ClaimAggregations:
 
         group = self._find(group_id)
         if claim_id not in (group.get("claim_ids") or []):
-            raise ReviewConflict("הטענה לא שייכת לאיחוד הזה")
+            raise ReviewConflict("The claim is not in this claim group")
         kept = self._without(group, claim_id)
         self.save()
         return kept

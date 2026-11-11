@@ -43,7 +43,7 @@ def test_tool_is_hosted_by_the_server() -> None:
 def test_missing_files_still_register_and_answer_409(tmp_path: Path) -> None:
     setup = EntitiesSetup(tmp_path, with_claims=False, with_entities=False, with_cache=False)
     tools = setup.client.get("/api/tools").json()
-    assert tools[0]["name"] == "entities" and tools[0]["title"] == "איחוד ישויות"
+    assert tools[0]["name"] == "entities" and tools[0]["title"] == "Entities"
     assert tools[0]["missing"] == ["claims", "entities"]  # the aggregations file is optional
     for path in ("/summary", "/entities?limit=5", "/entities/e0000", "/deleted-names"):
         response = setup.client.get(f"/api/entities{path}")

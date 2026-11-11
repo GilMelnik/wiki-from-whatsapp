@@ -5,60 +5,53 @@ export const SEARCH_DEBOUNCE_MS = 250;
 export const TARGET_SEARCH_LIMIT = 40;
 
 export const STATUSES = {
-  suggested: { label: "מוצעת", badge: "badge-slate" },
-  ambiguous: { label: "דו-משמעית", badge: "badge-amber" },
-  accepted: { label: "אושרה", badge: "badge-emerald" },
-  rejected: { label: "נדחתה", badge: "badge-rose" },
+  suggested: { label: "Suggested", badge: "badge-slate" },
+  ambiguous: { label: "Ambiguous", badge: "badge-amber" },
+  accepted: { label: "Accepted", badge: "badge-emerald" },
+  rejected: { label: "Rejected", badge: "badge-rose" },
 };
 
 export const STATUS_FILTERS = [
-  { value: "all", label: "כל הסטטוסים" },
+  { value: "all", label: "All statuses" },
   ...Object.entries(STATUSES).map(([value, { label }]) => ({ value, label })),
 ];
 
 export const FLAG_FILTERS = [
-  { value: "all", label: "הכול" },
-  { value: "attached", label: "שמות שצורפו אוטומטית" },
-  { value: "conflict", label: "חשד לבלבול עם ישות אחרת" },
-  { value: "uncertain", label: "פרטי קשר לא ודאיים" },
-  { value: "multi", label: "יותר משם אחד" },
+  { value: "all", label: "All" },
+  { value: "attached", label: "Names attached automatically" },
+  { value: "conflict", label: "May be confused with another entity" },
+  { value: "uncertain", label: "Uncertain contacts" },
+  { value: "multi", label: "More than one name" },
 ];
 
 export const SORTS = [
-  { value: "count", label: "אזכורים" },
-  { value: "size", label: "מספר שמות" },
-  { value: "score", label: "לכידות" },
-  { value: "id", label: "מזהה (חדשות בסוף)" },
-  { value: "name", label: "שם" },
+  { value: "count", label: "Mentions" },
+  { value: "size", label: "Number of names" },
+  { value: "score", label: "Cohesion" },
+  { value: "id", label: "ID (new ones last)" },
+  { value: "name", label: "Name" },
 ];
 
 export const ORDERS = [
-  { value: "desc", label: "יורד" },
-  { value: "asc", label: "עולה" },
+  { value: "desc", label: "Descending" },
+  { value: "asc", label: "Ascending" },
 ];
 
 export const DEFAULT_VIEW = { status: "all", flag: "all", q: "", sort: "count", order: "desc" };
 
 export const SIGNAL_LABELS = {
-  co_occur: "אזכור משותף",
-  confident_contact: "פרטי קשר",
-  string: "דמיון כתיב",
-  prefix: "תחילית",
-  seed: "רשימת זרע",
-  transliteration: "תעתיק",
-};
-
-export const STANCE_LABELS = {
-  positive: "חיובית",
-  negative: "שלילית",
-  neutral: "ניטרלית",
-  factual: "עובדתית",
+  co_occur: "Mentioned together",
+  confident_contact: "Same contacts",
+  string: "Similar spelling",
+  prefix: "Prefix",
+  seed: "Seed list",
+  transliteration: "Transliteration",
 };
 
 export const CONTACT_KINDS = [
-  { key: "email", label: "דוא״ל" },
-  { key: "phone", label: "טלפון" },
-  { key: "website", label: "אתר" },
+  { key: "email", label: "Email" },
+  { key: "phone", label: "Phone" },
+  { key: "website", label: "Website" },
 ];
 
 // Colours of members (self mentions) and of other entities in a claim text. Static class

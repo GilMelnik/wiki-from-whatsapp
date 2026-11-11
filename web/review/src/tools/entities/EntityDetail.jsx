@@ -1,4 +1,4 @@
-import { Bidi, formatCount, Ltr, Panel, PanelState } from "@shell";
+import { Bidi, countText, formatCount, Ltr, Panel, PanelState } from "@shell";
 import { pickedFor, SIGNAL_LABELS, statusOf } from "./entities.js";
 import { MemberCard } from "./MemberCard.jsx";
 
@@ -10,13 +10,13 @@ function QueueNav({ queue, onSelect }) {
   return (
     <>
       <button type="button" className="btn btn-sm" disabled={!queue.prev_id} onClick={() => onSelect(queue.prev_id)}>
-        ‹ הקודמת
+        ‹ Previous
       </button>
       <span className="text-xs text-slate-500">
         {formatCount(queue.position + 1)} / {formatCount(queue.total)}
       </span>
       <button type="button" className="btn btn-sm" disabled={!queue.next_id} onClick={() => onSelect(queue.next_id)}>
-        הבאה ›
+        Next ›
       </button>
     </>
   );
@@ -29,8 +29,8 @@ function Flags({ entity, saving, on }) {
       {entity.conflicts.length > 0 && (
         <div className="rounded border border-amber-200 bg-amber-50 p-3 text-amber-900">
           <p>
-            שלב 4 החזיק את הישות הזאת בנפרד מישויות שנראות דומות, כי ההקשר שלהן שונה. האם זו
-            אותה ישות?
+            Step 4 kept this entity apart from entities that look alike, because their context
+            differs. Is it the same entity?
           </p>
           <ul className="mt-2 flex flex-wrap gap-2">
             {entity.conflicts.map((conflict) => (
@@ -41,24 +41,25 @@ function Flags({ entity, saving, on }) {
                       <Bidi>{conflict.canonical_name}</Bidi>
                     </button>
                     <button type="button" className="btn btn-sm" disabled={saving} onClick={() => on.mergeInto(conflict.entity_id)}>
-                      מיזוג לתוכה…
+                      Merge into it…
                     </button>
                   </>
                 ) : (
-                  <Bidi className="badge badge-slate" title="אין כבר ישות בשם הזה">
+                  <Bidi className="badge badge-slate" title="No entity has this name any more">
                     {conflict.name}
                   </Bidi>
                 )}
               </li>
             ))}
           </ul>
-          <p className="mt-2 text-xs">אם אלה ישויות שונות, אשרו את הישות (a) והסימון יוסר.</p>
+          <p className="mt-2 text-xs">If these are different entities, accept this entity (a) and the flag goes away.</p>
         </div>
       )}
       {attached > 0 && (
         <p className="rounded border border-amber-200 bg-amber-50 p-3 text-amber-900">
-          {attached === 1 ? "שם אחד צורף" : `${attached} שמות צורפו`} לישות אוטומטית בעדכון של שלב 4.
-          בדקו את הטענות שלו ואשרו את השיוך, או העבירו את השם לישות אחרת.
+          {attached === 1 ? "One name was" : `${formatCount(attached)} names were`} attached to this entity
+          automatically by a step 4 update. Check the name's claims and confirm the attachment, or
+          move the name to another entity.
         </p>
       )}
     </>
@@ -66,25 +67,25 @@ function Flags({ entity, saving, on }) {
 }
 
 export function EntityDetail({ detail, selectedId, picked, saving, reads, on }) {
-  if (!selectedId) return <PanelState empty emptyText="בחרו ישות מהרשימה" />;
+  if (!selectedId) return <PanelState empty emptyText="Choose an entity from the list" />;
   const entity = detail.data?.entity;
   const status = entity && statusOf(entity.status);
   return (
     <PanelState loading={detail.loading} error={detail.error} hasData={Boolean(entity)} onRetry={detail.reload}>
       {entity && (
         <Panel
-          title={<Bidi>{entity.canonical_name || "(ללא שם)"}</Bidi>}
+          title={<Bidi>{entity.canonical_name || "(no name)"}</Bidi>}
           subtitle={
             <span className="flex flex-wrap items-center gap-2">
               <span className={`badge ${status.badge}`}>{status.label}</span>
               <span>
-                {formatCount(entity.member_count)} שמות · {formatCount(entity.total_count)} טענות
+                {countText(entity.member_count, "name")} · {countText(entity.total_count, "claim")}
               </span>
               <Ltr>{entity.entity_id}</Ltr>
-              {detail.data.queue.position === null && <span className="badge badge-slate">לא ברשימה המסוננת</span>}
-              {entity.type && <span className="badge badge-sky">{entity.type}</span>}
+              {detail.data.queue.position === null && <span className="badge badge-slate">Not in the filtered list</span>}
+              {entity.type && <Bidi className="badge badge-sky">{entity.type}</Bidi>}
               {entity.merge_signals.map((signal) => (
-                <span key={signal} className="badge badge-slate" title="למה שלב 4 איחד את השמות">
+                <span key={signal} className="badge badge-slate" title="Why step 4 grouped the names">
                   {SIGNAL_LABELS[signal] ?? signal}
                 </span>
               ))}

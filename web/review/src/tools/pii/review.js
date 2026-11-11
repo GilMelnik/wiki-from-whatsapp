@@ -2,46 +2,42 @@
 
 export const PAGE_SIZE = 100;
 
+// The mark step 3 puts in the claim text in place of a removed detail (content, kept as is).
+export const MARK = "[הוסר]";
+
 export const FILTERS = [
-  { value: "pending", label: "ממתינות" },
-  { value: "reviewed", label: "נבדקו" },
-  { value: "all", label: "הכל" },
+  { value: "pending", label: "Pending" },
+  { value: "reviewed", label: "Reviewed" },
+  { value: "all", label: "All" },
 ];
 
 export const SORTS = [
-  { value: "claim_id", label: "מזהה" },
-  { value: "thread_id", label: "שיחה" },
-  { value: "date", label: "תאריך" },
-  { value: "redactions", label: "מספר הסרות" },
-  { value: "supporters", label: "תומכים" },
+  { value: "claim_id", label: "ID" },
+  { value: "thread_id", label: "Thread" },
+  { value: "date", label: "Date" },
+  { value: "redactions", label: "Removals" },
+  { value: "supporters", label: "Supporters" },
 ];
 
 export const ORDERS = [
-  { value: "asc", label: "עולה" },
-  { value: "desc", label: "יורד" },
+  { value: "asc", label: "Ascending" },
+  { value: "desc", label: "Descending" },
 ];
 
 export const STATUS = {
-  pending: { label: "ממתינה", badge: "badge-amber" },
-  accepted: { label: "ההסרה אושרה", badge: "badge-slate" },
-  restored: { label: "שוחזרה", badge: "badge-emerald" },
-  partial: { label: "שוחזרה חלקית", badge: "badge-sky" },
+  pending: { label: "Pending", badge: "badge-amber" },
+  accepted: { label: "Removal accepted", badge: "badge-slate" },
+  restored: { label: "Restored", badge: "badge-emerald" },
+  partial: { label: "Partly restored", badge: "badge-sky" },
 };
 
 export const DECISION_TOASTS = {
-  accepted: "ההסרה אושרה",
-  restored: "הפרטים שוחזרו",
-  partial: "הפרטים המסומנים שוחזרו",
+  accepted: "Removal accepted",
+  restored: "Details restored",
+  partial: "Marked details restored",
 };
 
-export const TYPE_LABELS = { phone: "טלפון", email: "דוא״ל" };
-
-export const STANCE_LABELS = {
-  positive: "חיובית",
-  negative: "שלילית",
-  neutral: "ניטרלית",
-  factual: "עובדתית",
-};
+export const TYPE_LABELS = { phone: "Phone", email: "Email" };
 
 export function typeLabel(type) {
   return TYPE_LABELS[type] ?? type;
@@ -59,8 +55,8 @@ export function marksToRestore(chosen, count) {
 }
 
 export function restoreLabel(chosenCount, total) {
-  if (chosenCount === 0 || chosenCount === total) return total === 1 ? "שחזור הפרט" : "שחזור כל הפרטים";
-  return `שחזור ${chosenCount} מתוך ${total} הפרטים`;
+  if (chosenCount === 0 || chosenCount === total) return total === 1 ? "Restore the detail" : "Restore all details";
+  return `Restore ${chosenCount} of ${total} details`;
 }
 
 /** "2024-01-05" or "2024-01-05 – 2024-02-01" (C3 dates are YYYY-MM-DD). */
@@ -69,7 +65,7 @@ export function dateRange(first, last) {
   return !last || last === first ? first : `${first} – ${last}`;
 }
 
-/** "טלפון 2 · דוא״ל 1" from `{phone: 2, email: 1}`. */
+/** "Phone 2 · Email 1" from `{phone: 2, email: 1}`. */
 export function typeCounts(counts) {
   return Object.entries(counts ?? {})
     .map(([type, count]) => `${typeLabel(type)} ${count}`)

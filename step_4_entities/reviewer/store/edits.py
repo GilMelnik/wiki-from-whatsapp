@@ -85,7 +85,7 @@ class EditsMixin:
     def rename(self, entity_id: str, canonical_name: str) -> str:
         name = canonical_name.strip()
         if not name:
-            raise ReviewConflict("שם הישות לא יכול להיות ריק")
+            raise ReviewConflict("The entity name cannot be empty")
         entity = self.find(entity_id)
         old = entity.get("canonical_name")
         entity["canonical_name"] = name
@@ -135,10 +135,10 @@ class EditsMixin:
     ) -> None:
         uncertain = entity.setdefault("contacts_uncertain", empty_contacts())
         if value not in (uncertain.get(kind) or []):
-            raise ReviewConflict(f"הערך {value} כבר לא מופיע בפרטי הקשר הלא ודאיים")
+            raise ReviewConflict(f"The value {value} is no longer among the uncertain contacts")
         resolved = (new_value or value).strip()
         if action == "accept" and not resolved:
-            raise ReviewConflict("פרט קשר מאושר לא יכול להיות ריק")
+            raise ReviewConflict("An accepted contact cannot be empty")
         uncertain[kind] = [v for v in uncertain[kind] if v != value]
         # Resolved at the member level too, so a later refresh does not bring it back.
         for member in entity.get("members") or []:
@@ -157,7 +157,7 @@ class EditsMixin:
     def _restore_contact(self, entity: dict[str, Any], kind: ContactKind, value: str) -> None:
         rejected = entity.get("contacts_rejected") or {}
         if value not in (rejected.get(kind) or []):
-            raise ReviewConflict(f"הערך {value} לא נמצא בפרטי הקשר שנדחו")
+            raise ReviewConflict(f"The value {value} is not among the rejected contacts")
         rejected[kind] = [v for v in rejected[kind] if v != value]
         for member in entity.get("members") or []:
             fresh = self.claims.member(
@@ -185,7 +185,7 @@ class EditsMixin:
         """Fold every member of the entity into the target (same names are combined)."""
 
         if entity_id == target_id:
-            raise ReviewConflict("אי אפשר למזג ישות לתוך עצמה")
+            raise ReviewConflict("An entity cannot be merged into itself")
         source, target = self.find(entity_id), self.find(target_id)
         for member in source.get("members") or []:
             member.pop("attached_by", None)
@@ -215,10 +215,10 @@ class EditsMixin:
         """Un-delete a name: a new suggested entity with every claim that names it."""
 
         if name not in self.deleted_names:
-            raise ReviewConflict(f'השם "{name}" לא ברשימת השמות שנמחקו')
+            raise ReviewConflict(f"The name “{name}” is not in the list of deleted names")
         claim_ids = self.claims.claims_for(name) - self.deleted_claims
         if not claim_ids:
-            raise ReviewConflict(f'אף טענה כבר לא מזכירה את "{name}", אין מה לשחזר')
+            raise ReviewConflict(f"No claim mentions “{name}” any more; there is nothing to restore")
         self.deleted_names.discard(name)
         member = self.claims.member(name, claim_ids)
         entity = new_entity(allocate_entity_id(self.payload), [member])

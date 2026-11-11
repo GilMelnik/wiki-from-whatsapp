@@ -111,7 +111,7 @@ def test_missing_claims_file_still_registers_and_is_reported(tmp_path: Path) -> 
     assert tools == [
         {
             "name": "pii",
-            "title": "בדיקת פרטיות בטענות",
+            "title": "Privacy",
             "reads": ["claims"],
             "writes": ["claims"],
             "missing": ["claims"],
@@ -234,7 +234,7 @@ def test_decisions_that_do_not_fit_are_409(pii: PiiSetup) -> None:
     pii.post(f"/claims/{PHONE}/undo", status=409)  # nothing decided yet
     pii.post(f"/claims/{PHONE}/decision", {"decision": "accept"})
     detail = pii.post(f"/claims/{PHONE}/decision", {"decision": "restore"}, status=409)["detail"]
-    assert "בטלו" in detail
+    assert "undo it first" in detail
     pii.post(f"/claims/{EMAIL}/decision", {"decision": "maybe"}, status=422)
 
 
@@ -295,7 +295,8 @@ def test_a_step_rerun_is_picked_up_before_the_next_decision(pii: PiiSetup) -> No
 def test_a_locked_claims_file_is_423_and_reads_still_work(pii: PiiSetup) -> None:
     with locked_elsewhere(pii.original):
         response = pii.client.post(f"/api/pii/claims/{PHONE}/decision", json={"decision": "accept"})
-        assert response.status_code == 423 and "locked" in response.json()["detail"]
+        detail = response.json()["detail"]
+        assert response.status_code == 423 and "being written by another process" in detail
         assert pii.get("/summary")["review"]["pending"] == 3
     assert not pii.edited.exists()
     pii.post(f"/claims/{PHONE}/decision", {"decision": "accept"})

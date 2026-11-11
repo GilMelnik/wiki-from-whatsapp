@@ -14,9 +14,9 @@ function Counters({ summary }) {
           {label}: {formatCount(review[status])}
         </span>
       ))}
-      {pendingTypes && <span>ממתינים לפי סוג: {pendingTypes}</span>}
-      <span title={summary.edited_exists ? undefined : "ההחלטה הראשונה תיצור את העותק הערוך"}>
-        קורא מ-<Ltr>{summary.file}</Ltr>
+      {pendingTypes && <span>Pending by type: {pendingTypes}</span>}
+      <span title={summary.edited_exists ? undefined : "The first decision creates the edited copy"}>
+        Reads from <Ltr>{summary.file}</Ltr>
       </span>
     </div>
   );
@@ -25,9 +25,9 @@ function Counters({ summary }) {
 export function Toolbar({ view, onFilter, onSort, onOrder, summary }) {
   return (
     <>
-      <Select label="סינון" value={view.filter} options={FILTERS} onChange={onFilter} />
-      <Select label="מיון" value={view.sort} options={SORTS} onChange={onSort} />
-      <Select label="כיוון" value={view.order} options={ORDERS} onChange={onOrder} />
+      <Select label="Filter" value={view.filter} options={FILTERS} onChange={onFilter} />
+      <Select label="Sort" value={view.sort} options={SORTS} onChange={onSort} />
+      <Select label="Order" value={view.order} options={ORDERS} onChange={onOrder} />
       <Counters summary={summary} />
     </>
   );

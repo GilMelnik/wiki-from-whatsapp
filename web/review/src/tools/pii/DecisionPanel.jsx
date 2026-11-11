@@ -1,16 +1,8 @@
-import { Ltr, Panel, PanelState } from "@shell";
-import { restoreLabel, typeLabel } from "./review.js";
+import { Bidi, Kbd, Ltr, Panel, PanelState } from "@shell";
+import { MARK, restoreLabel, typeLabel } from "./review.js";
 
 // Side column: the decision on the selected claim. Pending: choose which removed values to
 // restore (none chosen = all), then accept the removal or restore. Reviewed: undo.
-
-function Key({ children }) {
-  return (
-    <kbd dir="ltr" className="ms-1 rounded border border-current px-1 font-mono text-[10px] opacity-70">
-      {children}
-    </kbd>
-  );
-}
 
 function RedactionChoices({ claim, chosen, onToggle, disabled }) {
   return (
@@ -24,7 +16,7 @@ function RedactionChoices({ claim, chosen, onToggle, disabled }) {
               disabled={disabled}
               onChange={() => onToggle(index)}
             />
-            <Key>{index + 1}</Key>
+            <Kbd>{index + 1}</Kbd>
             <span className="w-14 shrink-0 text-xs text-slate-500">{typeLabel(redaction.type)}</span>
             <Ltr className="break-all rounded bg-rose-50 px-1 text-rose-800">{redaction.value}</Ltr>
           </label>
@@ -36,14 +28,14 @@ function RedactionChoices({ claim, chosen, onToggle, disabled }) {
 
 function ReviewedValues({ claim }) {
   if (claim.redactions.length === 0) {
-    return <p className="text-slate-400">הקובץ המקורי כבר לא מציין מה הוסר מהטענה.</p>;
+    return <p className="text-slate-400">The original file no longer says what was removed from the claim.</p>;
   }
   return (
     <ul className="space-y-2">
       {claim.redactions.map((redaction, index) => (
         <li key={index} className="flex items-center gap-2">
           <span className={`badge ${redaction.in_text ? "badge-emerald" : "badge-slate"}`}>
-            {redaction.in_text ? "שוחזר" : "הוסר"}
+            {redaction.in_text ? "Restored" : "Removed"}
           </span>
           <span className="w-14 shrink-0 text-xs text-slate-500">{typeLabel(redaction.type)}</span>
           <Ltr className="break-all">{redaction.value}</Ltr>
@@ -57,8 +49,8 @@ function PendingFooter({ claim, chosen, saving, onAccept, onRestore, onUndo, can
   return (
     <>
       <button type="button" className="btn btn-primary btn-block" disabled={saving} onClick={onAccept}>
-        אישור ההסרה – להשאיר [הוסר]
-        <Key>a</Key>
+        Accept the removal – keep <Bidi>{MARK}</Bidi>
+        <Kbd>a</Kbd>
       </button>
       <button
         type="button"
@@ -67,12 +59,12 @@ function PendingFooter({ claim, chosen, saving, onAccept, onRestore, onUndo, can
         onClick={onRestore}
       >
         {restoreLabel(chosen.length, claim.redactions.length)}
-        <Key>r</Key>
+        <Kbd>r</Kbd>
       </button>
       {canUndoPrevious && (
         <button type="button" className="btn btn-sm btn-block" disabled={saving} onClick={onUndo}>
-          ביטול ההחלטה הקודמת
-          <Key>u</Key>
+          Undo the previous decision
+          <Kbd>u</Kbd>
         </button>
       )}
     </>
@@ -94,38 +86,38 @@ export function DecisionPanel({ detail, chosen, saving, canUndoPrevious, onToggl
     />
   ) : (
     <button type="button" className="btn btn-block" disabled={saving || !claim.can_undo} onClick={onUndo}>
-      ביטול ההחלטה – הטענה תחזור לממתינות
-      <Key>u</Key>
+      Undo the decision – the claim goes back to pending
+      <Kbd>u</Kbd>
     </button>
   );
   return (
     <Panel
-      title="החלטה"
+      title="Decision"
       subtitle={
         <>
-          נשמרת מיד בקובץ <Ltr>claims_edited.json</Ltr>
+          Saved at once to <Ltr>claims_edited.json</Ltr>
         </>
       }
       footer={footer}
     >
-      <PanelState empty={!claim} emptyText="אין טענה נבחרת">
+      <PanelState empty={!claim} emptyText="No claim selected">
         {claim && (
           <div className="space-y-6 p-4 text-sm">
             {pending ? (
               <section className="space-y-3">
-                <p>האם ההסרה האוטומטית נכונה, או שהפרט צריך להישאר בטענה?</p>
+                <p>Is the automatic removal right, or should the detail stay in the claim?</p>
                 <RedactionChoices claim={claim} chosen={chosen} onToggle={onToggle} disabled={saving || !claim.marks_match} />
                 {claim.redactions.length > 1 && (
-                  <p className="text-xs text-slate-500">סמנו פרטים (או הקישו את המספר) כדי לשחזר רק אותם.</p>
+                  <p className="text-xs text-slate-500">Mark details (or press their number) to restore only those.</p>
                 )}
               </section>
             ) : (
               <section>
-                <h3 className="section-title">הפרטים שהוסרו בשלב 3</h3>
+                <h3 className="section-title">Details removed in step 3</h3>
                 <ReviewedValues claim={claim} />
                 {!claim.can_undo && (
                   <p className="mt-3 text-xs text-slate-500">
-                    אי אפשר לבטל: בקובץ המקורי כבר אין לטענה פרטים שהוסרו.
+                    Cannot undo: in the original file, the claim no longer has removed details.
                   </p>
                 )}
               </section>
