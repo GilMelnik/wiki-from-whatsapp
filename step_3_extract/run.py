@@ -11,6 +11,12 @@ Per thread (fingerprint = message ids + contents + reactions, ``metadata.inputs`
   appended (a thread that had no claims is simply extracted again);
 - thread gone or no longer knowledge-bearing -> its claims are dropped.
 
+Disagreements: a dissent of substance is a claim of its own, linked to the claim it disputes
+through ``counters`` (``step_3_extract.claims``); a new claim of an update may dispute an
+existing one, which then gains the link too. For the threads the model read, the run counts
+the links, the invalid references it dropped and where the opposing evidence and the links
+disagree (``check_counters``, logged, never fatal).
+
 A failed call leaves the thread's previous fingerprint (or none) in place, so the next run
 retries it. Output: ``claims.json`` (public, C3) written through ``utils.reconcile`` with the
 derived fields as ``refresh_keys`` -- a manual text edit, PII decision or deletion in
@@ -32,6 +38,7 @@ from step_3_extract.claims import (
     DERIVED_KEYS,
     OutputError,
     ThreadClaims,
+    check_counters,
     input_fingerprint,
     message_fingerprints,
 )
@@ -95,6 +102,7 @@ class Extractor:
             self.prev_claims.setdefault(claim["thread_id"], []).append(claim)
         self.failed: list[str] = []
         self.ungrounded = 0
+        self.invalid_counters = 0
 
     def plan(self, thread: dict[str, Any], *, changed: bool) -> ThreadClaims | None:
         """The thread's model job, or ``None`` when its claims only need recomputing."""
@@ -156,7 +164,26 @@ class Extractor:
             self.logger.warning(f"Extract: {job.thread_id}: {exc}")
             return None
         self.ungrounded += job.ungrounded
+        self.invalid_counters += len(job.invalid_counters)
+        for problem in job.invalid_counters:
+            self.logger.info(f"Extract: {job.thread_id}: counter reference dropped: {problem}")
         return records
+
+    def counter_summary(self, claims: list[dict[str, Any]]) -> dict[str, int]:
+        """Counter links of the claims of the threads the model read, and where they disagree
+        with the opposing evidence (``check_counters``, per thread); each case is logged."""
+
+        by_thread: dict[str, list[dict[str, Any]]] = {}
+        for claim in claims:
+            by_thread.setdefault(claim["thread_id"], []).append(claim)
+        totals = {"counter_links": 0, **{kind: 0 for kind in check_counters([])}}
+        for thread_id, thread_claims in by_thread.items():
+            totals["counter_links"] += sum(len(c["counters"]) for c in thread_claims) // 2
+            for kind, cases in check_counters(thread_claims).items():
+                totals[kind] += len(cases)
+                for case in cases:
+                    self.logger.info(f"Extract: {thread_id}: {kind}: {case}")
+        return totals
 
 
 def run(
@@ -252,14 +279,12 @@ def run(
     audit: list[dict[str, Any]] = []
     dropped = 0
     for tid, thread_records in records.items():
-        thread_claims = jobs.get(tid) or ThreadClaims(current[tid])
-        for record in thread_records:
-            finalized = thread_claims.finalize(record)
-            if finalized is None:
-                dropped += 1
-                continue
-            claims.append(finalized[0])
-            audit.append(finalized[1])
+        kept, lost = (jobs.get(tid) or ThreadClaims(current[tid])).finalize_all(thread_records)
+        dropped += lost
+        claims.extend(claim for claim, _ in kept)
+        audit.extend(record for _, record in kept)
+    read = set(jobs) - set(extractor.failed)
+    counter_check = extractor.counter_summary([c for c in claims if c["thread_id"] in read])
     previous_audit = load_audit(audit_path) if carried_threads else {}
     for tid in carried_threads:
         for claim in extractor.prev_claims[tid]:
@@ -277,6 +302,8 @@ def run(
         "new_claims": len(fresh),
         "ungrounded_claims_dropped": extractor.ungrounded,
         "claims_without_evidence_dropped": dropped,
+        "invalid_counter_refs_dropped": extractor.invalid_counters,
+        "counter_check": counter_check,
     }
     payload = {
         "claims": claims,

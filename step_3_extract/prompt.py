@@ -8,6 +8,12 @@ One system prompt serves both modes, so its cached prefix is shared:
 - fresh: the whole thread -> ``FRESH_SCHEMA`` ``{claims}``;
 - update (the thread gained messages): the thread with the new messages marked plus its
   existing claims as ``C1``, ``C2``, ... -> ``UPDATE_SCHEMA`` ``{claims, existing}``.
+
+Disagreements are recorded here, where the model sees who answered whom: a dissent of
+substance becomes a claim of its own whose ``counters`` lists the claims it disputes by their
+number in the answer (1 = the first claim of ``claims``); in update mode
+``counters_existing`` lists existing claims it disputes (1 = ``C1``). Code turns them into
+claim ids and makes the link mutual (``ThreadClaims.absorb``).
 """
 
 from __future__ import annotations
@@ -29,8 +35,15 @@ _CLAIM_ITEM: dict[str, Any] = {
         "stance": {"type": "string", "enum": list(STANCES)},
         "supporting": _NUMBERS,
         "opposing": _NUMBERS,
+        "counters": _NUMBERS,
     },
-    "required": ["text", "entities", "stance", "supporting", "opposing"],
+    "required": ["text", "entities", "stance", "supporting", "opposing", "counters"],
+}
+# In update mode a new claim may also dispute an existing one.
+_UPDATE_CLAIM_ITEM: dict[str, Any] = {
+    **_CLAIM_ITEM,
+    "properties": {**_CLAIM_ITEM["properties"], "counters_existing": _NUMBERS},
+    "required": [*_CLAIM_ITEM["required"], "counters_existing"],
 }
 FRESH_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -42,7 +55,7 @@ UPDATE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
-        "claims": {"type": "array", "items": _CLAIM_ITEM},
+        "claims": {"type": "array", "items": _UPDATE_CLAIM_ITEM},
         "existing": {
             "type": "array",
             "items": {
@@ -108,9 +121,25 @@ opinion or experience without a clear valence; "factual" is a fact, price, rule 
 least the message(s) the claim comes from.
 - opposing: numbers of the messages that dispute or contradict the claim or report a contrary \
 experience; usually empty.
-- A message number is never in both lists of one claim. When members disagree, write the \
-claim once and put the dissenting messages in opposing; write the dissent as a claim of its \
-own only when it adds information of its own.
+- counters: the claims of your answer that this claim disputes, by their number in your list \
+(1 for the first claim you write); usually empty (see "When members disagree").
+- counters_existing (only when the request lists existing claims): the existing claims this \
+new claim disputes, by number (1 for {_PREFIX}1).
+- A message number is never in both lists of one claim.
+
+When members disagree
+- Keep both sides. The claim that is disputed lists the dissenting messages in opposing.
+- When the dissent says anything of substance (a different experience, a correction, a reason, \
+a newer or different fact, price or timeline), also write the dissenting position as a claim of \
+its own: self-contained like every claim, with its own stance, the dissenting messages in its \
+supporting, and the disputed claim in its counters (an existing claim in counters_existing). \
+Lean towards writing it: the wiki should say what the other side said, not only that someone \
+disagreed. Write the position itself, never who held it.
+- Only a dissent that says nothing beyond "no", "not true" or "I disagree" stays a number in the \
+disputed claim's opposing, with no claim of its own.
+- counters links claims that disagree, nothing else: not a claim that adds a detail to, narrows \
+or updates one it agrees with, and not two claims that are merely about the same subject. One \
+side listing the other is enough.
 
 Updating (only when the request lists existing claims)
 - The conversation was processed before. Its claims are listed as {_PREFIX}1, {_PREFIX}2, ... \
@@ -120,6 +149,8 @@ and is not already covered by an existing claim; each new claim's supporting lis
 least one marked message.
 - existing: one entry for each existing claim that marked messages support or oppose: \
 claim is its number (1 for {_PREFIX}1); supporting and opposing list only marked messages.
+- A marked message that disputes an existing claim goes in that claim's opposing; when it says \
+anything of substance, it also becomes a new claim whose counters_existing lists that claim.
 """
 
 

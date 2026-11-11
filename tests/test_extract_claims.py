@@ -24,6 +24,7 @@ C3_KEYS = [
     "stance",
     "supporting_message_ids",
     "opposing_message_ids",
+    "counters",
     "first_date",
     "last_date",
     "supporter_count",
@@ -46,9 +47,14 @@ def _thread() -> dict:
     }
 
 
-def _claim(text: str, supporting: list[int], opposing: list[int] = ()) -> dict:
-    return {"text": text, "entities": ["Alpha", " ", "Alpha"], "stance": "factual",
-            "supporting": supporting, "opposing": list(opposing)}
+def _claim(text: str, supporting: list[int], opposing: list[int] = (), *,
+           counters: list[int] = (), counters_existing: list[int] | None = None) -> dict:
+    """One claim of a model answer; ``counters_existing`` is set only in update answers."""
+    claim = {"text": text, "entities": ["Alpha", " ", "Alpha"], "stance": "factual",
+             "supporting": supporting, "opposing": list(opposing), "counters": list(counters)}
+    if counters_existing is not None:
+        claim["counters_existing"] = list(counters_existing)
+    return claim
 
 
 def test_numbers_map_to_whatsapp_ids_and_record_shape() -> None:
@@ -103,7 +109,8 @@ def test_update_keeps_existing_text_and_adds_only_new_evidence() -> None:
                  "entities": [], "stance": "neutral", "supporting_message_ids": ["A"],
                  "opposing_message_ids": []}]
     answer = {
-        "claims": [_claim("new fact", [3]), _claim("not grounded in new messages", [1])],
+        "claims": [_claim("new fact", [3], counters_existing=[]),
+                   _claim("not grounded in new messages", [1], counters_existing=[])],
         "existing": [{"claim": 1, "supporting": [2, 3], "opposing": []},
                      {"claim": 7, "supporting": [3], "opposing": []}],
     }

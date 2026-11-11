@@ -19,7 +19,7 @@ from utils.paths import AUDIT_PATH, CHAT_ANDROID_PATH, CLAIMS, THREADS, Artifact
 
 C3_KEYS = {
     "claim_id", "thread_id", "claim_text", "entities", "stance", "supporting_message_ids",
-    "opposing_message_ids", "first_date", "last_date", "supporter_count", "opposer_count",
+    "opposing_message_ids", "counters", "first_date", "last_date", "supporter_count", "opposer_count",
     "reaction_summary",
 }
 
@@ -87,6 +87,7 @@ def test_migrate_emits_c3_claims_and_audit(backup: Path, tmp_path: Path) -> None
     first = claims[claim_id_for("thread-0001", "raw text")]  # id from the extracted text
     assert set(first) == C3_KEYS
     assert first["claim_text"] == "reviewed text"
+    assert all(c["counters"] == [] for c in claims.values())  # v1 had no dispute links
     assert first["supporting_message_ids"] == ["WA"] and first["opposing_message_ids"] == ["WB"]
     assert (first["first_date"], first["last_date"]) == ("2023-05-01", "2023-05-02")
     assert (first["supporter_count"], first["opposer_count"]) == (2, 1)
