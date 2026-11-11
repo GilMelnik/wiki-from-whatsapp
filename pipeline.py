@@ -2,6 +2,7 @@
 
 Runs steps in order:
 
+    1. threads   -> data/threads.json (contract C1; only new export messages are placed)
     3. classify  -> data/threads_classified.json
     4. extract   -> data/claims.json + data/audit/ (private)
     4b. entities -> data/entities.json
@@ -26,6 +27,7 @@ from __future__ import annotations
 
 import logging
 
+from step_1_threads_split.run import run as split_threads
 from step_2_classify.run import run as classify
 from step_3_extract.run import run as extract
 from step_4_entities.run import run as resolve_entities
@@ -39,6 +41,7 @@ from utils.llm_client import LLMClient
 from utils.logging_setup import setup_step_logging
 from utils.paths import (
     SHARED,
+    STEP_1,
     STEP_2,
     STEP_3,
     STEP_4,
@@ -70,6 +73,15 @@ def run(
     for stage, client in clients.items():
         batch_note = " (batch)" if use_batch and client.supports_batch() else ""
         logger.info(f"  {stage}: {client.provider} / {client.model}{batch_note}")
+
+    logger = setup_step_logging(STEP_1)
+    logger.info("[1] Splitting the chat into threads...")
+    t_meta = split_threads()
+    logger.info(
+        f"    {t_meta['new']} new, {t_meta['changed']} changed, {t_meta['removed']} removed "
+        f"messages; {t_meta.get('threads_created', 0)} new threads"
+        + ("" if t_meta["written"] else " (nothing to do)")
+    )
 
     logger = setup_step_logging(STEP_2)
     logger.info("[3] Classifying threads...")

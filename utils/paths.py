@@ -45,10 +45,8 @@ CHAT_ANDROID_PATH = DATA_DIR / INPUT_CONFIG["export_filename"]
 UPDATES_DIR = DATA_DIR / INPUT_CONFIG["updates_dir"]
 
 # ------------------------------------------------------- step 1 threads_split
-TFIDF_CORPUS_PATH = step_path(STEP_1, "tfidf_corpus.json")
-TFIDF_TOKENS_PATH = step_path(STEP_1, "tfidf_tokens.json")
-MESSAGE_EMBEDDINGS_PATH = step_path(STEP_1, "message_embeddings.json")
-MESSAGE_QUERY_EMBEDDINGS_PATH = step_path(STEP_1, "message_query_embeddings.json")
+# The splitter's measurement against the gold windows (``step_1_threads_split.measure``).
+MEASURE_REPORT_PATH = step_path(STEP_1, "measure_report.md")
 # Hand-tagged gold clustering, frozen by ``step_1_threads_split.evaluate --freeze-gold``.
 GOLD_THREADS_PATH = step_path(STEP_1, "gold_threads.json")
 # Which gold windows the user marked as done in the thread tagger's gold mode.

@@ -37,7 +37,7 @@ class StepSpec:
 
 
 STEP_SPECS: tuple[StepSpec, ...] = (
-    StepSpec("threads", "שלב 1 · פיצול לשיחות", None),
+    StepSpec("threads", "שלב 1 · פיצול לשיחות", "step_1_threads_split.run", incremental_safe=True),
     StepSpec("classified", "שלב 2 · סיווג שיחות", "step_2_classify.run", incremental_safe=True),
     StepSpec("claims", "שלב 3 · חילוץ טענות", "step_3_extract.run", incremental_safe=True, paid=True),
     StepSpec("entities", "שלב 4 · זיהוי ישויות", "step_4_entities.run", incremental_safe=True),
