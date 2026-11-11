@@ -136,7 +136,7 @@ class ReviewRun:
         }}
 
     def metadata(self, input_tokens: int, run: Mapping[str, Any]) -> dict[str, Any]:
-        sources = ("groups", "plan", "assignments", "pages")
+        sources = ("groups", "plan", "assignments", "entities", "pages")
         return {
             "sources": {name: str(path) for name, path in zip(sources, self.review.sources)},
             "inputs": self.inputs,
@@ -184,8 +184,9 @@ def run(
 ) -> dict[str, Any]:
     """Review the whole wiki once if anything it reads changed; see the module docstring.
 
-    Inputs default to the effective pages, groups, plan, assignments and entities. ``estimate``: count
-    the prompt's tokens, make no review call, write nothing. ``llm`` defaults to the
+    Inputs default to the effective pages, groups, plan, assignments and entities (their kinds
+    decide the groups withheld from the pages). ``estimate``: count the prompt's tokens, make no
+    review call, write nothing. ``llm`` defaults to the
     ``wiki_review.stage`` client, ``count_tokens`` to the free counting endpoint. Returns
     ``written``, ``calls``, ``input_tokens``, ``raised`` (new suggestions), ``dropped``,
     ``suggestions`` (total), ``backup`` and the review ``note``.
