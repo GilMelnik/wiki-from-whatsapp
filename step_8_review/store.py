@@ -40,8 +40,10 @@ from step_8_review.proposals import (
     REJECTED,
     problems,
 )
+from utils.file_lock import file_lock
+from utils.json_io import write_json_file
 from utils.paths import PLAN, SUGGESTIONS, WIKI_PAGES, Artifact, resolve
-from utils.reconcile import guarded_write
+from utils.reconcile import backup_file
 
 logger = logging.getLogger(__name__)
 MESSAGES = REVIEW_CONFIG["messages"]
@@ -139,19 +141,23 @@ class SuggestionsStore:
 
     def _change(self, suggestion_id: str, action: str, allowed: tuple[str, ...],
                 **fields: Any) -> dict[str, Any]:
-        """Set ``fields`` on one suggestion (after checking its status) and save."""
-        payload = copy.deepcopy(self._payload())
-        suggestion = self._find(payload, suggestion_id)
-        if suggestion["status"] not in allowed:
-            raise SuggestionConflict(MESSAGES["wrong_status"].format(
-                id=suggestion_id, status=REVIEW_CONFIG["status_names"][suggestion["status"]],
-                action=ACTIONS[action]))
-        for key, value in fields.items():
-            if value is None:
-                suggestion.pop(key, None)
-            else:
-                suggestion[key] = value
-        guarded_write(self.artifact.edited, payload, backup=True)
+        """Set ``fields`` on one suggestion (after checking its status) and save. Read, check
+        and write happen under one lock of the edited file, so two writers (the review tool's
+        requests and its background applies) never lose each other's change."""
+        with file_lock(self.artifact.edited):
+            payload = copy.deepcopy(self._payload())
+            suggestion = self._find(payload, suggestion_id)
+            if suggestion["status"] not in allowed:
+                raise SuggestionConflict(MESSAGES["wrong_status"].format(
+                    id=suggestion_id, status=REVIEW_CONFIG["status_names"][suggestion["status"]],
+                    action=ACTIONS[action]))
+            for key, value in fields.items():
+                if value is None:
+                    suggestion.pop(key, None)
+                else:
+                    suggestion[key] = value
+            backup_file(self.artifact.edited)
+            write_json_file(payload, self.artifact.edited)
         logger.info(f"Suggestion {suggestion_id}: {action} -> {suggestion['status']}")
         return self.get(suggestion_id)
 
