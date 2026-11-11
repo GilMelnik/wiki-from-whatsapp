@@ -10,6 +10,7 @@ from __future__ import annotations
 from review_tool.artifacts import GRAPH
 from review_tool.registry import ToolSpec
 from review_tool.status_tool import StatusTool
+from step_1_threads_split.reviewer.tool import ThreadsTool
 from step_3_extract.reviewer.tool import PiiTool
 from step_4_entities.reviewer.tool import EntitiesTool
 from step_5_aggregate.reviewer.tool import GroupsTool
@@ -19,6 +20,7 @@ from utils.config import DATA_DIR
 
 TOOL_SPECS: tuple[ToolSpec, ...] = (
     StatusTool(GRAPH, DATA_DIR).spec,
+    ThreadsTool(GRAPH).spec,
     PiiTool(GRAPH).spec,
     EntitiesTool(GRAPH).spec,
     GroupsTool(GRAPH).spec,

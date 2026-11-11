@@ -68,8 +68,8 @@ def thread_record(thread_id: str, messages: list[dict[str, Any]]) -> dict[str, A
     """A C1 thread from its messages (kept in the given order).
 
     ``participants`` are the senders and the people who reacted, and ``num_messages`` /
-    ``num_unique_senders`` / ``last_sender`` are filled as the thread tagger computes them, so
-    the old tagger opens the file and a thread it never touched compares equal.
+    ``num_unique_senders`` / ``last_sender`` are filled as well; the conversations tool
+    rebuilds every thread it edits with this function.
     """
     people = {m["sender"] for m in messages if m.get("sender")}
     for message in messages:

@@ -41,3 +41,33 @@ export function formatBytes(bytes) {
   const digits = unit === 0 || value >= 100 ? 0 : 1;
   return `${value.toFixed(digits)} ${BYTE_UNITS[unit]}`;
 }
+
+// Chat times are local wall-clock times without a zone ("2024-08-15T17:05:00"): read and shown
+// as they are.
+const clock = new Intl.DateTimeFormat(LOCALE, { hour: "2-digit", minute: "2-digit" });
+const day = new Intl.DateTimeFormat(LOCALE, { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+const month = new Intl.DateTimeFormat(LOCALE, { month: "long", year: "numeric" });
+
+/** "17:05" */
+export function formatTime(iso) {
+  return iso ? clock.format(new Date(iso)) : "—";
+}
+
+/** "Thu 15 Aug 2024" */
+export function formatDay(iso) {
+  return iso ? day.format(new Date(iso)) : "—";
+}
+
+/** "August 2024" */
+export function formatMonth(iso) {
+  return iso ? month.format(new Date(iso)) : "—";
+}
+
+/** "Thu 15 Aug 2024, 17:05–19:40" (the end's day too when it differs). */
+export function formatSpan(start, end) {
+  const sameDay = start?.slice(0, 10) === end?.slice(0, 10);
+  if (start === end) return `${formatDay(start)}, ${formatTime(start)}`;
+  return sameDay
+    ? `${formatDay(start)}, ${formatTime(start)}–${formatTime(end)}`
+    : `${formatDay(start)}, ${formatTime(start)} – ${formatDay(end)}, ${formatTime(end)}`;
+}

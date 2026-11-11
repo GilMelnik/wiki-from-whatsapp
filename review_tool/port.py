@@ -1,6 +1,6 @@
 """Find the running review server, or bind a free port for a new one.
 
-Replaces ``utils.port.free_port``: nothing is ever killed. A port that is taken is asked
+Nothing is ever killed (the old per-tool servers freed a port by stopping its process). A port that is taken is asked
 ``GET /api/health``; if it answers as this app for the same data directory it is reused,
 otherwise the next port is tried.
 """

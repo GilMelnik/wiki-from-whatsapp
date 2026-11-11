@@ -37,6 +37,14 @@ export { EditableText, IdField, submitOnEnter, TextArea } from "./fields.jsx";
 export { Consequences, OperationDialog } from "./OperationDialog.jsx";
 export { AddCategoryDialog, AddLabelDialog, AddPageDialog, KindField, MergeDialog, SplitDialog } from "./PlanDialogs.jsx";
 
+// The shared message views (conversation and timeline), for every tool that shows messages;
+// their pure helpers (rows, gaps, edges, selection rules, colours) come with pure.js.
+export { ConversationView, ROLE_LABELS } from "./ConversationView.jsx";
+export { TimelineView } from "./TimelineView.jsx";
+export { Divider, MessageRow, ThreadTag } from "./MessageRow.jsx";
+export { MESSAGE_VIEWS, MessageViewBar } from "./MessageViewBar.jsx";
+export { useMessageSelection, useThreadColors } from "./messageHooks.js";
+
 // Text, formatting, keyboard, remembered state
 export { Bidi, Kbd, Ltr } from "./text.jsx";
 export { useNow } from "./useNow.js";
