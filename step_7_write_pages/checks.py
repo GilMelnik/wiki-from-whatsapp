@@ -8,8 +8,8 @@ them back in its one retry); ``repair`` fixes what code can fix: an unknown cita
 removed, an unknown or malformed link becomes its plain text (``utils.wiki_links``), a
 front-matter block, a ``#`` heading and any footnote definition the model wrote are taken
 out, ``related`` keeps only planned pages. A missing citation cannot be repaired; it is
-recorded. ``with_definitions`` appends the footnote definitions for exactly the cited
-groups, from their records (claim text + when it was said; no counts).
+recorded. A page body holds the marks only: step 9 renders the references from the groups.
+``strip_definitions`` takes the definitions out of a body stored before that change.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from step_7_write_pages.inputs import PAGES_CONFIG, Record, hebrew_month
+from step_7_write_pages.inputs import PAGES_CONFIG, Record
 from utils.config import section
 from utils.wiki_links import WikiLink, find_wiki_links, replace_wiki_links
 
@@ -42,22 +42,6 @@ def cited_ids(body: str) -> list[str]:
 def strip_definitions(body: str) -> str:
     """The body without footnote definition lines (the form the model reads and writes)."""
     return _DEFINITION.sub("", body).rstrip() + "\n"
-
-
-def said(record: Mapping[str, Any]) -> str:
-    """When a group was said, in the wording of ``pages.footnote``."""
-    first, last = hebrew_month(record["first"]), hebrew_month(record["last"])
-    wording = PAGES_CONFIG["footnote"]
-    if first == last:
-        return wording["said_in"].format(when=first)
-    return wording["said_between"].format(first=first, last=last)
-
-
-def with_definitions(body: str, records: Mapping[str, Record]) -> str:
-    """``body`` (marks only) + one definition per cited group, in order of first citation."""
-    body = strip_definitions(body).rstrip()
-    lines = [f"[^{gid}]: {records[gid]['text']} ({said(records[gid])})" for gid in cited_ids(body)]
-    return body + ("\n\n" + "\n".join(lines) if lines else "") + "\n"
 
 
 @dataclass(frozen=True)

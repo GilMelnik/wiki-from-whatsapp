@@ -1,13 +1,15 @@
-"""What step 9 publishes, computed in memory from the plan (C7) and the written pages (C9).
+"""What step 9 publishes, computed in memory from the plan (C7), the written pages (C9) and the
+claim groups (C6).
 
-``Site(plan, pages)`` decides which planned pages are published (those that have a written
+``Site(plan, pages, groups)`` decides which planned pages are published (those that have a written
 page), builds the navigation from the plan's tree, renders every generated markdown file
 (pages with their OKF front matter, label pages, the home page, redirect stubs for merged
 ids) and collects the problems found on the way in ``issues``. Nothing here touches the disk.
 
 Wiki links in page bodies are resolved here: ``[[page_id|text]]`` becomes a relative markdown
 link to that page, ``[[label:label_id|text]]`` a link to the label's page; a link to a merged
-id goes to the survivor; a link to anything not published becomes its plain text.
+id goes to the survivor; a link to anything not published becomes its plain text. The
+references under a page are rendered from the groups (``step_9_site.references``).
 """
 
 from __future__ import annotations
@@ -18,6 +20,7 @@ import yaml
 
 from step_6_plan.model import check_plan, iter_nodes
 from step_9_site.info_pages import about_body, terms_body
+from step_9_site.references import References
 from utils.config import section
 from utils.okf import render_page, validate_front_matter
 from utils.wiki_links import WikiLink, replace_wiki_links
@@ -68,7 +71,9 @@ def _redirects(items: dict[str, dict[str, Any]]) -> dict[str, str]:
 class Site:
     """The published site for one plan + pages pair (see the module docstring)."""
 
-    def __init__(self, plan: dict[str, Any], pages: dict[str, dict[str, Any]]) -> None:
+    def __init__(
+        self, plan: dict[str, Any], pages: dict[str, dict[str, Any]], groups: list[dict[str, Any]]
+    ) -> None:
         self.plan = check_plan(plan)
         unplanned = sorted(set(pages) - set(plan["pages"]))
         if unplanned:
@@ -93,6 +98,8 @@ class Site:
             if label_id not in carried:
                 self._issue("label_not_carried", "", label_id)
         self.related = {page_id: self._resolve_related(page_id) for page_id in self.order}
+        self.references = References(groups)
+        self.bodies = {page_id: self._resolve_marks(page_id) for page_id in self.order}
         self.nav = self._nav()
         self.files = self._files()
         self.redirect_files = sorted(set(self.files) - self._content_files())
@@ -149,6 +156,13 @@ class Site:
                 related.append({"id": target, "relation": entry["relation"]})
         return related
 
+    def _resolve_marks(self, page_id: str) -> str:
+        """The page's body without stored definitions, its marks following merged groups."""
+        resolved = self.references.resolve(self.pages[page_id]["body_md"])
+        for kind, group_id in resolved.problems:
+            self._issue(kind, page_id, group_id)
+        return resolved.body
+
     def _resolve_links(self, page_id: str) -> str:
         source = page_file(page_id)
 
@@ -168,7 +182,7 @@ class Site:
             title, file = found
             return f"[{link.text or title}]({_href(source, file)})"
 
-        return replace_wiki_links(self.pages[page_id]["body_md"], resolve)
+        return replace_wiki_links(self.bodies[page_id], resolve)
 
     # ------------------------------------------------------------------------ nav
 
@@ -209,7 +223,8 @@ class Site:
         files = {HOME_FILE: self._home(), **self._info_pages()}
         for page_id in self.order:
             front_matter = self.pages[page_id]["front_matter"]
-            files[page_file(page_id)] = render_page(front_matter, self._resolve_links(page_id))
+            body = self.references.with_references(self._resolve_links(page_id))
+            files[page_file(page_id)] = render_page(front_matter, body)
         for label_id in self.labels:
             files[label_file(label_id)] = self._label_page(label_id)
         for old, page_id in self._page_redirects.items():

@@ -7,8 +7,10 @@ groups, both sides wherever members disagree, newer claims weighted higher and s
 the text, and Wikipedia-style links to other pages and labels (``prompts``). Code then
 enforces what must not be left to the model (``checks``): only the page's own groups are
 cited, only planned pages and labels are linked, disputed groups are cited and enough of
-the page's groups are used (one retry that names the problems, then repair); the footnote
-definitions and the OKF front matter are written in code (``front_matter``).
+the page's groups are used (one retry that names the problems, then repair); the OKF front
+matter is written in code (``front_matter``). The body keeps its ``[^g-…]`` marks only: step 9
+renders the references from the groups (a body stored with definitions keeps them until its
+text changes; step 9 ignores them).
 
 Re-runs (C14) work per page. ``metadata.pages[page_id]`` keeps a fingerprint of the writer
 (model + ``pages.prompt_version``), of the page's plan fields and of every group record, and
@@ -49,6 +51,7 @@ from typing import Any
 import anthropic
 
 from step_6_plan.run import AnthropicTokenCounter, TokenCounter
+from step_7_write_pages.checks import strip_definitions
 from step_7_write_pages.front_matter import LabelRule, page_front_matter
 from step_7_write_pages.inputs import (
     PAGES_CONFIG,
@@ -219,7 +222,7 @@ class PagesRun:
 
     def _from_text(self, job: Job, text: PageText) -> dict[str, Any]:
         source = job.source
-        same = source is not None and text.body == source["body_md"] and all(
+        same = source is not None and text.body == strip_definitions(source["body_md"]) and all(
             source["front_matter"].get(key, default) == value for key, value, default in (
                 ("summary", text.summary, ""), ("questions", text.questions, []),
                 ("related", text.related, [])))

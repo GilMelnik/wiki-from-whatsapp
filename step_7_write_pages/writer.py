@@ -1,9 +1,9 @@
 """The two model calls of step 7: write a page in full, or update it from its current text.
 
 ``PageWriter.write(context)`` and ``PageWriter.update(context, current, delta)`` are the whole
-contract (tasks 26 and 50 build on ``update``). Both return a ``PageText``: the body WITH its
-footnote definitions (appended in code for exactly the cited groups), the summary, the
-questions, ``related`` in the C9 form ``[{slug, relation}]``, whether the text changed, and a
+contract (tasks 26 and 50 build on ``update``). Both return a ``PageText``: the body with its
+``[^g-…]`` marks and no footnote definitions (step 9 renders the references from the groups),
+the summary, the questions, ``related`` in the C9 form ``[{slug, relation}]``, whether the text changed, and a
 ``report`` (calls, problems found, repairs, cited share, uncited groups). Each answer is
 checked (``step_7_write_pages.checks``); a failing answer gets ONE retry that names the
 problems, then whatever is still wrong is repaired and recorded.
@@ -23,7 +23,6 @@ from step_7_write_pages.checks import (
     repair,
     rules_for,
     strip_definitions,
-    with_definitions,
 )
 from step_7_write_pages.inputs import MAIN, PageContext
 from step_7_write_pages.prompts import (
@@ -139,7 +138,6 @@ class PageWriter:
         final = problems(answer, rules)
         fixed, repairs = repair(answer, rules)
         no_change = bool(current is not None and answer.get("no_change"))
-        records = {record["id"]: record for record in context.records}
         report = {
             "calls": calls,
             "first_problems": first,
@@ -154,7 +152,7 @@ class PageWriter:
         if final:
             self.logger.warning(f"{task}: still wrong after the retry (repaired / recorded): {final}")
         return PageText(
-            body=with_definitions(fixed["body"], records),
+            body=fixed["body"],
             summary=fixed["summary"],
             questions=fixed["questions"],
             related=fixed["related"],

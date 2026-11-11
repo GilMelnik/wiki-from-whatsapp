@@ -1,9 +1,11 @@
 """Step 9: publish the wiki: ``docs/`` and ``mkdocs.yml`` from the plan (C7) and the pages (C9).
 
-Reads the effective plan and the effective written pages, then writes:
+Reads the effective plan, the effective written pages and the effective claim groups (C6, for
+the references), then writes:
 
 - ``docs/<page_id>.md``: each planned page that has a written page, OKF front matter (hidden by
-  mkdocs) + body with its wiki links resolved;
+  mkdocs) + body with its wiki links resolved and its references (group id, when, how many
+  people took part) rendered as footnotes from the groups;
 - ``docs/<labels_dir>/<label_id>.md``: one page per label that a published page carries;
 - ``docs/index.md``: the home page, the plan's tree with each page's one-line description;
 - ``docs/about.md`` ("how this wiki was made", linked only from the home page) and
@@ -41,6 +43,7 @@ from utils.paths import (
     MKDOCS_PATH,
     STEP_9,
     WIKI_INDEX_FILE,
+    resolve_aggregated_path,
     resolve_plan_path,
     resolve_wiki_pages_path,
 )
@@ -149,6 +152,7 @@ def run(
     *,
     plan_path: Path | None = None,
     pages_path: Path | None = None,
+    groups_path: Path | None = None,
     docs_dir: Path = DOCS_DIR,
     mkdocs_path: Path = MKDOCS_PATH,
 ) -> dict[str, Any]:
@@ -160,7 +164,8 @@ def run(
     """
     plan = _load(plan_path or resolve_plan_path(), "plan (step 6)")
     pages = _load(pages_path or resolve_wiki_pages_path(), "written pages (step 7)")["pages"]
-    site = Site(plan, pages)
+    groups = _load(groups_path or resolve_aggregated_path(), "claim groups (step 5)")["groups"]
+    site = Site(plan, pages, groups)
     files = {**site.files, WIKI_INDEX_FILE: index_text(site, docs_dir / WIKI_INDEX_FILE)}
     config = build_config(
         site.nav,

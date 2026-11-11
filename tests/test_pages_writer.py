@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from step_6_plan import operations
-from step_7_write_pages.checks import AnswerRules, cited_ids, problems, repair, rules_for, said, with_definitions
+from step_7_write_pages.checks import AnswerRules, cited_ids, problems, repair, rules_for
 from step_7_write_pages.front_matter import LabelRule, page_front_matter
 from step_7_write_pages.inputs import (
     PAGES_CONFIG,
@@ -96,6 +96,9 @@ def test_fingerprint_follows_text_inputs_not_the_catalogue(tmp_path: Path, monke
     ws.write_plan(plan)
     assert fp() == first
     groups = ws.groups()
+    groups[0]["participant_count"] = 7  # rendered by step 9 only: no rewrite
+    ws.write_groups(groups)
+    assert fp() == first
     groups[0]["supporter_count"] += 1
     ws.write_groups(groups)
     assert fp() != first
@@ -149,17 +152,28 @@ def test_repair_removes_what_code_can_fix(corpus: Corpus) -> None:
     assert len(repairs) >= 6
 
 
-def test_footnote_definitions_are_exactly_the_cited_groups_without_counts(corpus: Corpus) -> None:
+def test_the_written_body_keeps_its_marks_and_no_definitions(corpus: Corpus) -> None:
     context = _context(corpus)
-    records = {r["id"]: r for r in context.records}
-    body = with_definitions("א [^g-00000004]. ב [^g-00000000][^g-00000004].\n\n[^g-x]: ישן\n", records)
-    definitions = [line for line in body.splitlines() if line.startswith("[^")]
-    assert [line.split("]:")[0][2:] for line in definitions] == ["g-00000004", "g-00000000"]
-    assert definitions[1] == f"[^g-00000000]: {records['g-00000000']['text']} ({said(records['g-00000000'])})"
-    assert said(records["g-00000000"]) == "נאמר בין ינואר 2023 ליוני 2024"
-    assert said(records["g-00000004"]) == "נאמר בין ינואר 2023 ליוני 2024"
-    assert "backed" not in body and "תומכ" not in body
-    assert cited_ids(body) == ["g-00000004", "g-00000000"]
+    answer = {"body": "א [^g-00000004]. ב [^g-00000000][^g-00000004].\n\n[^g-00000000]: ישן\n",
+              "summary": "", "questions": [], "related": []}
+    text = PageWriter(FakeWriter(respond=lambda s, u, t: answer), FakeWriter(), corpus.plan,
+                      LOGGER).write(context)
+    assert "]:" not in text.body and cited_ids(text.body) == ["g-00000004", "g-00000000"]
+    assert "removed footnote definitions written by the model" in text.report["repairs"]
+
+
+def test_the_participant_count_never_reaches_the_prompt(tmp_path: Path) -> None:
+    ws = PagesWorkspace(tmp_path)
+    before = {pid: write_prompt(_context(Corpus.load(ws.groups_path, ws.plan_path, ws.assignments_path), pid))
+              for pid in ("agencies", "hospital")}
+    groups = ws.groups()
+    for group in groups:
+        group["participant_count"] = 987654
+    ws.write_groups(groups)
+    corpus = Corpus.load(ws.groups_path, ws.plan_path, ws.assignments_path)
+    for page_id, prompt in before.items():
+        assert write_prompt(_context(corpus, page_id)) == prompt
+        assert "987654" not in str(_context(corpus, page_id).records)
 
 
 # ------------------------------------------------------------------------ writer
@@ -175,7 +189,7 @@ def test_one_retry_names_the_problems_then_the_answer_is_repaired(corpus: Corpus
     assert len(llm.calls) == 2
     retry = _flatten(llm.calls[1]["user"])
     assert "<previous_answer>" in retry and "g-deadbeef" in retry.split("broke these rules:")[1]
-    assert "[^g-deadbeef]" not in text.body and "[^g-00000007]: " in text.body
+    assert "[^g-deadbeef]" not in text.body and "[^g-00000007]" in text.body and "]:" not in text.body
     assert text.report["calls"] == 2 and text.report["final_problems"]
     assert "removed citation g-deadbeef" in text.report["repairs"]
     assert text.report["uncited_required"] == ["g-00000003"]  # recorded, not invented
@@ -227,8 +241,7 @@ def test_an_editor_request_goes_into_the_changes_and_leaves_other_updates_alone(
 
 def test_front_matter_is_valid_and_sources_cover_every_footnote(corpus: Corpus) -> None:
     context = _context(corpus)
-    body = with_definitions(article(["g-00000000", "g-00000004"], "agencies"),
-                            {r["id"]: r for r in context.records})
+    body = article(["g-00000000", "g-00000004"], "agencies")
     front_matter = page_front_matter(
         context, corpus.plan, body=body, summary="ת", questions=["ש?"],
         related=[{"slug": "costs", "relation": "see_also"}, {"slug": "gone", "relation": "x"}],

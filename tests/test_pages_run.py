@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -59,9 +60,27 @@ def test_first_run_writes_c9_pages_that_step_9_accepts(ws: PagesWorkspace) -> No
         assert payload["metadata"]["inputs"][page_id] == page["input_fingerprint"]
         assert "report" in payload["metadata"]["pages"][page_id]
     assert not ws.artifact.edited.exists()  # reconcile creates no edited copy
-    site = Site(ws.plan(), payload["pages"])
+    site = Site(ws.plan(), payload["pages"], ws.groups())
     assert not [i for i in site.issues if i["issue"].startswith("broken")]
+    assert not [i for i in site.issues if i["issue"].endswith("_reference")]
     assert payload["metadata"]["run"]["write"] == 4
+    assert all("]:" not in page["body_md"] for page in payload["pages"].values())
+
+
+def test_participant_counts_and_baked_definitions_change_no_page(ws: PagesWorkspace) -> None:
+    payload = ws.pages()
+    for page in payload["pages"].values():  # pages as an older step 7 stored them
+        page["body_md"] += "".join(f"\n[^{gid}]: טענה (נאמר במאי 2024)" for gid in cited_ids(page["body_md"]))
+    ws.artifact.original.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    groups = ws.groups()
+    for group in groups:
+        group["participant_count"] = 5
+    ws.write_groups(groups)
+    llm, update = FakeWriter(), FakeWriter("fake-update")
+    result = ws.run(llm, update)
+    assert llm.calls == [] and update.calls == []
+    assert (result.get("write", 0), result.get("update", 0), result["kept"]) == (0, 0, 4)
+    assert ws.pages()["pages"] == payload["pages"]
 
 
 def test_second_run_makes_no_call_and_writes_nothing(ws: PagesWorkspace) -> None:
