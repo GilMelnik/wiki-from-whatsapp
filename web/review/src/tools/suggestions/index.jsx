@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  countText,
   ItemList,
   Layout,
   Panel,
@@ -28,19 +29,23 @@ import {
   filterItems,
   filterOptions,
   newOutcomes,
+  nextToDecide,
   orderItems,
   outcomeKey,
   OVERVIEW_ID,
+  SECTION_LABELS,
   SUGGESTIONS_KEY,
   TOOL_ID,
 } from "./suggestions.js";
 
-// What the whole-wiki review (step 8) proposed, for the owner to decide on: the list holds
-// the suggestions (open ones first, in the reviewer's order), the main column one suggestion
-// with its evidence and proposal (or the overview), the side column the actions. Decisions
-// and corrections are saved at once by the store; applying runs in the background on the
-// server, one at a time, and its outcome arrives as an event; nothing here decides what is
-// allowed.
+// What the whole-wiki review (step 8) proposed, for the owner to decide on. Decided here: accept,
+// reject or correct each suggestion, then apply the accepted ones. The list holds the
+// suggestions in sections (to decide, accepted, applied, rejected; each in the reviewer's
+// order) under "About this review"; the main column one suggestion with the context it is
+// about next to its proposal; the side column the decision, with its keys. After a decision
+// on one suggestion the next one to decide is shown. Decisions and corrections are saved at
+// once by the store; applying runs in the background on the server, one at a time, and its
+// outcome arrives as an event; nothing here decides what is allowed.
 
 const APPLY_EVENT = "suggestions_apply";
 
@@ -55,8 +60,8 @@ function useOutcomeToasts(applies) {
     }
     for (const outcome of newOutcomes(applies, seen.current)) {
       seen.current.add(outcomeKey(outcome));
-      if (outcome.status === "applied") toast.success(`בוצעה: ${outcome.title}`);
-      else toast.error(`${outcome.status === "failed" ? "נכשלה" : "סורבה"}: ${outcome.title}. ${outcome.message}`);
+      if (outcome.status === "applied") toast.success(`Applied: ${outcome.title}`);
+      else toast.error(`${outcome.status === "failed" ? "Failed" : "Refused"}: ${outcome.title}. ${outcome.message}`);
     }
   }, [applies]);
 }
@@ -77,7 +82,7 @@ function SuggestionsTool({ tool }) {
   const items = useMemo(() => orderItems(data?.items ?? []), [data]);
   const shown = filterItems(items, view);
   const rows = [{ id: OVERVIEW_ID }, ...shown];
-  const picking = usePicking(`${view.kind}:${view.status}`);
+  const picking = usePicking(view.kind);
   const item = items.find((candidate) => candidate.id === selectedId) ?? null;
   const detail = useResource(() => (item ? api.get(suggestionPath(item.id)) : null), [item?.id], { watch });
   // The apply queue moved (started, finished, refused): the list and the shown item follow.
@@ -115,7 +120,7 @@ function SuggestionsTool({ tool }) {
         picking.clear();
         refresh();
         const refused = Object.values(answer.refused);
-        toast.info(`${answer.queued.length === 1 ? "הצעה אחת נשלחה" : `${answer.queued.length} הצעות נשלחו`} לביצוע ברקע.`);
+        toast.info(`${countText(answer.queued.length, "suggestion")} sent to be applied in the background.`);
         if (refused.length) toast.error(refused.join("\n"));
       });
     if (cost.paid > 0) setDialog({ type: "apply", cost, confirm: send });
@@ -125,11 +130,13 @@ function SuggestionsTool({ tool }) {
     decide: (action) => {
       const ids = actionTargets(targets, action).map((target) => target.id);
       if (ids.length === 0 || lockedBy) return;
+      const next = !marked && item && action !== "reopen" ? nextToDecide(shown, item.id) : null;
       guarded(async () => {
         const answer = await api.post("/suggestions/decide", { ids, action });
         picking.clear();
         refresh();
-        toast.success(`${ACTION_LABELS[action]}: ${answer.done.length === 1 ? "הצעה אחת" : `${answer.done.length} הצעות`}`);
+        if (next && answer.done.length) setSelectedId(next);
+        toast.success(`${ACTION_LABELS[action]}: ${countText(answer.done.length, "suggestion")}`);
         const refused = Object.values(answer.refused);
         if (refused.length) toast.error(refused.join("\n"));
       });
@@ -148,30 +155,27 @@ function SuggestionsTool({ tool }) {
   const saveEdit = async (id, proposal) => {
     await api.post(`${suggestionPath(id)}/edit`, { proposal });
     refresh();
-    toast.success("ההצעה המתוקנת נשמרה");
+    toast.success("The corrected proposal is saved");
   };
   const changeView = (patch) => setView((previous) => ({ ...previous, ...patch }));
 
   useShortcuts([
-    { keys: "a", label: "קבלת ההצעה (או המסומנות)", run: () => act.decide("accept") },
-    { keys: "x", label: "דחיית ההצעה (או המסומנות)", run: () => act.decide("reject") },
-    { keys: "o", label: "החזרה להמתנה", run: () => act.decide("reopen") },
-    { keys: "e", label: "תיקון ההצעה לפני ההחלטה", run: () => act.edit() },
-    { keys: "y", label: "ביצוע ההצעה שהתקבלה (או המסומנות)", run: () => act.apply() },
-    { keys: "shift+y", label: "ביצוע כל ההצעות שהתקבלו", run: () => act.applyAll() },
-    { keys: " ", label: "סימון ההצעה הנבחרת (רווח)", run: () => item && picking.toggle(item.id) },
+    { keys: "a", label: "Accept the suggestion (or the marked ones)", run: () => act.decide("accept") },
+    { keys: "x", label: "Reject the suggestion (or the marked ones)", run: () => act.decide("reject") },
+    { keys: "o", label: "Back to pending", run: () => act.decide("reopen") },
+    { keys: "e", label: "Correct the proposal before deciding", run: () => act.edit() },
+    { keys: "y", label: "Apply the accepted suggestion (or the marked ones)", run: () => act.apply() },
+    { keys: "shift+y", label: "Apply every accepted suggestion", run: () => act.applyAll() },
+    { keys: " ", label: "Mark the selected suggestion (Space)", run: () => item && picking.toggle(item.id) },
   ]);
 
-  const toolbar = data?.exists && (
-    <>
-      <Select label="סוג" value={view.kind} options={filterOptions(items, "kind", "kind_name", "כל הסוגים")} onChange={(kind) => changeView({ kind })} />
-      <Select label="מצב" value={view.status} options={filterOptions(items, "status", "status_name", "כל המצבים")} onChange={(status) => changeView({ status })} />
-      {(view.kind !== ALL || view.status !== ALL) && (
-        <button type="button" className="btn btn-sm" onClick={() => setView(DEFAULT_VIEW)}>
-          הצגת הכול
-        </button>
-      )}
-    </>
+  const kindFilter = items.length > 0 && (
+    <Select
+      label="Show"
+      value={view.kind ?? ALL}
+      options={filterOptions(items, "kind", "kind_name", "All kinds")}
+      onChange={(kind) => changeView({ kind })}
+    />
   );
   const listColumn = (
     <PanelState loading={list.loading} error={list.error} hasData={Boolean(data)} onRetry={list.reload}>
@@ -180,10 +184,11 @@ function SuggestionsTool({ tool }) {
         getKey={(row) => row.id}
         selectedKey={item ? item.id : OVERVIEW_ID}
         onSelect={setSelectedId}
-        total={items.length + 1}
+        header={kindFilter}
+        sectionOf={(row) => SECTION_LABELS[row.status] ?? null}
         renderItem={(row) =>
           row.id === OVERVIEW_ID ? (
-            <OverviewRow data={data} />
+            <OverviewRow />
           ) : (
             <SuggestionRow item={row} applies={data.applies} picked={picking.has(row.id)} onToggle={() => picking.toggle(row.id)} />
           )
@@ -199,13 +204,12 @@ function SuggestionsTool({ tool }) {
   ) : item ? (
     <Detail detail={detail} applies={data.applies} busy={busy} />
   ) : (
-    <Overview data={data} onSelect={setSelectedId} onFilter={(status) => changeView({ status, kind: ALL })} />
+    <Overview data={data} onSelect={setSelectedId} />
   );
   return (
     <>
       <Layout
         toolId={TOOL_ID}
-        toolbar={toolbar}
         list={listColumn}
         main={main}
         side={
@@ -230,4 +234,4 @@ function SuggestionsTool({ tool }) {
   );
 }
 
-export default { id: TOOL_ID, title: "הצעות לשיפור הוויקי", Component: SuggestionsTool, quietStale: [SUGGESTIONS_KEY] };
+export default { id: TOOL_ID, title: "Suggestions", Component: SuggestionsTool, quietStale: [SUGGESTIONS_KEY] };

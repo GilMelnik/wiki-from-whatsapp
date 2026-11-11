@@ -1,16 +1,26 @@
-// Pure helpers of the suggestions tool (no React): the list's order and filters, which of a
-// set of suggestions an action can move, what an apply click will cost, the request body of a
-// corrected plan operation, and the Hebrew wording of outcomes. The server (the store and its
-// applier) decides every move; these only shape requests and texts.
+// Pure helpers of the suggestions tool (no React): the list's order, sections and filter,
+// which of a set of suggestions an action can move and which one to show next, what an apply
+// click will cost, the request body of a corrected plan operation, and the wording of counts.
+// The server (the store and its applier) decides every move; these only shape requests and
+// texts.
+
+import { countText } from "@shell";
 
 export const TOOL_ID = "suggestions";
 export const OVERVIEW_ID = "__overview";
 export const SUGGESTIONS_KEY = "suggestions";
 export const ALL = "all";
-export const DEFAULT_VIEW = { kind: ALL, status: ALL };
+export const DEFAULT_VIEW = { kind: ALL };
 export const STRUCTURAL = ["split", "merge", "add_page", "add_label"];
-export const OPEN = ["pending", "accepted"];
 
+// The list's sections, in this order: what is left to decide first, done last.
+export const STATUS_ORDER = ["pending", "accepted", "applied", "rejected"];
+export const SECTION_LABELS = {
+  pending: "To decide",
+  accepted: "Accepted · not applied yet",
+  applied: "Applied",
+  rejected: "Rejected",
+};
 export const STATUS_BADGES = {
   pending: "badge-amber",
   accepted: "badge-sky",
@@ -34,25 +44,29 @@ export const ACTION_FROM = {
   apply: ["accepted"],
 };
 export const ACTION_LABELS = {
-  accept: "קבלה",
-  reject: "דחייה",
-  reopen: "החזרה להמתנה",
-  apply: "ביצוע",
+  accept: "Accepted",
+  reject: "Rejected",
+  reopen: "Back to pending",
+  apply: "Applied",
 };
 
-/** Open suggestions first (pending, accepted), then decided ones; each in the reviewer's order. */
+/** By section (STATUS_ORDER), each in the reviewer's order. */
 export function orderItems(items) {
-  const open = items.filter((item) => OPEN.includes(item.status));
-  return [...open, ...items.filter((item) => !OPEN.includes(item.status))];
+  return STATUS_ORDER.flatMap((status) => items.filter((item) => item.status === status));
 }
 
 export function filterItems(items, view) {
-  return items.filter(
-    (item) => (view.kind === ALL || item.kind === view.kind) && (view.status === ALL || item.status === view.status)
-  );
+  return items.filter((item) => view.kind === ALL || item.kind === view.kind);
 }
 
-/** The options of a filter: "all", then every value present with its Hebrew name and count. */
+/** After deciding on `id`: the next suggestion still to decide (below it, else above), or null. */
+export function nextToDecide(items, id) {
+  const index = items.findIndex((item) => item.id === id);
+  const later = items.slice(index + 1).find((item) => item.status === "pending" && item.id !== id);
+  return later?.id ?? items.find((item) => item.status === "pending" && item.id !== id)?.id ?? null;
+}
+
+/** The options of a filter: "all", then every value present with its name and count. */
 export function filterOptions(items, field, nameField, allLabel) {
   const counts = new Map();
   for (const item of items) {
@@ -76,11 +90,10 @@ export function applyCost(items) {
   return { count: items.length, paid: items.filter((item) => item.paid).length };
 }
 
-/** The sentence a paid apply asks to confirm ("3 לביצוע, 2 מהן בתשלום"). */
+/** The sentence a paid apply asks to confirm ("3 suggestions to apply, 2 of them paid"). */
 export function applyQuestion({ count, paid }) {
-  const what = count === 1 ? "הצעה אחת לביצוע" : `${count} הצעות לביצוע`;
-  const cost = paid === count ? (count === 1 ? "והיא בתשלום" : "כולן בתשלום") : `${paid} מהן בתשלום`;
-  return `${what}, ${cost}: כל תיקון טקסט הוא קריאה אחת למודל, שנמשכת דקה עד שתיים. הן ירוצו ברקע, אחת אחרי השנייה, ואפשר להמשיך לעבוד בינתיים.`;
+  const cost = paid === count ? (count === 1 ? "and it is paid" : "all of them paid") : `${paid} of them paid`;
+  return `${countText(count, "suggestion")} to apply, ${cost}: each text correction is one model call that takes a minute or two. They run in the background, one after the other, and you can keep working meanwhile.`;
 }
 
 /** The effective proposal: the owner's correction if there is one. */

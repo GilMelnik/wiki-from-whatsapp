@@ -9,24 +9,25 @@ import { applyQuestion, proposalOf, proposalFromOperation } from "./suggestions.
 // the correction on the suggestion (the store checks it against the current wiki and its
 // refusal stays in the dialog); nothing changes in the wiki until the suggestion is applied.
 
-const EDIT_NOTE = "השמירה מתקנת רק את ההצעה. התוכנית משתנה רק כשההצעה מתקבלת ומבוצעת.";
+const EDIT_NOTE = "Saving corrects only the suggestion. The plan changes only when the suggestion is accepted and applied.";
 
 function Intro({ suggestion }) {
   return (
-    <div className="rounded border border-sky-200 bg-sky-50 p-3 text-sky-900">
-      <p>
-        <Bidi className="font-medium">{suggestion.title}</Bidi>. <Bidi>{suggestion.reason}</Bidi>
-      </p>
-      <p className="mt-1 text-xs">המזהים החדשים הם ניחוש של הסוקר; תקנו כל שדה לפני השמירה.</p>
+    <div className="note note-info">
+      <Bidi as="p" className="font-medium">
+        {suggestion.title}
+      </Bidi>
+      <Bidi as="p">{suggestion.reason}</Bidi>
+      <p className="mt-1 text-xs">The new ids are the reviewer's guess; correct any field before saving.</p>
     </div>
   );
 }
 
 function Unavailable({ id, onClose }) {
   return (
-    <Dialog open title="אי אפשר לערוך את ההצעה" onClose={onClose}>
+    <Dialog open title="This suggestion cannot be corrected" onClose={onClose}>
       <p>
-        הפריט <bdi dir="ltr">{id}</bdi> כבר אינו בתוכנית, ולכן ההצעה לא ניתנת לביצוע כפי שהיא. אפשר לדחות אותה.
+        <bdi dir="ltr">{id}</bdi> is no longer in the plan, so the suggestion cannot be applied as it is. You can reject it.
       </p>
     </Dialog>
   );
@@ -41,8 +42,8 @@ function StructuralEdit({ suggestion, onClose, save }) {
     overview,
     onClose,
     save: (op) => save(proposalFromOperation(op)),
-    title: <>תיקון ההצעה: <Bidi>„{suggestion.title}”</Bidi></>,
-    confirmLabel: "שמירת ההצעה המתוקנת",
+    title: <>Correct the proposal: “<Bidi>{suggestion.title}</Bidi>”</>,
+    confirmLabel: "Save the corrected proposal",
     intro: <Intro suggestion={suggestion} />,
     note: EDIT_NOTE,
   };
@@ -67,8 +68,8 @@ function CorrectionEdit({ suggestion, onClose, save }) {
     <Dialog
       open
       size="lg"
-      title={<>תיקון ההצעה: <Bidi>„{suggestion.title}”</Bidi></>}
-      confirmLabel="שמירת ההצעה המתוקנת"
+      title={<>Correct the proposal: “<Bidi>{suggestion.title}</Bidi>”</>}
+      confirmLabel="Save the corrected proposal"
       confirmDisabled={!draft.trim()}
       onClose={onClose}
       onConfirm={() => save({ ...proposal, correction: draft.trim() })}
@@ -76,8 +77,8 @@ function CorrectionEdit({ suggestion, onClose, save }) {
       <div className="space-y-3">
         <p className="text-slate-600">
           {suggestion.kind === "mistake"
-            ? "ההוראה לכותב הדפים: מה לתקן במשפט. כותב הדפים מתקן רק לפי הקבוצות של הדף, ומשאיר את שאר הדף מילה במילה."
-            : "ההוראה לכותב הדפים: איך להציג את שני הצדדים בכל אחד מהדפים."}
+            ? "The instruction to the page writer: what to fix in the sentence. The writer corrects only from the page's claim groups and keeps the rest of the page word for word."
+            : "The instruction to the page writer: how to show both sides on each of the pages."}
         </p>
         <TextArea value={draft} onChange={setDraft} rows={5} />
         <p className="text-xs text-slate-500">{EDIT_NOTE}</p>
@@ -88,7 +89,7 @@ function CorrectionEdit({ suggestion, onClose, save }) {
 
 function ApplyConfirm({ cost, onClose, confirm }) {
   return (
-    <Dialog open title="ביצוע ההצעות" confirmLabel="ביצוע" onClose={onClose} onConfirm={confirm}>
+    <Dialog open title="Apply the suggestions" confirmLabel="Apply" onClose={onClose} onConfirm={confirm}>
       <p>{applyQuestion(cost)}</p>
     </Dialog>
   );

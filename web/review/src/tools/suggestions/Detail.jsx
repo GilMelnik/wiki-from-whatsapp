@@ -1,22 +1,25 @@
 import { Bidi, formatDateTime, Ltr, Panel, PanelState } from "@shell";
 import { Changes } from "./Changes.jsx";
-import { Evidence } from "./Evidence.jsx";
+import { Groups, Pages, Quote, Section, Sides, StructuralEvidence } from "./Evidence.jsx";
 import { Proposal } from "./Proposal.jsx";
 import { KIND_BADGES, outcomeFor, proposalOf, STATUS_BADGES } from "./suggestions.js";
 
-// The main column for one suggestion: what is wrong (the reviewer's reason), the evidence
-// from the wiki as it is now, the proposal, the last failed attempt to carry it out, and once
-// applied what it changed.
+// The main column for one suggestion, in the order the owner decides: what changed on its
+// pages since the review, the last failed apply, what an apply changed; then the reviewer's
+// reason, the context it is about (the sentence in its paragraph, the two sides, the pages),
+// the proposal next to it (with the dry run of a plan change), and the claim groups behind it.
 
 export function Outcome({ outcome }) {
   if (!outcome || outcome.status === "applied") return null;
   const failed = outcome.status === "failed";
   return (
-    <div role="status" className="space-y-1 rounded border border-rose-200 bg-rose-50 p-3 text-rose-900">
-      <p className="font-medium">{failed ? "הביצוע נכשל" : "הביצוע סורב"} ({formatDateTime(outcome.ended_at)})</p>
-      <Bidi as="p" className="whitespace-pre-line">
+    <div role="status" className="note note-danger space-y-1">
+      <p className="font-medium">
+        {failed ? "The apply failed" : "The apply was refused"} ({formatDateTime(outcome.ended_at)})
+      </p>
+      <p dir="auto" className="whitespace-pre-line">
         {outcome.message}
-      </Bidi>
+      </p>
       {outcome.details?.length > 0 && (
         <ul className="list-disc ps-5 text-xs">
           {outcome.details.map((detail, index) => (
@@ -26,7 +29,7 @@ export function Outcome({ outcome }) {
           ))}
         </ul>
       )}
-      <p className="text-xs">שום קובץ לא נכתב; ההצעה נשארה מקובלת, ואפשר לתקן אותה או לנסות שוב.</p>
+      <p className="text-xs">No file was written; the suggestion stays accepted. You can correct it or try again.</p>
     </div>
   );
 }
@@ -37,11 +40,58 @@ function Marks({ suggestion }) {
   return (
     <ul className="space-y-1">
       {marks.map(([page, text]) => (
-        <li key={page} className="rounded border border-amber-200 bg-amber-50 p-2 text-amber-900">
+        <li key={page} className="note note-warning p-2">
           <Ltr>{page}</Ltr>: {text}
         </li>
       ))}
     </ul>
+  );
+}
+
+function MistakeContext({ suggestion, evidence }) {
+  return (
+    <>
+      <Section title={<>The sentence on “<Bidi>{evidence.page.title ?? evidence.page.page_id}</Bidi>”, as the page reads now</>}>
+        <Quote quote={evidence.quote} sentence={proposalOf(suggestion).sentence} />
+      </Section>
+      <Proposal suggestion={suggestion} />
+      <Section title="The claim groups the sentence rests on">
+        <Groups groups={evidence.groups} />
+      </Section>
+      <Section title="The page">
+        <Pages pages={[evidence.page]} />
+      </Section>
+    </>
+  );
+}
+
+function ContradictionContext({ suggestion, evidence }) {
+  return (
+    <>
+      <Section title="What clashes">
+        <Bidi as="p" className="card whitespace-pre-line leading-relaxed">
+          {proposalOf(suggestion).clash}
+        </Bidi>
+      </Section>
+      <Section title="The two sides">
+        <Sides sides={evidence.sides} />
+      </Section>
+      <Proposal suggestion={suggestion} />
+      <Section title="Pages that should show both sides">
+        <Pages pages={evidence.pages} />
+      </Section>
+    </>
+  );
+}
+
+function Context({ suggestion, evidence }) {
+  if (suggestion.kind === "mistake") return <MistakeContext suggestion={suggestion} evidence={evidence} />;
+  if (suggestion.kind === "contradiction") return <ContradictionContext suggestion={suggestion} evidence={evidence} />;
+  return (
+    <>
+      <Proposal suggestion={suggestion} />
+      <StructuralEvidence evidence={evidence} />
+    </>
   );
 }
 
@@ -50,32 +100,30 @@ export function Detail({ detail, applies, busy }) {
   const suggestion = data?.suggestion;
   return (
     <Panel
-      title={suggestion ? <Bidi>{suggestion.title || suggestion.kind_name}</Bidi> : "הצעה"}
+      title={suggestion ? <Bidi>{suggestion.title || suggestion.kind_name}</Bidi> : "Suggestion"}
       subtitle={
         suggestion && (
-          <span className="flex flex-wrap items-center gap-1">
+          <span className="flex flex-wrap items-center gap-2">
             <span className={`badge ${KIND_BADGES[suggestion.kind] ?? "badge-slate"}`}>{suggestion.kind_name}</span>
-            <span className={`badge ${STATUS_BADGES[suggestion.status]}`}>{suggestion.status_name}</span>
+            <span className={`badge capitalize ${STATUS_BADGES[suggestion.status]}`}>{suggestion.status_name}</span>
+            <span>Raised {formatDateTime(suggestion.raised_at)}</span>
             <Ltr className="text-slate-400">{suggestion.id}</Ltr>
-            <span>הועלתה {formatDateTime(suggestion.raised_at)}</span>
           </span>
         )
       }
     >
       <PanelState loading={detail.loading} error={detail.error} hasData={Boolean(data)} onRetry={detail.reload}>
         {suggestion && (
-          <div className="space-y-6 p-4 text-sm">
+          <div className="max-w-4xl space-y-6 p-4 text-sm">
             <Marks suggestion={suggestion} />
-            <section>
-              <h3 className="section-title">מה לא בסדר</h3>
+            {suggestion.status === "accepted" && <Outcome outcome={outcomeFor(applies, suggestion.id)} />}
+            {data.changes && <Changes suggestion={suggestion} changes={data.changes} busy={busy} />}
+            <Section title="What the reviewer found">
               <Bidi as="p" className="leading-relaxed">
                 {suggestion.reason}
               </Bidi>
-            </section>
-            {suggestion.status === "accepted" && <Outcome outcome={outcomeFor(applies, suggestion.id)} />}
-            {data.changes && <Changes suggestion={suggestion} changes={data.changes} busy={busy} />}
-            <Proposal suggestion={suggestion} />
-            <Evidence suggestion={suggestion} evidence={data.evidence} proposal={proposalOf(suggestion)} />
+            </Section>
+            <Context suggestion={suggestion} evidence={data.evidence} />
           </div>
         )}
       </PanelState>

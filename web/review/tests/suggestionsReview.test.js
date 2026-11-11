@@ -9,6 +9,7 @@ import {
   filterOptions,
   formatUsd,
   newOutcomes,
+  nextToDecide,
   orderItems,
   outcomeFor,
   outcomeKey,
@@ -19,7 +20,7 @@ import {
 
 // Synthetic suggestions in the shape GET /api/suggestions/suggestions answers.
 const item = (id, kind, status, extra = {}) => ({
-  id, kind, status, kind_name: `סוג ${kind}`, status_name: `מצב ${status}`, paid: kind === "mistake" || kind === "contradiction", busy: false, ...extra,
+  id, kind, status, kind_name: `Kind ${kind}`, status_name: status, paid: kind === "mistake" || kind === "contradiction", busy: false, ...extra,
 });
 const ITEMS = [
   item("s1", "mistake", "applied"),
@@ -29,16 +30,25 @@ const ITEMS = [
   item("s5", "add_label", "accepted", { busy: true }),
 ];
 
-test("open suggestions come first, each group in the reviewer's order", () => {
+test("sections in order (to decide, accepted, applied, rejected), each in the reviewer's order", () => {
   assert.deepEqual(orderItems(ITEMS).map((i) => i.id), ["s2", "s4", "s5", "s1", "s3"]);
+  const more = [...ITEMS, item("s6", "merge", "pending")];
+  assert.deepEqual(orderItems(more).map((i) => i.id), ["s2", "s6", "s4", "s5", "s1", "s3"]);
 });
 
-test("filters by kind and status, with counted options", () => {
-  assert.deepEqual(filterItems(ITEMS, { kind: "mistake", status: ALL }).map((i) => i.id), ["s1", "s3"]);
-  assert.deepEqual(filterItems(ITEMS, { kind: ALL, status: "accepted" }).map((i) => i.id), ["s4", "s5"]);
-  const options = filterOptions(ITEMS, "kind", "kind_name", "הכול");
-  assert.deepEqual(options[0], { value: ALL, label: "הכול (5)" });
-  assert.deepEqual(options[1], { value: "mistake", label: "סוג mistake (2)" });
+test("filters by kind, with counted options", () => {
+  assert.deepEqual(filterItems(ITEMS, { kind: "mistake" }).map((i) => i.id), ["s1", "s3"]);
+  assert.equal(filterItems(ITEMS, { kind: ALL }).length, 5);
+  const options = filterOptions(ITEMS, "kind", "kind_name", "All kinds");
+  assert.deepEqual(options[0], { value: ALL, label: "All kinds (5)" });
+  assert.deepEqual(options[1], { value: "mistake", label: "Kind mistake (2)" });
+});
+
+test("after a decision the next suggestion to decide is shown: below first, then above", () => {
+  const items = [item("a", "mistake", "pending"), item("b", "mistake", "pending"), item("c", "split", "pending"), item("d", "split", "accepted")];
+  assert.equal(nextToDecide(items, "b"), "c");
+  assert.equal(nextToDecide(items, "c"), "a");
+  assert.equal(nextToDecide([items[0], items[3]], "a"), null);
 });
 
 test("an action moves only the suggestions in a fitting status that are not being applied", () => {
@@ -51,8 +61,8 @@ test("an action moves only the suggestions in a fitting status that are not bein
 test("an apply says how many are paid", () => {
   const cost = applyCost([ITEMS[3], item("s6", "merge", "accepted"), item("s7", "mistake", "accepted")]);
   assert.deepEqual(cost, { count: 3, paid: 2 });
-  assert.match(applyQuestion(cost), /^3 הצעות לביצוע, 2 מהן בתשלום/);
-  assert.match(applyQuestion({ count: 1, paid: 1 }), /^הצעה אחת לביצוע, והיא בתשלום/);
+  assert.match(applyQuestion(cost), /^3 suggestions to apply, 2 of them paid/);
+  assert.match(applyQuestion({ count: 1, paid: 1 }), /^1 suggestion to apply, and it is paid/);
 });
 
 test("a corrected plan operation drops what the dialogs add but the review never proposes", () => {
