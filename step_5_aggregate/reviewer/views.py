@@ -1,9 +1,13 @@
 """What the groups tool shows: the filtered, sorted list, one group in full, the suggestion
-queue and the counters. Read-only views over a ``GroupsStore``; nothing here changes data.
+queue, what a merge would do and the counters. Read-only views over a ``GroupsStore``; nothing
+here changes data.
 
 The numbers shown are the group's own derived fields (C6, written by step 5 or recomputed by the
 store after an edit); member claims are shown with their own text, stance, dates and counts
-from the effective claims file.
+from the effective claims file. Every group says whether the owner's rule keeps it off the
+wiki (``withheld``, ``step_7_write_pages.withhold``) and the page it is (or would be) on; each
+contradiction link says where it comes from and, for a dispute from a conversation, which
+claims dispute which (``disputes``).
 """
 
 from __future__ import annotations
@@ -13,8 +17,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
+from step_5_aggregate.derive import GroupDeriver
 from step_5_aggregate.groups import Group
 from step_5_aggregate.reviewer.suggestions import REVIEW_CONFIG, Suggestion
+from step_7_write_pages.withhold import WITHHOLD_CONFIG, withholds
 
 if TYPE_CHECKING:
     from step_5_aggregate.reviewer.store import GroupsStore
@@ -30,6 +36,7 @@ class GroupQuery:
     multi: bool = False
     contradictions: bool = False
     suggested: bool = False
+    withheld: bool = False
     entity: str = ""
     stance: str = ""
     q: str = ""
@@ -68,6 +75,8 @@ class GroupViews:
             "suggestion_count": len(self.store.partners.get(gid, [])),
             "merged_count": len(group.get("merged_from") or []),
             "representative_manual": bool(group.get("representative_manual")),
+            "withheld": gid in self.store.withheld,
+            "page": self.store.placement.page_of(gid),
         }
 
     def member(self, claim_id: str, group: Group) -> dict[str, Any]:
@@ -92,11 +101,32 @@ class GroupViews:
             "is_representative": claim_id == group.get("representative_claim_id"),
         }
 
-    def _link(self, group_id: str, *, manual: bool) -> dict[str, Any]:
-        group = self.store.by_id.get(group_id)
-        if group is None:
-            return {"group_id": group_id, "missing": True, "manual": manual}
-        return {**self.card(group), "missing": False, "manual": manual}
+    def link(self, group: Group, other_id: str, *, rejected: bool = False) -> dict[str, Any]:
+        """A contradiction link of ``group``: the other side as a list row, where the link
+        comes from and, for a dispute from a conversation, which claims dispute which."""
+
+        other = self.store.by_id.get(other_id)
+        manual = rejected or other_id in (group.get("contradicts_manual") or [])
+        if other is None:
+            return {"group_id": other_id, "missing": True, "manual": manual}
+        pairs = self.store.disputes.claim_pairs(group["group_id"], other_id)
+        return {
+            **self.card(other),
+            "missing": False,
+            "manual": manual,
+            "origin": None if rejected else self.store.disputes.origin(group, other_id),
+            "pairs": [{"ours": self.member(a, group), "theirs": self.member(b, other)} for a, b in pairs],
+        }
+
+    def dispute(self, group_id: str, other_id: str) -> dict[str, Any] | None:
+        """How two groups dispute each other (``None``: they do not): a contradiction link,
+        or members who disputed each other even when the owner removed the link."""
+
+        group = self.store.by_id[group_id]
+        linked = other_id in (group.get("contradicts") or [])
+        if not linked and not self.store.disputes.claim_pairs(group_id, other_id):
+            return None
+        return {**self.link(group, other_id), "linked": linked}
 
     def suggestion(self, suggestion: Suggestion) -> dict[str, Any]:
         """A suggested pair with both groups' texts and numbers, for a decision in seconds."""
@@ -104,8 +134,11 @@ class GroupViews:
         def side(group_id: str) -> dict[str, Any]:
             group = self.store.by_id[group_id]
             members = [self.member(c, group) for c in group["member_claim_ids"]]
-            return {**self.card(group), "members": members}
+            links = [self.link(group, gid) for gid in group.get("contradicts") or []]
+            return {**self.card(group), "members": members, "contradicts": links}
 
+        a, b = self.store.by_id[suggestion.a], self.store.by_id[suggestion.b]
+        shared = set(b.get("entities") or [])
         return {
             "key": suggestion.key,
             "a": side(suggestion.a),
@@ -114,6 +147,12 @@ class GroupViews:
             "min_cosine": round(suggestion.min_cosine, 4),
             "max_cosine": round(suggestion.max_cosine, 4),
             "shared_entity": suggestion.shared_entity,
+            "shared_entity_names": [
+                name
+                for e, name in zip(a.get("entities") or [], a.get("entity_names") or [])
+                if e in shared
+            ],
+            "dispute": self.dispute(suggestion.a, suggestion.b),
         }
 
     # ------------------------------------------------------------------ list
@@ -124,6 +163,8 @@ class GroupViews:
         if query.contradictions and not group.get("contradicts"):
             return False
         if query.suggested and group["group_id"] not in self.store.partners:
+            return False
+        if query.withheld and group["group_id"] not in self.store.withheld:
             return False
         if query.entity and query.entity not in (group.get("entities") or []):
             return False
@@ -160,7 +201,6 @@ class GroupViews:
 
     def group_detail(self, group_id: str) -> dict[str, Any]:
         group = self.store.group(group_id)
-        manual = set(group.get("contradicts_manual") or [])
         return {
             **self.card(group),
             "representative_claim_id": group.get("representative_claim_id"),
@@ -172,11 +212,9 @@ class GroupViews:
             "timeline": [
                 {"month": month, **counts} for month, counts in (group.get("by_month") or {}).items()
             ],
-            "contradicts": [
-                self._link(gid, manual=gid in manual) for gid in group.get("contradicts") or []
-            ],
+            "contradicts": [self.link(group, gid) for gid in group.get("contradicts") or []],
             "contradicts_rejected": [
-                self._link(gid, manual=True)
+                self.link(group, gid, rejected=True)
                 for gid in group.get("contradicts_rejected") or []
                 if gid in self.store.by_id
             ],
@@ -202,6 +240,43 @@ class GroupViews:
                 "next_id": ids[index + 1] if index is not None and index + 1 < len(ids) else None,
             },
         }
+
+    # ------------------------------------------------------------------ what a merge would do
+
+    def merge_check(self, group_ids: Sequence[str]) -> dict[str, Any]:
+        """Before a merge: the pairs among the groups that dispute each other (the merge is
+        still allowed: the owner's merge wins), and whether the merged group would be
+        withheld, with the groups withheld now (a second reporter releases a group)."""
+
+        groups = sorted(
+            (self.store.group(gid) for gid in dict.fromkeys(group_ids)),
+            key=lambda g: self.store.position[g["group_id"]],
+        )
+        ids = [g["group_id"] for g in groups]
+        disputes = []  # each read from its first group: ``pairs`` = (claim of from_id, other's)
+        for k, a in enumerate(ids):
+            for b in ids[k + 1 :]:
+                found = self.dispute(a, b)
+                if found is not None:
+                    disputes.append({**found, "from_id": a})
+        merged = self._merged(groups)
+        return {
+            "survivor_id": ids[0] if ids else None,
+            "disputes": disputes,
+            "withheld": [gid for gid in ids if gid in self.store.withheld],
+            "withheld_after": None if merged is None else withholds(merged),
+            "supporter_count_after": None if merged is None else merged["supporter_count"],
+        }
+
+    def _merged(self, groups: Sequence[Group]) -> Group | None:
+        """The group a merge would make, derived as step 5 would (``None`` without vectors)."""
+        if self.store.scorer is None or len(groups) < 2:
+            return None
+        members = [cid for g in groups for cid in g["member_claim_ids"]]
+        if any(cid not in self.store.inputs.claims for cid in members):
+            return None
+        deriver = GroupDeriver(self.store.inputs, self.store.scorer)
+        return deriver.refresh({"group_id": groups[0]["group_id"], "member_claim_ids": members})
 
     # ------------------------------------------------------------------ suggestions, counters
 
@@ -240,6 +315,8 @@ class GroupViews:
             "claim_count": len(store.group_of),
             "ungrouped_claims": sum(1 for c in store.inputs.claims if c not in store.group_of),
             "contradiction_groups": sum(1 for g in groups if g.get("contradicts")),
+            "withheld_count": len(store.withheld),
+            "withhold_min_supporters": WITHHOLD_CONFIG["min_supporters"],
             "not_same_count": len(store.not_same),
             "stances": dict(Counter(g.get("stance") or "" for g in groups)),
             "entities": [
