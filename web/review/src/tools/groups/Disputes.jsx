@@ -53,6 +53,11 @@ function WhoDisputesWhat({ pairs }) {
   );
 }
 
+/** The claim pairs say more than the two group texts (a group holds several claims). */
+function pairsAddSomething(group, link) {
+  return (link.pairs ?? []).some((pair) => pair.ours.claim_text !== group.claim_text || pair.theirs.claim_text !== link.claim_text);
+}
+
 /** One contradiction link of `group`. `actions`: buttons for the link (remove, restore). */
 export function DisputeCard({ group, link, onOpen, actions = null }) {
   if (link.missing) {
@@ -76,7 +81,7 @@ export function DisputeCard({ group, link, onOpen, actions = null }) {
           </span>
         </div>
       </div>
-      {link.pairs?.length > 0 && <WhoDisputesWhat pairs={link.pairs} />}
+      {pairsAddSomething(group, link) && <WhoDisputesWhat pairs={link.pairs} />}
       <p className="flex flex-wrap gap-2">
         <button type="button" className="btn btn-sm" onClick={() => onOpen(link.group_id)}>
           Open the other side

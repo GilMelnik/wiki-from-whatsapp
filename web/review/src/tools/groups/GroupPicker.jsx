@@ -13,13 +13,13 @@ import { PICKER_LIMIT, SEARCH_DEBOUNCE_MS } from "./groups.js";
 function Option({ group, chosen, hint, onChoose }) {
   return (
     <li>
-      <button type="button" onClick={onChoose} aria-pressed={chosen} className={`list-row rounded ${chosen ? "list-row-selected" : ""}`}>
+      <button type="button" title={group.group_id} onClick={onChoose} aria-pressed={chosen} className={`list-row rounded ${chosen ? "list-row-selected" : ""}`}>
         <Bidi as="span" className="line-clamp-2 block">
           {group.claim_text}
         </Bidi>
         <span className="flex flex-wrap items-center gap-2">
           {hint && <span className="badge badge-sky">{hint}</span>}
-          <GroupBadges group={group} />
+          <GroupBadges group={group} quiet />
           <GroupNumbers group={group} />
         </span>
       </button>
@@ -42,7 +42,7 @@ export function GroupPicker({ title, description, excludeId, suggested = [], ini
   );
   const shown = new Set(suggested.map((group) => group.group_id));
   const options = [
-    ...suggested.map((group) => ({ group, hint: "Merge suggestion" })),
+    ...suggested.map((group) => ({ group, hint: "Suggested for this group" })),
     ...(results.data?.items ?? [])
       .filter((group) => group.group_id !== excludeId && !shown.has(group.group_id))
       .map((group) => ({ group })),

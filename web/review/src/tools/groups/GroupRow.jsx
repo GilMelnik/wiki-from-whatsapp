@@ -15,8 +15,8 @@ export function GroupNumbers({ group }) {
   );
 }
 
-/** Marks: stance, kept off the wiki, disputed, a merge suggested, merged by hand. */
-export function GroupBadges({ group }) {
+/** Marks: stance, kept off the wiki, disputed, a merge suggested (unless `quiet`), merged by hand. */
+export function GroupBadges({ group, quiet = false }) {
   const stance = stanceOf(group.stance);
   return (
     <span className="flex flex-wrap items-center gap-1">
@@ -27,7 +27,7 @@ export function GroupBadges({ group }) {
         </span>
       )}
       {group.contradiction_count > 0 && <span className="badge badge-rose">Disputed</span>}
-      {group.suggestion_count > 0 && <span className="badge badge-sky">Merge suggested</span>}
+      {group.suggestion_count > 0 && !quiet && <span className="badge badge-sky">Merge suggested</span>}
       {group.merged_count > 0 && <span className="badge badge-slate">Merged</span>}
     </span>
   );

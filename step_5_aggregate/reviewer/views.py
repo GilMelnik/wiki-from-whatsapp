@@ -52,7 +52,7 @@ class GroupViews:
 
     def _text_of(self, group: Group) -> str:
         claims = self.store.inputs.claims
-        parts = [group.get("claim_text") or "", *(group.get("entity_names") or [])]
+        parts = [group["group_id"], group.get("claim_text") or "", *(group.get("entity_names") or [])]
         parts += [str(claims.get(c, {}).get("claim_text") or "") for c in group["member_claim_ids"]]
         return " ".join(parts).casefold()
 

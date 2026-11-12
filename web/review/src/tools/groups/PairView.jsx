@@ -47,7 +47,9 @@ function Texts({ pair }) {
   );
 }
 
-function Side({ name, group, onOpen }) {
+function Side({ name, group, other, onOpen }) {
+  // The link between the two groups is in the warning above; here only their other disputes.
+  const links = group.contradicts.filter((link) => link.group_id !== other.group_id);
   return (
     <section className="min-w-0 space-y-3">
       <header className="flex flex-wrap items-center justify-between gap-2">
@@ -59,15 +61,17 @@ function Side({ name, group, onOpen }) {
       <GroupNumbers group={group} />
       <PageLine group={group} />
       <EntityNames names={group.entity_names} />
-      <div>
-        <h4 className="section-title">{group.size > 1 ? `Its claims (${formatCount(group.size)})` : "Its claim"}</h4>
-        <MemberList members={group.members} />
-      </div>
-      {group.contradicts.length > 0 && (
+      {group.size > 1 && (
         <div>
-          <h4 className="section-title">Disputes it has</h4>
+          <h4 className="section-title">Its claims ({formatCount(group.size)})</h4>
+          <MemberList members={group.members} />
+        </div>
+      )}
+      {links.length > 0 && (
+        <div>
+          <h4 className="section-title">Other disputes it has</h4>
           <ul className="space-y-2">
-            {group.contradicts.map((link) => (
+            {links.map((link) => (
               <DisputeCard key={link.group_id} group={group} link={link} onOpen={onOpen} />
             ))}
           </ul>
@@ -108,8 +112,8 @@ export function PairView({ list, pair, position, minSupporters, watch, onOpen })
               </ul>
             </section>
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-              <Side name="A" group={pair.a} onOpen={onOpen} />
-              <Side name="B" group={pair.b} onOpen={onOpen} />
+              <Side name="A" group={pair.a} other={pair.b} onOpen={onOpen} />
+              <Side name="B" group={pair.b} other={pair.a} onOpen={onOpen} />
             </div>
           </div>
         </Panel>
