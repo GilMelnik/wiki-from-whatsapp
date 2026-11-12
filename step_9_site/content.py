@@ -1,7 +1,7 @@
-"""What step 9 publishes, computed in memory from the plan (C7), the written pages (C9) and the
-claim groups (C6).
+"""What step 9 publishes, computed in memory from the plan (C7), the written pages (C9), the
+claim groups (C6) and the period of the chat messages (``utils.threads_io.messages_period``).
 
-``Site(plan, pages, groups)`` decides which planned pages are published (those that have a written
+``Site(plan, pages, groups, period)`` decides which planned pages are published (those that have a written
 page), builds the navigation from the plan's tree, renders every generated markdown file
 (pages with their OKF front matter, label pages, the home page, redirect stubs for merged
 ids) and collects the problems found on the way in ``issues``. Nothing here touches the disk.
@@ -86,9 +86,11 @@ class Site:
         plan: dict[str, Any],
         pages: dict[str, dict[str, Any]],
         groups: list[dict[str, Any]],
+        period: tuple[str, str],
         withheld: Collection[str] = (),
     ) -> None:
         self.plan = check_plan(plan)
+        self.period = period
         unplanned = sorted(set(pages) - set(plan["pages"]))
         if unplanned:
             raise ValueError(
@@ -286,15 +288,11 @@ class Site:
         return with_front_matter(meta, "\n".join([self.home_intro(ABOUT_FILE), *tree]))
 
     def home_intro(self, about_href: str) -> str:
-        """The home page's opening paragraph: what the wiki rests on and from when to when (the
-        claim groups the published pages cite as sources), ending in the link ``about_href`` to
-        the about page. Without a dated group the sentence leaves the dates out."""
-        sources = (source["id"] for page_id in self.order for source in self.pages[page_id]["front_matter"]["sources"])
-        period = self.references.period(sources)
-        if period:
-            intro = HOME_CONFIG["intro"].format(first=hebrew_month(period[0]), last=hebrew_month(period[1]))
-        else:
-            intro = HOME_CONFIG["intro_undated"]
+        """The home page's opening paragraph: what the wiki rests on and from which month to
+        which month (those of the earliest and the latest chat message used, ``self.period``),
+        ending in the link ``about_href`` to the about page."""
+        first, last = self.period
+        intro = HOME_CONFIG["intro"].format(first=hebrew_month(first), last=hebrew_month(last))
         return f"{intro} [{ABOUT_CONFIG['home_link_text']}]({about_href})."
 
     def tree_lines(self, nodes: list[dict[str, Any]], level: int, item: Callable[[str], str]) -> list[str]:

@@ -2,13 +2,16 @@
 
 Reads the effective plan, the effective written pages and the effective claim groups (C6, for
 the references and for the check that no page cites a group withheld by
-``step_7_write_pages.withhold``), then writes:
+``step_7_write_pages.withhold``), and the effective conversations of step 1 (C1: the home page
+says the wiki rests on messages from the month of the earliest to the month of the latest
+one), then writes:
 
 - ``docs/<page_id>.md``: each planned page that has a written page, OKF front matter (hidden by
   mkdocs) + body with its wiki links resolved and its references (group id, when, how many
   people took part) rendered as footnotes from the groups;
 - ``docs/<labels_dir>/<label_id>.md``: one page per label that a published page carries;
-- ``docs/index.md``: the home page, the plan's tree with each page's one-line description;
+- ``docs/index.md``: the home page, an intro with the months of the first and the last message,
+  then the plan's tree with each page's one-line description;
 - ``docs/about.md`` ("how this wiki was made", linked only from the home page) and
   ``docs/terms.md`` (the terms, linked from the banner and the footer); neither is in the nav;
 - ``docs/<agent_markdown.dir>/…/index.md`` (a markdown twin of every content page, shipped by the
@@ -51,9 +54,11 @@ from utils.paths import (
     WIKI_INDEX_FILE,
     resolve_aggregated_path,
     resolve_plan_path,
+    resolve_threads_path,
     resolve_wiki_pages_path,
 )
 from utils.rtl import HEBREW_CSS
+from utils.threads_io import messages_period
 
 logger = logging.getLogger(__name__)
 SITE_CONFIG = section("site")
@@ -162,6 +167,7 @@ def run(
     plan_path: Path | None = None,
     pages_path: Path | None = None,
     groups_path: Path | None = None,
+    threads_path: Path | None = None,
     docs_dir: Path = DOCS_DIR,
     mkdocs_path: Path = MKDOCS_PATH,
 ) -> dict[str, Any]:
@@ -174,8 +180,9 @@ def run(
     plan = _load(plan_path or resolve_plan_path(), "plan (step 6)")
     pages = _load(pages_path or resolve_wiki_pages_path(), "written pages (step 7)")["pages"]
     groups = _load(groups_path or resolve_aggregated_path(), "claim groups (step 5)")["groups"]
+    period = messages_period(_load(threads_path or resolve_threads_path(), "conversations (step 1)"))
     withheld = withheld_ids(groups)
-    site = Site(plan, pages, groups, withheld)
+    site = Site(plan, pages, groups, period, withheld)
     files = {**site.files, **AgentPages(site).files(), WIKI_INDEX_FILE: index_text(site, docs_dir / WIKI_INDEX_FILE)}
     config = build_config(
         site.nav,

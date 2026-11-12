@@ -31,6 +31,14 @@ def load_threads(path: Path | str = DEFAULT_THREADS_PATH) -> dict[str, Any]:
         return json.load(f)
 
 
+def messages_period(threads: dict[str, Any]) -> tuple[str, str]:
+    """The ``datetime`` of the earliest and of the latest message of a C1 threads payload."""
+    moments = [message["datetime"] for thread in threads["threads"] for message in thread.get("messages", [])]
+    if not moments:
+        raise ValueError("the threads payload holds no message, so it has no period")
+    return min(moments), max(moments)
+
+
 def thread_text(thread: dict[str, Any]) -> str:
     """All message contents concatenated (used for heuristic keyword matching)."""
     return "\n".join(m.get("content", "") or "" for m in thread.get("messages", []))

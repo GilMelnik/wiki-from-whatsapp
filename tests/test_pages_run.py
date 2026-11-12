@@ -64,7 +64,7 @@ def test_first_run_writes_c9_pages_that_step_9_accepts(ws: PagesWorkspace) -> No
         assert payload["metadata"]["inputs"][page_id] == page["input_fingerprint"]
         assert "report" in payload["metadata"]["pages"][page_id]
     assert not ws.artifact.edited.exists()  # reconcile creates no edited copy
-    site = Site(ws.plan(), payload["pages"], ws.groups())
+    site = Site(ws.plan(), payload["pages"], ws.groups(), ("2024-01-01T10:00:00", "2024-03-01T10:00:00"))
     assert not [i for i in site.issues if i["issue"].startswith("broken")]
     assert not [i for i in site.issues if i["issue"].endswith("_reference")]
     assert payload["metadata"]["run"]["write"] == 4
