@@ -26,7 +26,7 @@ function NotRunYet({ rerun }) {
       <p>Step 8 (the review of the whole wiki) has not run yet, so there are no suggestions to look at.</p>
       <p className="text-slate-600">
         The review reads the wiki in parts of a few related pages, one model call each, plus one call that compares the
-        points of every page
+        pages through their points (pages written before step 7 listed points are left out of it)
         {rerun && (
           <>
             : {rerun.passes} calls sent together, about {formatUsd(rerun.usd)}
