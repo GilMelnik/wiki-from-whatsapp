@@ -1,5 +1,6 @@
-"""Step 8's run: C12 shape, stable ids, checks on the model's proposals, and every re-run case
-(offline: fake review model, synthetic wiki)."""
+"""Step 8's run: C12 shape, stable ids, checks on the model's proposals, and the re-run cases
+of the whole run (offline: fake review model, synthetic wiki). The passes themselves (cutting,
+prompts, scope, batch, failures, ``--only``) are in ``test_review_parts``."""
 
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ import pytest
 from review_tool.artifacts import GRAPH
 from review_tool.steps import SERVED_STEPS
 from step_8_review.inputs import REVIEW_CONFIG
-from step_8_review.proposals import ANSWER_SCHEMA, KINDS
+from step_8_review.proposals import KINDS, answer_schema
 from tests.pages_fixtures import SECRET
 from tests.review_fixtures import FakeReviewer, ReviewWorkspace, flat, sentence_a, valid_answers
 
@@ -30,9 +31,12 @@ def _by_kind(payload: dict) -> dict[str, dict]:
 def test_first_run_writes_c12_with_one_suggestion_per_kind(ws: ReviewWorkspace) -> None:
     reviewer = FakeReviewer(valid_answers())
     result = ws.review(reviewer)
-    assert (result["calls"], result["raised"], result["dropped"]) == (1, 6, [])
+    assert (result["calls"], result["raised"], result["failed"]) == (3, 6, [])
     payload = ws.suggestions_payload()
     assert set(_by_kind(payload)) == set(KINDS)
+    raised_by = {s["kind"]: s["raised_by"] for s in payload["suggestions"]}
+    assert raised_by == {"mistake": "before", "merge": "before", "split": "during",
+                         "add_label": "during", "contradiction": "cross", "add_page": "cross"}
     for suggestion in payload["suggestions"]:
         assert re.fullmatch(r"sug-[0-9a-f]{8}", suggestion["id"])
         assert suggestion["status"] == "pending" and suggestion["reason"] and suggestion["title"]
@@ -57,8 +61,13 @@ def test_first_run_writes_c12_with_one_suggestion_per_kind(ws: ReviewWorkspace) 
                                              "title_he": "טקסס", "description": "תיאור",
                                              "kind": "country"}
     meta = payload["metadata"]
-    assert set(meta["inputs"]) == {"reviewer", "plan", "pages"}
-    assert meta["model"] == "fake-opus" and meta["run"]["note"] == "הערה"
+    assert set(meta["inputs"]) == {"passes"}
+    assert set(meta["inputs"]["passes"]) == {"before", "during", "cross"}
+    assert meta["model"] == "fake-opus" and meta["run"]["note"] == "הערה הערה הערה"
+    rows = {row["id"]: row for row in meta["run"]["passes"]}
+    assert rows["before"]["pages"] == ["agencies", "costs"] and rows["cross"]["raised"] == 2
+    assert all(row["failed"] is None and row["input_tokens"] > 0 for row in rows.values())
+    assert meta["run"]["batch"] is True and meta["run"]["without_points"] == []
     assert meta["summary"]["suggestions"] == 6 and "git_commit" in meta
     assert not ws.suggestions.edited.exists()
 
@@ -87,30 +96,36 @@ def test_unusable_and_repeated_proposals_are_dropped(ws: ReviewWorkspace) -> Non
         flat("merge", survivor_id="agencies", merged_ids=["no-such-page"]),
         valid_answers()[0], valid_answers()[0],
     ]
-    result = ws.review(FakeReviewer(bad))
+    result = ws.review(FakeReviewer([], by_pass={"before": bad}))
     assert result["raised"] == 1
     reasons = " ".join(result["dropped"])
-    for expected in ("not in page agencies", "unknown groups", "is used 2 times",
-                     "groups on both sides", "already raised"):
+    for expected in ("not in page agencies", "did not see: ['g-ffffffff']", "is used 2 times",
+                     "groups on both sides", "did not see: ['no-such-page']", "already raised"):
         assert expected in reasons
     assert len(result["dropped"]) == 6
 
 
-def test_at_most_max_suggestions_are_kept(ws: ReviewWorkspace, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setitem(REVIEW_CONFIG, "max_suggestions", 2)
+def test_each_pass_keeps_at_most_its_cap(ws: ReviewWorkspace, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(REVIEW_CONFIG["part"], "max_suggestions", 1)
+    monkeypatch.setitem(REVIEW_CONFIG["cross"], "max_suggestions", 1)
     result = ws.review(FakeReviewer(valid_answers()))
-    assert result["raised"] == 2 and sum("over max_suggestions" in d for d in result["dropped"]) == 4
+    assert result["raised"] == 3
+    assert sum("over the pass's max_suggestions" in d for d in result["dropped"]) == 5
 
 
 def test_the_prompt_never_carries_identities_and_the_schema_is_strict(ws: ReviewWorkspace) -> None:
     reviewer = FakeReviewer([])
     ws.review(reviewer)
-    prompt = reviewer.calls[0]["system"] + reviewer.calls[0]["user"]
-    assert SECRET not in prompt and "t-SECRET" not in prompt and "reaction" not in prompt
-    assert '<page id="agencies"' in prompt and "g-00000004 | mention -> agencies" in prompt
-    assert "<already_raised count=\"0\">" in prompt
-    item = ANSWER_SCHEMA["properties"]["suggestions"]["items"]
+    assert reviewer.passes() == ["before", "during", "cross"]
+    for call in reviewer.calls:
+        prompt = call["system"] + call["user"]
+        assert SECRET not in prompt and "t-SECRET" not in prompt and "reaction" not in prompt
+        assert "<already_raised count=\"0\">" in prompt
+    assert '<page id="agencies"' in reviewer.calls[0]["user"]
+    assert "g-00000004 | mention -> agencies" in reviewer.calls[0]["user"]
+    item = answer_schema(KINDS)["properties"]["suggestions"]["items"]
     assert item["additionalProperties"] is False and set(item["required"]) == set(item["properties"])
+    assert reviewer.calls[0]["schema"] == answer_schema(KINDS)
 
 
 def test_nothing_to_suggest_is_a_valid_answer(ws: ReviewWorkspace) -> None:
@@ -152,18 +167,19 @@ def test_a_run_after_changes_keeps_decisions_and_raises_nothing_again(ws: Review
     kinds = {s["kind"]: s["id"] for s in store.list()["items"]}
     store.reject(kinds["merge"])
     store.accept(kinds["add_label"])
-    edited_split = {**ws.suggestions_payload()["suggestions"][2]["proposal"], "new_page_id": "prices"}
+    edited_split = {**_by_kind(ws.suggestions_payload())["split"]["proposal"], "new_page_id": "prices"}
     store.edit(kinds["split"], edited_split)
     _edit_page(ws, "agencies", "עריכה של הבעלים.")
     renamed = valid_answers()[3]
     renamed["title"] = "מיזוג במילים אחרות"
     fresh = flat("add_label", label_id="georgia-state", title_he="מדינת ג׳ורג׳יה", description="ת",
-                 label_kind="us-state", pages=["hospital"])
+                 label_kind="us-state", pages=["costs"])
     reviewer = FakeReviewer([renamed, valid_answers()[0], fresh])
     result = ws.review(reviewer)
-    assert result["calls"] == 1 and result["raised"] == 1
+    assert reviewer.passes() == ["before"] and result["raised"] == 1
     shown = reviewer.calls[0]["user"]
-    assert '"status": "rejected"' in shown and '"new_page_id": "prices"' in shown
+    # A pass is shown what was raised about its pages: the rejected merge, not the split.
+    assert '"status": "rejected"' in shown and '"new_page_id"' not in shown
     items = {s["id"]: s for s in ws.store().list()["items"]}
     assert items[kinds["merge"]]["status"] == "rejected"
     assert items[kinds["add_label"]]["status"] == "accepted"
@@ -212,12 +228,18 @@ def test_estimate_counts_tokens_and_makes_no_call(ws: ReviewWorkspace) -> None:
     assert not ws.suggestions.original.exists()
 
 
-def test_a_wiki_too_long_for_one_call_fails_with_the_overshoot(ws: ReviewWorkspace) -> None:
+def test_a_pass_too_long_for_the_model_fails_alone_with_the_overshoot(ws: ReviewWorkspace) -> None:
     reviewer = FakeReviewer(valid_answers())
     budget = REVIEW_CONFIG["context_window_tokens"] - REVIEW_CONFIG["max_output_tokens"]
-    with pytest.raises(ValueError, match="it is 1000 tokens"):
-        ws.review(reviewer, count_tokens=lambda system, user: budget + 1000)
-    assert reviewer.calls == [] and not ws.suggestions.original.exists()
+
+    def count(system: str, user: str) -> int:
+        return budget + 1000 if '<part id="during"' in user else 10
+
+    result = ws.review(reviewer, count_tokens=count)
+    assert reviewer.passes() == ["before", "cross"] and result["failed"] == ["during"]
+    row = next(row for row in result["passes"] if row["id"] == "during")
+    assert "it is 1000 tokens" in row["failed"] and "Nothing was sent" in row["failed"]
+    assert set(ws.suggestions_payload()["metadata"]["inputs"]["passes"]) == {"before", "cross"}
 
 
 def test_suggestions_node_and_step_row() -> None:

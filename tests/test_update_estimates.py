@@ -55,7 +55,7 @@ def test_step_6b_estimate_asks_nothing_and_bounds_the_proposals(tmp_path: Path) 
 def test_step_8_estimate_says_whether_a_call_is_due(tmp_path: Path) -> None:
     workspace = ReviewWorkspace(tmp_path)
     reviewer = FakeReviewer(valid_answers())
-    assert workspace.review(reviewer, estimate=True)["calls"] == 1
+    assert workspace.review(reviewer, estimate=True)["calls"] == 3  # two parts and the cross pass
     workspace.review(reviewer)
     calls = len(reviewer.calls)
     assert workspace.review(reviewer, estimate=True)["calls"] == 0
@@ -79,7 +79,8 @@ def _results() -> dict[str, dict[str, Any]]:
         STEP_7: {"estimate": [{"page": "a", "mode": "write", "input_tokens": 500_000},
                               {"page": "b", "mode": "update", "input_tokens": 500_000}],
                  "input_tokens": 1_000_000, "modes": {"write": 1, "update": 1, "keep": 4}},
-        STEP_8: {"calls": 0, "input_tokens": 800_000},
+        STEP_8: {"calls": 2, "input_tokens": 200_000, "batch": True,
+                 "passes": [{"id": "a"}, {"id": "b"}, {"id": "cross"}]},
     }
 
 
@@ -87,7 +88,7 @@ def _results() -> dict[str, dict[str, Any]]:
     (STEP_3, 2, (1_000_000 * 2 + EXTRACT_OUTPUT * 10) / 1e6 * 0.5),
     (STEP_6_ASSIGN, 1, 10 * 12200 * 0.042 / 1e6 + (30000 * 2 + 4000 * 10) / 1e6),
     (STEP_7, 2, (500_000 * 2 + 13000 * 10 + 500_000 * 2 + 6000 * 10) / 1e6),
-    (STEP_8, 0, 0.0),
+    (STEP_8, 2, (200_000 * 4 + 10000 * 2 * 20) / 1e6 * 0.5),
 ])
 def test_estimates_are_priced_from_config(key: str, calls: int, usd: float) -> None:
     seen: dict[str, Any] = {}

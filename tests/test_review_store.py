@@ -32,7 +32,7 @@ def _ids(ws: ReviewWorkspace) -> dict[str, str]:
 
 def test_list_shows_names_counts_and_the_note(ws: ReviewWorkspace) -> None:
     listing = ws.store().list()
-    assert listing["counts"]["status"] == {"pending": 6} and listing["note"] == "הערה"
+    assert listing["counts"]["status"] == {"pending": 6} and listing["note"] == "הערה הערה הערה"
     first = listing["items"][0]
     assert first["kind_name"] == REVIEW_CONFIG["kind_names"][first["kind"]]
     assert first["status_name"] == REVIEW_CONFIG["status_names"]["pending"]
