@@ -1,4 +1,4 @@
-"""The units of the split experiment (task 52): the same chat messages cut five ways.
+"""The units of the split experiment (task 52): the same chat messages cut seven ways.
 
 The messages ("the set") are those of the gold file with its context part
 (``step_1_threads_split.gold_context``): per gold window, the window's own messages and the
@@ -13,15 +13,22 @@ whole chat messages and belongs to one window. Per window, in chat order:
 - D, new split + background: A's units, each shown after the ``context_messages`` chat
   messages right before its first message, as read-only background;
 - E, packed: A's units, several per call while their rendered text stays within
-  ``pack_max_chars`` (a longer unit goes alone).
+  ``pack_max_chars`` (a longer unit goes alone);
+- F, long conversations in parts: A's units, but a unit of more than ``long_messages``
+  messages goes in consecutive parts of about equal size, none longer than that; every part
+  after the first is shown after the ``context_messages`` messages of the unit before it, as
+  read-only background;
+- G, thoroughness note: A's units; a unit of more than ``long_messages`` messages is sent with
+  a note that asks for every claim (``prompts.THOROUGH_NOTE``).
 
 Every variant covers each message of the set exactly once (``check_cover`` raises otherwise),
 so the variants differ only in how the messages are grouped. Unit ids are
-``<variant><window number>-<unit number>`` (``A3-02``); D keeps the number of its A unit.
+``<variant><window number>-<unit number>`` (``A3-02``); D and G keep the number of their A unit.
 """
 
 from __future__ import annotations
 
+import math
 from collections import Counter
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
@@ -158,6 +165,23 @@ def pack(units: Sequence[Unit], messages: MessageSet, max_chars: int) -> list[Un
     return packs
 
 
+def in_parts(units: Sequence[Unit], messages: MessageSet, max_messages: int,
+             context: int) -> list[Unit]:
+    """F: a unit of more than ``max_messages`` messages in consecutive parts of about equal
+    size; each part after the first has the ``context`` messages before it as background."""
+    parts: list[Unit] = []
+    for window in messages.windows:
+        number = 0
+        for unit in (u for u in units if u.window == window):
+            ids = unit.message_ids
+            size = math.ceil(len(ids) / math.ceil(len(ids) / max_messages))
+            for start in range(0, len(ids), size):
+                number += 1
+                parts.append(Unit(_unit_id("F", window, number), "F", window, unit.unit_id,
+                                  (ids[start:start + size],), ids[max(0, start - context):start]))
+    return parts
+
+
 def check_cover(units: Sequence[Unit], messages: MessageSet) -> None:
     """Raise unless the units hold every message of the set exactly once, window by window."""
     for window in messages.windows:
@@ -172,14 +196,18 @@ def check_cover(units: Sequence[Unit], messages: MessageSet) -> None:
 def build_units(messages: MessageSet, new_split: Sequence[dict[str, Any]],
                 old_split: Sequence[dict[str, Any]],
                 variants: Sequence[str] = VARIANTS) -> dict[str, list[Unit]]:
-    """The units of the requested variants (all five are built and checked)."""
+    """The units of the requested variants (all of them are built and checked)."""
     new_units = cut("A", thread_owner(new_split), messages)
+    context = int(EXPERIMENT_CONFIG["context_messages"])
     built = {
         "A": new_units,
         "B": cut("B", messages.labels, messages),
         "C": cut("C", thread_owner(old_split), messages),
-        "D": with_background(new_units, messages, int(EXPERIMENT_CONFIG["context_messages"])),
+        "D": with_background(new_units, messages, context),
         "E": pack(new_units, messages, int(EXPERIMENT_CONFIG["pack_max_chars"])),
+        "F": in_parts(new_units, messages, int(EXPERIMENT_CONFIG["long_messages"]), context),
+        "G": [Unit(f"G{unit.unit_id[1:]}", "G", unit.window, unit.source, unit.conversations)
+              for unit in new_units],
     }
     for units in built.values():
         check_cover(units, messages)

@@ -3,13 +3,17 @@
 Every unit goes to step 3's own model setup: ``EXTRACT_SYSTEM`` and ``FRESH_SCHEMA``, the
 messages rendered by ``render_thread_for_llm`` and the answer read by ``ThreadClaims``. A
 plain unit (A, B, C; a D unit with nothing before it; an E pack of one conversation) is sent
-exactly as step 3 sends a thread (``ThreadClaims.prompt``). Two variants add an instruction at
-the top of the user prompt, never in the system prompt:
+exactly as step 3 sends a thread (``ThreadClaims.prompt``); so is a unit of F or G that is not
+long. The other variants add an instruction at the top of the user prompt, never in the system
+prompt:
 
 - background (D): the messages before the conversation come first, numbered like the rest and
   under their own heading, with ``BACKGROUND_NOTE``;
 - packed (E): each conversation under its own heading, numbered across the request, with
-  ``PACKED_NOTE``.
+  ``PACKED_NOTE``;
+- a later part of a long conversation (F): like D, but the messages before it are the same
+  conversation's and the note is ``EARLIER_NOTE``;
+- a long conversation sent whole (G): ``THOROUGH_NOTE`` above the conversation.
 
 The whole request is rendered as one thread (one numbering, one set of aliases, replies across
 the parts shown by number) and then cut at the parts' borders; a part's text is exactly what
@@ -29,7 +33,7 @@ from itertools import accumulate
 from typing import Any
 
 from step_3_extract.claims import ThreadClaims
-from step_3_extract.split_experiment.units import MessageSet, Unit
+from step_3_extract.split_experiment.units import EXPERIMENT_CONFIG, MessageSet, Unit
 from utils.threads_io import render_thread_for_llm
 
 BACKGROUND_NOTE = """\
@@ -45,6 +49,25 @@ its own heading. Treat each one as if it had been sent alone: a claim comes from
 conversation, and its supporting and opposing messages are messages of that conversation. \
 The messages are numbered across the whole request and an alias is the same person in all of \
 them; cite messages by these numbers as usual."""
+
+EARLIER_NOTE = """\
+This is a later part of a long conversation. Messages [1] to [{last}] are the {count} messages \
+right before this part, from the same conversation. They are shown only so that you \
+understand what is being discussed; their claims were already extracted. Extract claims only \
+from the messages under "Conversation:". Never write a claim from the earlier messages, never \
+put an earlier message's number in supporting or opposing, and never cite it in any other way."""
+
+THOROUGH_NOTE = """\
+This conversation is long: {count} messages. Work through it from the first message to the \
+last and extract every claim it holds. There is no limit on the number of claims: it grows \
+with the length of the conversation, so do not stop after the main points and do not \
+summarise. A detail that one member mentions once (a price, a provider, a duration, a \
+document, a tip, an experience) is a claim of its own when another member could act on it. \
+What to skip is unchanged."""
+
+# variant -> the note above the read-only messages and their heading
+BACKGROUND = {"D": (BACKGROUND_NOTE, "Background (read only)"),
+              "F": (EARLIER_NOTE, "Earlier in the conversation (read only)")}
 
 
 @dataclass(frozen=True)
@@ -71,10 +94,12 @@ class UnitJob:
     def prompt(self) -> str:
         if self.unit.background:
             background, conversation = self._parts([len(self.unit.background)])
-            note = BACKGROUND_NOTE.format(last=len(self.unit.background),
-                                          count=len(self.unit.background))
-            return (f"{note}\n\nBackground (read only):\n{background}\n\n"
-                    f"Conversation:\n{conversation}")
+            note, heading = BACKGROUND[self.unit.variant]
+            note = note.format(last=len(self.unit.background), count=len(self.unit.background))
+            return f"{note}\n\n{heading}:\n{background}\n\nConversation:\n{conversation}"
+        size = len(self.unit.message_ids)
+        if self.unit.variant == "G" and size > int(EXPERIMENT_CONFIG["long_messages"]):
+            return f"{THOROUGH_NOTE.format(count=size)}\n\n{self.reader.prompt([])}"
         count = len(self.unit.conversations)
         if count > 1:
             sizes = list(accumulate(len(c) for c in self.unit.conversations))

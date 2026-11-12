@@ -1,8 +1,8 @@
-"""Task 52's split experiment: extract claims from the gold messages under five ways of cutting
-them into conversations, and compare the claims side by side (``units`` says how each variant
+"""Task 52's split experiment: extract claims from the gold messages under seven ways of cutting
+or sending them, and compare the claims side by side (``units`` says how each variant
 cuts, ``prompts`` what is sent, ``compare`` how claims are matched, ``page`` the owner's page).
 
-PAID (the ``extract`` stage, step 3's model): about $1.5 at the batch price for all five
+PAID (the ``extract`` stage, step 3's model): about $2 at the batch price for all seven
 variants on the eight gold windows. The run refuses to start when its estimate is above
 ``extract.split_experiment.max_usd``. Answers go through the LLM disk cache, so a repeated run
 costs nothing::

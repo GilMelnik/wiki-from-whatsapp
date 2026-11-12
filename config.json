@@ -186,9 +186,12 @@
         "B": "owner's conversations",
         "C": "old split",
         "D": "new split + background",
-        "E": "new split, packed"
+        "E": "new split, packed",
+        "F": "new split, long conversations in parts",
+        "G": "new split, thoroughness note on long conversations"
       },
       "context_messages": 8,
+      "long_messages": 30,
       "pack_max_chars": 12000,
       "match_min_overlap": 0.5,
       "max_usd": 2.0,
