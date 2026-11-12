@@ -17,6 +17,12 @@ describe("wiki_index.schema.json", () => {
     expect(schema.properties.index_version.const).toBe(mcpSettings.index_version);
   });
 
+  it("requires the disclaimer line", () => {
+    const { disclaimer: _disclaimer, ...withoutDisclaimer } = index;
+    expect(validate(withoutDisclaimer).valid).toBe(false);
+    expect(validate({ ...index, disclaimer: "" }).valid).toBe(false);
+  });
+
   it("rejects a page without text, an absolute url, an unknown key and a bad relation", () => {
     const page = index.pages[0];
     const broken = (patch: object) => ({ ...index, pages: [{ ...page, ...patch }] });

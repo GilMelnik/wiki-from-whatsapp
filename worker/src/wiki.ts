@@ -86,6 +86,9 @@ export class Wiki {
           `this server reads version ${settings.index_version}.`,
       );
     }
+    if (typeof index.disclaimer !== "string" || !index.disclaimer) {
+      throw new Error(`Wiki index ${url.pathname} has no disclaimer; run step 9 again to write it.`);
+    }
     if (!searchResponse.ok) console.warn(`${searchUrl.pathname} missing (HTTP ${searchResponse.status}); indexing in memory.`);
     const snapshot = searchResponse.ok ? ((await searchResponse.json()) as SearchSnapshot) : undefined;
     return new Wiki(index, settings, siteUrl, snapshot);
@@ -153,6 +156,11 @@ export class Wiki {
     const hits = result.hits.map((hit) => ({ ...hit, url: new URL(hit.url, this.siteUrl).href }));
     const hint = result.total ? undefined : "No page contains every word. Try fewer words, another spelling, or a * suffix.";
     return { query, total: result.total, hits, ...(hint && { hint }) };
+  }
+
+  /** The page body as get_page returns it: the site's disclaimer line first, as on the markdown twins. */
+  body(page: IndexPage): string {
+    return `> ${this.index.disclaimer}\n\n${page.text}`;
   }
 
   /** Metadata of a page (everything but the body), with titles for every referenced id. */

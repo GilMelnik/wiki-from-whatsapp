@@ -9,12 +9,14 @@
   <script src="{{ 'assets/wiki/refs-toggle.js' | url }}" data-storage-key="{{ config.extra.refs_toggle.storage_key | e }}"></script>
 {% endblock %}
 
+{#- The disclaimer in Material's own info admonition (what `!!! info "title"` renders), which the
+    theme styles only inside `md-typeset`. -#}
 {% block hero %}
   {% set disclaimer = config.extra.disclaimer %}
-  <div class="wiki-disclaimer-bar md-grid">
-    <div class="wiki-disclaimer" role="note">
-      <p><strong>{{ disclaimer.label | e }}</strong>
-        {{ disclaimer.text | e }}
+  <div class="wiki-disclaimer md-grid md-typeset">
+    <div class="admonition info" role="note">
+      <p class="admonition-title">{{ disclaimer.label | e }}</p>
+      <p>{{ disclaimer.text | e }}
         <a href="{{ config.extra.terms_path | url }}">{{ disclaimer.terms_link_text | e }}</a></p>
     </div>
   </div>

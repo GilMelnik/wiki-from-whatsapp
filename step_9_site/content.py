@@ -27,12 +27,14 @@ import yaml
 from step_6_plan.model import check_plan, iter_nodes
 from step_9_site.info_pages import about_body, terms_body
 from step_7_write_pages.checks import cited_ids
+from step_7_write_pages.inputs import hebrew_month
 from step_9_site.references import References
 from utils.config import section
 from utils.okf import render_page, validate_front_matter
 from utils.wiki_links import WikiLink, replace_wiki_links
 
 SITE_CONFIG = section("site")
+HOME_CONFIG = SITE_CONFIG["home"]
 PAGES_CONFIG = section("pages")
 HOME_FILE = "index.md"
 ABOUT_CONFIG = SITE_CONFIG["about"]
@@ -280,10 +282,20 @@ class Site:
             "title": mkdocs["site_name"],
             "description": mkdocs["site_description"],
         }
-        about_link = f"[{ABOUT_CONFIG['home_link_text']}]({ABOUT_FILE})"
         tree = self.tree_lines(self.plan["tree"], 2, lambda page_id: self._page_item(HOME_FILE, page_id))
-        lines = [SITE_CONFIG["home_intro"], "", about_link, *tree]
-        return with_front_matter(meta, "\n".join(lines))
+        return with_front_matter(meta, "\n".join([self.home_intro(ABOUT_FILE), *tree]))
+
+    def home_intro(self, about_href: str) -> str:
+        """The home page's opening paragraph: what the wiki rests on and from when to when (the
+        claim groups the published pages cite as sources), ending in the link ``about_href`` to
+        the about page. Without a dated group the sentence leaves the dates out."""
+        sources = (source["id"] for page_id in self.order for source in self.pages[page_id]["front_matter"]["sources"])
+        period = self.references.period(sources)
+        if period:
+            intro = HOME_CONFIG["intro"].format(first=hebrew_month(period[0]), last=hebrew_month(period[1]))
+        else:
+            intro = HOME_CONFIG["intro_undated"]
+        return f"{intro} [{ABOUT_CONFIG['home_link_text']}]({about_href})."
 
     def tree_lines(self, nodes: list[dict[str, Any]], level: int, item: Callable[[str], str]) -> list[str]:
         """The plan's tree as markdown: a heading and description per category, ``item(page_id)``

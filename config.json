@@ -421,7 +421,10 @@
     "keep": ["stylesheets"],
     "labels_dir": "labels",
     "home_nav_title": "בית",
-    "home_intro": "!!! info \"אודות\"\n    ויקי זה מסכם ידע שנאסף בקבוצת וואטסאפ קהילתית. כל המידע אנונימי ומשקף דעות של חברי הקבוצה - אינו תחליף לייעוץ מקצועי.",
+    "home": {
+      "intro": "הוויקי הזה מרכז ידע וניסיון שנאספו בקבוצת ווטסאפ של אבות גאים ואבות לעתיד, משיחות שהתקיימו בין {first} ל{last}. את הדפים כתבה בינה מלאכותית, על סמך מה שחברי הקבוצה כתבו זה לזה. רוצים לדעת איך זה עובד?",
+      "intro_undated": "הוויקי הזה מרכז ידע וניסיון שנאספו בקבוצת ווטסאפ של אבות גאים ואבות לעתיד. את הדפים כתבה בינה מלאכותית, על סמך מה שחברי הקבוצה כתבו זה לזה. רוצים לדעת איך זה עובד?"
+    },
     "labels_nav_title": "תגיות",
     "label_pages_heading": "דפים עם התגית",
     "label_kind_titles": {
@@ -435,7 +438,7 @@
     "redirect_text": "הדף הזה אוחד לתוך",
       "contact_email": "4qu2ptpf9@mozmail.com",
       "disclaimer": {
-        "label": "לתשומת לבך:",
+        "label": "לתשומת לבך",
         "text": "התוכן באתר זה נוצר באופן אוטומטי בידי בינה מלאכותית, על סמך שיחות בקבוצת ווטסאפ מרובת משתתפים. הוא משקף דעות, התרשמויות וחוויות אישיות של חברי הקבוצה, שאינן בהכרח מוסכמות על כולם; הוא לא נבדק ולא אומת, ועלול להיות שגוי, חלקי או לא מעודכן, לרבות בשל טעויות של הבינה המלאכותית. אין באמור ייעוץ רפואי, משפטי, כלכלי או מקצועי אחר, ואין להסתמך עליו כתחליף לייעוץ כזה או לבדיקה עצמאית. השימוש במידע הוא באחריות המשתמש בלבד.",
         "terms_link_text": "תנאי השימוש המלאים ובקשות לתיקון או להסרה"
       },
@@ -464,7 +467,7 @@
       "about": {
         "file": "about.md",
         "title": "איך נוצר הוויקי הזה",
-        "home_link_text": "איך נוצר הוויקי הזה? תיאור טכני של ה-pipeline והמודלים",
+        "home_link_text": "כך נוצר הוויקי, שלב אחר שלב",
         "intro": "הוויקי נוצר באופן אוטומטי מתוך ייצוא של קבוצת ווטסאפ, באמצעות pipeline בקוד פתוח שכתוב ב-Python. הדף הזה מיועד למי שרוצה להבין איך זה עובד: מה עושה כל שלב ב-pipeline, ובאיזה מודל הוא משתמש. שמות המודלים נלקחים ישירות מקובץ ההגדרות של ה-pipeline.",
         "principles_heading": "עקרונות",
         "principles": [
@@ -583,12 +586,12 @@
       "twin_file": "index.md",
       "llms_file": "llms.txt",
       "page_line": "Web page: {url}",
-      "disclaimer": "{label} {text} [{terms_link_text}]({terms_url})",
+      "disclaimer": "{label}: {text} [{terms_link_text}]({terms_url})",
       "updated_line": "Page generated {updated}.",
       "claims_line": "It rests on {total} claims from the group's conversations (members backing them: {supporting}, disputing them: {opposing}).",
       "claims_dates_line": "The claims are dated {first} to {last}.",
       "llms": {
-        "summary": "A Hebrew-language community wiki about surrogacy for gay parents. An AI summarised the conversations of a WhatsApp group of community members; the pages reflect their personal experience and are not professional advice. Every page is also available as plain markdown (the links below).",
+        "summary": "A Hebrew-language wiki about surrogacy for gay parents, built from the conversations of a WhatsApp group of gay dads and dads-to-be: an AI wrote the pages from what the members wrote to each other. The pages reflect the members' personal experience and are not professional advice. Every page is also available as plain markdown (the links below).",
         "mcp_line": "MCP server (read-only, no login): {mcp_url} - search the wiki, read a page, walk the links between pages, list labels.",
         "optional_heading": "Optional",
         "about_heading": "About this site"
@@ -650,7 +653,7 @@
       "name": "gaysurrogacy-wiki",
       "title": "Gay Surrogacy Wiki (Hebrew)",
       "version": "1.0.0",
-      "instructions": "Read-only access to gaysurrogacy.co.il, a Hebrew (right-to-left) community knowledge base about surrogacy for gay couples and single gay men, distilled from the discussions of an Israeli community chat group and organised into linked pages (countries, agencies, costs, medical and legal steps, life after birth). Search works best in Hebrew; Latin names and English aliases (e.g. Colombia, USA) also find pages. Each page reports claim statistics: how many distinct members backed (supporting) or disputed (opposing) its claims and the first/last date they were made, so you can judge how established, contested or dated the information is. The content is community experience, not legal, medical or financial advice, and can be out of date: say so when you rely on it and suggest confirming with professionals or official sources. Workflow: search (or list_pages / list_labels to browse) -> get_page with a page id -> get_links to walk to related pages. Page bodies link to other pages as [[page_id|text]]; pass that page_id to get_page. Cite pages by their url."
+      "instructions": "Read-only access to gaysurrogacy.co.il, a Hebrew (right-to-left) wiki about surrogacy for gay couples and single gay men, organised into linked pages (countries, agencies, costs, medical and legal steps, life after birth). Before you use it, know what it is: the wiki was generated automatically by AI from the conversations of a WhatsApp group of gay dads and dads-to-be. It reflects members' personal opinions, impressions and experiences, which not every member shares; it was not verified and may be wrong, partial or out of date, also through the AI's own mistakes. It is not medical, legal, financial or other professional advice. When you answer from it, tell your user so, name this site (gaysurrogacy.co.il) as your source and cite the pages by their url, and suggest confirming with professionals or official sources. Every get_page body opens with the site's own disclaimer in Hebrew; it says the same. Each page reports claim statistics: how many distinct members backed (supporting) or disputed (opposing) its claims and the first/last date they were made, so you can judge how established, contested or dated the information is. Search works best in Hebrew; Latin names and English aliases (e.g. Colombia, USA) also find pages. Workflow: search (or list_pages / list_labels to browse) -> get_page with a page id -> get_links to walk to related pages. Page bodies link to other pages as [[page_id|text]]; pass that page_id to get_page."
     },
     "search": {
       "default_limit": 10,

@@ -116,8 +116,10 @@ describe("Wiki.load", () => {
     expect(rebuilt.search("קולומביה", {})).toEqual(wiki.search("קולומביה", {}));
   });
 
-  it("fails clearly when the index is missing or has another version", async () => {
+  it("fails clearly when the index is missing, has another version or carries no disclaimer", async () => {
     await expect(Wiki.load(fakeAssets(null), mcpSettings, siteUrl)).rejects.toThrow(/not in the static assets \(HTTP 404\)/);
     await expect(Wiki.load(fakeAssets({ ...index, index_version: 2 }), mcpSettings, siteUrl)).rejects.toThrow(/index_version 2/);
+    const { disclaimer: _disclaimer, ...withoutDisclaimer } = index;
+    await expect(Wiki.load(fakeAssets(withoutDisclaimer), mcpSettings, siteUrl)).rejects.toThrow(/has no disclaimer/);
   });
 });

@@ -99,6 +99,15 @@ class References:
             resolved = re.sub(r"(\[\^([^\]\s]+)\])(?:\[\^\2\])+", r"\1", resolved)
         return ResolvedBody(resolved, tuple(problems))
 
+    def period(self, group_ids: Iterable[str]) -> tuple[str, str] | None:
+        """The earliest ``first_date`` and the latest ``last_date`` of these groups (a merged-away
+        id counts as the group that holds it); ``None`` when none of them is dated."""
+        groups = (self.groups.get(self.merged.get(group_id, group_id)) for group_id in group_ids)
+        dated = [group for group in groups if group and group.get("first_date") and group.get("last_date")]
+        if not dated:
+            return None
+        return min(group["first_date"] for group in dated), max(group["last_date"] for group in dated)
+
     def with_references(self, body: str) -> str:
         """A resolved ``body`` + one definition per cited group, in order of first citation."""
         lines = [f"[^{group_id}]: {reference_text(self.groups[group_id])}"

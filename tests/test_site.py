@@ -12,6 +12,7 @@ from step_6_plan import operations
 from step_9_site.agent_pages import twin_docs_path
 from step_9_site.hebrew_search import prefix_variants
 from step_9_site.run import sync_docs
+from tests.plan_fixtures import make_groups
 from tests.site_fixtures import issues_of, make_page, make_site_plan, run_site
 from utils.config import PROJECT_ROOT, section
 from utils.okf import parse_page
@@ -116,7 +117,11 @@ def test_home_page_presents_the_tree(built: tuple[Path, dict[str, Any]]) -> None
     meta, body = _read(docs, "index.md")
     assert meta["okf_version"] == section("pages")["okf_version"]
     assert meta["title"] == section("site")["mkdocs"]["site_name"]
-    assert body.startswith(section("site")["home_intro"])
+    site = section("site")
+    # one plain paragraph (no box): the groups' dates (fixture group g-00000001), then the about link
+    intro = site["home"]["intro"].format(first="ינואר 2023", last="יוני 2024")
+    assert body.split("\n\n")[0] == f"{intro} [{site['about']['home_link_text']}](about.md)."
+    assert "!!!" not in body
     lines = [line for line in body.splitlines() if line.startswith(("#", "-"))]
     assert lines == [
         "## לפני",
@@ -127,6 +132,16 @@ def test_home_page_presents_the_tree(built: tuple[Path, dict[str, Any]]) -> None
         "### רפואי",
         "- [כותרת clinics](clinics.md): תיאור clinics",
     ]
+
+
+def test_home_paragraph_leaves_the_dates_out_when_no_group_is_dated(tmp_path: Path) -> None:
+    plan = make_site_plan()
+    groups = [{**group, "first_date": None, "last_date": None} for group in make_groups(4)]
+    run_site(tmp_path, plan, _pages(plan), groups)
+    _, body = _read(tmp_path / "docs", "index.md")
+    site = section("site")
+    assert body.split("\n\n")[0] == f"{site['home']['intro_undated']} [{site['about']['home_link_text']}](about.md)."
+    assert "{" not in body.split("\n\n")[0]
 
 
 def test_merged_ids_get_redirect_stubs_and_links_follow_them(tmp_path: Path) -> None:

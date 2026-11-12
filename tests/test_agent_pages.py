@@ -14,7 +14,7 @@ import pytest
 import yaml
 
 from step_6_plan import operations
-from step_9_site.agent_pages import plain_admonitions, strip_marks, twin_docs_path, twin_url
+from step_9_site.agent_pages import disclaimer_line, plain_admonitions, strip_marks, twin_docs_path, twin_url
 from step_9_site.run import build_config
 from tests.site_fixtures import make_page, make_site_plan, run_site
 from utils.config import PROJECT_ROOT, section
@@ -111,6 +111,23 @@ def test_every_twin_starts_with_the_disclaimer_and_has_no_marks_or_html(built: P
         assert not HTML_TAG.search(text), path
         assert "[[" not in text and "!!!" not in text, path
         assert not text.startswith("---"), path  # no front matter
+
+
+def test_get_page_and_the_twins_carry_the_same_disclaimer_line(built: Path) -> None:
+    """The MCP ``get_page`` opens every body with ``wiki_index.json``'s ``disclaimer``: the twins' first line."""
+    index = json.loads((built / "docs" / "wiki_index.json").read_text(encoding="utf-8"))
+    disclaimer = SITE["disclaimer"]
+    assert index["disclaimer"] == disclaimer_line()
+    assert index["disclaimer"].startswith(f"{disclaimer['label']}: {disclaimer['text']} [{disclaimer['terms_link_text']}]")
+    for path in (built / "out").rglob(AGENT["twin_file"]):
+        assert path.read_text(encoding="utf-8").split("\n\n")[1] == f"> {index['disclaimer']}", path
+    assert f"> {index['disclaimer']}" in (built / "out" / AGENT["llms_file"]).read_text(encoding="utf-8")
+
+
+def test_home_twin_opens_with_the_home_paragraph_linking_the_about_twin(built: Path) -> None:
+    text = (built / "out" / AGENT["twin_file"]).read_text(encoding="utf-8")
+    intro = SITE["home"]["intro"].format(first="ינואר 2023", last="יוני 2024")
+    assert text.split("\n\n")[3] == f"{intro} [{SITE['about']['home_link_text']}]({twin_url('about.md')})."
 
 
 def test_links_in_the_twins_are_absolute_and_resolve_to_twins(built: Path) -> None:

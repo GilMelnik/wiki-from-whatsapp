@@ -38,4 +38,3 @@ export interface McpSettings {
 
 export const mcpSettings: McpSettings = config.mcp as McpSettings;
 export const siteUrl: string = config.site.url;
-export const twinFile: string = config.site.agent_markdown.twin_file;

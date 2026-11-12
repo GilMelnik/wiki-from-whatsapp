@@ -9,10 +9,8 @@
     "directory": "./site",
     "binding": "ASSETS",
     "not_found_handling": "404-page",
-    // The script runs for the MCP endpoint and for page URLs (the home page and every path ending
-    // in "/"), where it answers "Accept: text/markdown" with the page's markdown twin. Every other
-    // request (assets, search index, the twins and llms.txt themselves) is a free static-asset hit.
-    "run_worker_first": ["/mcp", "/", "/*/"]
+    // Only the MCP endpoint runs the script; every other request is a free static-asset hit.
+    "run_worker_first": ["/mcp"]
   },
   "routes": [{ "pattern": "gaysurrogacy.co.il", "custom_domain": true }]
 }
