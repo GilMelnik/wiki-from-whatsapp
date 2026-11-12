@@ -1,27 +1,28 @@
 import { useEffect, useState } from "react";
-import { Bidi, countText, Pager, useResource } from "@shell";
+import { Bidi, countText, useResource } from "@shell";
 import { api, entityPath } from "./api.js";
 import { ClaimItem } from "./ClaimItem.jsx";
-import { colour, SIGNAL_LABELS } from "./entities.js";
+import { colour, moreShown, SIGNAL_LABELS } from "./entities.js";
 
-// One member (one spelling) of the entity: its actions, how step 4 attached it, its claims
-// (paged by the server; the first page comes with the entity) and the claims excluded from it.
+// One name (one spelling) of the entity: does it belong here? Its claims (the first three
+// come with the entity; "Show more" loads more), how step 4 attached it, the other entities
+// that hold the same name, and the claims excluded from it. Actions on picked claims appear
+// once a claim is picked.
 
 function AttachedNotice({ attachedBy, saving, onConfirm, onMove }) {
   const signals = attachedBy.signals.map((signal) => SIGNAL_LABELS[signal] ?? signal).join(", ");
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
-      <span>
-        Attached automatically in an update: like “<Bidi className="font-semibold">{attachedBy.matched}</Bidi>” (
-        {attachedBy.similarity}
-        {signals && `, ${signals}`})
+    <div className="note note-warning flex flex-wrap items-center gap-2 p-2 text-xs">
+      <span title={`Similarity ${attachedBy.similarity}`}>
+        An update attached this name because it looks like “<Bidi className="font-semibold">{attachedBy.matched}</Bidi>”
+        {signals && ` (${signals})`}. Does it belong here?
       </span>
       <span className="ms-auto flex gap-1">
         <button type="button" className="btn btn-sm" disabled={saving} onClick={onConfirm}>
-          Attachment is right
+          It belongs here
         </button>
         <button type="button" className="btn btn-sm" disabled={saving} onClick={onMove}>
-          Move…
+          Move it…
         </button>
       </span>
     </div>
@@ -47,24 +48,40 @@ function Excluded({ claims, saving, onInclude }) {
   );
 }
 
-export function MemberCard({ entityId, member, pageSize, picked, saving, reads, on }) {
-  const [offset, setOffset] = useState(0);
-  const page = useResource(
-    () =>
-      offset === 0
-        ? null
-        : api.get(`${entityPath(entityId)}/claims`, { name: member.name, offset, limit: pageSize }),
-    [offset],
+function PickedActions({ name, picked, saving, on }) {
+  if (picked.length === 0) return null;
+  return (
+    <span className="flex flex-wrap items-center gap-1 text-xs">
+      <span className="text-slate-600">{countText(picked.length, "claim")} picked:</span>
+      <button type="button" className="btn btn-sm" disabled={saving} onClick={() => on.claims("copy", name, picked)}>
+        Copy…
+      </button>
+      <button type="button" className="btn btn-sm" disabled={saving} onClick={() => on.claims("move", name, picked)}>
+        Move…
+      </button>
+      <button type="button" className="btn btn-sm text-rose-700" disabled={saving} onClick={() => on.exclude(name, picked)}>
+        Unrelated
+      </button>
+    </span>
+  );
+}
+
+export function MemberCard({ entityId, member, picked, saving, reads, on }) {
+  const first = member.claims;
+  const [shown, setShown] = useState(first.claims.length);
+  const more = useResource(
+    () => (shown <= first.claims.length ? null : api.get(`${entityPath(entityId)}/claims`, { name: member.name, offset: 0, limit: shown })),
+    [shown],
     { watch: reads, keepPrevious: true }
   );
-  const claims = (offset > 0 && page.data) || member.claims;
-  // The member shrank under the page shown (claims moved or excluded): back to the first page.
+  const claims = (shown > first.claims.length && more.data) || first;
+  // The name lost claims under what is shown (moved, excluded): show the first ones again.
   useEffect(() => {
-    if (offset > 0 && page.data && offset >= page.data.count) setOffset(0);
-  }, [offset, page.data]);
+    if (more.data && shown > more.data.count) setShown(first.claims.length);
+  }, [more.data]);
   const tone = colour(member.member_index);
-  const none = picked.length === 0;
   const name = member.name;
+  const left = claims.count - claims.claims.length;
 
   return (
     <section className={`space-y-2 rounded-lg border p-3 ${tone.card}`}>
@@ -75,35 +92,21 @@ export function MemberCard({ entityId, member, pageSize, picked, saving, reads, 
         {member.is_canonical && <span className="badge badge-emerald">Canonical name</span>}
         <span className="ms-auto flex flex-wrap gap-1">
           {!member.is_canonical && (
-            <button type="button" className="btn btn-sm" disabled={saving} onClick={() => on.setCanonical(name)}>
+            <button type="button" className="btn btn-sm btn-quiet" disabled={saving} onClick={() => on.setCanonical(name)}>
               Make canonical
             </button>
           )}
-          <button type="button" className="btn btn-sm" disabled={saving} onClick={() => on.moveMember(name)}>
+          <button type="button" className="btn btn-sm btn-quiet" disabled={saving} onClick={() => on.moveMember(name)}>
             Move name…
-          </button>
-          <button type="button" className="btn btn-sm" disabled={saving || none} onClick={() => on.claims("copy", name, picked)}>
-            Copy claims ({picked.length})…
-          </button>
-          <button type="button" className="btn btn-sm" disabled={saving || none} onClick={() => on.claims("move", name, picked)}>
-            Move claims ({picked.length})…
-          </button>
-          <button type="button" className="btn btn-sm text-rose-700" disabled={saving || none} onClick={() => on.exclude(name, picked)}>
-            Unrelated ({picked.length})
           </button>
         </span>
       </header>
       {member.attached_by && (
-        <AttachedNotice
-          attachedBy={member.attached_by}
-          saving={saving}
-          onConfirm={() => on.confirm(name)}
-          onMove={() => on.moveMember(name)}
-        />
+        <AttachedNotice attachedBy={member.attached_by} saving={saving} onConfirm={() => on.confirm(name)} onMove={() => on.moveMember(name)} />
       )}
       {member.also_in.length > 0 && (
         <p className="flex flex-wrap items-center gap-1 text-xs text-slate-600">
-          This name also appears in:
+          This name also belongs to:
           {member.also_in.map((other) => (
             <button key={other.entity_id} type="button" className="badge badge-slate hover:bg-slate-200" onClick={() => on.open(other.entity_id)}>
               <Bidi>{other.canonical_name}</Bidi>
@@ -111,6 +114,7 @@ export function MemberCard({ entityId, member, pageSize, picked, saving, reads, 
           ))}
         </p>
       )}
+      <PickedActions name={name} picked={picked} saving={saving} on={on} />
       <ul className="space-y-1.5">
         {claims.claims.map((claim) => (
           <ClaimItem
@@ -128,9 +132,11 @@ export function MemberCard({ entityId, member, pageSize, picked, saving, reads, 
         ))}
         {claims.claims.length === 0 && <li className="p-2 text-xs text-slate-500">No active claims for this name.</li>}
       </ul>
-      <div className="flex justify-center text-xs text-slate-500">
-        <Pager offset={claims.offset} limit={pageSize} total={claims.count} onChange={setOffset} />
-      </div>
+      {left > 0 && (
+        <button type="button" className="btn btn-sm btn-quiet" disabled={more.loading && shown > first.claims.length} onClick={() => setShown(moreShown(claims.claims.length, claims.count))}>
+          Show more ({countText(left, "claim")} not shown)
+        </button>
+      )}
       <Excluded claims={member.excluded_claims} saving={saving} onInclude={(ids) => on.include(name, ids)} />
     </section>
   );

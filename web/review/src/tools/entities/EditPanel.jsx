@@ -1,10 +1,21 @@
 import { useEffect, useState } from "react";
-import { Bidi, countText, Kbd, Ltr, Panel, PanelState } from "@shell";
-import { Contacts } from "./Contacts.jsx";
+import { countText, Kbd, Panel, PanelState } from "@shell";
+import { ContactsForm } from "./Contacts.jsx";
 
-// Side column: what can be done with the selected entity. Decisions in the footer (accept,
-// merge, reject, delete); the name, contacts and claim grouping above. Every change is saved
-// at once to entities_edited.json (claim groups to claim_aggregations.json).
+// The side column: the decisions on the selected entity, only those that fit it, each with
+// its key (accept, or back to suggested; merge into another entity; split a grouping of
+// several names; combine picked claims; delete), then its canonical name and the contacts
+// edited by hand. Every change is saved at once.
+
+function ActionButton({ label, keyName, primary = false, danger = false, disabled, onClick }) {
+  const tone = primary ? "btn-primary" : danger ? "text-rose-700" : "";
+  return (
+    <button type="button" className={`btn btn-block justify-between ${tone}`} disabled={disabled} onClick={onClick}>
+      <span>{label}</span>
+      {keyName && <Kbd>{keyName}</Kbd>}
+    </button>
+  );
+}
 
 function NameForm({ entity, saving, nameRef, onRename }) {
   const [name, setName] = useState(entity.canonical_name);
@@ -21,82 +32,54 @@ function NameForm({ entity, saving, nameRef, onRename }) {
       <h3 className="section-title">
         Canonical name {entity.canonical_manual && <span className="badge badge-sky ms-1">Set by hand</span>}
       </h3>
-      <input ref={nameRef} dir="rtl" lang="he" className="field w-full" value={name} onChange={(event) => setName(event.target.value)} />
-      <button type="submit" className="btn btn-sm" disabled={saving || !dirty}>
-        Save name
-      </button>
+      <div className="flex gap-2">
+        <input ref={nameRef} dir="rtl" lang="he" className="field min-w-0 flex-1" value={name} onChange={(event) => setName(event.target.value)} />
+        <button type="submit" className="btn btn-sm" disabled={saving || !dirty}>
+          Save
+        </button>
+      </div>
+      <p className="text-xs text-slate-500">
+        Or “Make canonical” on one of its names. <Kbd>e</Kbd> edits it.
+      </p>
     </form>
   );
 }
 
-function Footer({ entity, saving, pickedCount, on }) {
+function Decisions({ entity, saving, pickedCount, on }) {
   const accepted = entity.status === "accepted";
   return (
-    <>
+    <div className="space-y-2">
       {accepted ? (
-        <button type="button" className="btn btn-block" disabled={saving} onClick={() => on.setStatus("suggested")}>
-          Back to suggested (for another look)
-        </button>
+        <ActionButton label="Back to suggested" disabled={saving} onClick={() => on.setStatus("suggested")} />
       ) : (
-        <button type="button" className="btn btn-primary btn-block" disabled={saving} onClick={() => on.setStatus("accepted")}>
-          Accept the entity
-          <Kbd>a</Kbd>
-        </button>
+        <ActionButton label="Accept the entity" keyName="a" primary disabled={saving} onClick={() => on.setStatus("accepted")} />
       )}
-      <div className="grid grid-cols-2 gap-2">
-        <button type="button" className="btn btn-sm" disabled={saving} onClick={on.merge}>
-          Merge into another entity…
-          <Kbd>m</Kbd>
-        </button>
-        <button type="button" className="btn btn-sm" disabled={saving} onClick={on.reject}>
-          Reject the grouping…
-          <Kbd>x</Kbd>
-        </button>
-        <button type="button" className="btn btn-sm" disabled={saving || pickedCount < 2} onClick={on.aggregate}>
-          Combine {countText(pickedCount, "claim")}…
-          <Kbd>g</Kbd>
-        </button>
-        <button type="button" className="btn btn-sm text-rose-700" disabled={saving} onClick={on.remove}>
-          Delete the entity…
-          <Kbd>Del</Kbd>
-        </button>
-      </div>
-    </>
+      <ActionButton label="Merge into another entity…" keyName="m" disabled={saving} onClick={on.merge} />
+      {entity.member_count > 1 && (
+        <ActionButton label="Split into one entity per name…" keyName="x" disabled={saving} onClick={on.reject} />
+      )}
+      {pickedCount >= 2 && (
+        <ActionButton label={`Combine the ${countText(pickedCount, "picked claim")}…`} keyName="g" disabled={saving} onClick={on.aggregate} />
+      )}
+      <ActionButton label="Delete the entity…" keyName="Del" danger disabled={saving} onClick={on.remove} />
+    </div>
   );
 }
 
 export function EditPanel({ detail, saving, nameRef, pickedCount, on }) {
   const entity = detail.data?.entity;
   return (
-    <Panel
-      title="Edit"
-      subtitle={
-        <>
-          Saved at once to <Ltr>entities_edited.json</Ltr>
-        </>
-      }
-      footer={entity && <Footer entity={entity} saving={saving} pickedCount={pickedCount} on={on} />}
-    >
+    <Panel title="Decide">
       <PanelState empty={!entity} emptyText="No entity selected">
         {entity && (
           <div className="space-y-6 p-4 text-sm">
+            <Decisions entity={entity} saving={saving} pickedCount={pickedCount} on={on} />
             <NameForm entity={entity} saving={saving} nameRef={nameRef} onRename={on.rename} />
-            <Contacts entity={entity} saving={saving} onSave={on.saveContacts} onResolve={on.resolveContact} />
-            <section>
-              <h3 className="section-title">All names</h3>
-              <p className="flex flex-wrap gap-1">
-                {entity.aliases.map((alias) => (
-                  <Bidi key={alias} className="badge badge-slate">
-                    {alias}
-                  </Bidi>
-                ))}
-              </p>
-            </section>
-            <section className="space-y-1 text-xs text-slate-500">
-              <p>Pick claims (the check box) to copy, move, mark as unrelated or combine them.</p>
-              <p>“Move name” moves one whole alias; “Merge” moves every name to another entity.</p>
-              <p>“Reject the grouping” splits the entity into one entity per name, each with only the claims tagged with that name.</p>
-            </section>
+            <ContactsForm entity={entity} saving={saving} onSave={on.saveContacts} />
+            <p className="text-xs text-slate-500">
+              Pick claims (their check box) to copy, move, mark as unrelated or combine them. “Move name” moves one name with its
+              claims to another entity.
+            </p>
           </div>
         )}
       </PanelState>

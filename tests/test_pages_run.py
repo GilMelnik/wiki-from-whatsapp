@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -13,7 +14,7 @@ from review_tool.steps import SERVED_STEPS
 from step_6_plan import operations
 from step_7_write_pages.checks import cited_ids
 from step_9_site.content import Site
-from tests.pages_fixtures import FakeWriter, PagesWorkspace
+from tests.pages_fixtures import FakeWriter, PagesWorkspace, main_ids_in, points_of
 from utils.llm_client import _flatten
 from utils.okf import validate_front_matter
 
@@ -51,17 +52,39 @@ def test_first_run_writes_c9_pages_that_step_9_accepts(ws: PagesWorkspace) -> No
     payload = ws.pages()
     assert list(payload["pages"]) == PAGES
     for page_id, page in payload["pages"].items():
-        assert set(page) == {"front_matter", "body_md", "input_fingerprint"}
+        assert list(page) == ["front_matter", "body_md", "points", "left_out", "input_fingerprint"]
         validate_front_matter(page["front_matter"])
         assert not page["body_md"].startswith(("---", "# "))
         cited = cited_ids(page["body_md"])
+        report = payload["metadata"]["pages"][page_id]["report"]
+        assert report["unaccounted"] == [] and report["final_problems"] == []
+        assert [gid for point in page["points"] for gid in point["groups"]] == [
+            gid for gid in cited if ws.assignments()["assignments"][gid]["pages"][0] == page_id]
         assert cited and [s["id"] for s in page["front_matter"]["sources"]] == cited
         assert payload["metadata"]["inputs"][page_id] == page["input_fingerprint"]
         assert "report" in payload["metadata"]["pages"][page_id]
     assert not ws.artifact.edited.exists()  # reconcile creates no edited copy
-    site = Site(ws.plan(), payload["pages"])
+    site = Site(ws.plan(), payload["pages"], ws.groups())
     assert not [i for i in site.issues if i["issue"].startswith("broken")]
+    assert not [i for i in site.issues if i["issue"].endswith("_reference")]
     assert payload["metadata"]["run"]["write"] == 4
+    assert all("]:" not in page["body_md"] for page in payload["pages"].values())
+
+
+def test_participant_counts_and_baked_definitions_change_no_page(ws: PagesWorkspace) -> None:
+    payload = ws.pages()
+    for page in payload["pages"].values():  # pages as an older step 7 stored them
+        page["body_md"] += "".join(f"\n[^{gid}]: טענה (נאמר במאי 2024)" for gid in cited_ids(page["body_md"]))
+    ws.artifact.original.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    groups = ws.groups()
+    for group in groups:
+        group["participant_count"] = 5
+    ws.write_groups(groups)
+    llm, update = FakeWriter(), FakeWriter("fake-update")
+    result = ws.run(llm, update)
+    assert llm.calls == [] and update.calls == []
+    assert (result.get("write", 0), result.get("update", 0), result["kept"]) == (0, 0, 4)
+    assert ws.pages()["pages"] == payload["pages"]
 
 
 def test_second_run_makes_no_call_and_writes_nothing(ws: PagesWorkspace) -> None:
@@ -106,7 +129,8 @@ def test_no_change_keeps_generated_at_and_records_the_new_fingerprint(ws: PagesW
     before = ws.pages()["pages"]["agencies"]
     _bump(ws, 8)
     update = FakeWriter("fake-update", respond=lambda s, u, t: {
-        "no_change": True, "body": "", "summary": "", "questions": [], "related": []})
+        **points_of(main_ids_in(u)), "no_change": True, "body": "", "summary": "",
+        "questions": [], "related": []})
     result = ws.run(FakeWriter(), update)
     after = ws.pages()["pages"]["agencies"]
     assert result["no_change"] == 1

@@ -27,6 +27,7 @@ export { useToast } from "./Toast.jsx";
 export { useBanner } from "./Banner.jsx";
 export { ToolLink } from "./navigation.jsx";
 export { JobLog, useStepRun } from "./JobControls.jsx";
+export { ActionButton } from "./ActionButton.jsx";
 
 // Plan operations, shared by every tool that shows or edits one (plan, suggestions): the pure
 // helpers (also what a tool's pure modules may import, see pure.js), the forms and dialogs,
@@ -35,7 +36,16 @@ export * from "./pure.js";
 export { usePlanOverview, usePreview } from "./planApi.js";
 export { EditableText, IdField, submitOnEnter, TextArea } from "./fields.jsx";
 export { Consequences, OperationDialog } from "./OperationDialog.jsx";
+export { DryRun } from "./DryRun.jsx";
 export { AddCategoryDialog, AddLabelDialog, AddPageDialog, KindField, MergeDialog, SplitDialog } from "./PlanDialogs.jsx";
+
+// The shared message views (conversation and timeline), for every tool that shows messages;
+// their pure helpers (rows, gaps, edges, selection rules, colours) come with pure.js.
+export { ConversationView, ROLE_LABELS } from "./ConversationView.jsx";
+export { TimelineView } from "./TimelineView.jsx";
+export { Divider, MessageRow, ThreadTag } from "./MessageRow.jsx";
+export { MESSAGE_VIEWS, MessageViewBar } from "./MessageViewBar.jsx";
+export { useMessageSelection, useThreadColors } from "./messageHooks.js";
 
 // Text, formatting, keyboard, remembered state
 export { Bidi, Kbd, Ltr } from "./text.jsx";

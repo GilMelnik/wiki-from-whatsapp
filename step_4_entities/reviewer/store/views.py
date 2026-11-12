@@ -13,9 +13,18 @@ from step_4_entities.reviewer.store.helpers import (
 )
 from utils.config import ENTITIES_CONFIG
 
+REVIEW_CONFIG = ENTITIES_CONFIG["review"]
+# How many claims a "more" under a name adds; the detail shows ``claims_per_name`` at first.
 PAGE_SIZE = ENTITIES_CONFIG["sample_claims_per_member"]
+FIRST_CLAIMS = REVIEW_CONFIG["claims_per_name"]
+# The review order's sections, first to last: what needs the owner's eye (ambiguous, a look-
+# alike, a name attached by an update, uncertain contacts), then the rest by size, then the
+# decided ones.
+SECTIONS = ("review", "several", "one", "accepted", "rejected")
 
 _SORT_KEYS = {
+    # Descending (the default order) = by section, then most mentioned first.
+    "review": lambda item: (-SECTIONS.index(item["section"]), item["total_count"]),
     "count": lambda item: item["total_count"],
     "size": lambda item: item["member_count"],
     "score": lambda item: item["score"] or 0,
@@ -42,24 +51,43 @@ def _matches(item: dict[str, Any], view: EntityView) -> bool:
     return item["entity_id"] == needle or any(needle in name.casefold() for name in names)
 
 
+def queue_section(status: str, flagged: bool, member_count: int) -> str:
+    """The section of the review order an entity belongs to (see ``SECTIONS``)."""
+    if status in ("accepted", "rejected"):
+        return status
+    if flagged or status == "ambiguous":
+        return "review"
+    return "several" if member_count > 1 else "one"
+
+
 class ViewsMixin:
     """Relies on ``EntityStore``: ``entities``, ``claims``, ``aggregations``, ``annotator``,
     ``deleted_claims``, ``deleted_names``, ``source``, ``edited_path``, ``find``,
     ``member_of`` and ``text_of``."""
 
     def list_item(self, entity: dict[str, Any]) -> dict[str, Any]:
-        return {
-            "entity_id": entity["entity_id"],
-            "canonical_name": entity.get("canonical_name") or "",
-            "status": entity.get("status", "suggested"),
-            "type": entity.get("type"),
-            "member_count": len(entity.get("members") or []),
-            "total_count": member_total(entity),
-            "aliases": entity.get("aliases") or [],
-            "score": entity.get("score"),
+        status = entity.get("status", "suggested")
+        members = len(entity.get("members") or [])
+        score = entity.get("score")
+        flags = {
             "attached_count": len(attached_members(entity)),
             "conflict_count": len(entity.get("conflict_with") or []),
             "uncertain_count": contact_count(entity.get("contacts_uncertain")),
+        }
+        return {
+            "entity_id": entity["entity_id"],
+            "canonical_name": entity.get("canonical_name") or "",
+            "status": status,
+            "type": entity.get("type"),
+            "member_count": members,
+            "total_count": member_total(entity),
+            "aliases": entity.get("aliases") or [],
+            "score": score,
+            "low_cohesion": members > 1
+            and score is not None
+            and score < REVIEW_CONFIG["low_cohesion"],
+            **flags,
+            "section": queue_section(status, any(flags.values()), members),
         }
 
     def _view_items(self, view: EntityView) -> list[dict[str, Any]]:
@@ -174,7 +202,7 @@ class ViewsMixin:
             "contacts_uncertain": member.get("contacts_uncertain") or {},
             "attached_by": member.get("attached_by"),
             "also_in": also_in,
-            "claims": self._claims_page(entity, member, 0, PAGE_SIZE),
+            "claims": self._claims_page(entity, member, 0, FIRST_CLAIMS),
         }
 
     def detail(self, entity_id: str, view: EntityView) -> dict[str, Any]:
@@ -189,6 +217,10 @@ class ViewsMixin:
             "contacts_manual": bool(entity.get("contacts_manual")),
             "merge_signals": entity.get("merge_signals") or [],
             "conflicts": conflicts,
+            "look_alikes": [
+                self.look_alike(conflict["entity_id"]) for conflict in conflicts if conflict["entity_id"]
+            ],
+            "contact_sources": self.contact_sources(entity),
             "members": [
                 self._member_view(entity, member, index)
                 for index, member in enumerate(entity.get("members") or [])
@@ -199,7 +231,7 @@ class ViewsMixin:
     def member_claims(
         self, entity_id: str, name: str, offset: int, limit: int | None = None
     ) -> dict[str, Any]:
-        """One page of a member's visible claims (default page size: the detail's)."""
+        """One page of a member's visible claims (default page size: ``PAGE_SIZE``)."""
 
         entity = self.find(entity_id)
         member = self.member_of(entity, name)

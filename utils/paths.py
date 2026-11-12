@@ -8,7 +8,6 @@ truth for those locations; nothing else hardcodes a ``data/...`` literal.
 
 from __future__ import annotations
 
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -25,6 +24,7 @@ STEP_6_ASSIGN = "step_6_assign"
 STEP_7 = "step_7_write_pages"
 STEP_8 = "step_8_review"
 STEP_9 = "step_9_site"
+STEP_10 = "step_10_update"
 SHARED = "shared"
 
 
@@ -125,6 +125,18 @@ DOCS_DIR = PROJECT_ROOT / section("site")["docs_dir"]
 MKDOCS_PATH = PROJECT_ROOT / section("site")["mkdocs_file"]
 WIKI_INDEX_FILE = section("mcp")["index_file"]
 
+# --------------------------------------------------------------- step 10 update
+# Contract C13. Per update ``<stamp>``, all in ``UPDATES_DIR`` (private, like the export):
+# ``<stamp>_<export_filename>`` (the full export), ``<stamp>_new_messages.json`` (what was not
+# seen before), ``<stamp>_report.json`` (config, commit, fingerprint, each step's summary) and
+# ``<stamp>_update.log``.
+UPDATE_STATE_PATH = step_path(STEP_10, "state.json")
+# Held (``flock``) by a running update; names the step it runs (``utils.step_lease``).
+UPDATE_LEASE_PATH = step_path(STEP_10, "running.json")
+NEW_MESSAGES_SUFFIX = "new_messages.json"
+UPDATE_REPORT_SUFFIX = "report.json"
+UPDATE_LOG_SUFFIX = "update.log"
+
 # ------------------------------------------------------------------- shared
 BACKUPS_DIR = step_path(SHARED, "backups")
 
@@ -159,111 +171,3 @@ def resolve_plan_path() -> Path:
 
 def resolve_wiki_pages_path() -> Path:
     return resolve(WIKI_PAGES)
-
-
-def edited_output_threads_path(source: Path | None = None) -> Path:
-    del source
-    return EDITED_THREADS_PATH
-
-
-def edited_output_classified_path(source: Path | None = None) -> Path:
-    del source
-    return EDITED_CLASSIFIED_PATH
-
-
-def has_classification_data() -> bool:
-    return EDITED_CLASSIFIED_PATH.is_file() or ORIGINAL_CLASSIFIED_PATH.is_file()
-
-
-def init_edited(artifact: Artifact, *, required: bool = True) -> Path | None:
-    """Create ``artifact.edited`` from ``artifact.original`` if missing."""
-    if artifact.edited.exists():
-        return None
-    if not artifact.original.is_file():
-        if required:
-            raise FileNotFoundError(
-                f"Cannot create {artifact.edited}: {artifact.original} not found."
-            )
-        return None
-    artifact.edited.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(artifact.original, artifact.edited)
-    return artifact.edited
-
-
-def init_threads_edited() -> Path | None:
-    try:
-        return init_edited(THREADS, required=True)
-    except FileNotFoundError as exc:
-        raise FileNotFoundError(
-            f"Cannot create {EDITED_THREADS_PATH}: "
-            f"{ORIGINAL_THREADS_PATH} not found. Run threads_split first."
-        ) from exc
-
-
-def init_classified_edited() -> Path | None:
-    return init_edited(CLASSIFIED, required=False)
-
-
-def init_claims_edited() -> Path | None:
-    try:
-        return init_edited(CLAIMS, required=True)
-    except FileNotFoundError as exc:
-        raise FileNotFoundError(
-            f"Cannot create {EDITED_CLAIMS_PATH}: "
-            f"{ORIGINAL_CLAIMS_PATH} not found. Run extract first."
-        ) from exc
-
-
-def init_aggregated_edited() -> Path | None:
-    try:
-        return init_edited(AGGREGATED, required=True)
-    except FileNotFoundError as exc:
-        raise FileNotFoundError(
-            f"Cannot create {EDITED_AGGREGATED_PATH}: "
-            f"{ORIGINAL_AGGREGATED_PATH} not found. Run aggregate first."
-        ) from exc
-
-
-def init_edited_files(*, require_classified: bool = True) -> dict[str, Path]:
-    """Create missing ``*_edited.json`` files by copying pipeline originals."""
-    created: dict[str, Path] = {}
-
-    threads = init_threads_edited()
-    if threads:
-        created["threads"] = threads
-
-    classified = init_classified_edited()
-    if classified:
-        created["classified"] = classified
-    elif require_classified and not has_classification_data():
-        raise FileNotFoundError(
-            f"{ORIGINAL_CLASSIFIED_PATH} not found. Run classify first, "
-            "or start the tool with --inspect to browse threads only."
-        )
-
-    return created
-
-
-def ensure_edited_workspace(
-    *,
-    classified_output: Path | None = None,
-) -> dict[str, str]:
-    """Ensure the review workspace exists for the tagging tool and pipeline."""
-    actions: dict[str, str] = {}
-
-    if not EDITED_THREADS_PATH.exists() and ORIGINAL_THREADS_PATH.is_file():
-        EDITED_THREADS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(ORIGINAL_THREADS_PATH, EDITED_THREADS_PATH)
-        actions["threads_edited"] = "created"
-
-    if classified_output is not None and classified_output.is_file():
-        EDITED_CLASSIFIED_PATH.parent.mkdir(parents=True, exist_ok=True)
-        existed = EDITED_CLASSIFIED_PATH.exists()
-        shutil.copy2(classified_output, EDITED_CLASSIFIED_PATH)
-        actions["threads_classified_edited"] = "updated" if existed else "created"
-    elif not EDITED_CLASSIFIED_PATH.exists() and ORIGINAL_CLASSIFIED_PATH.is_file():
-        EDITED_CLASSIFIED_PATH.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(ORIGINAL_CLASSIFIED_PATH, EDITED_CLASSIFIED_PATH)
-        actions["threads_classified_edited"] = "created"
-
-    return actions

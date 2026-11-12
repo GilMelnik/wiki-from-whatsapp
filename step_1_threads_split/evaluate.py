@@ -11,7 +11,7 @@ format and the C1 format score identically.
 - ``--suggest-windows [N] [--hours H] [--seed S]``: propose windows to tag;
 - ``--freeze-gold [--add | --force] [--done-only]``: build the gold file from
   ``threads_edited.json`` and ``config.json`` ``threads.gold_windows``; ``--done-only``
-  keeps only the windows marked done in the thread tagger (``gold_progress.json``);
+  keeps only the windows marked done in the conversations tool (``gold_progress.json``);
 - ``--add-context --tagged PATH [--shown PATH ...]``: add the context part (the owner's tags
   outside the windows, ``step_1_threads_split.gold_context``) to the gold file;
 - ``--context`` (with the scoring mode): also report the "window + context" score.
@@ -41,7 +41,7 @@ from step_1_threads_split.gold import (
     message_moment,
 )
 from step_1_threads_split.gold_context import add_context_to_file, all_labels, scored_ids
-from step_1_threads_split.review.gold_windows import GoldProgress
+from step_1_threads_split.reviewer.gold_windows import GoldProgress
 from utils.config import PROJECT_ROOT, section
 from utils.logging_setup import setup_step_logging
 from utils.paths import (
@@ -280,14 +280,14 @@ def _configured_windows() -> list[Window]:
 
 
 def _done_windows() -> list[Window]:
-    """The configured windows the user marked done in the thread tagger."""
+    """The configured windows the user marked done in the conversations tool."""
     configured = _configured_windows()
     done = GoldProgress(GOLD_PROGRESS_PATH).done_windows()
     chosen = [window for window in configured if window in done]
     if not chosen:
         raise ValueError(
             f"none of the {len(configured)} configured gold windows is marked done in "
-            f"{GOLD_PROGRESS_PATH}; mark windows done in the thread tagger first"
+            f"{GOLD_PROGRESS_PATH}; mark windows done in the conversations tool (`python -m review_tool --tool threads`) first"
         )
     for window in configured:
         if window not in done:
@@ -321,7 +321,7 @@ def _freeze_report(args: argparse.Namespace) -> str:
     if not EDITED_THREADS_PATH.is_file():
         raise FileNotFoundError(
             f"{EDITED_THREADS_PATH} not found; the gold file is frozen from the threads "
-            "tagged in the thread tagger (`python -m step_1_threads_split.review --inspect`)"
+            "tagged in the conversations tool (`python -m review_tool --tool threads`)"
         )
     kept = load_gold(args.gold)["windows"] if args.add and args.gold.is_file() else []
     frozen_before = {window["start"] for window in kept}
@@ -431,7 +431,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument(
         "--done-only",
         action="store_true",
-        help="with --freeze-gold: freeze only the windows marked done in the thread tagger",
+        help="with --freeze-gold: freeze only the windows marked done in the conversations tool",
     )
     parser.add_argument(
         "--context",

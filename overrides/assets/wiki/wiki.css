@@ -1,4 +1,5 @@
-/* Reader-facing additions of step 9: the disclaimer banner and the references toggle. */
+/* Reader-facing additions of step 9: the disclaimer banner, the references toggle and the
+   two lines above the footer. */
 
 /* ---- disclaimer: calm, always visible, no way to close it ---- */
 .wiki-disclaimer-bar {
@@ -80,4 +81,31 @@ html.wiki-js .wiki-tools {
 html:not(.wiki-refs-on) .wiki-refs-toggle__state--on,
 html.wiki-refs-on .wiki-refs-toggle__state--off {
   display: none;
+}
+
+/* ---- above the footer: the terms link, the support line right under it ---- */
+.wiki-footer-lines {
+  padding: 0.8rem 0.8rem 1rem;
+  text-align: center;
+  font-size: 0.64rem;
+  line-height: 1.5;
+  color: var(--md-default-fg-color--light);
+}
+
+.wiki-footer-lines p {
+  margin: 0;
+  unicode-bidi: plaintext;
+}
+
+.wiki-footer-lines p + p {
+  margin-block-start: 0.15rem;
+}
+
+.wiki-footer-lines a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.wiki-footer-lines a:hover {
+  color: var(--md-accent-fg-color);
 }

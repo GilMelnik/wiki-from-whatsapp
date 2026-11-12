@@ -3,7 +3,9 @@
 The shape is the Worker's (``worker/wiki_index.schema.json``; field sources in
 ``tasks/41-wiki-mcp/report.md``): every plan label, then every published page in navigation
 order with its front-matter metadata, its resolved labels / related pages / out-links (only
-published pages) and its body as written, wiki links kept.
+published pages) and its body as written, wiki links and ``[^g-…]`` marks kept, without
+references (a definition stored by an older step 7 is left out; marks of merged groups follow
+the group that holds them).
 """
 
 from __future__ import annotations
@@ -51,7 +53,7 @@ def _page_entry(site: Site, page_id: str) -> dict[str, Any]:
     )
     if front_matter.get("status", DEFAULT_STATUS) != DEFAULT_STATUS:
         entry["status"] = front_matter["status"]
-    entry["text"] = site.pages[page_id]["body_md"]
+    entry["text"] = site.bodies[page_id]
     return entry
 
 

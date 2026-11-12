@@ -17,7 +17,8 @@ PAGE_IDS = ("agencies", "costs", "clinics", "hospital")
 
 
 def make_groups(count: int = 12) -> list[dict[str, Any]]:
-    """``count`` C6 groups with synthetic English text and fields the prompt must not show."""
+    """``count`` C6 groups with synthetic English text and fields the prompt must not show.
+    Every negative group has two supporters at least, so the withhold rule leaves them all."""
 
     return [
         {
@@ -28,7 +29,7 @@ def make_groups(count: int = 12) -> list[dict[str, Any]]:
             "member_claim_ids": [f"t-SECRET{index}-abcd1234"],
             "entities": [f"e{index:04d}"],
             "entity_names": [f"Entity{index}"] if index % 2 else [],
-            "supporter_count": index % 5,
+            "supporter_count": max(index % 5, 2) if index % 4 == 1 else index % 5,
             "opposer_count": index % 2,
             "first_date": "2023-01-05",
             "last_date": "2024-06-01" if index % 3 else "2023-01-20",

@@ -59,7 +59,7 @@ class ViewBody(BaseModel):
     status: StatusFilter = "all"
     flag: FlagFilter = "all"
     q: str = ""
-    sort: SortKind = "count"
+    sort: SortKind = "review"
     order: SortOrder = "desc"
 
     def to_view(self) -> EntityView:
@@ -70,7 +70,7 @@ def view_query(
     status: StatusFilter = "all",
     flag: FlagFilter = "all",
     q: str = "",
-    sort: SortKind = "count",
+    sort: SortKind = "review",
     order: SortOrder = "desc",
 ) -> EntityView:
     return EntityView(status, flag, q, sort, order)

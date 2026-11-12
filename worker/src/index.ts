@@ -1,11 +1,14 @@
 /**
- * Cloudflare Worker entry. `wrangler.jsonc` sends only `/mcp` to this script
- * (`assets.run_worker_first`); every other path is served from the static site without it.
+ * Cloudflare Worker entry. `wrangler.jsonc` sends `/mcp` and the page URLs (the home page and
+ * every path ending in `/`) to this script (`assets.run_worker_first`); the other files are
+ * served from the static site without it. A page URL is answered by the static assets, or with
+ * the page's markdown twin when the client asks for `text/markdown` (see `negotiate.ts`).
  * The handler is stateless (MCP 2026-07-28 per-request envelope, plus the SDK's stateless
  * fallback for 2025-era clients); the wiki index is fetched from the assets once per isolate.
  */
 import { createMcpHandler, originValidationResponse, type McpHttpHandler } from "@modelcontextprotocol/server";
-import { mcpSettings, siteUrl } from "./settings";
+import { servePage } from "./negotiate";
+import { mcpSettings, siteUrl, twinFile } from "./settings";
 import { createServer } from "./tools";
 import type { Env } from "./types";
 import { Wiki } from "./wiki";
@@ -28,7 +31,7 @@ function unavailable(error: unknown): Response {
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    if (new URL(request.url).pathname !== mcpSettings.route) return env.ASSETS.fetch(request);
+    if (new URL(request.url).pathname !== mcpSettings.route) return servePage(request, env.ASSETS, twinFile);
     const rejected = originValidationResponse(request, mcpSettings.allowed_origin_hostnames);
     if (rejected) return rejected;
     handlerPromise ??= buildHandler(env);

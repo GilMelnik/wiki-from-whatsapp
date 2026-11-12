@@ -1,8 +1,10 @@
-import { Bidi, Ltr, stanceOf } from "@shell";
+import { Bidi } from "@shell";
 import { ClaimText } from "./ClaimText.jsx";
+import { claimTip } from "./entities.js";
 
-// One claim under a member: pick box, highlighted text, the facts around it (id, stance,
-// whether the claim tags the name or only mentions it, other entities), and its actions.
+// One claim under a member: pick box, highlighted text (its id and conversation in the
+// tooltip), whether the claim tags the name or only mentions it, the other entities it names,
+// and its actions.
 
 function EntityChips({ label, entities, tagged, onOpenEntity }) {
   if (entities.length === 0) return null;
@@ -36,7 +38,7 @@ function EntityChips({ label, entities, tagged, onOpenEntity }) {
 
 export function ClaimItem({ claim, memberIndex, picked, saving, onTogglePick, onOpenEntity, onExclude, onDelete, onShowAggregation }) {
   return (
-    <li className="flex items-start gap-2 rounded bg-white/80 p-2">
+    <li className="flex items-start gap-2 rounded bg-white/80 p-2" title={claimTip(claim)}>
       <input
         type="checkbox"
         className="mt-1 shrink-0"
@@ -52,8 +54,6 @@ export function ClaimItem({ claim, memberIndex, picked, saving, onTogglePick, on
           onOpenEntity={onOpenEntity}
         />
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-          <Ltr>{claim.claim_id}</Ltr>
-          {claim.stance && <span>{stanceOf(claim.stance).label}</span>}
           {!claim.tagged && (
             <span className="badge badge-sky" title="The claim is not tagged with this name; the name only appears in its text">
               Text mention only

@@ -40,7 +40,7 @@ from typing import Any
 from step_4_entities.cluster import EntityClusterer
 from step_4_entities.collect import ClaimCorpus, load_claims_for_entities, tagged_names
 from step_4_entities.mentions import Analyzer, DictaAnalyzer, build_or_load_analysis
-from step_4_entities.records import entity_counts, member_names
+from step_4_entities.records import drop_retired_fields, entity_counts, member_names
 from step_4_entities.update import EntityUpdate
 from utils.config import ENTITIES_CONFIG
 from utils.embedding_ab import _git_commit
@@ -153,6 +153,7 @@ def run(
     stats.update(
         new_claims=len(diff.new), changed_claims=len(diff.changed), removed_claims=len(diff.removed)
     )
+    drop_retired_fields(state.get("entities") or [])
 
     out_inputs = {
         cid: fp for cid, fp in prev_inputs.items() if scope is not None and cid not in scope

@@ -212,7 +212,9 @@ def run(
                 f"{len(job.shown)} suggestions already raised")
     _budget_check(tokens, len(review.pages))
     if estimate:
-        return {**result, "input_tokens": tokens, "written": False, "estimate": True}
+        # An unchanged wiki is counted too, but a run would make no call.
+        return {**result, "calls": int(not job.unchanged), "input_tokens": tokens,
+                "written": False, "estimate": True}
     llm = llm or LLMClient.for_stage(stage, logger=logger,
                                      max_tokens=REVIEW_CONFIG["max_output_tokens"])
     raw = llm.complete_json(system, user, task="review", response_schema=ANSWER_SCHEMA)

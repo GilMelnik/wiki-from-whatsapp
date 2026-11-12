@@ -49,12 +49,17 @@ def _step_lines(number: int, step: dict[str, Any]) -> list[str]:
 
 
 def about_body() -> str:
-    """The "how this wiki was made" page: the steps in order, their models, the links."""
+    """The "how this wiki was made" page: the principles, the steps and their models, the links."""
+    principles = [f"- {principle}" for principle in ABOUT_CONFIG["principles"]]
     steps = [line for number, step in enumerate(ABOUT_CONFIG["steps"], 1) for line in _step_lines(number, step)]
     links = [f"- [{link['text']}]({link['url']})" for link in ABOUT_CONFIG["links"]]
     return "\n".join(
         [
             ABOUT_CONFIG["intro"],
+            "",
+            f"## {ABOUT_CONFIG['principles_heading']}",
+            "",
+            *principles,
             "",
             f"## {ABOUT_CONFIG['steps_heading']}",
             "",

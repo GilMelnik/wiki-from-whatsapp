@@ -217,7 +217,8 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
         ),
         # The published site (docs/ + mkdocs.yml); its index file stands for the whole folder.
         ArtifactNode(
-            "site", "Site", DOCS_DIR / WIKI_INDEX_FILE, step=STEP_9, upstream=("plan", "pages")
+            "site", "Site", DOCS_DIR / WIKI_INDEX_FILE, step=STEP_9,
+            upstream=("plan", "pages", "groups"),
         ),
     )
 

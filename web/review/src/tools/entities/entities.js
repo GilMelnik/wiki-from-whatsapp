@@ -1,6 +1,8 @@
 // Labels and pure helpers of the entity tool (no React, so node --test can import them).
 
 export const PAGE_SIZE = 100;
+// How many more claims "Show more" under a name adds (the detail shows the first three).
+export const MORE_CLAIMS = 12;
 export const SEARCH_DEBOUNCE_MS = 250;
 export const TARGET_SEARCH_LIMIT = 40;
 
@@ -25,6 +27,7 @@ export const FLAG_FILTERS = [
 ];
 
 export const SORTS = [
+  { value: "review", label: "Needs review first" },
   { value: "count", label: "Mentions" },
   { value: "size", label: "Number of names" },
   { value: "score", label: "Cohesion" },
@@ -37,7 +40,16 @@ export const ORDERS = [
   { value: "asc", label: "Ascending" },
 ];
 
-export const DEFAULT_VIEW = { status: "all", flag: "all", q: "", sort: "count", order: "desc" };
+export const DEFAULT_VIEW = { status: "all", flag: "all", q: "", sort: "review", order: "desc" };
+
+// The sections of the review order (the server's `section` of a list item).
+export const SECTION_LABELS = {
+  review: "Needs review",
+  several: "Several names",
+  one: "One name",
+  accepted: "Accepted",
+  rejected: "Rejected",
+};
 
 export const SIGNAL_LABELS = {
   co_occur: "Mentioned together",
@@ -74,6 +86,39 @@ export function colour(index) {
 
 export function statusOf(status) {
   return STATUSES[status] ?? STATUSES.suggested;
+}
+
+/** The list's section headings: only in the review order (other orders mix the sections). */
+export function sectionsFor(view) {
+  return view.sort === "review" ? (item) => SECTION_LABELS[item.section] ?? null : undefined;
+}
+
+/** The tooltip that names a claim and its conversation (ids are not shown under every claim). */
+export function claimTip(claim) {
+  return claim.thread_id ? `Claim ${claim.claim_id} · conversation ${claim.thread_id}` : `Claim ${claim.claim_id}`;
+}
+
+/** How many claims of a name to show after one more "Show more" (never past `count`). */
+export function moreShown(shown, count, step = MORE_CLAIMS) {
+  return Math.min(count, shown + step);
+}
+
+/**
+ * Every contact of the entity in one list for the decision, each with its state (contact,
+ * uncertain, rejected) and the claim it was found in (`sources` from the server; a contact
+ * typed by hand has none).
+ */
+export function contactRows(entity) {
+  const sourceOf = new Map((entity.contact_sources ?? []).map((source) => [`${source.kind}\u0001${source.value}`, source]));
+  const rows = [];
+  for (const [field, state] of [["contacts", "contact"], ["contacts_uncertain", "uncertain"], ["contacts_rejected", "rejected"]]) {
+    for (const { key } of CONTACT_KINDS) {
+      for (const value of entity[field]?.[key] ?? []) {
+        rows.push({ kind: key, value, state, source: sourceOf.get(`${key}\u0001${value}`) ?? null });
+      }
+    }
+  }
+  return rows;
 }
 
 /** The text cut into plain pieces and highlighted pieces (`highlights` sorted, no overlap). */

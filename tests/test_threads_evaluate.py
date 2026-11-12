@@ -475,7 +475,7 @@ def test_cli_rejects_flag_mixups(cli: Path) -> None:
     for argv in mixups:
         with pytest.raises(SystemExit):
             main(argv)
-    with pytest.raises(FileNotFoundError, match="thread tagger"):
+    with pytest.raises(FileNotFoundError, match="conversations tool"):
         main(["--freeze-gold", "--gold", str(cli / "gold.json")])
 
 

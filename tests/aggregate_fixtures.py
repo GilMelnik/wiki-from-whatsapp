@@ -34,7 +34,7 @@ class Corpus:
     root: Path
     claims: list[dict[str, Any]] = field(default_factory=list)
     vectors: dict[str, np.ndarray] = field(default_factory=dict)
-    audit: dict[str, dict[str, list[dict[str, str]]]] = field(default_factory=dict)
+    audit: dict[str, dict[str, Any]] = field(default_factory=dict)
     entity_of: dict[str, list[str]] = field(default_factory=dict)
     must_links: list[dict[str, Any]] = field(default_factory=list)
     legacy: dict[str, list[str]] = field(default_factory=dict)
@@ -52,16 +52,20 @@ class Corpus:
         supporters: Sequence[tuple[str, str]] = (),
         opposers: Sequence[tuple[str, str]] = (),
         counters: Sequence[str] = (),
+        thread: str | None = None,
+        participants: Sequence[str] | None = None,
     ) -> None:
         """One claim; ``supporters`` / ``opposers`` are ``(person, date)`` audit events;
-        ``counters`` are the claims it disputes (C3; ``link`` makes a link mutual)."""
+        ``counters`` are the claims it disputes (C3; ``link`` makes a link mutual);
+        ``thread`` defaults to a thread of its own; ``participants`` are the people who
+        wrote in that thread (left out of the audit when ``None``, as in older audits)."""
 
         # Digits are spelled as letters: quoted numbers would trigger the number rule.
         text = text or f"claim {claim_id.translate(_DIGITS_AS_LETTERS)}"
         self.claims.append(
             {
                 "claim_id": claim_id,
-                "thread_id": f"t-{claim_id}",
+                "thread_id": thread or f"t-{claim_id}",
                 "claim_text": text,
                 "entities": list(entities),
                 "stance": stance,
@@ -79,6 +83,9 @@ class Corpus:
             side: [{"person": p, "date": d, "via": "message", "message_id": "m"} for p, d in events]
             for side, events in (("supporters", supporters), ("opposers", opposers))
         }
+        if participants is not None:
+            self.claims[-1]["participant_count"] = len(set(participants))
+            self.audit[claim_id]["participants"] = sorted(set(participants))
         for entity in entities:
             self.entity_of.setdefault(entity, []).append(claim_id)
 

@@ -10,16 +10,22 @@ behind ``python -m <module>`` (``None`` while the step has no command line), and
   work. Only these steps can be started from the tool; for every other step the stale notice
   says to run it by hand. A step task that migrates its step to C14 flips this flag in its row.
 - ``paid``: a run makes paid API calls worth asking about first (the tool shows a
-  confirmation dialog).
+  confirmation dialog; the update driver runs it only when allowed, or when its estimate says
+  it would make no paid call).
+- ``review_tool``: the review tool where a person looks at the step's output before the
+  pipeline goes on (``python -m review_tool --tool <name>``); the update driver stops there.
 
-``SERVED_STEPS`` is the registry the server uses.
+The rows are the one description of the pipeline: their order is the order the steps run in
+(``pipeline.py`` and ``step_10_update`` walk them), ``Step.run_function`` is the step's own
+``run()``. ``SERVED_STEPS`` is the registry the server uses.
 """
 
 from __future__ import annotations
 
 import sys
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from importlib import import_module
 from typing import Any
 
 from review_tool.artifacts import GRAPH, ArtifactGraph
@@ -34,25 +40,36 @@ class StepSpec:
     module: str | None
     incremental_safe: bool = False
     paid: bool = False
+    review_tool: str | None = None
 
 
 STEP_SPECS: tuple[StepSpec, ...] = (
     StepSpec("threads", "Step 1 · Split into conversations", "step_1_threads_split.run", incremental_safe=True),
     StepSpec("classified", "Step 2 · Classify conversations", "step_2_classify.run", incremental_safe=True),
-    StepSpec("claims", "Step 3 · Extract claims", "step_3_extract.run", incremental_safe=True, paid=True),
-    StepSpec("entities", "Step 4 · Find entities", "step_4_entities.run", incremental_safe=True),
-    StepSpec("groups", "Step 5 · Group claims", "step_5_aggregate.run", incremental_safe=True),
     StepSpec(
-        "plan", "Step 6 · Plan the wiki", "step_6_plan.run", incremental_safe=True, paid=True
+        "claims", "Step 3 · Extract claims", "step_3_extract.run", incremental_safe=True,
+        paid=True, review_tool="pii",
+    ),
+    StepSpec(
+        "entities", "Step 4 · Find entities", "step_4_entities.run", incremental_safe=True,
+        review_tool="entities",
+    ),
+    StepSpec(
+        "groups", "Step 5 · Group claims", "step_5_aggregate.run", incremental_safe=True,
+        review_tool="groups",
+    ),
+    StepSpec(
+        "plan", "Step 6 · Plan the wiki", "step_6_plan.run", incremental_safe=True, paid=True,
+        review_tool="plan",
     ),
     StepSpec(
         "assignments", "Step 6b · Assign groups to pages", "step_6_plan.assign",
-        incremental_safe=True, paid=True,
+        incremental_safe=True, paid=True, review_tool="plan",
     ),
     StepSpec("pages", "Step 7 · Write the pages", "step_7_write_pages.run", incremental_safe=True, paid=True),
     StepSpec(
         "suggestions", "Step 8 · Review the whole wiki", "step_8_review.run",
-        incremental_safe=True, paid=True,
+        incremental_safe=True, paid=True, review_tool="suggestions",
     ),
     StepSpec("site", "Step 9 · Build the site", "step_9_site.run", incremental_safe=True),
 )
@@ -71,6 +88,12 @@ class Step:
         if self.spec.module is None:
             raise ValueError(f"step {self.key!r} has no command line")
         return [sys.executable, "-m", self.spec.module, *([REBUILD_FLAG] if rebuild else [])]
+
+    def run_function(self) -> Callable[..., dict[str, Any]]:
+        """The step's own ``run()`` (its module is imported only now: some are heavy)."""
+        if self.spec.module is None:
+            raise ValueError(f"step {self.key!r} has no module")
+        return import_module(self.spec.module).run
 
     def to_json(self) -> dict[str, Any]:
         spec = self.spec

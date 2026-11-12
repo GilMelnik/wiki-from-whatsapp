@@ -14,67 +14,54 @@ import {
 import { ClaimDetail } from "./ClaimDetail.jsx";
 import { ClaimRow } from "./ClaimRow.jsx";
 import { DecisionPanel } from "./DecisionPanel.jsx";
-import { DECISION_TOASTS, PAGE_SIZE, toggleMark } from "./review.js";
-import { Toolbar } from "./Toolbar.jsx";
+import { DECISION_TOASTS, PAGE_SIZE, sectionOf, toggleMark } from "./review.js";
 
-// PII review: every claim whose phone numbers or emails step 3 scrubbed (list, paged by the
-// server), the selected claim with its marks (main), and the decision (side). A decision is
-// saved at once and the queue moves to the next claim the server names; "u" undoes the last
-// decision. Everything follows the claims files on disk: a step-3 re-run shows up live.
+// Privacy: every claim whose phone numbers or e-mail addresses step 3 removed. Decided here:
+// per claim, keep the removal or put the details back. The list holds the claims in sections
+// (to decide, removal kept, restored); the main column the claim with each removed detail in
+// place, whose contact it is and the chat message it came from; the side column the decision.
+// A decision is saved at once and the next claim to decide is shown; "u" undoes. Everything
+// follows the files on disk: a step-3 re-run, or step 4 finding contacts, shows up live.
 
 const ID = "pii";
 const api = createApi(ID);
 const DIGITS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
+const CONTEXT_KEYS = ["entities", "export"];
 
 const claimPath = (claimId) => `/claims/${encodeURIComponent(claimId)}`;
 
 function PiiTool({ tool }) {
   const toast = useToast();
-  const [filter, setFilter] = useStoredState(ID, "filter", "pending");
-  const [sort, setSort] = useStoredState(ID, "sort", "claim_id");
-  const [order, setOrder] = useStoredState(ID, "order", "asc");
   const [selectedId, setSelectedId] = useStoredState(ID, "selected", null);
   const [offset, setOffset] = useState(0);
   const [choice, setChoice] = useState({ claimId: null, marks: [] });
   const [lastDecided, setLastDecided] = useState(null);
   const [saving, setSaving] = useState(false);
-  const view = { filter, sort, order };
 
-  const summary = useResource(() => api.get("/summary"), [], { watch: tool.reads });
-  const list = useResource(
-    () => api.get("/claims", { ...view, offset, limit: PAGE_SIZE }),
-    [filter, sort, order, offset],
-    { watch: tool.reads, keepPrevious: true }
-  );
-  const detail = useResource(
-    () => (selectedId ? api.get(claimPath(selectedId), view) : null),
-    [selectedId, filter, sort, order],
-    { watch: tool.reads }
-  );
+  const list = useResource(() => api.get("/claims", { offset, limit: PAGE_SIZE }), [offset], {
+    watch: tool.reads,
+    keepPrevious: true,
+  });
+  const detail = useResource(() => (selectedId ? api.get(claimPath(selectedId)) : null), [selectedId], {
+    watch: [...tool.reads, ...CONTEXT_KEYS],
+  });
 
-  const items = list.data?.items ?? [];
   const claim = detail.data?.claim;
   const queue = detail.data?.queue;
   const chosen = claim && choice.claimId === claim.claim_id ? choice.marks : [];
-  // The list shows the page of the selected claim (it may have moved after a decision); a
-  // claim that left the view (decided elsewhere, removed by a step re-run, filter changed)
-  // gives way to the first listed claim.
+  // The list shows the page of the selected claim; a claim that is gone (a step re-run removed
+  // it) gives way to the first listed one.
   const goToPage = usePagedSelection({
     list,
     getKey: (item) => item.claim_id,
     selectedKey: selectedId,
     onSelect: setSelectedId,
     position: queue?.position,
-    lost: detail.error?.status === 404 || queue?.position === null,
+    lost: detail.error?.status === 404,
     offset,
     setOffset,
     pageSize: PAGE_SIZE,
   });
-
-  const changeView = (setter) => (value) => {
-    setter(value);
-    setOffset(0);
-  };
 
   const toggle = (index) => {
     if (claim?.status !== "pending" || !claim.marks_match || index >= claim.redactions.length) return;
@@ -85,7 +72,6 @@ function PiiTool({ tool }) {
     setSaving(true);
     try {
       const result = await api.post(path, body);
-      summary.setData(result.summary);
       await list.reload();
       onDone(result);
     } catch (error) {
@@ -100,7 +86,7 @@ function PiiTool({ tool }) {
     if (saving || claim?.status !== "pending") return;
     if (decision === "restore" && !claim.marks_match) return;
     const restore = decision === "restore" && chosen.length > 0 ? chosen : null;
-    save(`${claimPath(claim.claim_id)}/decision`, { decision, restore, ...view }, (result) => {
+    save(`${claimPath(claim.claim_id)}/decision`, { decision, restore }, (result) => {
       setLastDecided(claim.claim_id);
       if (result.next_id === claim.claim_id) detail.reload();
       else setSelectedId(result.next_id);
@@ -115,12 +101,12 @@ function PiiTool({ tool }) {
       setLastDecided(null);
       if (undoTarget === selectedId) detail.reload();
       else setSelectedId(undoTarget);
-      toast.success("Decision undone; the claim is pending again");
+      toast.success("Decision undone; the claim is to decide again");
     });
   };
 
   useShortcuts([
-    { keys: "a", label: "Accept the removal", run: () => decide("accept") },
+    { keys: "a", label: "Keep the removal", run: () => decide("accept") },
     { keys: "r", label: "Restore the details (all, or only the marked ones)", run: () => decide("restore") },
     { keys: DIGITS, label: "Mark a detail to restore by its number", run: (event) => toggle(Number(event.code.slice(-1)) - 1) },
     { keys: "u", label: "Undo the last decision", run: undo },
@@ -133,10 +119,10 @@ function PiiTool({ tool }) {
       hasData={Boolean(list.data)}
       onRetry={list.reload}
       empty={list.data?.total === 0}
-      emptyText={filter === "pending" ? "No claims waiting for review" : "No claims match this filter"}
+      emptyText="Step 3 removed no phone number or e-mail address from any claim."
     >
       <ItemList
-        items={items}
+        items={list.data?.items ?? []}
         getKey={(item) => item.claim_id}
         selectedKey={selectedId}
         onSelect={setSelectedId}
@@ -144,6 +130,7 @@ function PiiTool({ tool }) {
         prevKey={queue?.prev_id}
         nextKey={queue?.next_id}
         header={<Pager offset={offset} limit={PAGE_SIZE} total={list.data?.total ?? 0} onChange={goToPage} />}
+        sectionOf={sectionOf}
         renderItem={(item) => <ClaimRow claim={item} />}
       />
     </PanelState>
@@ -152,17 +139,8 @@ function PiiTool({ tool }) {
   return (
     <Layout
       toolId={tool.id}
-      toolbar={
-        <Toolbar
-          view={view}
-          onFilter={changeView(setFilter)}
-          onSort={changeView(setSort)}
-          onOrder={changeView(setOrder)}
-          summary={summary.data}
-        />
-      }
       list={listPanel}
-      main={<ClaimDetail detail={detail} selectedId={selectedId} chosen={chosen} onSelect={setSelectedId} />}
+      main={<ClaimDetail detail={detail} selectedId={selectedId} chosen={chosen} />}
       side={
         <DecisionPanel
           detail={detail}

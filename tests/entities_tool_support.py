@@ -148,7 +148,9 @@ class EntitiesSetup:
         return next(m for m in self.entity(entity_id)["members"] if m["name"] == name)
 
     def shown_claims(self, entity_id: str, name: str) -> list[str]:
-        return [c["claim_id"] for c in self.member(entity_id, name)["claims"]["claims"]]
+        """Every visible claim of the name (the detail itself carries only the first few)."""
+        page = self.get(f"/entities/{entity_id}/claims", name=name, limit=1000)
+        return [c["claim_id"] for c in page["claims"]]
 
     def saved(self) -> dict[str, Any]:
         return json.loads(self.edited.read_text(encoding="utf-8"))

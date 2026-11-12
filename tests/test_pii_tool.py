@@ -59,7 +59,8 @@ def claims_payload() -> dict[str, Any]:
 
 class PiiSetup:
     def __init__(self, root: Path, *, with_claims: bool = True) -> None:
-        self.graph = build_graph(root)
+        self.root = root
+        self.graph = build_graph(root, optional_reads=True)
         node = self.graph.node("claims")
         self.original, self.edited = node.original, node.edited
         if with_claims:
@@ -137,28 +138,24 @@ def test_summary_counts_the_review(pii: PiiSetup) -> None:
     }
 
 
-def test_list_filters_sorts_and_pages(pii: PiiSetup) -> None:
+def test_list_is_in_sections_and_paged(pii: PiiSetup) -> None:
     page = pii.get("/claims", limit=2)
     assert ids(page) == [PHONE, PHONE_EMAIL] and page["total"] == 3 and page["offset"] == 0
     assert ids(pii.get("/claims", limit=2, offset=2)) == [EMAIL]
-    assert ids(pii.get("/claims", limit=10, sort="date")) == [PHONE_EMAIL, EMAIL, PHONE]
-    assert ids(pii.get("/claims", limit=10, sort="supporters", order="desc"))[0] == PHONE_EMAIL
-    assert ids(pii.get("/claims", limit=10, sort="redactions", order="desc"))[0] == PHONE_EMAIL
-    assert pii.get("/claims", limit=10, filter="reviewed")["total"] == 0
-    row = pii.get("/claims", limit=10, sort="date")["items"][0]
-    assert row == {
+    pii.post(f"/claims/{PHONE}/decision", {"decision": "restore"})
+    pii.post(f"/claims/{PHONE_EMAIL}/decision", {"decision": "accept"})
+    # To decide first, then the removals kept, then the restored ones.
+    rows = pii.get("/claims", limit=10)["items"]
+    assert [(row["claim_id"], row["status"]) for row in rows] == [
+        (EMAIL, "pending"), (PHONE_EMAIL, "accepted"), (PHONE, "restored")
+    ]
+    assert rows[1] == {
         "claim_id": PHONE_EMAIL,
-        "thread_id": "t-B1",
         "text": f"חייגו {REDACTION_MARK} או כתבו אל {REDACTION_MARK}.",
-        "status": "pending",
+        "status": "accepted",
         "redaction_counts": {"email": 1, "phone": 1},
-        "first_date": "2024-01-01",
-        "last_date": "2024-06-01",
-        "supporter_count": 5,
-        "opposer_count": 1,
     }
     assert pii.client.get("/api/pii/claims", params={"limit": 0}).status_code == 422
-    assert pii.client.get("/api/pii/claims", params={"limit": 5, "sort": "x"}).status_code == 422
 
 
 def test_detail_pairs_each_mark_with_its_value(pii: PiiSetup) -> None:
@@ -173,11 +170,40 @@ def test_detail_pairs_each_mark_with_its_value(pii: PiiSetup) -> None:
         {"text": "."},
     ]
     assert claim["marks_match"] is True and claim["can_undo"] is False
-    assert claim["supporting_message_count"] == 2 and claim["opposing_message_count"] == 1
-    assert claim["entities"] == ["Alpha"] and claim["stance"] == "factual"
+    assert claim["entities"] == ["Alpha"] and claim["first_date"] == "2024-01-01"
     assert detail["queue"] == {"position": 1, "total": 3, "prev_id": PHONE, "next_id": EMAIL}
-    other_view = pii.get(f"/claims/{PHONE_EMAIL}", filter="reviewed")["queue"]
-    assert other_view == {"position": None, "total": 0, "prev_id": None, "next_id": None}
+    # Without the chat export and the entities there is nothing to show around it.
+    assert claim["messages"] == [] and claim["context"] == {"chat": False, "entities": False}
+    assert [item["owners"] for item in claim["redactions"]] == [[], []]
+
+
+def test_detail_shows_the_messages_a_detail_came_from_and_whose_contact_it_is(
+    pii: PiiSetup,
+) -> None:
+    export = [
+        {"id": "A1", "date": "01/03/2024", "time": "10:00", "sender": {"user_name": "Dana"},
+         "text": "Call them on 03 123 4567"},
+        {"id": "A2", "date": "01/03/2024", "time": "10:05", "sender": {"user_name": "Noa"},
+         "text": "Thanks! Or mail INFO@alpha.example"},
+        {"id": "A3", "date": "01/03/2024", "time": "10:07", "sender": {"user_name": "Lior"},
+         "text": "I would not"},
+    ]
+    pii.root.joinpath("export.json").write_text(json.dumps(export), encoding="utf-8")
+    entities = {"entities": [
+        {"entity_id": "e0001", "canonical_name": "Alpha", "contacts": {"phone": ["+972-3-1234567"]},
+         "contacts_uncertain": {"email": ["info@alpha.example"]}},
+        {"entity_id": "e0002", "canonical_name": "Beta", "contacts_rejected": {"phone": ["031234567"]}},
+    ]}
+    write_json_file(entities, pii.root / "entities.json")
+    claim = pii.get(f"/claims/{PHONE_EMAIL}")["claim"]
+    assert claim["context"] == {"chat": True, "entities": True}
+    shown = [(m["id"], m["sender"], m["side"], m["holds"]) for m in claim["messages"]]
+    assert shown == [("A1", "Dana", "supporting", [0]), ("A2", "Noa", "supporting", [1]),
+                     ("A3", "Lior", "opposing", [])]
+    assert claim["messages"][0]["datetime"] == "2024-03-01T10:00:00"
+    phone, email = claim["redactions"]
+    assert [(o["entity_id"], o["how"]) for o in phone["owners"]] == [("e0001", "contact"), ("e0002", "rejected")]
+    assert email["owners"] == [{"entity_id": "e0001", "canonical_name": "Alpha", "how": "uncertain"}]
 
 
 @pytest.mark.parametrize("claim_id", ["t-Z9-ffffffff", CLEAN])
@@ -205,10 +231,12 @@ def test_accept_is_saved_to_the_edited_file_only_and_survives_a_restart(pii: Pii
 
     pii.client = pii.new_client()
     assert pii.get("/summary")["file"] == "claims_edited.json"
-    reviewed = pii.get(f"/claims/{PHONE}", filter="reviewed")["claim"]
+    reviewed = pii.get(f"/claims/{PHONE}")["claim"]
     assert reviewed["status"] == "accepted" and reviewed["can_undo"] is True
-    assert reviewed["redactions"] == [{"type": "phone", "value": "050-1234567", "in_text": False}]
-    assert ids(pii.get("/claims", limit=10)) == [PHONE_EMAIL, EMAIL]
+    assert reviewed["redactions"] == [
+        {"type": "phone", "value": "050-1234567", "in_text": False, "owners": []}
+    ]
+    assert ids(pii.get("/claims", limit=10)) == [PHONE_EMAIL, EMAIL, PHONE]
 
 
 def test_restore_puts_every_value_back_in_its_own_place(pii: PiiSetup) -> None:
@@ -255,18 +283,12 @@ def test_undo_makes_the_claim_pending_again(pii: PiiSetup) -> None:
     assert saved == claims_payload()["claims"][1]
 
 
-def test_next_claim_follows_the_queue_and_wraps(pii: PiiSetup) -> None:
-    by_date = {"filter": "pending", "sort": "date", "order": "asc"}  # PHONE_EMAIL, EMAIL, PHONE
-    first = pii.post(f"/claims/{EMAIL}/decision", {"decision": "accept", **by_date})
-    assert first["next_id"] == PHONE
-    last = pii.post(f"/claims/{PHONE}/decision", {"decision": "accept", **by_date})
-    assert last["next_id"] == PHONE_EMAIL  # end of the queue: back to the first one left
-    done = pii.post(f"/claims/{PHONE_EMAIL}/decision", {"decision": "accept", **by_date})
-    assert done["next_id"] is None
-    pii.post(f"/claims/{PHONE}/undo")
-    everything = {"filter": "all", "sort": "claim_id", "order": "desc"}  # EMAIL, PHONE_EMAIL, PHONE
-    stays = pii.post(f"/claims/{PHONE}/decision", {"decision": "accept", **everything})
-    assert stays["next_id"] == PHONE  # last in a view it stays in: keep showing it
+def test_next_claim_is_the_next_one_still_to_decide(pii: PiiSetup) -> None:
+    assert pii.post(f"/claims/{PHONE_EMAIL}/decision", {"decision": "accept"})["next_id"] == EMAIL
+    # The last one to decide in id order: back to the first one left.
+    assert pii.post(f"/claims/{EMAIL}/decision", {"decision": "accept"})["next_id"] == PHONE
+    # Nothing left to decide: the decided claim stays shown.
+    assert pii.post(f"/claims/{PHONE}/decision", {"decision": "accept"})["next_id"] == PHONE
 
 
 # ------------------------------------------------- files changing underneath

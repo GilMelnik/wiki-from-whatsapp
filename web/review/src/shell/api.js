@@ -30,7 +30,9 @@ function messageFrom(detail, fallback) {
 function buildUrl(base, path, params) {
   const query = new URLSearchParams();
   for (const [name, value] of Object.entries(params ?? {})) {
-    if (value !== undefined && value !== null) query.set(name, String(value));
+    // An array is a repeated parameter (`include=a&include=b`), as FastAPI reads a list.
+    if (Array.isArray(value)) for (const item of value) query.append(name, String(item));
+    else if (value !== undefined && value !== null) query.set(name, String(value));
   }
   const suffix = query.toString();
   return suffix ? `${base}${path}?${suffix}` : `${base}${path}`;

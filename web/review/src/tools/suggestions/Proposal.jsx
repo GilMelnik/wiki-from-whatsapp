@@ -1,4 +1,4 @@
-import { Bidi, Consequences, Ltr, usePlanOverview, usePreview } from "@shell";
+import { Bidi, DryRun, Ltr, usePlanOverview } from "@shell";
 import { proposalOf, STRUCTURAL } from "./suggestions.js";
 
 // What the suggestion would do, as it will be carried out: the owner's correction when there
@@ -65,15 +65,9 @@ function Body({ kind, proposal }) {
   );
 }
 
-function DryRun({ proposal }) {
+function PlanDryRun({ proposal }) {
   const plan = usePlanOverview();
-  const { preview, error, pending } = usePreview(proposal);
-  return (
-    <section>
-      <h3 className="section-title">What applying it does to the plan</h3>
-      <Consequences preview={preview} error={error} pending={pending} overview={plan.data} />
-    </section>
-  );
+  return <DryRun op={proposal} overview={plan.data} />;
 }
 
 const TITLES = {
@@ -102,7 +96,7 @@ export function Proposal({ suggestion }) {
           </details>
         )}
       </section>
-      {structural && open && <DryRun proposal={proposalOf(suggestion)} />}
+      {structural && open && <PlanDryRun proposal={proposalOf(suggestion)} />}
     </>
   );
 }

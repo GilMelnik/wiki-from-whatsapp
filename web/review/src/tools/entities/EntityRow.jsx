@@ -1,25 +1,24 @@
 import { Bidi, countText } from "@shell";
 import { statusOf } from "./entities.js";
 
-/** One row of the entity list: name, status, size, and what step 4 flagged for review. */
+/** One row of the entity list: the name, its other names, and what step 4 flagged for review. */
 export function EntityRow({ entity }) {
   const status = statusOf(entity.status);
   const multi = entity.member_count > 1;
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between gap-2">
+    <span className="flex flex-col gap-0.5">
+      <span className="flex items-center justify-between gap-2">
         <Bidi className="truncate font-medium">{entity.canonical_name || "(no name)"}</Bidi>
-        <span className={`badge shrink-0 ${status.badge}`}>{status.label}</span>
-      </div>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
-        {multi && <span className="font-medium text-slate-700">{countText(entity.member_count, "name")}</span>}
+        {entity.status !== "suggested" && <span className={`badge shrink-0 ${status.badge}`}>{status.label}</span>}
+      </span>
+      {multi && <Bidi className="truncate text-xs text-slate-500">{entity.aliases.join(" · ")}</Bidi>}
+      <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
         <span>{countText(entity.total_count, "claim")}</span>
-        {multi && <span>Cohesion {entity.score}</span>}
-        {entity.attached_count > 0 && <span className="badge badge-amber">Attached automatically</span>}
-        {entity.conflict_count > 0 && <span className="badge badge-amber">Like another entity</span>}
-        {entity.uncertain_count > 0 && <span className="badge badge-slate">Uncertain contacts</span>}
-      </div>
-      {multi && <Bidi className="truncate text-xs text-slate-400">{entity.aliases.join(" · ")}</Bidi>}
-    </div>
+        {entity.conflict_count > 0 && <span className="text-amber-800">Like another entity</span>}
+        {entity.attached_count > 0 && <span className="text-amber-800">A name attached by an update</span>}
+        {entity.uncertain_count > 0 && <span className="text-amber-800">Uncertain contacts</span>}
+        {entity.low_cohesion && <span className="text-amber-800">Names far apart</span>}
+      </span>
+    </span>
   );
 }

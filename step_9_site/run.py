@@ -1,13 +1,18 @@
 """Step 9: publish the wiki: ``docs/`` and ``mkdocs.yml`` from the plan (C7) and the pages (C9).
 
-Reads the effective plan and the effective written pages, then writes:
+Reads the effective plan, the effective written pages and the effective claim groups (C6, for
+the references and for the check that no page cites a group withheld by
+``step_7_write_pages.withhold``), then writes:
 
 - ``docs/<page_id>.md``: each planned page that has a written page, OKF front matter (hidden by
-  mkdocs) + body with its wiki links resolved;
+  mkdocs) + body with its wiki links resolved and its references (group id, when, how many
+  people took part) rendered as footnotes from the groups;
 - ``docs/<labels_dir>/<label_id>.md``: one page per label that a published page carries;
 - ``docs/index.md``: the home page, the plan's tree with each page's one-line description;
 - ``docs/about.md`` ("how this wiki was made", linked only from the home page) and
   ``docs/terms.md`` (the terms, linked from the banner and the footer); neither is in the nav;
+- ``docs/<agent_markdown.dir>/…/index.md`` (a markdown twin of every content page, shipped by the
+  hook ``agent_hook.py``) and ``docs/llms.txt``: the site for AI agents (``agent_pages.py``);
 - a redirect stub at the old id of every merged page / label;
 - ``docs/wiki_index.json``: the MCP index (contract C11);
 - ``mkdocs.yml``: the navigation in the plan's order plus the site settings of ``config.json``.
@@ -15,7 +20,8 @@ Reads the effective plan and the effective written pages, then writes:
 The step owns ``docs/``: files it did not write are removed, except the top-level entries in
 ``site.keep``. A file whose content is unchanged is not rewritten, so a re-run on unchanged
 inputs changes nothing. Problems (a planned page nobody wrote, a link to a page that is not
-published, a label nobody carries...) are logged and returned under ``issues``.
+published, a label nobody carries...) are logged and returned under ``issues``; a page citing a
+withheld group (``withheld_reference``) is logged as an error: re-run step 7 before publishing.
 """
 
 from __future__ import annotations
@@ -31,8 +37,10 @@ from typing import Any
 
 import yaml
 
-from step_9_site import hebrew_search
-from step_9_site.content import INFO_FILES, NavEntry, Site
+from step_9_site import agent_hook, hebrew_search
+from step_9_site.agent_pages import AgentPages
+from step_7_write_pages.withhold import withheld_ids
+from step_9_site.content import INFO_FILES, WITHHELD_REFERENCE, NavEntry, Site
 from step_9_site.index import index_text
 from utils.config import PROJECT_ROOT, section
 from utils.logging_setup import setup_step_logging
@@ -41,6 +49,7 @@ from utils.paths import (
     MKDOCS_PATH,
     STEP_9,
     WIKI_INDEX_FILE,
+    resolve_aggregated_path,
     resolve_plan_path,
     resolve_wiki_pages_path,
 )
@@ -48,6 +57,7 @@ from utils.rtl import HEBREW_CSS
 
 logger = logging.getLogger(__name__)
 SITE_CONFIG = section("site")
+AGENT_CONFIG = SITE_CONFIG["agent_markdown"]
 SEARCH_CONFIG = section("mcp")["search"]
 
 
@@ -80,17 +90,19 @@ def build_config(
             "coffee_text": SITE_CONFIG["coffee_text"],
             "coffee_link_text": SITE_CONFIG["coffee_link_text"],
             "coffee_url": SITE_CONFIG["coffee_url"],
-            "contact_email": SITE_CONFIG["contact_email"],
             "disclaimer": SITE_CONFIG["disclaimer"],
             "refs_toggle": SITE_CONFIG["refs_toggle"],
             "terms_path": SITE_CONFIG["terms"]["file"].removesuffix(".md") + "/",
             "terms_footer_text": SITE_CONFIG["terms"]["footer_link_text"],
+            "agent_markdown": {key: AGENT_CONFIG[key] for key in ("dir", "twin_file")},
         },
         "extra_css": [HEBREW_CSS],
+        "exclude_docs": f"/{AGENT_CONFIG['dir']}/",
+        "hooks": [_config_path(Path(agent_hook.__file__), mkdocs_path)],
     }
     search = SITE_CONFIG["hebrew_search"]
     if search["enabled"]:
-        config["hooks"] = [_config_path(Path(hebrew_search.__file__), mkdocs_path)]
+        config["hooks"].append(_config_path(Path(hebrew_search.__file__), mkdocs_path))
         for plugin in config["plugins"]:
             if isinstance(plugin, dict) and "search" in plugin:
                 plugin["search"]["fields"] = {search["field"]: {"boost": search["boost"]}}
@@ -149,6 +161,7 @@ def run(
     *,
     plan_path: Path | None = None,
     pages_path: Path | None = None,
+    groups_path: Path | None = None,
     docs_dir: Path = DOCS_DIR,
     mkdocs_path: Path = MKDOCS_PATH,
 ) -> dict[str, Any]:
@@ -160,8 +173,10 @@ def run(
     """
     plan = _load(plan_path or resolve_plan_path(), "plan (step 6)")
     pages = _load(pages_path or resolve_wiki_pages_path(), "written pages (step 7)")["pages"]
-    site = Site(plan, pages)
-    files = {**site.files, WIKI_INDEX_FILE: index_text(site, docs_dir / WIKI_INDEX_FILE)}
+    groups = _load(groups_path or resolve_aggregated_path(), "claim groups (step 5)")["groups"]
+    withheld = withheld_ids(groups)
+    site = Site(plan, pages, groups, withheld)
+    files = {**site.files, **AgentPages(site).files(), WIKI_INDEX_FILE: index_text(site, docs_dir / WIKI_INDEX_FILE)}
     config = build_config(
         site.nav,
         docs_dir=docs_dir,
@@ -173,7 +188,8 @@ def run(
     if _write_if_changed(mkdocs_path, config_text):
         written.append(mkdocs_path.name)
     for issue in site.issues:
-        logger.warning(f"{issue['issue']}: page {issue['page']!r} target {issue['target']!r}")
+        level = logging.ERROR if issue["issue"] == WITHHELD_REFERENCE else logging.WARNING
+        logger.log(level, f"{issue['issue']}: page {issue['page']!r} target {issue['target']!r}")
     result = {
         "published": len(site.order),
         "labels": len(site.labels),

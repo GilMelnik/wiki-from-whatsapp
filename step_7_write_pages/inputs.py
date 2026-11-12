@@ -1,10 +1,15 @@
 """What step 7 reads, and what one page's text depends on.
 
-The step reads three upstream artifacts, each in its effective (edited-if-present) form: the
-claim groups (C6), the plan (C7) and the assignment of groups to pages (C8). Nothing else:
-no claims, no private audit, no identities, no reaction summaries. C6 already counts the
-distinct people per group and per month, with neutral reactions (a heart, praying hands)
-left out.
+The step reads four upstream artifacts, each in its effective (edited-if-present) form: the
+claim groups (C6), the plan (C7) and the assignment of groups to pages (C8). Nothing else: no
+claims, no private audit, no identities, no reaction summaries. C6 already counts the distinct
+people per group and per month, with neutral reactions (a heart, praying hands) left out.
+
+Groups the owner's rule withholds (``step_7_write_pages.withhold``: a negative statement about
+a named entity that fewer than two members reported) are treated as placed on no page:
+they are in no page's groups, in no other group's ``contradicts``, in no front matter and in
+no label count. Each is accounted for in its primary page's ``left_out`` (``withheld_on``)
+and listed in the run's metadata (``withheld_list``).
 
 A page's groups are ``groups_on_page(assignments, page_id)`` in C6 order. A group whose
 ``pages[0]`` is the page is a ``main`` group (written there in full); a group that has the
@@ -31,6 +36,7 @@ from typing import Any
 
 from step_6_plan.assign_rules import groups_on_page
 from step_6_plan.model import find_node, validation_errors, PlanError
+from step_7_write_pages.withhold import REASON as WITHHELD, withheld_ids
 from utils.config import section
 from utils.paths import ASSIGNMENTS, PLAN, resolve, resolve_aggregated_path
 from utils.reconcile import fingerprint
@@ -75,6 +81,7 @@ class PageContext:
     records: tuple[Record, ...]    # C6 order
     catalogue: str                 # every page and label, the link vocabulary
     as_of: str                     # newest last_date of the corpus, YYYY-MM-DD
+    withheld: frozenset[str] = frozenset()  # withheld group ids (any page; never shown)
 
     @property
     def ids(self) -> set[str]:
@@ -94,13 +101,15 @@ class PageContext:
 
 @dataclass
 class Corpus:
-    """The effective C6 groups, C7 plan and C8 assignments of one run."""
+    """The effective C6 groups, C7 plan and C8 assignments of one run, and the groups the
+    owner's rule withholds."""
 
     groups: dict[str, dict[str, Any]]
     plan: dict[str, Any]
     assignments: dict[str, dict[str, Any]]
     sources: tuple[Path, ...]
     skipped: list[str] = field(default_factory=list)
+    withheld: frozenset[str] = frozenset()
 
     @classmethod
     def load(cls, aggregated_path: Path | None = None, plan_path: Path | None = None,
@@ -113,7 +122,9 @@ class Corpus:
         if errors:
             raise PlanError([f"{paths[1]} is not a valid C7 plan; fix it in the plan tool", *errors])
         assignments = _read(paths[2], "assignments (step 6b)")["assignments"]
-        corpus = cls({g["group_id"]: g for g in groups}, plan, assignments, paths)
+        withheld = withheld_ids(groups)
+        corpus = cls({g["group_id"]: g for g in groups}, plan, assignments, paths,
+                     withheld=withheld)
         corpus.skipped = [gid for gid in corpus.groups if gid not in assignments]
         return corpus
 
@@ -122,12 +133,38 @@ class Corpus:
         return max((g["last_date"] for g in self.groups.values()), default="")
 
     def placed(self) -> dict[str, dict[str, Any]]:
-        """Assignment records of current groups only (stale ids in C8 are ignored)."""
-        return {gid: rec for gid, rec in self.assignments.items() if gid in self.groups}
+        """Assignment records of current groups only (stale ids in C8 and withheld groups are
+        ignored)."""
+        return {gid: rec for gid, rec in self.assignments.items()
+                if gid in self.groups and gid not in self.withheld}
 
-    def primary_page(self, group_id: str) -> str | None:
+    def _assigned_page(self, group_id: str) -> str | None:
         record = self.assignments.get(group_id)
         return record["pages"][0] if record and record["pages"] else None
+
+    def primary_page(self, group_id: str) -> str | None:
+        """The page a group is written on (``None``: unplaced or withheld)."""
+        return None if group_id in self.withheld else self._assigned_page(group_id)
+
+    def withheld_on(self, page_id: str) -> list[str]:
+        """Withheld groups that would be ``main`` groups of the page, in C6 order."""
+        return [gid for gid in self.groups
+                if gid in self.withheld and self._assigned_page(gid) == page_id]
+
+    def accounted_left_out(self, page_id: str, left_out: Sequence[Mapping[str, str]]
+                           ) -> list[dict[str, str]]:
+        """A page's ``left_out`` with its withheld groups accounted for (code adds them, with
+        reason ``withheld``; the writer never saw them)."""
+        return [dict(entry) for entry in left_out if entry["reason"] != WITHHELD] + [
+            {"group": gid, "reason": WITHHELD} for gid in self.withheld_on(page_id)]
+
+    def withheld_list(self) -> list[dict[str, Any]]:
+        """Every withheld group placed on a page: ids and numbers only, never text."""
+        return [{"group_id": gid, "page_id": page_id,
+                 "entity_ids": list(self.groups[gid].get("entities") or []),
+                 "supporter_count": self.groups[gid].get("supporter_count")}
+                for gid in self.groups
+                if gid in self.withheld and (page_id := self._assigned_page(gid)) is not None]
 
     def page_group_ids(self, page_id: str) -> list[str]:
         return groups_on_page(self.placed(), page_id)
@@ -183,7 +220,8 @@ class Corpus:
                  "scope": page["scope"]}
         breadcrumb = tuple(find_node(self.plan, node_id)[0]["title_he"] for node_id in page["path"])
         return PageContext(page_id, brief, breadcrumb,
-                           tuple(self.record(gid, page_id) for gid in ids), catalogue, self.as_of)
+                           tuple(self.record(gid, page_id) for gid in ids), catalogue, self.as_of,
+                           self.withheld)
 
     def label_shares(self) -> Counter[str]:
         """How many placed groups carry each label (for the label rule's lift)."""

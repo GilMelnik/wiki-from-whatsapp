@@ -77,7 +77,7 @@ export function DialogHost({ dialog, entity, view, saving, reads, close, act, fi
     case "reject":
       return (
         <Danger
-          title="Reject the grouping"
+          title="Split into one entity per name"
           confirmLabel="Split the entity"
           onClose={close}
           onConfirm={() => act(() => api.post(`${path}/reject`), "Grouping rejected")}

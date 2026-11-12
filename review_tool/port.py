@@ -1,6 +1,6 @@
 """Find the running review server, or bind a free port for a new one.
 
-Replaces ``utils.port.free_port``: nothing is ever killed. A port that is taken is asked
+Nothing is ever killed (the old per-tool servers freed a port by stopping its process). A port that is taken is asked
 ``GET /api/health``; if it answers as this app for the same data directory it is reused,
 otherwise the next port is tried.
 """
@@ -63,6 +63,15 @@ class PortFinder:
         raise RuntimeError(
             f"no usable port between {preferred_port} and {last_port} on {self._host}; "
             "pass --port to choose another range"
+        )
+
+    def running_port(self, preferred_port: int) -> int | None:
+        """The port of the review server already running for this data directory, else
+        ``None``. Binds nothing (for a process that only wants to talk to the server)."""
+        last_port = preferred_port + self._search_limit - 1
+        return next(
+            (port for port in range(preferred_port, last_port + 1) if self._is_our_server(port)),
+            None,
         )
 
     def base_url(self, port: int) -> str:

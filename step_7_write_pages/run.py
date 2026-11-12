@@ -2,13 +2,21 @@
 
 How it works, in plain words: for every page of the reviewed plan (C7) the step collects the
 claim groups assigned to it (C8, ``step_7_write_pages.inputs``) and asks the ``write`` stage
-(Sonnet 5.5) for the whole article in one call: readable Hebrew prose grounded in those
-groups, both sides wherever members disagree, newer claims weighted higher and said so in
-the text, and Wikipedia-style links to other pages and labels (``prompts``). Code then
-enforces what must not be left to the model (``checks``): only the page's own groups are
-cited, only planned pages and labels are linked, disputed groups are cited and enough of
-the page's groups are used (one retry that names the problems, then repair); the footnote
-definitions and the OKF front matter are written in code (``front_matter``).
+(Sonnet 5.5) for the whole page in one call: first the page's points (each one thing the page
+says, with every group behind it, ``points``), then the article written from them, one
+statement per point: readable Hebrew prose grounded in those groups, both sides wherever
+members disagree, dates only where they help the reader decide, and Wikipedia-style links to
+other pages and labels (``prompts``). Code then enforces what must not be left to the model
+(``checks``): only the page's own groups are cited, only planned pages and labels are linked,
+disputed groups are cited, every main group is accounted for in a point or left out with a
+reason, every point is said, no statement carries more than three marks and no point is told
+again and again (one retry that names the problems, then repair); the OKF front matter is
+written in code (``front_matter``). A negative statement about a named entity that fewer
+than two members reported never reaches the writer (``withhold``): code adds it to its page's
+``left_out`` with reason ``withheld`` and lists it in ``metadata.withheld``. The body keeps its ``[^g-…]`` marks only: step 9 renders
+the references from the groups (a body stored with definitions keeps them until its text
+changes; step 9 ignores them). The points and the groups left out are stored with the page:
+an update starts from them.
 
 Re-runs (C14) work per page. ``metadata.pages[page_id]`` keeps a fingerprint of the writer
 (model + ``pages.prompt_version``), of the page's plan fields and of every group record, and
@@ -17,8 +25,9 @@ Re-runs (C14) work per page. ``metadata.pages[page_id]`` keeps a fingerprint of 
   code-owned front matter such as the breadcrumb or the labels is brought up to date);
 - page not written yet, or a new writer -> full write;
 - groups or plan fields changed -> UPDATE call (stage ``update``) from the current EFFECTIVE
-  page (owner edits included) + the new / changed / removed groups; "no change needed" keeps
-  the text and ``generated.at``; above ``pages.update.rewrite_changed_share`` a full rewrite;
+  page (owner edits and stored points included) + the new / changed / removed groups; "no
+  change needed" keeps the text and ``generated.at`` (the points may still change: a new group
+  joined one); above ``pages.update.rewrite_changed_share`` a full rewrite;
 - a page that left the plan, or has no groups any more, is dropped.
 Pages are written through ``utils.reconcile`` once per run (front matter and fingerprint are
 refresh keys, so a kept manual edit gets current front matter). A crash costs nothing on the
@@ -28,9 +37,11 @@ notice then clears).
 
     python -m step_7_write_pages.run [--rebuild] [--only PAGE_ID ...] [--estimate]
 
-Output: ``wiki_pages.json`` (C9) ``{pages: {page_id: {front_matter, body_md,
-input_fingerprint}}, metadata: {sources, inputs, pages, as_of, models, config, git_commit,
-generated_at, run, summary}}``.
+Output: ``wiki_pages.json`` (C9) ``{pages: {page_id: {front_matter, body_md, points,
+left_out, input_fingerprint}}, metadata: {sources, inputs, pages, as_of, models, config,
+git_commit, generated_at, run, summary, withheld}}``; ``points`` = ``[{kind, statement,
+groups}]``, ``left_out`` = ``[{group, reason}]``; ``withheld`` = ``[{group_id, page_id,
+entity_ids, supporter_count}]`` (ids and numbers only).
 """
 
 from __future__ import annotations
@@ -49,6 +60,7 @@ from typing import Any
 import anthropic
 
 from step_6_plan.run import AnthropicTokenCounter, TokenCounter
+from step_7_write_pages.checks import strip_definitions
 from step_7_write_pages.front_matter import LabelRule, page_front_matter
 from step_7_write_pages.inputs import (
     PAGES_CONFIG,
@@ -58,7 +70,9 @@ from step_7_write_pages.inputs import (
     page_state,
     writer_fingerprint,
 )
+from step_7_write_pages.points import LeftOut, Point
 from step_7_write_pages.prompts import update_prompt, write_prompt
+from step_7_write_pages.withhold import WITHHOLD_CONFIG
 from step_7_write_pages.writer import GroupDelta, PageText, PageWriter, changed_share, current_text
 from utils.embedding_ab import _git_commit
 from utils.llm_client import LLMClient, _flatten
@@ -69,7 +83,7 @@ from utils.reconcile import diff_inputs, load_previous, write_reconciled
 WRITE_CONFIG = PAGES_CONFIG["write"]
 UPDATE_CONFIG = PAGES_CONFIG["update"]
 REFRESH_KEYS = ("front_matter", "input_fingerprint")
-COMPARED_METADATA = ("inputs", "pages")
+COMPARED_METADATA = ("inputs", "pages", "withheld")
 
 
 def _now() -> str:
@@ -209,32 +223,37 @@ class PagesRun:
     # ----------------------------------------------------------------- payload
 
     def _item(self, job: Job, *, body: str, summary: str, questions: list[str],
-              related: list[dict[str, str]], generated_at: str) -> dict[str, Any]:
+              related: list[dict[str, str]], points: list[Point], left_out: list[LeftOut],
+              generated_at: str) -> dict[str, Any]:
         front_matter = page_front_matter(
             job.context, self.corpus.plan, body=body, summary=summary, questions=questions,
             related=related, labels=self.labels(job.page_id), model=self.model,
             generated_at=generated_at)
-        return {"front_matter": front_matter, "body_md": body,
+        return {"front_matter": front_matter, "body_md": body, "points": points,
+                "left_out": self.corpus.accounted_left_out(job.page_id, left_out),
                 "input_fingerprint": input_fingerprint(job.state)}
 
     def _from_text(self, job: Job, text: PageText) -> dict[str, Any]:
         source = job.source
-        same = source is not None and text.body == source["body_md"] and all(
+        same = source is not None and text.body == strip_definitions(source["body_md"]) and all(
             source["front_matter"].get(key, default) == value for key, value, default in (
                 ("summary", text.summary, ""), ("questions", text.questions, []),
                 ("related", text.related, [])))
         generated_at = source["front_matter"]["generated"]["at"] if same else _now()
         return self._item(job, body=text.body, summary=text.summary, questions=text.questions,
-                          related=text.related, generated_at=generated_at)
+                          related=text.related, points=text.points, left_out=text.left_out,
+                          generated_at=generated_at)
 
     def _kept(self, job: Job) -> dict[str, Any]:
-        """An unchanged page: the step's own body, front matter rebuilt from the effective
-        page (its citations and model-owned fields), ``generated.at`` unchanged."""
+        """An unchanged page: the step's own body and points, front matter rebuilt from the
+        effective page (its citations and model-owned fields), ``generated.at`` unchanged."""
         source = current_text(job.source)
+        own = current_text(self.old_pages[job.page_id])
         item = self._item(
             job, body=job.source["body_md"], summary=source["summary"],
             questions=source["questions"],
             related=[{"slug": r["page_id"], "relation": r["relation"]} for r in source["related"]],
+            points=own["points"], left_out=own["left_out"],
             generated_at=job.source["front_matter"]["generated"]["at"])
         return {**item, "body_md": self.old_pages[job.page_id]["body_md"]}
 
@@ -260,10 +279,12 @@ class PagesRun:
         inputs = {pid: input_fingerprint(states[pid]) for pid in states}
         self.stats["kept"] = sum(1 for job in self.jobs if job.mode == "keep") + len(self.carried)
         reports = [s["report"] for s in states.values() if "report" in s]
+        withheld = self.corpus.withheld_list()
         return {
             "pages": pages,
             "metadata": {
-                "sources": {name: str(path) for name, path in zip(("groups", "plan", "assignments"), sources)},
+                "sources": {name: str(path) for name, path in
+                            zip(("groups", "plan", "assignments"), sources)},
                 "inputs": inputs,
                 "pages": states,
                 "as_of": self.corpus.as_of,
@@ -275,10 +296,15 @@ class PagesRun:
                         "skipped_groups": len(self.corpus.skipped)},
                 "summary": {
                     "pages": len(pages),
-                    "cited_share": {pid: s["report"]["cited_share"] for pid, s in states.items()
-                                    if "report" in s},
+                    # a page written before task 27b keeps its old report (no points)
+                    "left_out_share": {pid: s["report"]["left_out_share"]
+                                       for pid, s in states.items()
+                                       if "left_out_share" in s.get("report", {})},
+                    "unaccounted": sum(len(r.get("unaccounted", [])) for r in reports),
                     "uncited_required": sum(len(r["uncited_required"]) for r in reports),
+                    "withheld": len(withheld),
                 },
+                "withheld": withheld,
             },
         }
 
@@ -318,6 +344,11 @@ def run(
     """
     logger = setup_step_logging(STEP_7)
     corpus = Corpus.load(aggregated_path, plan_path, assignments_path)
+    withheld = corpus.withheld_list()
+    logger.info(f"Withheld from every page: {len(withheld)} groups (negative, about a named "
+                f"entity, fewer than {WITHHOLD_CONFIG['min_supporters']} members) on "
+                f"{len({w['page_id'] for w in withheld})} pages: "
+                f"{[w['group_id'] for w in withheld]}")
     if corpus.skipped:
         logger.warning(f"{len(corpus.skipped)} claim groups have no assignment record (run the "
                        "assignment step); they are on no page this run")

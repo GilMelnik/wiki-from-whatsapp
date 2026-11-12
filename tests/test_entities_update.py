@@ -294,3 +294,16 @@ def test_attachment_needs_every_member_to_match(step: Step) -> None:
     assert step.entity_of("Sigma Insurances")["entity_id"] != omega
     # Like the only member of an entity: attached.
     assert step.entity_of("Kappas")["entity_id"] == step.entity_of("Kappa")["entity_id"]
+
+
+def test_a_run_writes_no_retired_fields_and_drops_the_old_ones(step: Step) -> None:
+    edited = step.edited()
+    for entity in edited["entities"]:
+        entity.update(kind="person", kind_confidence=0.9, kind_input="x", kind_manual=True)
+    step.artifact.edited.write_text(json.dumps(edited), encoding="utf-8")
+    result = step.run([*BASE, _claim("t6-a", ["Zeta Bank"], "Zeta Bank transfers the payment")])
+    data = step.edited()
+    assert result["claims_processed"] == 1 and len(data["entities"]) == len(edited["entities"]) + 1
+    retired = {"kind", "kind_confidence", "kind_input", "kind_manual"}
+    assert not any(retired & set(entity) for entity in data["entities"])
+    assert not any(key.startswith("kind") for key in {**data["metadata"], **data["metadata"]["run"]})

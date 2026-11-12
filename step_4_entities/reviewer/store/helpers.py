@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from step_4_entities.records import CONTACT_KINDS
 
-SortKind = Literal["count", "size", "score", "id", "name"]
+SortKind = Literal["review", "count", "size", "score", "id", "name"]
 SortOrder = Literal["asc", "desc"]
 StatusFilter = Literal["all", "suggested", "accepted", "ambiguous", "rejected"]
 FlagFilter = Literal["all", "attached", "conflict", "uncertain", "multi"]
@@ -32,7 +32,7 @@ class EntityView:
     status: StatusFilter = "all"
     flag: FlagFilter = "all"
     query: str = ""
-    sort: SortKind = "count"
+    sort: SortKind = "review"
     order: SortOrder = "desc"
 
 

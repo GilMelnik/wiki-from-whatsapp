@@ -17,11 +17,15 @@ existing one, which then gains the link too. For the threads the model read, the
 the links, the invalid references it dropped and where the opposing evidence and the links
 disagree (``check_counters``, logged, never fatal).
 
+``run(estimate=True)`` makes no model call and writes nothing: it returns how many calls the
+run would make and their input tokens (``count_tokens``, the free counting endpoint by default).
+
 A failed call leaves the thread's previous fingerprint (or none) in place, so the next run
 retries it. Output: ``claims.json`` (public, C3) written through ``utils.reconcile`` with the
 derived fields as ``refresh_keys`` -- a manual text edit, PII decision or deletion in
 ``claims_edited.json`` survives count / date changes -- plus the PRIVATE
-``audit/claims_audit.json`` with every supporter / opposer identity per claim.
+``audit/claims_audit.json`` with every supporter / opposer identity per claim and the people
+who wrote in its thread (``participants``; C3 carries only their number).
 """
 
 from __future__ import annotations
@@ -44,6 +48,7 @@ from step_3_extract.claims import (
 )
 from step_3_extract.prompt import EXTRACT_SYSTEM, FRESH_SCHEMA, UPDATE_SCHEMA
 from step_3_extract.scrub import scrub_claims
+from step_6_plan.run import AnthropicTokenCounter, TokenCounter
 from utils.json_io import write_json_file
 from utils.llm_client import BatchRequest, LLMClient
 from utils.logging_setup import setup_step_logging
@@ -155,6 +160,22 @@ class Extractor:
                 self.logger.warning(f"Extract: model call failed for {tid}: {exc!r}")
         return answers
 
+    def estimate(self, jobs: list[ThreadClaims], count_tokens: TokenCounter) -> dict[str, Any]:
+        """The calls ``ask`` would make and their input tokens; no call is made."""
+
+        tokens = sum(
+            count_tokens(EXTRACT_SYSTEM, job.prompt(self.prev_claims.get(job.thread_id, [])))
+            for job in jobs
+        )
+        updates = sum(1 for job in jobs if self.prev_claims.get(job.thread_id))
+        self.logger.info(
+            f"Extract estimate: {len(jobs)} calls ({updates} updates of threads with claims), "
+            f"{tokens} input tokens"
+        )
+        return {"estimate": True, "model": self.llm.model, "model_calls": len(jobs),
+                "update_calls": updates, "input_tokens": tokens, "batch_mode": self.use_batch,
+                "written": False}
+
     def absorb(self, job: ThreadClaims, answer: Any) -> list[dict[str, Any]] | None:
         """The thread's claim records after the answer, or ``None`` if it is unusable."""
 
@@ -197,6 +218,8 @@ def run(
     use_batch: bool = True,
     only: Collection[str] | None = None,
     rebuild: bool = False,
+    estimate: bool = False,
+    count_tokens: TokenCounter | None = None,
 ) -> dict[str, Any]:
     """Extract / update claims; see the module docstring.
 
@@ -204,6 +227,7 @@ def run(
     exist. ``export_path`` is the chat export quotes and reactions are joined from (``None``
     when the threads carry them inline). ``only`` restricts the work to these thread ids
     (everything else is carried as it is); ``rebuild`` ignores the previous output.
+    ``estimate``: no model call, nothing written; returns the calls the run would make.
     """
 
     logger = setup_step_logging(STEP_3)
@@ -253,6 +277,10 @@ def run(
         job = extractor.plan(thread, changed=tid in diff.new or tid in diff.changed)
         if job is not None:
             jobs[tid] = job
+    if estimate:
+        return {"new_threads": len(diff.new), "changed_threads": len(diff.changed),
+                **extractor.estimate(list(jobs.values()),
+                                     count_tokens or AnthropicTokenCounter(llm.model))}
     answers = extractor.ask(list(jobs.values()))
 
     records: dict[str, list[dict[str, Any]]] = {}
@@ -346,8 +374,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--rebuild", action="store_true", help="ignore the previous output")
     parser.add_argument("--only", nargs="+", metavar="THREAD_ID", help="restrict to these threads")
     parser.add_argument("--sync", action="store_true", help="sync API instead of the batch API")
+    parser.add_argument("--estimate", action="store_true",
+                        help="count the input tokens of the calls a run would make; write nothing")
     args = parser.parse_args(argv)
-    run(use_batch=not args.sync, only=args.only, rebuild=args.rebuild)
+    run(use_batch=not args.sync, only=args.only, rebuild=args.rebuild, estimate=args.estimate)
 
 
 if __name__ == "__main__":

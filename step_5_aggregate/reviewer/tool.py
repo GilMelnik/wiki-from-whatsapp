@@ -2,14 +2,17 @@
 
 The owner checks how step 5 grouped claims that say the same thing: each group with its
 member claims, people counts and timeline; merges, splits, moves, the representative text and
-contradiction links; and, above all, a ranked queue of merge suggestions (step 5 merges only
-what it is nearly sure about). Endpoints, under ``/api/groups`` (view = ``multi,
-contradictions, suggested, entity, stance, q, sort, order``; see ``views.GroupQuery``):
+contradiction links (both sides of a dispute); the groups the owner's rule keeps off the wiki
+(``withheld``); and, above all, a ranked queue of merge suggestions (step 5 merges only what it
+is nearly sure about). Endpoints, under ``/api/groups`` (view = ``multi, contradictions,
+suggested, withheld, entity, stance, q, sort, order``; see ``views.GroupQuery``):
 
 - ``GET  /summary``                          counters, entities, suggestion status, file read
 - ``GET  /groups?<view>&offset&limit``       one page of the list
 - ``GET  /groups/{id}?<view>``               the group in full and its place in the view
 - ``GET  /suggestions?offset&limit``         one page of the ranked merge suggestions
+- ``GET  /merge-check?group_ids=a&group_ids=b`` what merging them would do: the disputes
+  between them (the merge stays allowed) and whether the result would be withheld
 - ``POST /groups/merge`` ``{group_ids}``     into the oldest of them
 - ``POST /groups/{id}/split`` ``{claim_ids}`` · ``/move`` ``{claim_id, target_id}`` ·
   ``/representative`` ``{claim_id|null}`` · ``/contradictions`` ``{group_id, linked}``
@@ -19,7 +22,8 @@ contradictions, suggested, entity, stance, q, sort, order``; see ``views.GroupQu
 Every edit answers ``{group_id, group, summary, ...}`` (``group_id``: the group to show next).
 Unknown group → 404; an edit that does not fit the current groups (or needs a step-5 run
 first) → 409; a missing file → 409; the groups file locked by a step → 423. No endpoint calls
-a paid API: vectors come from the embedding cache only.
+a paid API: vectors come from the embedding cache only. The plan and the assignments (steps 6
+and 6b, both optional) are read only to say on which page a group is; they are watched by hand.
 """
 
 from __future__ import annotations
@@ -44,6 +48,7 @@ from utils.paths import AUDIT_PATH
 GROUPS_KEY = "groups"
 CLAIMS_KEY = "claims"
 ENTITIES_KEY = "entities"
+PLACEMENT_KEYS = ("plan", "assignments")
 MAX_PAGE = int(REVIEW_CONFIG["max_page_size"])
 
 
@@ -51,13 +56,14 @@ def view_query(
     multi: bool = False,
     contradictions: bool = False,
     suggested: bool = False,
+    withheld: bool = False,
     entity: str = "",
     stance: str = "",
     q: str = "",
     sort: SortKind = "size",
     order: SortOrder = "desc",
 ) -> GroupQuery:
-    return GroupQuery(multi, contradictions, suggested, entity, stance, q, sort, order)
+    return GroupQuery(multi, contradictions, suggested, withheld, entity, stance, q, sort, order)
 
 
 class MergeRequest(BaseModel):
@@ -100,10 +106,13 @@ class GroupsTool:
         lock_timeout: float | None = None,
     ) -> None:
         nodes = (graph.node(key) for key in (GROUPS_KEY, CLAIMS_KEY, ENTITIES_KEY))
-        # The private audit (who backed each claim) is not a graph node: followed by hand.
+        known = {node.key for node in graph.nodes}
+        placement = {key: graph.node(key) for key in PLACEMENT_KEYS if key in known}
+        # The private audit (who backed each claim) is not a graph node, and the plan and its
+        # assignments are optional reads (no "missing input" warning): followed by hand.
         self._handle: StoreHandle[GroupsStore] = StoreHandle(
-            partial(GroupsStore, *nodes, audit_path),
-            (*graph.files(*self.READS), audit_path),
+            partial(GroupsStore, *nodes, audit_path, **placement),
+            (*graph.files(*self.READS, *placement), audit_path),
             lock_paths=graph.files(*self.WRITES),
             lock_timeout=lock_timeout,
         )
@@ -121,6 +130,7 @@ class GroupsTool:
             "/groups/{group_id}/contradictions", self.contradiction, methods=["POST"]
         )
         router.add_api_route("/suggestions", self.suggestions, methods=["GET"])
+        router.add_api_route("/merge-check", self.merge_check, methods=["GET"])
         router.add_api_route("/not-same", self.not_same, methods=["POST"])
         router.add_api_route("/not-same/{record_id}", self.undo_not_same, methods=["DELETE"])
         self.spec = ToolSpec(
@@ -148,6 +158,10 @@ class GroupsTool:
         self, limit: int = Query(ge=1, le=MAX_PAGE), offset: int = Query(0, ge=0)
     ) -> dict[str, Any]:
         return self._handle.get().views.suggestions(offset, limit)
+
+    def merge_check(self, group_ids: list[str] = Query(min_length=2)) -> dict[str, Any]:
+        with _as_http_errors():
+            return self._handle.get().views.merge_check(group_ids)
 
     # ------------------------------------------------------------------ edits
 

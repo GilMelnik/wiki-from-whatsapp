@@ -1,4 +1,4 @@
-import { Bidi, formatCount, Kbd, Panel } from "@shell";
+import { ActionButton, Bidi, formatCount, Kbd, Panel } from "@shell";
 import { actionTargets, queuePlace, STRUCTURAL } from "./suggestions.js";
 
 // The side column: the decision on the selected suggestion, or on the marked ones (each
@@ -6,19 +6,6 @@ import { actionTargets, queuePlace, STRUCTURAL } from "./suggestions.js";
 // shown, each with its key; under them, what applying it will do. The footer applies every
 // accepted suggestion. While a step rewrites a file the tool writes, every button is off and
 // the panel says why.
-
-function ActionButton({ label, keyName, count, primary = false, danger = false, disabled, onClick }) {
-  const tone = primary ? "btn-primary" : danger ? "text-rose-700" : "";
-  return (
-    <button type="button" className={`btn btn-block justify-between ${tone}`} disabled={disabled || count === 0} onClick={onClick}>
-      <span>
-        {label}
-        {count !== undefined && count !== null && ` (${formatCount(count)})`}
-      </span>
-      <Kbd>{keyName}</Kbd>
-    </button>
-  );
-}
 
 function Locked({ lockedBy }) {
   return (
