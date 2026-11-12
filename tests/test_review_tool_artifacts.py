@@ -10,6 +10,7 @@ from review_tool.artifacts import GRAPH, ArtifactGraph, ArtifactNode, ArtifactSt
 from review_tool.events import ARTIFACT_CHANGED
 from review_tool.watcher import ArtifactWatcher
 from tests.review_tool_support import build_graph, new_bus, write_file
+from tests.update_support import rooted_graph
 from utils.file_lock import file_lock
 from utils.json_io import write_json_file
 
@@ -51,7 +52,7 @@ def test_default_graph_is_the_pipeline_in_order() -> None:
         "claim_aggregations", "groups", "plan", "assignments", "pages", "suggestions", "site",
     ]  # fmt: skip
     assert (GRAPH.node("site").step, GRAPH.node("site").upstream) == (
-        "step_9_site", ("plan", "pages", "groups"))
+        "step_9_site", ("plan", "pages", "groups", "threads"))
     assert GRAPH.node("site").edited is None
     assert GRAPH.node("export").edited is None
     assert (GRAPH.node("gold_threads").step, GRAPH.node("gold_threads").upstream) == (None, ())
@@ -63,6 +64,17 @@ def test_default_graph_is_the_pipeline_in_order() -> None:
     assert GRAPH.node("claims").upstream == ("threads", "classified")
     assert GRAPH.node("claims").original.name == "claims.json"
     assert GRAPH.node("claims").edited.name == "claims_edited.json"
+
+
+def test_the_site_is_out_of_date_when_step_1_placed_newer_messages(tmp_path: Path) -> None:
+    graph = rooted_graph(tmp_path)
+    for key in ("threads", "plan", "pages", "groups", "site"):
+        node = graph.node(key)
+        node.original.parent.mkdir(parents=True, exist_ok=True)
+        write_file(node.original, {}, mtime=2000)
+    assert status_by_key(graph)["site"].stale_because == ()
+    write_file(graph.node("threads").original, {}, mtime=5000)  # only messages: no new claim, page or plan
+    assert status_by_key(graph)["site"].stale_because == ("threads",)
 
 
 def test_status_of_missing_files(tmp_path: Path) -> None:

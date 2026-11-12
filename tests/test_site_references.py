@@ -21,17 +21,6 @@ def _group(**fields: Any) -> dict[str, Any]:
     return {**group, **fields}
 
 
-def test_period_spans_the_dated_groups_and_follows_merges() -> None:
-    references = References([
-        _group(),
-        _group(group_id="g-00000002", first_date="2023-02-01", last_date="2023-03-01", merged_from=["g-0000000f"]),
-        _group(group_id="g-00000003", first_date=None, last_date=None),
-    ])
-    assert references.period(["g-1a2b3c4d", "g-0000000f", "g-00000003"]) == ("2023-02-01", "2024-05-20")
-    assert references.period(["g-00000003", "g-99999999"]) is None
-    assert references.period([]) is None
-
-
 def test_a_reference_is_id_month_and_participants() -> None:
     assert reference_text(_group()) == f"{RLM}g-1a2b3c4d · מאי 2024 · 7 משתתפים בשיחה"
     assert reference_text(_group(participant_count=1)) == f"{RLM}g-1a2b3c4d · מאי 2024 · משתתף אחד בשיחה"

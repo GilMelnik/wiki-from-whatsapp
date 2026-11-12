@@ -19,6 +19,7 @@ from tests.plan_fixtures import make_groups, make_plan
 from utils.okf import build_front_matter
 
 GENERATED_AT = "2026-11-01T10:00:00Z"
+FIRST_MESSAGE, LAST_MESSAGE = "2023-01-15T09:30:00", "2024-06-20T21:05:00"
 
 
 def make_site_plan() -> dict[str, Any]:
@@ -65,14 +66,28 @@ def make_page(
     return {"front_matter": front_matter, "body_md": body, "input_fingerprint": f"fp-{page_id}"}
 
 
+def make_threads(*moments: str) -> dict[str, Any]:
+    """A C1 threads payload with one message at each of ``moments`` (the first in a thread of its
+    own, the others in a second thread, out of order on purpose)."""
+    messages = [{"id": f"m{n}", "datetime": moment, "sender": "s", "content": "x"}
+                for n, moment in enumerate(moments)]
+    return {"threads": [{"thread_id": "t1", "messages": messages[:1]},
+                        {"thread_id": "t2", "messages": messages[:0:-1]}], "metadata": {}}
+
+
 def run_site(
     tmp_path: Path,
     plan: dict[str, Any],
     pages: dict[str, dict[str, Any]],
     groups: list[dict[str, Any]] | None = None,
+    threads: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Write the inputs under ``tmp_path`` and build the site into ``tmp_path/docs``."""
+    """Write the inputs under ``tmp_path`` and build the site into ``tmp_path/docs``; the
+    messages run from ``FIRST_MESSAGE`` to ``LAST_MESSAGE`` unless ``threads`` says otherwise."""
     plan_path, pages_path = tmp_path / "plan.json", tmp_path / "wiki_pages.json"
+    threads_path = tmp_path / "threads.json"
+    chat = make_threads(FIRST_MESSAGE, "2023-08-01T12:00:00", LAST_MESSAGE) if threads is None else threads
+    threads_path.write_text(json.dumps(chat, ensure_ascii=False), encoding="utf-8")
     groups_path = tmp_path / "claims_aggregated.json"
     plan_path.write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
     pages_path.write_text(json.dumps({"pages": pages, "metadata": {}}, ensure_ascii=False), encoding="utf-8")
@@ -82,6 +97,7 @@ def run_site(
         plan_path=plan_path,
         pages_path=pages_path,
         groups_path=groups_path,
+        threads_path=threads_path,
         docs_dir=tmp_path / "docs",
         mkdocs_path=tmp_path / "mkdocs.yml",
     )
