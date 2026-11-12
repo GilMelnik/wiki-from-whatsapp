@@ -144,6 +144,7 @@ def test_overview_shows_tree_budget_labels_and_no_changes(setup: PlanSetup) -> N
 def test_page_detail_has_example_texts_and_coverage(setup: PlanSetup) -> None:
     detail = setup.get("/pages/agencies")
     assert detail["coverage"] is None
+    assert (detail["size"], detail["sample"], detail["near"]) == (None, None, None)  # no 6b yet
     assert [e["group_id"] for e in detail["examples"]] == ["g-00000000"]
     assert detail["examples"][0]["claim_text"].startswith("Synthetic claim number 0")
     assert detail["examples"][0]["claim_count"] == 1
@@ -151,7 +152,7 @@ def test_page_detail_has_example_texts_and_coverage(setup: PlanSetup) -> None:
     detail = setup.get("/pages/agencies")
     assert detail["coverage"] == {"measured": True, "count": 5, "projected": 50,
                                   "merged_count": 0, "merged_projected": 0,
-                                  "scope_changed": False, "small": False, "large": True}
+                                  "scope_changed": False}
     setup.get("/pages/ghost", status=404)
     setup.get("/pages/before", status=404)  # a category is not a page
 
@@ -165,8 +166,9 @@ def test_coverage_is_read_against_todays_plan(setup: PlanSetup) -> None:
     assert coverage["generated_at"] == "2026-01-01T00:00:00+00:00"
     assert coverage["pages"]["agencies"]["merged_count"] == 3
     assert coverage["pages"]["clinics"]["scope_changed"] is True
-    codes = {(w["code"], tuple(w["ids"])) for w in setup.get("/plan")["warnings"]}
-    assert ("small_page", ("hospital",)) in codes and ("large_page", ("agencies",)) in codes
+    # The sample's projected size flags are not warnings: exact sizes need the assignments.
+    codes = {w["code"] for w in setup.get("/plan")["warnings"]}
+    assert not codes & {"small_page", "large_page", "fold_page", "split_page"}
     unplaced = setup.get("/coverage/unplaced")
     assert [g["group_id"] for g in unplaced["none"]] == ["g-00000003"]
     assert unplaced["unsure"][1] == {"group_id": "g-gone", "missing": True}

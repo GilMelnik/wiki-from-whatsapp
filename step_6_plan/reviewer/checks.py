@@ -1,7 +1,8 @@
 """Warnings about a valid plan: things the C7 rules allow but the owner probably wants to fix.
 
-Each warning is ``{code, ids, text}`` with an English sentence that names the items by title and
-says what to do. They are advice; nothing is refused because of them.
+Each warning is ``{code, ids, text, tone}`` with an English sentence that names the items by
+title and says what to do; ``tone`` is ``warning``, or ``info`` for a page a little outside the
+usual size that may well be right. They are advice; nothing is refused because of them.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from typing import Any
 
 from step_6_plan.model import PLAN_CONFIG, iter_nodes
 from step_6_plan.reviewer.requests import quote
+from step_6_plan.reviewer.sizes import FOLD, GUIDE, LARGE, SMALL, SPLIT
 
 _PARENTHESIZED = re.compile(r"\([^)]*\)")
 _NOT_A_LETTER = re.compile(r"[^\w\s]")
@@ -110,20 +112,33 @@ def _budget(plan: dict[str, Any]) -> list[dict[str, Any]]:
                      "a new page or a split first needs another page merged or deleted."}]
 
 
-def _coverage(plan: dict[str, Any], coverage: Mapping[str, Any] | None) -> list[dict[str, Any]]:
-    if coverage is None:
+_SIZE_ADVICE = {
+    FOLD: ("warning", f"fewer than {GUIDE['fold_below']}: the size guide makes a subject this small "
+                      "a section of a neighbouring page. Merge it into the page it belongs with, or "
+                      "widen its scope."),
+    SMALL: ("info", f"under the usual {GUIDE['typical_min']} to {GUIDE['typical_max']}. Fine if the "
+                    "subject is this narrow; otherwise widen its scope or merge it into a "
+                    "neighbouring page."),
+    LARGE: ("info", f"over the usual {GUIDE['typical_min']} to {GUIDE['typical_max']}. Fine if it is "
+                    "one subject; split it if it covers several."),
+    SPLIT: ("warning", f"more than {GUIDE['split_above']}: the size guide says to split it by "
+                       "sub-subject."),
+}
+
+
+def _sizes(plan: dict[str, Any], sizes: Mapping[str, Mapping[str, Any]] | None) -> list[dict[str, Any]]:
+    """A page outside the size guide, by its exact count of groups (``sizes.page_sizes``)."""
+
+    if sizes is None:
         return []
     found = []
-    for page_id, numbers in coverage["pages"].items():
-        title = quote(plan["pages"][page_id]["title_he"])
-        if numbers["small"]:
-            found.append({"code": "small_page", "ids": [page_id],
-                          "text": f"In the coverage check the page {title} drew very few claims; "
-                                  "maybe merge it into a neighbouring page or widen its scope."})
-        if numbers["large"]:
-            found.append({"code": "large_page", "ids": [page_id],
-                          "text": f"In the coverage check the page {title} drew very many claims; "
-                                  "maybe split it or narrow its scope."})
+    for page_id, size in sizes.items():
+        if size["flag"] is None:
+            continue
+        tone, advice = _SIZE_ADVICE[size["flag"]]
+        found.append({"code": f"{size['flag']}_page", "ids": [page_id], "tone": tone,
+                      "text": f"The page {quote(plan['pages'][page_id]['title_he'])} is the main "
+                              f"page of {size['groups']} claim groups, {advice}"})
     return found
 
 
@@ -131,17 +146,17 @@ def plan_warnings(
     plan: dict[str, Any],
     *,
     group_ids: set[str] | None,
-    coverage: Mapping[str, Any] | None,
+    sizes: Mapping[str, Mapping[str, Any]] | None,
 ) -> list[dict[str, Any]]:
     """Every warning about ``plan``. ``group_ids`` = the groups file's ids (``None`` when there
-    is no groups file); ``coverage`` = ``views.coverage_view`` (or ``None``)."""
+    is no groups file); ``sizes`` = ``sizes.page_sizes`` (``None`` before step 6b has run)."""
 
-    return [
+    found = [
         *_budget(plan),
         *_label_like_page(plan),
         *_same_titles(plan),
         *_empty_categories(plan),
         *_lonely_kinds(plan),
         *_pages_without_examples(plan, group_ids),
-        *_coverage(plan, coverage),
     ]
+    return [*({"tone": "warning", **warning} for warning in found), *_sizes(plan, sizes)]

@@ -145,7 +145,8 @@ def coverage_view(
     The report measured the proposal as the model made it, so each page says whether its
     numbers still describe it: ``measured`` (the page existed then), ``scope_changed`` (its
     scope differs from the measured one) and ``merged_count`` (sample groups of pages merged
-    into it since)."""
+    into it since). The report's size flags, projected from the sample, are not shown: the
+    exact sizes from the assignments replace them (``sizes``)."""
 
     if report is None:
         return None
@@ -162,8 +163,6 @@ def coverage_view(
             "merged_count": sum(counts[old] for old in absorbed),
             "merged_projected": sum(projected.get(old, 0) for old in absorbed),
             "scope_changed": page_id in measured_scopes and measured_scopes[page_id] != page["scope"],
-            "small": page_id in (report.get("small_pages") or []),
-            "large": page_id in (report.get("large_pages") or []),
         }
     keys = ("sample_size", "total_groups", "confident_share", "none_share", "unsure_share",
             "findings")

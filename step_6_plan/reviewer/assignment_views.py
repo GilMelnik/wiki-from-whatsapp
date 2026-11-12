@@ -8,7 +8,10 @@ have no record yet (newer than the last run). Nothing here writes.
 Lists (``scope``): ``page`` (the groups the page owns, then those that only mention it),
 ``label``, ``unplaced`` (``pages == []``) and ``waiting``. Default order: least certain
 first (the classifier's probability for that page / label; the top page for an unplaced
-group), records pinned by hand last; also by last date or by supporters.
+group), records pinned by hand last; also by last date or by supporters. For judging a
+page's scope: the groups the classifier found closest to the page that it did not put there
+(``near_groups``). Rows mark the groups the owner's rule withholds from the wiki; they do not
+count toward a page's size (``sizes``).
 """
 
 from __future__ import annotations
@@ -22,7 +25,9 @@ from step_6_plan.operations import PlanEdit
 from step_6_plan.reviewer.assignments import MANUAL, followed
 from step_6_plan.reviewer.history import Record
 from step_6_plan.reviewer.proposals import ACCEPTED, PENDING, REJECTED, status_of
+from step_6_plan.reviewer.sizes import page_sizes
 from step_6_plan.reviewer.views import group_summary, redirect_map
+from step_7_write_pages.withhold import withheld_ids
 
 REVIEW_CONFIG = PLAN_CONFIG["review"]
 FINDINGS = REVIEW_CONFIG["label_findings"]
@@ -54,6 +59,7 @@ class AssignmentView:
         self.gone = [gid for gid in self.stored if gid not in known]
         self.records = {gid: followed(self.stored[gid], plan) for gid in self.order}
         self._redirects = redirect_map(plan)
+        self.withheld = withheld_ids(groups.values()) if groups is not None else frozenset()
 
     # --- one group ----------------------------------------------------------------
 
@@ -72,6 +78,7 @@ class AssignmentView:
 
         group = (self.groups or {}).get(gid)
         base = group_summary(group) if group else {"group_id": gid, "missing": self.groups is not None}
+        base["withheld"] = gid in self.withheld
         record = self.records.get(gid)
         if record is None:
             return {**base, "record": False}
@@ -128,6 +135,15 @@ class AssignmentView:
         return {"scope": scope, "id": item_id, "items": rows[offset:offset + limit],
                 "total": len(rows), "offset": offset, "limit": limit, "counts": counts,
                 "manual": sum(1 for row in rows if row.get("manual"))}
+
+    def near_groups(self, page_id: str, limit: int) -> list[dict[str, Any]]:
+        """The groups not on ``page_id`` to which the classifier gave it the highest
+        probability, most probable first: where the page's scope ends."""
+
+        near = sorted(((record["p"].get(page_id, 0.0), gid) for gid, record in self.records.items()
+                       if page_id not in record["pages"] and record["p"].get(page_id, 0.0) > 0),
+                      key=lambda item: -item[0])
+        return [self.row(gid, certainty) for certainty, gid in near[:limit]]
 
     @staticmethod
     def _sorted(rows: list[dict[str, Any]], sort: str) -> list[dict[str, Any]]:
@@ -186,6 +202,7 @@ class AssignmentView:
                 "gone": len(self.gone),
             },
             "pages": pages,
+            "sizes": page_sizes(records, self.plan, self.withheld),
             "labels": labels,
             "label_findings": self.label_findings(labels),
             "proposals": statuses,
