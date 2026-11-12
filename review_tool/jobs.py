@@ -12,8 +12,9 @@ artifact the step produces):
 - ``job_finished`` ``payload`` = the final job summary
 
 At most one job runs per produced artifact, and a step does not start while a step that
-produces one of its inputs is running (it would read the inputs before they are updated). The
-runner only ever signals the process group of a
+produces one of its inputs is running (it would read the inputs before they are updated), nor
+while the update driver (``step_10_update``) holds its lease (``utils.step_lease``): it runs
+steps in its own process. The runner only ever signals the process group of a
 child it started itself and has not reaped yet: a cancel sends SIGINT (the step's ``finally``
 blocks and file locks unwind), then SIGKILL after ``review.jobs.stop_timeout_seconds``.
 ``shutdown()`` does the same for every running job when the server stops.
@@ -37,6 +38,8 @@ from review_tool.events import EventBus
 from review_tool.fs import iso_utc
 from review_tool.steps import Step, StepRegistry
 from utils.config import section
+from utils.paths import UPDATE_LEASE_PATH
+from utils.step_lease import StepLease
 
 logger = logging.getLogger(__name__)
 
@@ -143,8 +146,10 @@ class JobRunner:
         cwd: Path,
         data_dir: Path,
         settings: JobSettings,
+        lease: StepLease | None = None,
     ) -> None:
         self.steps = steps
+        self._lease = StepLease(UPDATE_LEASE_PATH) if lease is None else lease
         self._bus = bus
         self._cwd = cwd
         self._data_dir = data_dir
@@ -172,6 +177,12 @@ class JobRunner:
         with self._lock:
             if self._closed:
                 raise JobRefused(503, "The server is shutting down; no new run can start.")
+            if self.outside_step() is not None:
+                raise JobRefused(
+                    409,
+                    "An update (python -m step_10_update.run) is running and runs the pipeline's "
+                    f"steps itself; start {spec.title} after it stops.",
+                )
             running = self._running_for(spec.produces)
             if running is not None:
                 raise JobRefused(
@@ -225,6 +236,11 @@ class JobRunner:
     def running_jobs(self) -> list[Job]:
         with self._lock:
             return [job for job in self._jobs.values() if job.state == RUNNING]
+
+    def outside_step(self) -> dict[str, Any] | None:
+        """What the update driver says it runs (``utils.step_lease``), ``None`` when no update
+        runs; ``produces`` is the artifact its current step rewrites (``None`` between steps)."""
+        return self._lease.current()
 
     def shutdown(self) -> None:
         """Stop every running job (server shutdown) and wait until they are gone."""

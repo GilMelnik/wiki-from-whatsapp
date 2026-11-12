@@ -1,0 +1,163 @@
+"""What a paid step would process and roughly cost, without calling any paid endpoint.
+
+Each paid step has an estimate mode that plans its run and makes no model call (steps 3, 7,
+8: ``run(estimate=True, count_tokens=...)``; step 6b: ``run(estimate=True)``). The Anthropic
+token counter needs credits, so the prompts are counted here by characters
+(``update.estimate.chars_per_token``). Output tokens are a typical figure per call
+(``output_tokens_per_call``); prices are ``usd_per_million_tokens`` per model, with
+``batch_discount`` when step 3 uses the batch API. Every figure is therefore rough; the
+estimate says what it counted.
+
+``paid_calls`` counts chat-model calls only. The cheap classifier (Jev) and the embeddings are
+priced but never stop the update: steps 1, 2, 4 and 5 use only them and run without a flag
+(cents for an update of a few hundred messages).
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any
+
+from review_tool.steps import Step
+from step_6_plan.assign_proposals import PROPOSALS_CONFIG
+from step_6_plan.assign_rules import ASSIGN_CONFIG
+from step_7_write_pages.run import UPDATE_CONFIG as PAGE_UPDATE_CONFIG
+from step_7_write_pages.run import WRITE_CONFIG
+from step_8_review.inputs import REVIEW_CONFIG
+from utils.config import LLM_CONFIG, section
+from utils.llm_client.settings import CLASSIFIER_CONFIG
+from utils.paths import STEP_3, STEP_6_ASSIGN, STEP_7, STEP_8
+
+ESTIMATE_CONFIG = section("update")["estimate"]
+EMBEDDING_MODEL = section("embedding")["model"]
+RunFunction = Callable[..., dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class Estimate:
+    step: str
+    paid_calls: int
+    usd: float
+    what: str
+    counted: str
+
+    def line(self) -> str:
+        return f"{self.what}; about ${self.usd:.2f} (rough: {self.counted})"
+
+    def to_json(self) -> dict[str, Any]:
+        return {"step": self.step, "paid_calls": self.paid_calls, "usd": round(self.usd, 4),
+                "what": self.what, "counted": self.counted}
+
+
+class CharTokenCounter:
+    """A ``TokenCounter`` that needs no endpoint: characters / ``chars_per_token``."""
+
+    def __init__(self, chars_per_token: float = ESTIMATE_CONFIG["chars_per_token"]) -> None:
+        self.chars_per_token = chars_per_token
+
+    def __call__(self, system: str, user: str) -> int:
+        return math.ceil((len(system) + len(user)) / self.chars_per_token)
+
+
+def usd(model: str, input_tokens: float, output_tokens: float = 0.0) -> float:
+    prices = ESTIMATE_CONFIG["usd_per_million_tokens"]
+    if model not in prices:
+        raise KeyError(
+            f"update.estimate.usd_per_million_tokens has no price for {model!r}; add it "
+            f"(known: {sorted(prices)})"
+        )
+    price = prices[model]
+    return (input_tokens * price["input"] + output_tokens * price["output"]) / 1_000_000
+
+
+def stage_model(stage: str) -> str:
+    return LLM_CONFIG["stages"][stage]["model"]
+
+
+def embedding_usd(texts: Sequence[str]) -> float:
+    """Rough price of embedding ``texts`` once (cached vectors cost nothing)."""
+    chars = sum(len(text) for text in texts)
+    return usd(EMBEDDING_MODEL, chars / ESTIMATE_CONFIG["chars_per_token"])
+
+
+class Estimator:
+    """Runs a paid step's estimate mode and prices it; ``None`` for a step it cannot price."""
+
+    def __init__(self, run_function: Callable[[Step], RunFunction] | None = None) -> None:
+        self._run_function = run_function or (lambda step: step.run_function())
+        self._counter = CharTokenCounter()
+        self._by_step: Mapping[str, Callable[[RunFunction, str], Estimate]] = {
+            STEP_3: self._claims,
+            STEP_6_ASSIGN: self._assignments,
+            STEP_7: self._pages,
+            STEP_8: self._review,
+        }
+
+    def __call__(self, step: Step) -> Estimate | None:
+        price = self._by_step.get(step.key)
+        return None if price is None else price(self._run_function(step), step.key)
+
+    def _claims(self, run: RunFunction, key: str) -> Estimate:
+        result = run(estimate=True, count_tokens=self._counter)
+        calls = result["model_calls"]
+        output = calls * ESTIMATE_CONFIG["output_tokens_per_call"]["extract"]
+        cost = usd(result["model"], result["input_tokens"], output)
+        if result["batch_mode"]:
+            cost *= ESTIMATE_CONFIG["batch_discount"]
+        return Estimate(
+            key, calls, cost,
+            f"{calls} conversations to read ({result['update_calls']} of them already have "
+            f"claims and are read for their new messages)",
+            f"{result['input_tokens']} input tokens by characters, {output} output tokens at "
+            f"a typical figure per call{', batch price' if result['batch_mode'] else ''}",
+        )
+
+    def _assignments(self, run: RunFunction, key: str) -> Estimate:
+        result = run(estimate=True)
+        classifier_model = CLASSIFIER_CONFIG["stages"][ASSIGN_CONFIG["stage"]]["model"]
+        classifier_tokens = result["groups_asked"] * ESTIMATE_CONFIG["classifier_tokens_per_group"]
+        calls = result["proposal_calls_max"]
+        proposal_cost = calls * usd(
+            stage_model(PROPOSALS_CONFIG["stage"]),
+            ESTIMATE_CONFIG["proposal_input_tokens"],
+            ESTIMATE_CONFIG["output_tokens_per_call"]["propose"],
+        )
+        plan_note = ("; the plan changed, so more groups may be asked"
+                     if result["plan_changed"] else "")
+        return Estimate(
+            key, calls, usd(classifier_model, classifier_tokens) + proposal_cost,
+            f"{result['groups_asked']} groups for the classifier, at most {calls} proposal "
+            f"calls (up to {result['proposal_candidates_max']} groups could stay unplaced)"
+            f"{plan_note}",
+            "classifier tokens at a typical figure per group; proposal calls as an upper bound "
+            "at a typical size",
+        )
+
+    def _pages(self, run: RunFunction, key: str) -> Estimate:
+        result = run(estimate=True, count_tokens=self._counter)
+        stages = {"write": WRITE_CONFIG["stage"], "update": PAGE_UPDATE_CONFIG["stage"]}
+        cost = sum(
+            usd(stage_model(stages[row["mode"]]), row["input_tokens"],
+                ESTIMATE_CONFIG["output_tokens_per_call"][stages[row["mode"]]])
+            for row in result["estimate"]
+        )
+        modes = result["modes"]
+        return Estimate(
+            key, len(result["estimate"]), cost,
+            f"{len(result['estimate'])} pages to write ({modes.get('write', 0)} in full, "
+            f"{modes.get('update', 0)} updated), {modes.get('keep', 0)} untouched",
+            f"{result['input_tokens']} input tokens by characters, output at a typical figure "
+            "per page (+ retries)",
+        )
+
+    def _review(self, run: RunFunction, key: str) -> Estimate:
+        result = run(estimate=True, count_tokens=self._counter)
+        calls = result["calls"]
+        output = ESTIMATE_CONFIG["output_tokens_per_call"][REVIEW_CONFIG["stage"]]
+        cost = calls * usd(stage_model(REVIEW_CONFIG["stage"]), result["input_tokens"], output)
+        what = (f"one review call over the whole wiki ({result['input_tokens']} input tokens)"
+                if calls else "no call: nothing the review reads changed since the last review")
+        return Estimate(key, calls, cost, what,
+                        "input tokens by characters, output at a typical figure")

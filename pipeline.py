@@ -1,179 +1,55 @@
 """Orchestrate the full threads-to-wiki pipeline (import-only, no CLI).
 
-Runs steps in order:
+The steps, their order, which of them are paid and where a person reviews come from the one
+step registry, ``review_tool.steps.STEP_SPECS`` (the review tool and the update driver
+``step_10_update`` read the same rows):
 
-    1. threads   -> data/threads.json (contract C1; only new export messages are placed)
-    3. classify  -> data/threads_classified.json
-    4. extract   -> data/claims.json + data/audit/ (private)
-    4b. entities -> data/entities.json
-    5. aggregate -> data/claims_aggregated.json (claim groups, contract C6)
-    6. plan      -> data/wiki_plan.json (contract C7; planned once, then curated by hand)
-    6b. assign   -> data/assignments.json (contract C8; groups on pages + labels, proposals)
-    7. write pages -> data/wiki_pages.json (contract C9; one call per page, incremental)
-    8. review    -> data/suggestions.json (contract C12; one call over the whole wiki, only when
-                    a page or the plan changed)
-    9. site      -> docs/ (pages, label pages, wiki_index.json) + mkdocs.yml
+    1. threads     -> conversations (contract C1; only new export messages are placed)
+    2. classify    -> which conversations carry knowledge (C2)
+    3. extract     -> claims (C3) + the private audit             review: pii
+    4. entities    -> canonical entities and their kinds         review: entities
+    5. aggregate   -> claim groups (C6)                          review: groups
+    6. plan        -> the wiki plan (C7; planned once, then curated)   review: plan
+    6b. assign     -> groups on pages + labels, proposals (C8)   review: plan
+    7. write pages -> wiki pages (C9; one call per new or changed page)
+    8. review      -> suggestions (C12; one call, only when a page or the plan changed)
+                                                                  review: suggestions
+    9. site        -> docs/ (pages, label pages, wiki_index.json) + mkdocs.yml
 
-Human gates (web UIs, no CLI):
-    step 1 — conversations (and the gold windows): ``python -m review_tool --tool threads``
-    step 3 — PII review: ``python -m review_tool --tool pii``
-    step 4 — entity review: ``python -m review_tool --tool entities``
-    step 5 — claim-group review: ``python -m review_tool --tool groups``
-    step 6 — plan review: ``python -m review_tool --tool plan``
-    step 8 — the review's suggestions: ``python -m review_tool --tool suggestions``
+A review is ``python -m review_tool --tool <name>``. This function runs every step once, in
+order, without stopping; a later chat export goes through ``python -m step_10_update.run``,
+which stops at the reviews and before paid steps.
 """
 
 from __future__ import annotations
 
 import logging
 
-from step_1_threads_split.run import run as split_threads
-from step_2_classify.run import run as classify
-from step_3_extract.run import run as extract
-from step_4_entities.run import run as resolve_entities
-from step_5_aggregate.run import run as aggregate
-from step_6_plan.assign import run as assign
-from step_6_plan.run import run as plan
-from step_7_write_pages.run import run as write_pages
-from step_8_review.run import run as review_wiki
-from step_9_site.run import run as site
+from review_tool.steps import SERVED_STEPS
+from step_10_update.record import scalar_summary
 from utils.llm_client import LLMClient
 from utils.logging_setup import setup_step_logging
-from utils.paths import (
-    SHARED,
-    STEP_1,
-    STEP_2,
-    STEP_3,
-    STEP_4,
-    STEP_5,
-    STEP_6,
-    STEP_7,
-    STEP_8,
-    STEP_9,
-)
+from utils.paths import SHARED, STEP_3
+
+LLM_STAGES = ("extract", "plan", "write", "update", "review")
 
 
-def _stage_clients(logger: logging.Logger) -> dict[str, LLMClient]:
-    return {
-        "extract": LLMClient.for_stage("extract", logger=logger),
-        "plan": LLMClient.for_stage("plan", logger=logger),
-        "write": LLMClient.for_stage("write", logger=logger),
-        "update": LLMClient.for_stage("update", logger=logger),
-        "review": LLMClient.for_stage("review", logger=logger),
-    }
-
-
-def run(
-    *,
-    use_batch: bool = False,
-) -> None:
-    logger = setup_step_logging(SHARED)
-    clients = _stage_clients(logger)
+def _log_llm_configuration(logger: logging.Logger, use_batch: bool) -> None:
     logger.info("LLM configuration:")
-    for stage, client in clients.items():
+    for stage in LLM_STAGES:
+        client = LLMClient.for_stage(stage, logger=logger)
         batch_note = " (batch)" if use_batch and client.supports_batch() else ""
         logger.info(f"  {stage}: {client.provider} / {client.model}{batch_note}")
 
-    logger = setup_step_logging(STEP_1)
-    logger.info("[1] Splitting the chat into threads...")
-    t_meta = split_threads()
-    logger.info(
-        f"    {t_meta['new']} new, {t_meta['changed']} changed, {t_meta['removed']} removed "
-        f"messages; {t_meta.get('threads_created', 0)} new threads"
-        + ("" if t_meta["written"] else " (nothing to do)")
-    )
 
-    logger = setup_step_logging(STEP_2)
-    logger.info("[3] Classifying threads...")
-    c_meta = classify()
-    logger.info(
-        f"    {c_meta['knowledge_bearing_count']} knowledge-bearing of "
-        f"{c_meta['thread_count']} threads"
-    )
-
-    logger = setup_step_logging(STEP_3)
-    logger.info("[4] Extracting claims...")
-    e_meta = extract(llm=clients["extract"], use_batch=use_batch)
-    logger.info(
-        f"    {e_meta['claims_count']} claims ({e_meta['new_claims']} new, "
-        f"{e_meta['model_calls']} model calls, {len(e_meta['failed_threads'])} failed); "
-        f"new redactions: {e_meta['scrub']['total_redactions']}, "
-        f"PII review: {e_meta['scrub']['pii_review_claims']}"
-    )
-    logger.info(
-        "    -> Review claims via "
-        "`python -m review_tool --tool pii` before aggregate."
-    )
-
-    logger = setup_step_logging(STEP_4)
-    logger.info("[4b] Resolving entities...")
-    en_meta = resolve_entities()
-    logger.info(
-        f"    {en_meta['entity_count']} entities "
-        f"({en_meta['multi_member_count']} multi-member) "
-        f"from {en_meta['distinct_entity_count']} distinct strings"
-    )
-    logger.info(
-        "    -> Review entity merges via "
-        "`python -m review_tool --tool entities` before aggregate."
-    )
-
-    logger = setup_step_logging(STEP_5)
-    logger.info("[5] Aggregating claims...")
-    a_meta = aggregate()
-    logger.info(
-        f"    {a_meta['group_count']} groups ({a_meta['multi_member_group_count']} with several "
-        f"claims) from {a_meta['claim_count']} claims; {a_meta['new_claims']} new claims"
-    )
-
-    logger = setup_step_logging(STEP_6)
-    logger.info("[6] Planning wiki structure (no model call once a plan exists)...")
-    p_meta = plan()
-    logger.info(
-        f"    {p_meta['page_count']} pages, {p_meta['label_count']} labels "
-        f"-> {p_meta['plan_path']} ({p_meta['model_calls']} model calls)"
-    )
-    logger.info("    -> Review the plan (python -m review_tool --tool plan) before writing pages.")
-
-    logger.info("[6b] Assigning claim groups to pages and labels...")
-    as_meta = assign()
-    counts = as_meta["summary"]
-    logger.info(
-        f"    {counts['group_count']} groups: {counts['unplaced']} unplaced, "
-        f"{counts['two_pages']} on two pages, {counts['manual']} manual "
-        f"({as_meta['classifier_requests']} classifier requests, "
-        f"{as_meta['proposal_calls']} proposal calls)"
-    )
-
-    logger = setup_step_logging(STEP_7)
-    logger.info("[7] Writing wiki pages (only new or changed pages cost a model call)...")
-    w_meta = write_pages()
-    logger.info(
-        f"    {w_meta['summary']['pages']} pages: {w_meta.get('write', 0)} written, "
-        f"{w_meta.get('update', 0)} updated, {w_meta.get('no_change', 0)} unchanged by the "
-        f"model, {w_meta['kept']} untouched, {len(w_meta['failed'])} failed"
-    )
-    logger.info(
-        "    -> Review the pages before the site step."
-    )
-
-    logger = setup_step_logging(STEP_8)
-    logger.info("[8] Reviewing the whole wiki (one call, only when a page or the plan changed)...")
-    r_meta = review_wiki()
-    logger.info(
-        f"    {r_meta['raised']} new suggestions ({r_meta['calls']} calls, "
-        f"{r_meta['input_tokens']} input tokens); {r_meta['suggestions']} in the file"
-    )
-    logger.info(
-        "    -> Decide on the suggestions (accept / reject / correct) and apply the accepted "
-        "ones before the site step; structural ones need steps 6b and 7 again."
-    )
-
-    logger = setup_step_logging(STEP_9)
-    logger.info("[9] Building the site (docs/, mkdocs.yml, wiki_index.json)...")
-    s_meta = site()
-    logger.info(
-        f"    {s_meta['published']} pages, {s_meta['labels']} label pages -> "
-        f"{s_meta['docs_dir']} ({len(s_meta['written'])} written, {len(s_meta['removed'])} "
-        f"removed; issues: {s_meta['issue_counts'] or 'none'})"
-    )
+def run(*, use_batch: bool = False) -> None:
+    logger = setup_step_logging(SHARED)
+    _log_llm_configuration(logger, use_batch)
+    for step in SERVED_STEPS.steps:
+        logger.info(f"[{step.spec.title}] {step.spec.module}")
+        options = {"use_batch": use_batch} if step.key == STEP_3 else {}
+        result = step.run_function()(**options)
+        logger = setup_step_logging(SHARED)
+        logger.info(f"    {scalar_summary(result)}")
+        if step.spec.review_tool:
+            logger.info(f"    -> Review: python -m review_tool --tool {step.spec.review_tool}")
