@@ -1,5 +1,4 @@
-"""Entity-level edits: status, reject (un-group), rename, kind, contacts, merge, delete,
-un-delete.
+"""Entity-level edits: status, reject (un-group), rename, contacts, merge, delete, un-delete.
 
 Every edit changes memory, then ``save()``; it returns the id of the entity the owner should
 see next (``None`` when the view is empty).
@@ -9,7 +8,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from step_4_entities.kinds import merge_kind, set_manual_kind
 from step_4_entities.records import (
     CONTACT_KINDS,
     allocate_entity_id,
@@ -96,14 +94,6 @@ class EditsMixin:
             conflicts = other.get("conflict_with")
             if other is not entity and conflicts and old in conflicts:
                 other["conflict_with"] = sorted({name if c == old else c for c in conflicts})
-        self.save()
-        return entity_id
-
-    def set_kind(self, entity_id: str, kind: str) -> str:
-        """The owner's kind (person, organisation, place, other): it wins over the classifier
-        on every later step-4 run."""
-
-        set_manual_kind(self.find(entity_id), kind)
         self.save()
         return entity_id
 
@@ -210,7 +200,6 @@ class EditsMixin:
         if source.get("contacts_manual") or target.get("contacts_manual"):
             target["contacts"] = _union(source.get("contacts"), target.get("contacts"))
             target["contacts_manual"] = True
-        merge_kind(target, source)
         self.entities.remove(source)
         refresh_entity(target)
         names = {*target["aliases"], target.get("canonical_name")}

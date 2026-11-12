@@ -6,7 +6,6 @@ import {
   contactsChanged,
   contactsToForm,
   formToContacts,
-  kindNote,
   NOTHING_PICKED,
   pickedFor,
   segments,
@@ -64,12 +63,3 @@ test("statuses and colours have fallbacks", () => {
   assert.equal(colour(null), colour(0));
 });
 
-
-test("the kind note says who set the kind and what an unknown kind means", () => {
-  assert.equal(kindNote({ kind: "person", kind_manual: true }), "Set by you; step 4 keeps it.");
-  assert.equal(
-    kindNote({ kind: "organisation", kind_confidence: 0.724 }),
-    "Set by the classifier, 72% sure; step 4 asks again when the names change."
-  );
-  assert.equal(kindNote({ kind: null }), "Not classified yet: counts as a person until step 4 classifies it.");
-});

@@ -7,7 +7,7 @@ step registry, ``review_tool.steps.STEP_SPECS`` (the review tool and the update 
     1. threads     -> conversations (contract C1; only new export messages are placed)
     2. classify    -> which conversations carry knowledge (C2)
     3. extract     -> claims (C3) + the private audit             review: pii
-    4. entities    -> canonical entities and their kinds         review: entities
+    4. entities    -> canonical entities                         review: entities
     5. aggregate   -> claim groups (C6)                          review: groups
     6. plan        -> the wiki plan (C7; planned once, then curated)   review: plan
     6b. assign     -> groups on pages + labels, proposals (C8)   review: plan
