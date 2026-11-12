@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 
+from step_9_site.agent_pages import disclaimer_line
 from tests.schema_check import schema_errors
 from tests.site_fixtures import GENERATED_AT, make_page, make_site_plan, run_site
 from utils.config import PROJECT_ROOT, section
@@ -47,6 +48,8 @@ def test_index_fields_follow_the_contract_table(tmp_path: Path) -> None:
     index = _build(tmp_path)
     plan = make_site_plan()
     assert index["index_version"] == section("mcp")["index_version"]
+    assert list(index) == ["index_version", "generated_at", "disclaimer", "labels", "pages"]
+    assert index["disclaimer"] == disclaimer_line()  # what get_page puts before every page body
     assert index["labels"] == {
         label_id: {"title": label["title_he"], "description": label["description"], "kind": label["kind"]}
         for label_id, label in plan["labels"].items()
@@ -87,6 +90,8 @@ def test_schema_check_accepts_the_worker_fixture_and_rejects_broken_pages() -> N
         assert schema_errors(broken, SCHEMA, SCHEMA), patch
     without_text = {key: value for key, value in page.items() if key != "text"}
     assert schema_errors({**FIXTURE, "pages": [without_text]}, SCHEMA, SCHEMA)
+    without_disclaimer = {key: value for key, value in FIXTURE.items() if key != "disclaimer"}
+    assert schema_errors(without_disclaimer, SCHEMA, SCHEMA)
 
 
 @pytest.mark.skipif(

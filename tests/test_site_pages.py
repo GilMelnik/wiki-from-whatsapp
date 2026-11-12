@@ -78,7 +78,7 @@ def _all_html(site: Path) -> dict[str, str]:
 def test_config_text_is_the_approved_banner() -> None:
     disclaimer = SITE["disclaimer"]
     assert disclaimer["text"] == APPROVED_BANNER
-    assert disclaimer["label"] == "לתשומת לבך:"
+    assert disclaimer["label"] == "לתשומת לבך"  # the box's title: no colon
     assert disclaimer["terms_link_text"] == "תנאי השימוש המלאים ובקשות לתיקון או להסרה"
     assert SITE["contact_email"] == "4qu2ptpf9@mozmail.com"
 
@@ -119,7 +119,17 @@ def test_disclaimer_is_in_the_html_of_every_page(built_site: Path) -> None:
         if name.startswith("search/"):
             continue
         assert APPROVED_BANNER in html, name
-        banner = re.search(r'<div class="wiki-disclaimer" role="note">(.*?)</div>', html, re.S).group(1)
+        # Material's own info admonition, inside md-typeset (the theme styles it only there)
+        box = re.search(
+            r'<div class="wiki-disclaimer md-grid md-typeset">\s*<div class="admonition info" role="note">\s*'
+            r'<p class="admonition-title">([^<]*)</p>\s*<p>(.*?)</p>\s*</div>',
+            html,
+            re.S,
+        )
+        assert box, name
+        title, banner = box.groups()
+        assert title == SITE["disclaimer"]["label"] and not title.endswith(":"), name
+        assert APPROVED_BANNER in banner, name
         # the contact address is on the terms page only
         assert "mailto:" not in banner and SITE["contact_email"] not in banner, name
         terms_href = (
@@ -128,9 +138,19 @@ def test_disclaimer_is_in_the_html_of_every_page(built_site: Path) -> None:
         assert re.search(
             rf'<a href="{terms_href}">'
             + re.escape(SITE["disclaimer"]["terms_link_text"]),
-            html,
+            banner,
         ), name
-        assert f"{SITE['disclaimer']['label']}</strong>" in html, name
+        assert "wiki-disclaimer-bar" not in html and "<strong>" not in banner, name
+
+
+def test_home_page_opens_with_one_plain_paragraph_ending_in_the_about_link(built_site: Path) -> None:
+    html = _html(built_site, "index.html")
+    article = html.split('<article class="md-content__inner md-typeset">', 1)[1]
+    first = re.search(r"<p>(.*?)</p>", article, re.S).group(1)
+    about = SITE["about"]
+    intro = SITE["home"]["intro"].format(first="ינואר 2023", last="יוני 2024")
+    assert first == f'{intro} <a href="about/">{about["home_link_text"]}</a>.'
+    assert 'class="admonition' not in article.split("</article>", 1)[0]  # no box in the content
 
 
 def test_terms_page_carries_the_contact_address_and_is_linked_from_banner_and_footer_not_in_nav(

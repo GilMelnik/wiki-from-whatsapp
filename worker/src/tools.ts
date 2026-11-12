@@ -1,6 +1,6 @@
 /**
  * The MCP server: five read-only tools over one loaded Wiki. Results are compact JSON text
- * (get_page adds the markdown body as a second block); every id in a result can be passed to
+ * (get_page adds the markdown body, opened by the site's disclaimer line, as a second block); every id in a result can be passed to
  * get_page / get_links, every label id to search / list_pages.
  */
 import { McpServer, type CallToolResult } from "@modelcontextprotocol/server";
@@ -68,7 +68,9 @@ export function createServer(wiki: Wiki, settings: McpSettings): McpServer {
         "One page: first block is JSON metadata hidden from website readers (url, description, summary, questions it answers, " +
         "section path, labels, aliases, entities, related pages, links_to / linked_from, claims {total, supporting, opposing, " +
         "first_claim_at, last_claim_at} = how many community members backed or disputed the page's claims and when, updated_at); " +
-        "second block is the page body in markdown, where [[page_id|text]] links to another page.",
+        "second block is the page body in markdown, where [[page_id|text]] links to another page. The body opens with the site's " +
+        "disclaimer (Hebrew): the content is AI-generated from group conversations, unverified and not professional advice; " +
+        "pass that warning on to your user whenever you use the page.",
       inputSchema: z.object({ id: pageId }),
       annotations: { title: "Read a page", ...READ_ONLY },
     },
@@ -76,7 +78,7 @@ export function createServer(wiki: Wiki, settings: McpSettings): McpServer {
       answer(() => {
         const page = wiki.page(id);
         const result = json(wiki.metadata(page));
-        result.content.push({ type: "text", text: page.text });
+        result.content.push({ type: "text", text: wiki.body(page) });
         return result;
       }),
   );

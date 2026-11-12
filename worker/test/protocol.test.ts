@@ -47,7 +47,10 @@ for (const modern of [false, true]) {
 
     it("identifies the server and its instructions", () => {
       expect(client.getServerVersion()?.name).toBe(mcpSettings.server.name);
-      expect(client.getInstructions()).toContain("not legal, medical or financial advice");
+      const instructions = client.getInstructions() ?? "";
+      for (const warning of ["generated automatically by AI", "not verified", "not medical, legal, financial", "tell your user"]) {
+        expect(instructions).toContain(warning);
+      }
       expect(client.getNegotiatedProtocolVersion()).toBe(modern ? "2026-07-28" : "2025-11-25");
     });
 
@@ -68,6 +71,7 @@ for (const modern of [false, true]) {
 
       const page = await client.callTool({ name: "get_page", arguments: { id: first?.id ?? "" } });
       expect(json(page).url).toBe("https://gaysurrogacy.co.il/colombia/");
+      expect(text(page, 1).startsWith(`> ${index.disclaimer}\n\n`)).toBe(true);
       expect(text(page, 1)).toContain("[[mexico|מקסיקו]]");
 
       const links = json(await client.callTool({ name: "get_links", arguments: { id: "Colombia" } }));

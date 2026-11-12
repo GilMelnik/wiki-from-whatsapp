@@ -1,30 +1,14 @@
-/* Reader-facing additions of step 9: the disclaimer banner, the references toggle and the
+/* Reader-facing additions of step 9: the disclaimer's place, the references toggle and the
    two lines above the footer. */
 
-/* ---- disclaimer: calm, always visible, no way to close it ---- */
-.wiki-disclaimer-bar {
+/* ---- disclaimer: Material's info admonition (main.html), always visible, no way to close it.
+   Only its place is set here: the side padding of the content below it, a little air above. */
+.wiki-disclaimer {
   padding-inline: 0.8rem;
 }
 
-.wiki-disclaimer {
-  margin-block: 0.6rem 0;
-  padding: 0.5rem 0.8rem;
-  border-inline-start: 0.2rem solid var(--md-primary-fg-color);
-  border-radius: 0.1rem;
-  background: var(--md-code-bg-color);
-  color: var(--md-default-fg-color);
-  font-size: 0.68rem;
-  line-height: 1.6;
-  text-align: start;
-}
-
-.wiki-disclaimer p {
-  margin: 0;
-}
-
-.wiki-disclaimer a {
-  color: var(--md-typeset-a-color);
-  text-decoration: underline;
+.wiki-disclaimer .admonition {
+  margin-block: 0.8rem 0;
 }
 
 /* ---- references toggle: off unless html carries wiki-refs-on (set by refs-toggle.js) ----

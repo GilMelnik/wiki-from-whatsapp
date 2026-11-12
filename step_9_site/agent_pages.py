@@ -7,7 +7,8 @@ and an ``/llms.txt`` that lists them (https://llmstxt.org). The twin of a wiki p
 ``Site.bodies``, the very text that ``wiki_index.json`` (and so the MCP ``get_page``) holds as
 ``text``; only two things are done to it: wiki links become absolute links to the twins, and the
 reference marks (``[^g-…]``, meaningless without the list) are removed. Every twin starts with
-the site's disclaimer, so an agent passes the warning on.
+the site's disclaimer, so an agent passes the warning on; the MCP ``get_page`` opens every page with
+the same line (``wiki_index.json``).
 
 mkdocs would turn a ``.md`` file in ``docs/`` into an HTML page, so the twins are written under
 ``docs/<site.agent_markdown.dir>/`` (left out of the build with ``exclude_docs``) and the mkdocs
@@ -56,6 +57,12 @@ def twin_url(docs_file: str) -> str:
 def twin_docs_path(docs_file: str) -> str:
     """Where the twin of a docs file is written, relative to ``docs/``."""
     return f"{AGENT_CONFIG['dir']}/{_page_path(docs_file)}{TWIN_FILE}"
+
+
+def disclaimer_line() -> str:
+    """The site's disclaimer as one markdown line, linking the terms twin: every twin opens with
+    it, ``llms.txt`` carries it and ``wiki_index.json`` hands it to the MCP ``get_page``."""
+    return AGENT_CONFIG["disclaimer"].format(terms_url=twin_url(TERMS_FILE), **SITE_CONFIG["disclaimer"])
 
 
 def strip_marks(body: str) -> str:
@@ -109,17 +116,12 @@ class AgentPages:
 
     # --------------------------------------------------------------------- pieces
 
-    @staticmethod
-    def _disclaimer() -> str:
-        disclaimer = SITE_CONFIG["disclaimer"]
-        return AGENT_CONFIG["disclaimer"].format(terms_url=twin_url(TERMS_FILE), **disclaimer)
-
     def _header(self, title: str, docs_file: str) -> list[str]:
         """Title, the disclaimer in one line, the address of the HTML page."""
         return [
             f"# {title}",
             "",
-            f"> {self._disclaimer()}",
+            f"> {disclaimer_line()}",
             "",
             AGENT_CONFIG["page_line"].format(url=page_url(docs_file)),
             "",
@@ -182,9 +184,8 @@ class AgentPages:
         return [*lines, "", f"## {LLMS_CONFIG['about_heading']}", "", *info]
 
     def _home(self) -> str:
-        description = SITE_CONFIG["mkdocs"]["site_description"]
         header = self._header(SITE_CONFIG["mkdocs"]["site_name"], HOME_FILE)
-        return "\n".join([*header, description, *self._contents(), ""])
+        return "\n".join([*header, self.site.home_intro(twin_url(ABOUT_FILE)), *self._contents(), ""])
 
     def _llms(self) -> str:
         """``llms.txt``: title, summary block quote, the MCP endpoint, the pages by section."""
@@ -194,7 +195,7 @@ class AgentPages:
             "",
             f"> {LLMS_CONFIG['summary']}",
             ">",
-            f"> {self._disclaimer()}",
+            f"> {disclaimer_line()}",
             "",
             LLMS_CONFIG["mcp_line"].format(mcp_url=mcp_url),
             *self._contents(),

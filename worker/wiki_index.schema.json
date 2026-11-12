@@ -4,7 +4,7 @@
   "title": "wiki_index.json (contract C11, index_version 1)",
   "description": "Search and graph index of the published wiki, written by the site generator (step 9) into the mkdocs docs dir so that it is copied into site/ and served as a static asset at /<config.mcp.index_file>. Read by the MCP Worker (worker/src). Plain data: no HTML, no scores, no normalised text.",
   "type": "object",
-  "required": ["index_version", "generated_at", "labels", "pages"],
+  "required": ["index_version", "generated_at", "disclaimer", "labels", "pages"],
   "additionalProperties": false,
   "properties": {
     "index_version": {
@@ -14,6 +14,10 @@
     "generated_at": {
       "description": "When step 9 wrote the index (UTC, ISO 8601 with offset).",
       "$ref": "#/$defs/timestamp"
+    },
+    "disclaimer": {
+      "description": "The site's warning in one markdown line (the line every markdown twin of a page opens with): AI-generated from group conversations, unverified, no professional advice, with a link to the terms. get_page opens every page body with it.",
+      "$ref": "#/$defs/nonEmpty"
     },
     "labels": {
       "description": "Every label of the plan (C7 labels), keyed by label id.",

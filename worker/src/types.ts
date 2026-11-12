@@ -54,6 +54,8 @@ export interface IndexLabel {
 export interface WikiIndex {
   index_version: number;
   generated_at: string;
+  /** The site's warning as one markdown line; get_page opens every page body with it. */
+  disclaimer: string;
   labels: Record<string, IndexLabel>;
   pages: IndexPage[];
 }

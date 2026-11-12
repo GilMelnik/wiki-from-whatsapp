@@ -1,7 +1,8 @@
 """``docs/wiki_index.json``: the search and graph index the MCP Worker reads (contract C11).
 
 The shape is the Worker's (``worker/wiki_index.schema.json``; field sources in
-``tasks/41-wiki-mcp/report.md``): every plan label, then every published page in navigation
+``tasks/41-wiki-mcp/report.md``): the site's disclaimer line (the one the markdown twins open
+with, which ``get_page`` puts before every page body), every plan label, then every published page in navigation
 order with its front-matter metadata, its resolved labels / related pages / out-links (only
 published pages) and its body as written, wiki links and ``[^g-…]`` marks kept, without
 references (a definition stored by an older step 7 is left out; marks of merged groups follow
@@ -15,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from step_9_site.agent_pages import disclaimer_line
 from step_9_site.content import Site
 from utils.config import section
 from utils.wiki_links import find_wiki_links
@@ -65,6 +67,7 @@ def build_index(site: Site, generated_at: str) -> dict[str, Any]:
     return {
         "index_version": MCP_CONFIG["index_version"],
         GENERATED_AT: generated_at,
+        "disclaimer": disclaimer_line(),
         "labels": labels,
         "pages": [_page_entry(site, page_id) for page_id in site.order],
     }
