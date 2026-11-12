@@ -142,3 +142,12 @@ export function outcomeKey(outcome) {
 export function formatUsd(amount) {
   return `$${Number(amount).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 }
+
+/** What running the review again would ask, from the overview's `rerun` (null: unknown):
+ * "2 of 11 review calls are due, about $0.45 at the batch price". */
+export function rerunText(rerun) {
+  if (!rerun) return "";
+  if (rerun.due === 0) return "no review call is due, so it would only refresh the file";
+  const calls = `${rerun.due} of ${rerun.passes} review call${rerun.passes === 1 ? "" : "s"}`;
+  return `${calls} ${rerun.due === 1 ? "is" : "are"} due, about ${formatUsd(rerun.usd)}${rerun.batch ? " at the batch price" : ""}`;
+}

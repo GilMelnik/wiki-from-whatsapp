@@ -16,6 +16,7 @@ import {
   proposalFromOperation,
   quoteParts,
   queuePlace,
+  rerunText,
 } from "../src/tools/suggestions/suggestions.js";
 
 // Synthetic suggestions in the shape GET /api/suggestions/suggestions answers.
@@ -90,4 +91,11 @@ test("the apply queue: place, newest outcome, outcomes not seen yet", () => {
   const seen = new Set([outcomeKey(applies.outcomes[1])]);
   assert.deepEqual(newOutcomes(applies, seen).map((o) => o.ended_at), ["t2"]);
   assert.equal(formatUsd(3.7), "$3.7");
+});
+
+test("the re-run line says how many review calls are due and what they cost", () => {
+  assert.equal(rerunText({ due: 2, passes: 11, usd: 0.45, batch: true }), "2 of 11 review calls are due, about $0.45 at the batch price");
+  assert.equal(rerunText({ due: 1, passes: 1, usd: 0.3, batch: false }), "1 of 1 review call is due, about $0.3");
+  assert.equal(rerunText({ due: 0, passes: 11, usd: 0, batch: true }), "no review call is due, so it would only refresh the file");
+  assert.equal(rerunText(null), "");
 });
