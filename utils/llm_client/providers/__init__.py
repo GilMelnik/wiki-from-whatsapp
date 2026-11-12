@@ -11,6 +11,12 @@ from utils.llm_client.providers.anthropic import (
 from utils.llm_client.providers.base import ClassifierProvider, LLMProvider
 from utils.llm_client.providers.typesafe import TypeSafeClassifierProvider
 
+# Chat providers by their config name (``llm.stages.<stage>.provider``); a class attribute such
+# as ``supports_batch`` can be read here without building a client.
+PROVIDERS: dict[str, type[LLMProvider]] = {
+    provider_object.name: provider_object for provider_object in (AnthropicProvider,)
+}
+
 
 def create_provider(
     provider: str,
@@ -21,15 +27,10 @@ def create_provider(
     logger: logging.Logger | None = None,
     thinking_param: str | None = None,
 ) -> LLMProvider:
-    registry: dict[str, type[LLMProvider]] = {
-        provider_object.name: provider_object
-        for provider_object in (AnthropicProvider,)
-    }
-
     try:
-        provider_cls = registry[provider]
+        provider_cls = PROVIDERS[provider]
     except KeyError:
-        raise ValueError(f"Unknown LLM provider: {provider!r}; expected one of {sorted(registry.keys())}")
+        raise ValueError(f"Unknown LLM provider: {provider!r}; expected one of {sorted(PROVIDERS.keys())}")
     return provider_cls(
         model=model,
         temperature=temperature,

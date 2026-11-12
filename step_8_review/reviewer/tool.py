@@ -8,8 +8,10 @@ and its applier decide every move, check and refusal; this module shows, collect
 reports. Endpoints, under ``/api/suggestions``:
 
 - ``GET  /suggestions``            every suggestion (file order, live page marks, Hebrew
-  names, ``paid``, ``busy``), the counts, the review's note and run, the apply queue;
-  ``exists: false`` (and nothing else to show) before step 8 has run
+  names, ``paid``, ``busy``), the counts, the review's note and run, the apply queue, and
+  ``rerun``: what running the review now would cost (``due`` of ``passes`` review passes,
+  ``usd``, ``batch``; counted by characters, no call to any endpoint; ``null`` when the wiki
+  cannot be read); ``exists: false`` (and nothing else to show) before step 8 has run
 - ``GET  /suggestions/{id}``       ``{suggestion, evidence, changes}`` (``evidence``: see
   ``reviewer.evidence``; ``changes``: what an applied suggestion changed, else ``null``)
 - ``POST /suggestions/decide``     ``{ids, action: accept|reject|reopen}`` → ``{done,
@@ -45,13 +47,16 @@ from review_tool import events
 from review_tool.artifacts import ArtifactGraph
 from review_tool.registry import ToolSpec
 from review_tool.stores import StoreHandle
+from step_10_update.estimate import CharTokenCounter, review_usd
 from step_6_plan.model import PlanError
 from step_8_review.inputs import REVIEW_CONFIG, read_json
+from step_8_review.parts import ReviewPasses, batch_available, stored_passes
 from step_8_review.proposals import ACCEPTED
 from step_8_review.reviewer.applies import APPLY_EVENT, ApplyRunner, is_paid
 from step_8_review.reviewer.changes import AppliedChanges
 from step_8_review.reviewer.evidence import WikiView
 from step_8_review.store import SuggestionConflict, SuggestionNotFound, SuggestionsStore
+from utils.config import LLM_CONFIG
 from utils.paths import BACKUPS_DIR
 
 logger = logging.getLogger(__name__)
@@ -87,6 +92,7 @@ class SuggestionsTool:
         self._view: StoreHandle[WikiView] = StoreHandle(
             lambda: WikiView(self.store.applier.review()),
             graph.files("plan", "assignments", "pages", "groups"), lock_paths=())
+        self._passes: tuple[WikiView, ReviewPasses] | None = None
         self.applies = ApplyRunner(
             lambda: self.store,
             lambda state: publish(APPLY_EVENT, tool=self.NAME, payload=state))
@@ -117,7 +123,7 @@ class SuggestionsTool:
         if not self._exists():
             return {"exists": False, "items": [], "counts": NO_COUNTS, "note": "",
                     "generated_at": None, "run": None, "applies": applies,
-                    "rerun_cost_usd": UI_CONFIG["rerun_cost_usd"]}
+                    "rerun": self._rerun([], {})}
         listing = self.store.list()
         busy = {entry["id"] for entry in applies["queue"]}
         if applies["running"]:
@@ -128,8 +134,9 @@ class SuggestionsTool:
             "items": [{**item, "paid": is_paid(item["kind"]), "busy": item["id"] in busy}
                       for item in listing["items"]],
             "run": {"model": metadata.get("model"), "input_tokens": metadata.get("input_tokens"),
-                    "outdated": (metadata.get("run") or {}).get("outdated") or []},
-            "rerun_cost_usd": UI_CONFIG["rerun_cost_usd"],
+                    "outdated": (metadata.get("run") or {}).get("outdated") or [],
+                    "without_points": (metadata.get("run") or {}).get("without_points") or []},
+            "rerun": self._rerun(listing["items"], metadata),
         }
 
     def detail(self, suggestion_id: str) -> dict[str, Any]:
@@ -191,6 +198,25 @@ class SuggestionsTool:
         return self.applies.state()
 
     # ------------------------------------------------------------------ helpers
+
+    def _rerun(self, suggestions: list[dict[str, Any]], metadata: dict[str, Any]
+               ) -> dict[str, Any] | None:
+        """What running the review now would cost: its due passes, counted by characters at
+        the update estimate's prices (no call to any endpoint)."""
+        try:
+            view = self._view.get()
+        except (PlanError, FileNotFoundError) as exc:
+            logger.info(f"No estimate of a new review: {exc}")
+            return None
+        if self._passes is None or self._passes[0] is not view:
+            model = LLM_CONFIG["stages"][REVIEW_CONFIG["stage"]]["model"]
+            self._passes = (view, ReviewPasses(view.review, model))
+        passes = self._passes[1]
+        counted = passes.estimate(stored_passes(metadata), suggestions,
+                                  CharTokenCounter(REVIEW_CONFIG["chars_per_token"]),
+                                  batch=batch_available())
+        return {"due": counted["calls"], "passes": len(passes.passes),
+                "usd": round(review_usd(counted), 2), "batch": counted["batch"]}
 
     def _exists(self) -> bool:
         artifact = self.store.artifact

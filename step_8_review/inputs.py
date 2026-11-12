@@ -1,4 +1,4 @@
-"""What the whole-wiki review reads, and the fingerprints its re-runs compare.
+"""What the review reads, and the page fingerprints its suggestions keep.
 
 The review reads the EFFECTIVE pages (C9; the owner's edits included) and, as each page's
 evidence, the very group lines step 7's writer read for that page: step 7's own ``Corpus``
@@ -7,10 +7,10 @@ evidence, the very group lines step 7's writer read for that page: step 7's own 
 text; nothing about people). The page body is sent without its footnote definitions: the
 group lines say more (counts, dates) than a definition does.
 
-Fingerprints (contract C14): one per page (its title and effective body) and one for the plan
-fields the reviewer reads (the rendered plan block). A suggestion stores the fingerprints of
-its pages when it is raised, so a later run (and the suggestions store) can tell that a page
-changed or left the wiki since (``page_marks``).
+Fingerprints (contract C14): one per page (its title and effective body); the review passes
+build theirs on it (``step_8_review.parts``). A suggestion stores the fingerprints of its pages
+when it is raised, so a later run (and the suggestions store) can tell that a page changed or
+left the wiki since (``page_marks``).
 """
 
 from __future__ import annotations

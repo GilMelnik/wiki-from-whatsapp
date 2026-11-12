@@ -6,9 +6,10 @@ A stored suggestion::
     {"id": "sug-<sha1[:8]>", "kind": "split|merge|add_page|add_label|contradiction|mistake",
      "pages": [page_id], "reason": Hebrew, "proposal": {...}, "status": "pending|accepted|
      rejected|applied", "edited_proposal"?: {...},
-     # additive: "title" (Hebrew headline), "raised_at", "raised_on" {page_id: fingerprint of
-     # the page when raised}, "page_marks" {page_id: "changed" | "gone"} (refreshed by every
-     # run), "applied_at" and "apply_result" (written when applied)}
+     # additive: "title" (Hebrew headline), "raised_at", "raised_by" (the id of the review
+     # pass that raised it; absent on suggestions of the one-call review), "raised_on"
+     # {page_id: fingerprint of the page when raised}, "page_marks" {page_id: "changed" |
+     # "gone"} (refreshed by every run), "applied_at" and "apply_result" (written when applied)}
 
 ``proposal`` per kind (what code carries out; ``edited_proposal`` has the same shape):
 
@@ -32,6 +33,7 @@ import hashlib
 import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
@@ -61,17 +63,46 @@ ANSWER_FIELDS: dict[str, dict[str, Any]] = {
     "groups_a": _IDS, "groups_b": _IDS, "clash": _TEXT,
     "sentence": _TEXT, "group_ids": _IDS, "correction": _TEXT,
 }
-ANSWER_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "note": _TEXT,
-        "suggestions": {"type": "array", "items": {
-            "type": "object", "properties": ANSWER_FIELDS, "required": list(ANSWER_FIELDS),
-            "additionalProperties": False}},
-    },
-    "required": ["note", "suggestions"],
-    "additionalProperties": False,
-}
+
+
+def answer_schema(kinds: Sequence[str]) -> dict[str, Any]:
+    """The answer of one review pass that may raise ``kinds``."""
+    fields = {**ANSWER_FIELDS, "kind": {"type": "string", "enum": list(kinds)}}
+    return {
+        "type": "object",
+        "properties": {
+            "note": _TEXT,
+            "suggestions": {"type": "array", "items": {
+                "type": "object", "properties": fields, "required": list(fields),
+                "additionalProperties": False}},
+        },
+        "required": ["note", "suggestions"],
+        "additionalProperties": False,
+    }
+
+
+@dataclass(frozen=True)
+class Scope:
+    """What one review pass may name: the pages and groups it was shown, the kinds it may
+    raise, and how many suggestions it may keep."""
+
+    pages: frozenset[str]
+    groups: frozenset[str]
+    kinds: tuple[str, ...]
+    cap: int
+
+    def outside(self, kind: str, proposal: Mapping[str, Any], named: Sequence[str]) -> list[str]:
+        """Why a suggestion is not this pass's to raise (empty: it is)."""
+        if kind not in self.kinds:
+            return [f"this review pass cannot raise a {kind}"]
+        found = []
+        pages = sorted({*suggestion_pages(kind, proposal, named), *named} - self.pages)
+        if pages:
+            found.append(f"names pages this review pass did not see: {pages}")
+        groups = sorted(set(named_groups(kind, proposal)) - self.groups)
+        if groups:
+            found.append(f"names groups this review pass did not see: {groups}")
+        return found
 
 _MARK = re.compile(r"\[\^[^\]\s]+\](?!:)")
 _QUOTES = str.maketrans({"״": '"', "”": '"', "“": '"', "׳": "'", "’": "'", "‘": "'"})
@@ -128,6 +159,15 @@ def suggestion_pages(kind: str, proposal: Mapping[str, Any], named: Sequence[str
     if kind == CONTRADICTION:
         return list(proposal["pages"])
     return list(dict.fromkeys(named))
+
+
+def named_groups(kind: str, proposal: Mapping[str, Any]) -> list[str]:
+    """The groups a suggestion names (a contradiction's sides, a mistake's evidence)."""
+    if kind == CONTRADICTION:
+        return [*proposal.get("groups_a", []), *proposal.get("groups_b", [])]
+    if kind == MISTAKE:
+        return list(proposal.get("group_ids", []))
+    return []
 
 
 def operation(kind: str, proposal: Mapping[str, Any]) -> Operation:
@@ -229,12 +269,14 @@ def new_id(kind: str, proposal: Mapping[str, Any], used: set[str]) -> str:
 
 
 def from_answer(raw: Any, review: ReviewInput, existing: Sequence[Mapping[str, Any]], *,
-                raised_at: str) -> tuple[list[dict[str, Any]], list[str]]:
-    """The usable new suggestions of one model answer, and why the others were dropped.
+                raised_at: str, raised_by: str, scope: Scope
+                ) -> tuple[list[dict[str, Any]], list[str]]:
+    """The usable new suggestions of one pass's answer, and why the others were dropped
+    (``ValueError`` when the answer has no suggestions list).
 
-    A suggestion is dropped when its proposal fails ``problems``, when it repeats one already
-    raised (any status) or an earlier one of the same answer, or beyond
-    ``wiki_review.max_suggestions``."""
+    A suggestion is dropped when it is not the pass's to raise (``Scope.outside``), when its
+    proposal fails ``problems``, when it repeats one already raised (any status) or an
+    earlier one of the same answer, or beyond the pass's cap."""
     answers = raw.get("suggestions") if isinstance(raw, dict) else None
     if not isinstance(answers, list):
         raise ValueError(f"the review answer has no suggestions list: {str(raw)[:300]}")
@@ -250,20 +292,21 @@ def from_answer(raw: Any, review: ReviewInput, existing: Sequence[Mapping[str, A
             continue
         title = _clean(answer.get("title"))
         proposal = proposal_from_answer(kind, answer)
-        found = problems(kind, proposal, review)
+        named = _ids(answer.get("pages"))
+        found = scope.outside(kind, proposal, named) or problems(kind, proposal, review)
         keys = signatures(kind, proposal)
         if found:
             dropped.append(f"#{index} {kind} {title!r}: {'; '.join(found)}")
         elif keys & seen:
             dropped.append(f"#{index} {kind} {title!r}: already raised")
-        elif len(kept) >= REVIEW_CONFIG["max_suggestions"]:
-            dropped.append(f"#{index} {kind} {title!r}: over max_suggestions")
+        elif len(kept) >= scope.cap:
+            dropped.append(f"#{index} {kind} {title!r}: over the pass's max_suggestions")
         else:
-            pages = [pid for pid in suggestion_pages(kind, proposal, _ids(answer.get("pages")))
-                     if pid in review.pages]
+            pages = [pid for pid in suggestion_pages(kind, proposal, named) if pid in review.pages]
             suggestion = {"id": new_id(kind, proposal, used), "kind": kind, "title": title,
                           "pages": pages, "reason": _clean(answer.get("reason")),
                           "proposal": proposal, "status": PENDING, "raised_at": raised_at,
+                          "raised_by": raised_by,
                           "raised_on": {pid: fingerprints[pid] for pid in pages},
                           "page_marks": {}}
             used.add(suggestion["id"])
