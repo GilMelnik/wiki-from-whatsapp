@@ -1,8 +1,18 @@
 import { Bidi, Kbd, Ltr, Panel, PanelState } from "@shell";
 import { MARK, restoreLabel, typeLabel } from "./review.js";
 
-// Side column: the decision on the selected claim. Pending: choose which removed values to
-// restore (none chosen = all), then accept the removal or restore. Reviewed: undo.
+// The side column: the decision on the selected claim, with only the actions that fit it. To
+// decide: which removed values to put back (none marked = all), then keep the removal or
+// restore. Decided: undo. "Undo the previous decision" stays offered after moving on.
+
+function ActionButton({ label, keyName, primary = false, disabled, onClick }) {
+  return (
+    <button type="button" className={`btn btn-block justify-between ${primary ? "btn-primary" : ""}`} disabled={disabled} onClick={onClick}>
+      <span>{label}</span>
+      <Kbd>{keyName}</Kbd>
+    </button>
+  );
+}
 
 function RedactionChoices({ claim, chosen, onToggle, disabled }) {
   return (
@@ -10,15 +20,10 @@ function RedactionChoices({ claim, chosen, onToggle, disabled }) {
       {claim.redactions.map((redaction, index) => (
         <li key={index}>
           <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={chosen.includes(index)}
-              disabled={disabled}
-              onChange={() => onToggle(index)}
-            />
+            <input type="checkbox" checked={chosen.includes(index)} disabled={disabled} onChange={() => onToggle(index)} />
             <Kbd>{index + 1}</Kbd>
-            <span className="w-14 shrink-0 text-xs text-slate-500">{typeLabel(redaction.type)}</span>
-            <Ltr className="break-all rounded bg-rose-50 px-1 text-rose-800">{redaction.value}</Ltr>
+            <span className="w-12 shrink-0 text-xs text-slate-500">{typeLabel(redaction.type)}</span>
+            <Ltr className="break-all">{redaction.value}</Ltr>
           </label>
         </li>
       ))}
@@ -26,101 +31,43 @@ function RedactionChoices({ claim, chosen, onToggle, disabled }) {
   );
 }
 
-function ReviewedValues({ claim }) {
-  if (claim.redactions.length === 0) {
-    return <p className="text-slate-400">The original file no longer says what was removed from the claim.</p>;
-  }
+function ToDecide({ claim, chosen, saving, onToggle, onAccept, onRestore }) {
+  const several = claim.redactions.length > 1;
   return (
-    <ul className="space-y-2">
-      {claim.redactions.map((redaction, index) => (
-        <li key={index} className="flex items-center gap-2">
-          <span className={`badge ${redaction.in_text ? "badge-emerald" : "badge-slate"}`}>
-            {redaction.in_text ? "Restored" : "Removed"}
-          </span>
-          <span className="w-14 shrink-0 text-xs text-slate-500">{typeLabel(redaction.type)}</span>
-          <Ltr className="break-all">{redaction.value}</Ltr>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function PendingFooter({ claim, chosen, saving, onAccept, onRestore, onUndo, canUndoPrevious }) {
-  return (
-    <>
-      <button type="button" className="btn btn-primary btn-block" disabled={saving} onClick={onAccept}>
-        Accept the removal – keep <Bidi>{MARK}</Bidi>
-        <Kbd>a</Kbd>
-      </button>
-      <button
-        type="button"
-        className="btn btn-block"
-        disabled={saving || !claim.marks_match}
-        onClick={onRestore}
-      >
-        {restoreLabel(chosen.length, claim.redactions.length)}
-        <Kbd>r</Kbd>
-      </button>
-      {canUndoPrevious && (
-        <button type="button" className="btn btn-sm btn-block" disabled={saving} onClick={onUndo}>
-          Undo the previous decision
-          <Kbd>u</Kbd>
-        </button>
+    <div className="space-y-3">
+      <p className="text-slate-700">Should the detail stay out of the claim, or go back in?</p>
+      {several && claim.marks_match && (
+        <>
+          <RedactionChoices claim={claim} chosen={chosen} onToggle={onToggle} disabled={saving} />
+          <p className="text-xs text-slate-500">Mark details (or press their number) to restore only those.</p>
+        </>
       )}
-    </>
+      <ActionButton label={<>Keep the removal: <Bidi>{MARK}</Bidi></>} keyName="a" primary disabled={saving} onClick={onAccept} />
+      {claim.marks_match && <ActionButton label={restoreLabel(chosen.length, claim.redactions.length)} keyName="r" disabled={saving} onClick={onRestore} />}
+    </div>
   );
 }
 
 export function DecisionPanel({ detail, chosen, saving, canUndoPrevious, onToggle, onAccept, onRestore, onUndo }) {
   const claim = detail.data?.claim;
   const pending = claim?.status === "pending";
-  const footer = !claim ? null : pending ? (
-    <PendingFooter
-      claim={claim}
-      chosen={chosen}
-      saving={saving}
-      onAccept={onAccept}
-      onRestore={onRestore}
-      onUndo={onUndo}
-      canUndoPrevious={canUndoPrevious}
-    />
-  ) : (
-    <button type="button" className="btn btn-block" disabled={saving || !claim.can_undo} onClick={onUndo}>
-      Undo the decision – the claim goes back to pending
-      <Kbd>u</Kbd>
-    </button>
-  );
   return (
     <Panel
-      title="Decision"
-      subtitle={
-        <>
-          Saved at once to <Ltr>claims_edited.json</Ltr>
-        </>
+      title="Decide"
+      footer={
+        pending &&
+        canUndoPrevious && <ActionButton label="Undo the previous decision" keyName="u" disabled={saving} onClick={onUndo} />
       }
-      footer={footer}
     >
       <PanelState empty={!claim} emptyText="No claim selected">
         {claim && (
-          <div className="space-y-6 p-4 text-sm">
+          <div className="space-y-4 p-4 text-sm">
             {pending ? (
-              <section className="space-y-3">
-                <p>Is the automatic removal right, or should the detail stay in the claim?</p>
-                <RedactionChoices claim={claim} chosen={chosen} onToggle={onToggle} disabled={saving || !claim.marks_match} />
-                {claim.redactions.length > 1 && (
-                  <p className="text-xs text-slate-500">Mark details (or press their number) to restore only those.</p>
-                )}
-              </section>
+              <ToDecide claim={claim} chosen={chosen} saving={saving} onToggle={onToggle} onAccept={onAccept} onRestore={onRestore} />
+            ) : claim.can_undo ? (
+              <ActionButton label="Undo the decision" keyName="u" disabled={saving} onClick={onUndo} />
             ) : (
-              <section>
-                <h3 className="section-title">Details removed in step 3</h3>
-                <ReviewedValues claim={claim} />
-                {!claim.can_undo && (
-                  <p className="mt-3 text-xs text-slate-500">
-                    Cannot undo: in the original file, the claim no longer has removed details.
-                  </p>
-                )}
-              </section>
+              <p className="text-xs text-slate-500">Decided. It cannot be undone: the original file no longer has the removed details.</p>
             )}
           </div>
         )}
