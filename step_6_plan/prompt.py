@@ -3,9 +3,10 @@ conversion of its flat answer into a C7 plan (``step_6_plan.model``).
 
 The model sees every claim group as one compact line (id, stance, distinct supporters and
 opposers, first and last month, thread count, entity names, representative claim text) and
-nothing about the people behind it. Structured output cannot express a recursive tree, so the
-model returns flat lists of category nodes and pages that point at their parent; the tree is
-built here.
+nothing about the people behind it; when the list does not fit ``plan.max_input_tokens`` it sees
+a sample (``step_6_plan.fit``), with a note and the size guide scaled to the sample.
+Structured output cannot express a recursive tree, so the model returns flat lists of category
+nodes and pages that point at their parent; the tree is built here.
 """
 
 from __future__ import annotations
@@ -20,12 +21,42 @@ from step_6_plan.model import PLAN_CONFIG, iter_nodes, sync_pages, validation_er
 _EXAMPLES = PLAN_CONFIG["example_group_ids"]
 _GUIDE = PLAN_CONFIG["page_groups"]
 
-PLAN_SYSTEM = f"""\
+
+def scaled_guide(shown: int, total: int) -> dict[str, int]:
+    """The size guide ``plan.page_groups`` in groups of a list that shows ``shown`` of ``total``
+    groups: each number times shown / total, rounded, never below 1 (unchanged for a full list)."""
+
+    if shown == total:
+        return dict(_GUIDE)
+    return {key: max(1, round(value * shown / total)) for key, value in _GUIDE.items()}
+
+
+def plan_system(shown: int, total: int) -> str:
+    """The planning instructions for a list of ``shown`` of ``total`` claim groups.
+
+    For a full list this is the prompt planning has always had. For a sample it says that the
+    list is a sample and gives the size guide in groups of the list (``scaled_guide``), so the
+    pages come out the size they would from the full list."""
+
+    guide = scaled_guide(shown, total)
+    listed = (
+        "every claim group, one per line, before the request." if shown == total else
+        "a sample of the claim groups, one per line, before the request; a note before the list "
+        "says how many groups there are in all and how the sample was chosen."
+    )
+    scaled = "" if shown == total else (
+        f" These numbers count groups of the list, which shows {shown} of all {total} groups: "
+        f"they are the guide for the whole corpus (roughly {_GUIDE['typical_min']} to "
+        f"{_GUIDE['typical_max']} groups, split above {_GUIDE['split_above']}, fold below "
+        f"{_GUIDE['fold_below']}) scaled by that share, so that a page sized by the list comes "
+        "out the right size for all the groups."
+    )
+    return f"""\
 You are designing the structure of a Hebrew wiki for an Israeli WhatsApp community of gay \
 couples and gay men who are going through surrogacy abroad or considering it. Over several \
 years members asked questions and shared experience, recommendations and warnings. Their \
 statements were extracted as claims, and claims that say the same thing were grouped. The \
-user message lists every claim group, one per line, before the request.
+user message lists {listed}
 
 Your job is to propose the wiki's structure: a tree of content whose leaves are the wiki \
 pages, plus labels that cut across pages. You do not write the pages. The owner of the wiki \
@@ -45,13 +76,13 @@ the top level come categories; below a category come pages, or, where a category
 one more level of sub-categories and then pages. Pages are always leaves.
 - Pages: size each page by its material and let the number of pages follow from that; there \
 is no target number of pages. A page is one coherent subject a member would look up and expect \
-to read in one place, and it rests on roughly {_GUIDE["typical_min"]} to \
-{_GUIDE["typical_max"]} claim groups (count the groups of the list that belong to it; the \
+to read in one place, and it rests on roughly {guide["typical_min"]} to \
+{guide["typical_max"]} claim groups (count the groups of the list that belong to it; the \
 support counts show how much the community cares). A subject with more than about \
-{_GUIDE["split_above"]} groups is too much for one page: split it by sub-subject into pages \
-of their own. A subject with fewer than about {_GUIDE["fold_below"]} groups is not a page: \
+{guide["split_above"]} groups is too much for one page: split it by sub-subject into pages \
+of their own. A subject with fewer than about {guide["fold_below"]} groups is not a page: \
 make it a section of the neighbouring page it belongs with. So no few long pages that each \
-cover many subjects, and no thin page for a subject that only a handful of groups touch.
+cover many subjects, and no thin page for a subject that only a handful of groups touch.{scaled}
 - Well defined and self-contained: define each page so that every claim group fits one page \
 easily and obviously. Pages must not overlap; where a subject could sit in two places, decide \
 where it goes and say so in both scopes. Together the pages must leave no common kind of \
@@ -180,26 +211,57 @@ def groups_block(groups: Sequence[dict[str, Any]]) -> str:
     return f'<claim_groups count="{len(groups)}">\n{lines}\n</claim_groups>'
 
 
-def initial_request(group_count: int) -> str:
-    return f"Propose the wiki structure for the {group_count} claim groups above."
+def _part(shown: int, total: int) -> str:
+    return f"all {total}" if shown == total else f"{shown} of the {total}"
 
 
-def retry_request(group_count: int, answer: Any, errors: Sequence[str]) -> str:
+def sample_note(shown_many: int, many: int, shown_rest: int, rest: int) -> str:
+    """The note before a sampled list: how many groups there are, how many are shown, and how
+    they were chosen (``many`` groups that more than one member backs, ``rest`` the others)."""
+
+    total = many + rest
+    return (
+        "Not every claim group fits in this request, so the list below is a sample: it shows "
+        f"{shown_many + shown_rest} of all {total} claim groups, namely "
+        f"{_part(shown_many, many)} groups that more than one member backs and "
+        f"{_part(shown_rest, rest)} groups that fewer than two members back. Where a part is not "
+        "shown whole, its groups were chosen at random but evenly over time, so that no period "
+        "of the chat is missing. The groups not shown resemble the shown ones in subject and in "
+        f"proportion: plan the wiki for all {total} groups as if the list held every one of them."
+    )
+
+
+def initial_request(shown: int, total: int) -> str:
+    if shown == total:
+        return f"Propose the wiki structure for the {total} claim groups above."
+    return f"Propose the wiki structure for all {total} claim groups, of which the {shown} above are a sample."
+
+
+def retry_request(shown: int, total: int, answer: Any, errors: Sequence[str]) -> str:
     problems = "\n".join(f"- {error}" for error in errors)
     return (
-        f"{initial_request(group_count)}\n\nYour previous answer did not pass validation:\n"
+        f"{initial_request(shown, total)}\n\nYour previous answer did not pass validation:\n"
         f"{problems}\n\nThat answer was:\n{json.dumps(answer, ensure_ascii=False)}\n\n"
         "Return the complete corrected answer, keeping everything that was not wrong."
     )
 
 
-def revision_request(plan: dict[str, Any], sample_size: int, findings: Sequence[str]) -> str:
+def revision_request(
+    plan: dict[str, Any], sample_size: int, findings: Sequence[str],
+    unlisted: Sequence[dict[str, Any]],
+) -> str:
+    """The revision call's request; ``unlisted`` are the groups the findings name that a sampled
+    list does not show (their lines are added so the model can read them)."""
+
     found = "\n".join(f"- {finding}" for finding in findings)
+    unlisted_lines = "".join(f"{group_line(group)}\n" for group in unlisted)
+    if unlisted_lines:
+        unlisted_lines = f"\nThe groups named here that the list does not show:\n{unlisted_lines}"
     return (
         f"This is the structure you proposed:\n"
         f"{json.dumps(proposal_from_plan(plan), ensure_ascii=False)}\n\n"
         f"A classifier then placed a random sample of {sample_size} claim groups, reading only "
-        f"the page titles and scopes. What it found:\n{found}\n\n"
+        f"the page titles and scopes. What it found:\n{found}\n{unlisted_lines}\n"
         "Revise the structure where these problems are real: sharpen scopes that overlap or "
         "are vague, split overloaded pages, fold pages that attract almost nothing into their "
         "neighbours, and give a home to the kinds of groups that fit nowhere. Keep the ids of "

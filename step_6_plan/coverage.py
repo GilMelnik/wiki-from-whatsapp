@@ -106,12 +106,25 @@ def coverage_check(
     return summarize(plan, picks, len(groups))
 
 
+def _unplaced_share(report: dict[str, Any]) -> float:
+    return report["none_share"] + report["unsure_share"]
+
+
+def named_group_ids(report: dict[str, Any]) -> list[str]:
+    """The groups ``findings`` names: the sampled groups not placed confidently, when their
+    share is above ``plan.coverage.max_unplaced_share`` (else none)."""
+
+    if _unplaced_share(report) <= COVERAGE_CONFIG["max_unplaced_share"]:
+        return []
+    return [*report["none_group_ids"], *report["unsure_group_ids"]]
+
+
 def findings(report: dict[str, Any], plan: dict[str, Any]) -> list[str]:
     """The problems worth one revision call, as sentences for the model (empty = none)."""
 
     found: list[str] = []
-    unplaced = report["none_share"] + report["unsure_share"]
-    if unplaced > COVERAGE_CONFIG["max_unplaced_share"]:
+    unplaced = _unplaced_share(report)
+    if named_group_ids(report):
         found.append(
             f"{unplaced:.0%} of the sample was not placed confidently: {report['none_share']:.0%} "
             f"fit no page (groups {', '.join(report['none_group_ids'])}) and "

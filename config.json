@@ -252,6 +252,9 @@
     "stage": "plan",
     "max_output_tokens": 100000,
     "context_window_tokens": 1000000,
+    "max_input_tokens": 600000,
+    "chars_per_token": 1.49,
+    "sample_seed": 56,
     "max_model_calls": 3,
     "example_group_ids": {"min": 3, "max": 8},
     "coverage": {
