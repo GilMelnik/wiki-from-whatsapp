@@ -4,7 +4,11 @@ import { test } from "node:test";
 import { selectedByThread, selectionRules, streamRows } from "../src/shell/pure.js";
 import {
   addRange,
+  automaticText,
+  emptyListText,
   extraParams,
+  knowledgeText,
+  listParams,
   mergeCandidates,
   moveTargets,
   progressText,
@@ -70,4 +74,22 @@ test("merge offers the conversation right before first", () => {
 
 test("progress counts the done windows", () => {
   assert.equal(progressText([{ done: true }, { done: false }, { done: true }]), "2 of 3 windows done");
+});
+
+test("step 2's knowledge label reads as yes / no, with its probability as a detail", () => {
+  const label = { value: false, auto: true, p_knowledge: 0.623, passed_heuristic: true, manual: true };
+  assert.equal(knowledgeText(label), "No knowledge");
+  assert.equal(knowledgeText({ ...label, value: true }), "Carries knowledge");
+  assert.equal(knowledgeText(null), null);
+  assert.equal(automaticText(label), "Step 2: yes (probability 0.62)");
+  assert.equal(automaticText({ ...label, auto: false, p_knowledge: null }), "Step 2: no (too few messages or people to ask)");
+});
+
+test("the list asks for the knowledge filter, also from an older stored search", () => {
+  assert.deepEqual(listParams({ q: "x", sort: "size" }), { q: "x", sort: "size", knowledge: "all" });
+  assert.deepEqual(listParams({ q: "", sort: "time", knowledge: "manual" }), { q: "", sort: "time", knowledge: "manual" });
+  assert.equal(emptyListText({ q: "cats", knowledge: "all" }), "No message or sender contains “cats”.");
+  assert.equal(emptyListText({ q: "cats", knowledge: "yes" }), "No message or sender contains “cats” among “Carries knowledge”.");
+  assert.equal(emptyListText({ q: "", knowledge: "manual" }), "No conversation has a label set by hand.");
+  assert.equal(emptyListText({ q: "", knowledge: "no" }), "No conversation is marked “No knowledge”.");
 });

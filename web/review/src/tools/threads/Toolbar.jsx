@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Kbd, Select } from "@shell";
-import { MODES, progressText, SORTS, windowLabel } from "./threads.js";
+import { KNOWLEDGE_FILTERS, MODES, progressText, SORTS, windowLabel } from "./threads.js";
 
-// The strip above the columns: what is listed (every conversation, searchable; or the gold
-// windows, one at a time, with their done marks).
+// The strip above the columns: what is listed (every conversation, searchable and filtered by
+// step 2's knowledge label once step 2 has run; or the gold windows, one at a time, with their
+// done marks).
 
 const SEARCH_DELAY_MS = 300;
 
@@ -73,6 +74,14 @@ export function Toolbar({ data, locked, onToggleDone }) {
         <>
           <SearchBox value={data.search.q} onChange={(q) => data.setSearch((previous) => ({ ...previous, q }))} />
           <Select label="Order" value={data.search.sort} options={SORTS} onChange={(sort) => data.setSearch((previous) => ({ ...previous, sort }))} />
+          {data.knowledge.data?.ready && (
+            <Select
+              label="Knowledge"
+              value={data.search.knowledge ?? "all"}
+              options={KNOWLEDGE_FILTERS}
+              onChange={(knowledge) => data.setSearch((previous) => ({ ...previous, knowledge }))}
+            />
+          )}
         </>
       )}
     </>

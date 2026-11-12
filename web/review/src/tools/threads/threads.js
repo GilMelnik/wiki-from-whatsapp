@@ -3,12 +3,20 @@ import { formatCount, formatMonth, formatSpan, streamRows, threadEdges } from "@
 
 export const TOOL_ID = "threads";
 export const THREADS_KEY = "threads";
+export const CLASSIFIED_KEY = "classified";
 export const MODES = { all: "all", gold: "gold" };
 export const SORTS = [
   { value: "time", label: "Time" },
   { value: "size", label: "Largest first" },
 ];
-export const DEFAULT_SEARCH = { q: "", sort: "time" };
+export const DEFAULT_SEARCH = { q: "", sort: "time", knowledge: "all" };
+// The list filter on step 2's knowledge label (the server's `knowledge` parameter).
+export const KNOWLEDGE_FILTERS = [
+  { value: "all", label: "All" },
+  { value: "yes", label: "Carries knowledge" },
+  { value: "no", label: "No knowledge" },
+  { value: "manual", label: "Set by hand" },
+];
 const OPENING_CHARS = 160;
 const BEFORE_ROLES = ["previous", "around"];
 
@@ -90,4 +98,31 @@ export function mergeCandidates(blocks, currentId) {
   const others = blocks.filter((block) => block.thread_id !== currentId);
   const before = others.filter((block) => BEFORE_ROLES.includes(block.role));
   return [...before, ...others.filter((block) => !before.includes(block))];
+}
+
+/** The list request: the search as stored (an older stored search has no knowledge filter). */
+export function listParams(search) {
+  return { q: search.q, sort: search.sort, knowledge: search.knowledge ?? "all" };
+}
+
+/** What the list says when nothing matches. */
+export function emptyListText(search) {
+  const filter = KNOWLEDGE_FILTERS.find((option) => option.value === (search.knowledge ?? "all"));
+  if (search.q) return `No message or sender contains “${search.q}”${filter.value === "all" ? "" : ` among “${filter.label}”`}.`;
+  return filter.value === "manual" ? "No conversation has a label set by hand." : `No conversation is marked “${filter.label}”.`;
+}
+
+/** "Carries knowledge" / "No knowledge" for a label (`null` when step 2 has none). */
+export function knowledgeText(label) {
+  if (!label) return null;
+  return label.value ? "Carries knowledge" : "No knowledge";
+}
+
+/** Step 2's own answer, quietly: its probability, or that the heuristic skipped the question. */
+export function automaticText(label) {
+  const answer = label.auto ? "yes" : "no";
+  if (label.p_knowledge === null || label.p_knowledge === undefined) {
+    return `Step 2: ${answer} (too few messages or people to ask)`;
+  }
+  return `Step 2: ${answer} (probability ${label.p_knowledge.toFixed(2)})`;
 }

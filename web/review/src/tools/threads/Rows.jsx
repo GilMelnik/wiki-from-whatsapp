@@ -1,11 +1,27 @@
 import { Bidi, countText, formatCount, formatSpan, ThreadTag } from "@shell";
+import { automaticText, knowledgeText } from "./threads.js";
 
-// The rows of the list column: a conversation of the whole chat, or of a gold window.
+// The rows of the list column: a conversation of the whole chat (with step 2's knowledge
+// label once step 2 has run), or of a gold window.
+
+function Knowledge({ label }) {
+  const text = knowledgeText(label);
+  if (!text) return null;
+  return (
+    <span className={label.value ? "text-slate-500" : "text-amber-800"} title={automaticText(label)}>
+      {text}
+      {label.manual && " · set by hand"}
+    </span>
+  );
+}
 
 export function ThreadRow({ row, query }) {
   return (
     <div className="space-y-0.5">
-      <div className="text-xs text-slate-500">{formatSpan(row.start_time, row.last_time)}</div>
+      <div className="flex justify-between gap-2 text-xs text-slate-500">
+        <span>{formatSpan(row.start_time, row.last_time)}</span>
+        <Knowledge label={row.knowledge} />
+      </div>
       <Bidi as="p" className="line-clamp-2 text-sm text-slate-900">
         {query && row.match ? row.match : row.opening}
       </Bidi>
