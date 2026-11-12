@@ -14,6 +14,8 @@ from step_3_extract.scrub import find_emails, find_phones
 from utils.config import ENTITIES_CONFIG
 
 CONTACT_KINDS = ("email", "phone", "website")
+# Fields an earlier step 4 stored on entities and nothing reads any more; a run drops them.
+RETIRED_FIELDS = ("kind", "kind_confidence", "kind_input", "kind_manual")
 _ID_PREFIX = ENTITIES_CONFIG["entity_id_prefix"]
 _ID_DIGITS = ENTITIES_CONFIG["entity_id_digits"]
 _ID_RE = re.compile(rf"{re.escape(_ID_PREFIX)}(\d+)")
@@ -170,6 +172,14 @@ def member_names(payload: Mapping[str, Any]) -> set[str]:
     """Every entity string some member of the payload carries."""
 
     return {m["name"] for e in payload.get("entities") or [] for m in e.get("members") or []}
+
+
+def drop_retired_fields(entities: Iterable[dict[str, Any]]) -> None:
+    """Remove the fields in ``RETIRED_FIELDS`` from every entity, in place."""
+
+    for entity in entities:
+        for field in RETIRED_FIELDS:
+            entity.pop(field, None)
 
 
 def entity_counts(payload: Mapping[str, Any]) -> dict[str, int]:

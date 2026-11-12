@@ -17,7 +17,6 @@ from tests.entities_tool_support import (
     DS5,
     DS6,
     EntitiesSetup,
-    FakeKindClassifier,
     claim,
     claims_payload,
 )
@@ -81,6 +80,14 @@ def test_unknown_entity_is_404_and_an_impossible_change_is_409(tool: EntitiesSet
     bogus = {"kind": "email", "value": "x", "action": "bogus"}
     tool.post("/entities/e0001/contact", bogus, expect=422)
     assert not tool.edited.exists()
+
+
+def test_an_entity_has_no_kind_to_set_or_read(tool: EntitiesSetup) -> None:
+    response = tool.client.post("/api/entities/entities/e0000/kind", json={"kind": "person"})
+    assert response.status_code in (404, 405)
+    assert not tool.edited.exists()
+    assert not {key for key in tool.entity("e0000") if key.startswith("kind")}
+    assert not any(key.startswith("kind") for key in tool.get("/entities/e0000")["entity"])
 
 
 # ------------------------------------------------------------- reads
@@ -214,7 +221,6 @@ def test_edits_survive_a_real_step_4_rerun_and_the_tool_follows_it(tmp_path: Pat
             analyzer=SimpleAnalyzer(),
             analysis_path=setup.cache,
             seed_path=tmp_path / "seed.json",
-            classifier=FakeKindClassifier(),
         )
 
     step_4()

@@ -57,20 +57,6 @@
       "prefix": "prefix",
       "string": "string",
       "transliteration": "transliteration"
-    },
-    "kind": {
-      "stage": "entities",
-      "question": "What does this name stand for in the members' messages? Judge by what the messages say it is, not by how the name sounds: a clinic, firm, agency or hospital named after a person is an organisation.",
-      "kinds": {
-        "person": "a person: one individual known by their own name (a doctor, a lawyer, a consultant, an agent, a coordinator)",
-        "organisation": "an organisation: a company, agency, clinic, hospital, law firm, insurer, authority or community group, even when it carries a person's name",
-        "place": "a place: a country, state, city, neighbourhood or address",
-        "other": "something else: a product, a service, a law, a document, a website or an idea"
-      },
-      "when_unsure": "person",
-      "min_confidence": 0.6,
-      "max_excerpts": 6,
-      "excerpt_chars": 60
     }
   },
   "input": {
@@ -110,8 +96,7 @@
   "classifier": {
     "stages": {
       "knowledge": {"provider": "typesafe", "model": "jev-latest"},
-      "assign": {"provider": "typesafe", "model": "jev-latest"},
-      "entities": {"provider": "typesafe", "model": "jev-latest"}
+      "assign": {"provider": "typesafe", "model": "jev-latest"}
     },
     "fallback": {"provider": "anthropic", "model": "claude-haiku-5-5"},
     "concurrency": 8,
@@ -300,7 +285,7 @@
     "max_marks_per_statement": 3,
     "max_statements_per_point": 2,
     "max_left_out_share": 0.3,
-    "withhold": {"stance": "negative", "kinds": ["person"], "min_supporters": 2, "reason": "withheld"},
+    "withhold": {"stance": "negative", "min_supporters": 2, "reason": "withheld"},
     "points": {
       "kinds": {
         "common_view": "what members generally recommend or report on a question (said once, however many groups repeat it)",
@@ -687,7 +672,7 @@
     "max_gap_days": 62,
     "review_hints": {
       "pii": "the new claims (privacy: names, phone numbers, details about people)",
-      "entities": "the new entities and their kinds (people, providers, places)",
+      "entities": "the new entities (people, providers, places)",
       "groups": "the new claim groups (merges and splits)",
       "plan": "the pending proposals for new pages and labels",
       "suggestions": "the review's suggestions (accept or reject, then apply the accepted ones)"

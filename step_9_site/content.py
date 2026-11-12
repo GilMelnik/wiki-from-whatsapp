@@ -11,7 +11,7 @@ link to that page, ``[[label:label_id|text]]`` a link to the label's page; a lin
 id goes to the survivor; a link to anything not published becomes its plain text. The
 references under a page are rendered from the groups (``step_9_site.references``).
 
-A page that cites a withheld group (``withheld``: a negative statement about a named individual
+A page that cites a withheld group (``withheld``: a negative statement about a named entity
 that fewer than two members reported, ``step_7_write_pages.withhold``) is an issue of kind
 ``withheld_reference``: a page written before the rule, or edited by hand, that step 7 must
 write again before the site is published.

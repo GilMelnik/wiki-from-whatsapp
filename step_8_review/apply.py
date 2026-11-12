@@ -130,14 +130,13 @@ class Applier:
 
     def __init__(self, *, pages_artifact: Artifact = WIKI_PAGES, plan_artifact: Artifact = PLAN,
                  aggregated_path: Path | None = None, assignments_path: Path | None = None,
-                 entities_path: Path | None = None, llm: LLMClient | None = None,
+                 llm: LLMClient | None = None,
                  linker: Callable[[], GroupLinker] = default_linker,
                  logger: logging.Logger | None = None) -> None:
         self.pages_artifact = pages_artifact
         self.plan_artifact = plan_artifact
         self.aggregated_path = aggregated_path
         self.assignments_path = assignments_path
-        self.entities_path = entities_path
         self._llm = llm
         self.linker = linker
         self.logger = logger or logging.getLogger(__name__)
@@ -152,8 +151,7 @@ class Applier:
     def review(self) -> ReviewInput:
         """The wiki as it is now (effective pages, groups, plan, assignments)."""
         return ReviewInput.load(self.pages_artifact, self.aggregated_path,
-                                resolve(self.plan_artifact), self.assignments_path,
-                                self.entities_path)
+                                resolve(self.plan_artifact), self.assignments_path)
 
     def apply(self, suggestion: Mapping[str, Any]) -> ApplyResult:
         """Carry out ``suggestion`` (its edited proposal when the owner changed it)."""

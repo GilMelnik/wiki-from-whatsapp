@@ -30,7 +30,7 @@ def test_to_blocks_marks_cache_breakpoints() -> None:
 
 def test_write_prompt_layout_and_flatten(tmp_path: Path) -> None:
     ws = PagesWorkspace(tmp_path)
-    corpus = Corpus.load(*ws.paths())
+    corpus = Corpus.load(ws.groups_path, ws.plan_path, ws.assignments_path)
     catalogue = corpus.catalogue()
     first = write_prompt(corpus.context("agencies", catalogue))
     second = write_prompt(corpus.context("costs", catalogue))

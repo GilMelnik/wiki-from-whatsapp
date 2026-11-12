@@ -42,20 +42,11 @@ from step_7_write_pages.run import run
 from utils.config import DATA_DIR
 from utils.llm_client import LLMClient
 from utils.logging_setup import setup_step_logging
-from utils.paths import (
-    AGGREGATED,
-    ASSIGNMENTS,
-    ENTITIES,
-    PLAN,
-    STEP_7,
-    WIKI_PAGES,
-    Artifact,
-    resolve,
-)
+from utils.paths import AGGREGATED, ASSIGNMENTS, PLAN, STEP_7, WIKI_PAGES, Artifact, resolve
 from utils.wiki_links import find_wiki_links, replace_wiki_links
 
 CHECK_CONFIG = PAGES_CONFIG["consolidation_check"]
-INPUTS = (AGGREGATED, PLAN, ASSIGNMENTS, ENTITIES, WIKI_PAGES)
+INPUTS = (AGGREGATED, PLAN, ASSIGNMENTS, WIKI_PAGES)
 _YEAR = re.compile(r"(?<!\d)20\d\d(?!\d)")
 _MARK = re.compile(r"\[\^(g-[0-9a-f]+)\]")
 _HEADING = re.compile(r"^(#{2,6})\s*(.+)$", re.MULTILINE)
@@ -137,7 +128,7 @@ class ConsolidationCheck:
                              "WIKI_DATA_DIR to an empty scratch folder, not to --source")
 
     def prepare(self) -> None:
-        """Copy the step 4-7 files (original and edited) from the source to the target."""
+        """Copy the step 5-7 files (original and edited) from the source to the target."""
         for artifact in INPUTS:
             origin, copy = _under(artifact, self.source), _under(artifact, self.target)
             for source, target in ((origin.original, copy.original), (origin.edited, copy.edited)):
@@ -156,7 +147,6 @@ class ConsolidationCheck:
         return run(aggregated_path=resolve(_under(AGGREGATED, self.target)),
                    plan_path=resolve(_under(PLAN, self.target)),
                    assignments_path=resolve(_under(ASSIGNMENTS, self.target)),
-                   entities_path=resolve(_under(ENTITIES, self.target)),
                    artifact=_under(WIKI_PAGES, self.target), only=self.pages, rebuild=True,
                    llm=llm, update_llm=update_llm)
 

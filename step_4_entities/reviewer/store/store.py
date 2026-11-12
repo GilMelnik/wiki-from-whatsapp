@@ -7,8 +7,7 @@ keeps what step 5 reads consistent: ``claim_entities`` (claim -> canonical entit
 high-water mark ``metadata.last_entity_number``, ``deleted_claims`` and ``deleted_names``.
 New ids come from ``records.allocate_entity_id``; entities are refreshed with
 ``records.refresh_entity``, which keeps the manual flags (``canonical_manual``,
-``contacts_manual``, ``contacts_rejected``). The owner's entity kind (``kind_manual``,
-``step_4_entities.kinds``) is never touched by a step-4 run.
+``contacts_manual``, ``contacts_rejected``).
 
 Members whose ``claim_ids`` is ``null`` (old files: "every claim naming it") get their claims
 listed on load, so every edit works on explicit claim lists.

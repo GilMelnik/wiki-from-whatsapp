@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -11,13 +10,11 @@ from fastapi.testclient import TestClient
 
 from review_tool.artifacts import ArtifactGraph, ArtifactNode
 from step_4_entities.collect import ClaimCorpus
-from step_4_entities.kinds import KIND_CONFIG
 from step_4_entities.mentions import SimpleAnalyzer, analyze_claims, build_or_load_analysis
 from step_4_entities.records import claim_entity_index, new_entity
 from step_4_entities.reviewer.tool import EntitiesTool
 from tests.review_tool_support import BASE_URL, build_app
 from utils.json_io import write_json_file
-from utils.llm_client import Answer, ClassifierError, Question
 
 SHORT_LOCK_TIMEOUT = 0.2
 API = "/api/entities"
@@ -36,33 +33,6 @@ CLAIMS = [
     (DS5, "David Shield is great", ["ORM"]),
     (DS6, "combine the morning plan with David Shield", ["Great Morning", "David Shield"]),
 ]
-
-
-class FakeKindClassifier:
-    """The entity-kind classifier with no paid call: ``kind_of(state)`` names the kind (an
-    organisation by default) at ``confidence``; ``fail`` raises like a provider outage. Every
-    state asked about is recorded in ``states``."""
-
-    def __init__(self, kind_of: Callable[[str], str] = lambda state: "organisation",
-                 confidence: float = 0.9, fail: bool = False) -> None:
-        self.kind_of = kind_of
-        self.confidence = confidence
-        self.fail = fail
-        self.states: list[str] = []
-
-    def classify_many(self, items: Sequence[tuple[str, Sequence[Question]]], *, task: str = ""
-                      ) -> list[list[Answer]]:
-        if self.fail:
-            raise ClassifierError("the classifier is down")
-        labels = KIND_CONFIG["kinds"]
-        answers = []
-        for state, questions in items:
-            self.states.append(state)
-            chosen = self.kind_of(state)
-            rest = (1 - self.confidence) / (len(labels) - 1)
-            answers.append([Answer(questions[0].id, {
-                label: self.confidence if kind == chosen else rest for kind, label in labels.items()})])
-        return answers
 
 
 def claim(claim_id: str, text: str, entities: list[str]) -> dict[str, Any]:

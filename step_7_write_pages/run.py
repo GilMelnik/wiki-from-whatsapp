@@ -11,7 +11,7 @@ other pages and labels (``prompts``). Code then enforces what must not be left t
 disputed groups are cited, every main group is accounted for in a point or left out with a
 reason, every point is said, no statement carries more than three marks and no point is told
 again and again (one retry that names the problems, then repair); the OKF front matter is
-written in code (``front_matter``). A negative statement about a named individual that fewer
+written in code (``front_matter``). A negative statement about a named entity that fewer
 than two members reported never reaches the writer (``withhold``): code adds it to its page's
 ``left_out`` with reason ``withheld`` and lists it in ``metadata.withheld``. The body keeps its ``[^g-…]`` marks only: step 9 renders
 the references from the groups (a body stored with definitions keeps them until its text
@@ -284,7 +284,7 @@ class PagesRun:
             "pages": pages,
             "metadata": {
                 "sources": {name: str(path) for name, path in
-                            zip(("groups", "plan", "assignments", "entities"), sources)},
+                            zip(("groups", "plan", "assignments"), sources)},
                 "inputs": inputs,
                 "pages": states,
                 "as_of": self.corpus.as_of,
@@ -331,11 +331,10 @@ def run(
     llm: LLMClient | None = None,
     update_llm: LLMClient | None = None,
     count_tokens: TokenCounter | None = None,
-    entities_path: Path | None = None,
 ) -> dict[str, Any]:
     """Write, update or keep every planned page; see the module docstring.
 
-    Inputs default to the effective (edited) groups, plan, assignments and entities. ``only``: work on
+    Inputs default to the effective (edited) groups, plan and assignments. ``only``: work on
     these page ids only (every other page stays as it is). ``rebuild``: write every page (in
     ``only``) in full; without ``only`` the edited file is backed up and replaced.
     ``estimate``: no writing call; returns the input tokens of every call the run would make.
@@ -344,10 +343,10 @@ def run(
     ``no_groups``, ``failed``, ``skipped_groups``), ``summary``, ``written`` and ``backup``.
     """
     logger = setup_step_logging(STEP_7)
-    corpus = Corpus.load(aggregated_path, plan_path, assignments_path, entities_path)
+    corpus = Corpus.load(aggregated_path, plan_path, assignments_path)
     withheld = corpus.withheld_list()
     logger.info(f"Withheld from every page: {len(withheld)} groups (negative, about a named "
-                f"individual, fewer than {WITHHOLD_CONFIG['min_supporters']} members) on "
+                f"entity, fewer than {WITHHOLD_CONFIG['min_supporters']} members) on "
                 f"{len({w['page_id'] for w in withheld})} pages: "
                 f"{[w['group_id'] for w in withheld]}")
     if corpus.skipped:
