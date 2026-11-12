@@ -157,7 +157,8 @@ def test_the_contradiction_of_a_withheld_group_is_not_shown(ws: PagesWorkspace) 
 
 
 def test_a_sentence_resting_on_a_withheld_group_is_deleted_whole() -> None:
-    records = [{"id": "g-0000000a", "role": "main", "opposers": 0, "contradicts": []}]
+    records = [{"id": "g-0000000a", "role": "main", "opposers": 0, "contradicts": [],
+                "supporters": 1, "last": "2024-01-01"}]
     rules = rules_for("p", records, {"pages": {"p": {}}, "labels": {}}, required=[],
                       withheld=["g-0000000w"])
     answer = {"points": [{"kind": "fact", "statement": "s", "groups": ["g-0000000a"]}],

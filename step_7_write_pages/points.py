@@ -28,7 +28,7 @@ POINTS_CONFIG = PAGES_CONFIG["points"]
 KINDS = tuple(POINTS_CONFIG["kinds"])
 REASONS = tuple(POINTS_CONFIG["left_out_reasons"])
 MAX_MARKS = PAGES_CONFIG["max_marks_per_statement"]
-MAX_TOLD = PAGES_CONFIG["max_statements_per_point"]
+TOLD_CONFIG = PAGES_CONFIG["max_statements_per_point"]
 Point = dict[str, Any]
 LeftOut = dict[str, str]
 
@@ -133,14 +133,21 @@ def citing(point: Point, statements: Sequence[Statement]) -> list[Statement]:
     return [statement for statement in statements if groups.intersection(statement.marks)]
 
 
+def told_cap(kind: str) -> int:
+    """Most statements after the lead a point of ``kind`` may be told in: a dispute needs a
+    sentence per side and a change a sentence per stage (``pages.max_statements_per_point``)."""
+    return TOLD_CONFIG["by_kind"].get(kind, TOLD_CONFIG["default"])
+
+
 def retold(points: Sequence[Point], statements: Sequence[Statement],
            frozen: Collection[str] = ()) -> list[tuple[Point, int]]:
-    """Points told in more than ``MAX_TOLD`` statements after the lead, with the count;
-    a point whose statements are all in ``frozen`` (kept text of an update) is not counted."""
+    """Points told in more than ``told_cap`` of their kind statements after the lead, with the
+    count; a point whose statements are all in ``frozen`` (kept text of an update) is not
+    counted."""
     found = []
     for point in points:
         told = [s for s in citing(point, statements) if not s.lead]
-        if len(told) > MAX_TOLD and any(s.text not in frozen for s in told):
+        if len(told) > told_cap(point["kind"]) and any(s.text not in frozen for s in told):
             found.append((point, len(told)))
     return found
 
