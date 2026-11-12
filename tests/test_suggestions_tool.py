@@ -11,10 +11,12 @@ from typing import Any
 import pytest
 
 from review_tool.tools import TOOL_SPECS
+from step_10_update.estimate import ESTIMATE_CONFIG
 from step_8_review.inputs import REVIEW_CONFIG
 from step_8_review.proposals import plain_text
 from tests.review_fixtures import FakeReviewer, flat, sentence_a
 from tests.suggestions_tool_support import ToolSetup
+from utils.config import LLM_CONFIG
 
 
 @pytest.fixture()
@@ -32,13 +34,14 @@ def test_before_step_8_has_run_the_tool_says_so(tmp_path: Path) -> None:
     setup = ToolSetup(tmp_path, review=False)
     overview = setup.get("/suggestions")
     assert overview["exists"] is False and overview["items"] == []
-    assert overview["rerun_cost_usd"] == REVIEW_CONFIG["ui"]["rerun_cost_usd"]
+    assert overview["rerun"]["due"] == overview["rerun"]["passes"] == 3
+    assert overview["rerun"]["usd"] > 0 and overview["rerun"]["batch"] is True
     setup.decide("accept", "sug-00000000", status=409)  # no file: the frame's 409
 
 
 def test_the_list_carries_names_marks_counts_paid_and_the_run(setup: ToolSetup) -> None:
     overview = setup.get("/suggestions")
-    assert overview["exists"] is True and overview["note"] == "הערה"
+    assert overview["exists"] is True and overview["note"] == "הערה הערה הערה"
     assert overview["counts"]["status"] == {"pending": 6}
     kinds = {item["kind"]: item for item in overview["items"]}
     assert set(kinds) == {"mistake", "contradiction", "split", "merge", "add_page", "add_label"}
@@ -47,6 +50,22 @@ def test_the_list_carries_names_marks_counts_paid_and_the_run(setup: ToolSetup) 
     assert all(item["busy"] is False and item["page_marks"] == {} for item in overview["items"])
     assert overview["run"]["model"] == "fake-opus" and overview["run"]["input_tokens"]
     assert overview["applies"] == {"running": None, "queue": [], "outcomes": []}
+
+
+def test_the_rerun_estimate_counts_only_the_due_passes(
+        setup: ToolSetup, monkeypatch: pytest.MonkeyPatch) -> None:
+    # The review ran with the fake model (for the configured one every pass would be due).
+    model = LLM_CONFIG["stages"][REVIEW_CONFIG["stage"]]["model"]
+    prices = ESTIMATE_CONFIG["usd_per_million_tokens"]
+    monkeypatch.setitem(prices, "fake-opus", prices[model])
+    monkeypatch.setitem(LLM_CONFIG["stages"][REVIEW_CONFIG["stage"]], "model", "fake-opus")
+    assert setup.get("/suggestions")["rerun"] == {"due": 0, "passes": 3, "usd": 0.0,
+                                                  "batch": True}
+    pages = setup.ws.pages()
+    pages["pages"]["agencies"]["body_md"] += "\n\nפסקה חדשה."
+    setup.ws.write_edited(pages)
+    rerun = setup.get("/suggestions")["rerun"]
+    assert rerun["due"] == 1 and 0 < rerun["usd"] < 1
 
 
 def test_a_page_changed_since_the_review_is_marked(setup: ToolSetup) -> None:

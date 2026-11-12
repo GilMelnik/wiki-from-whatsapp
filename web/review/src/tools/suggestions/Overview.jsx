@@ -1,13 +1,14 @@
 import { Bidi, formatDateTime, Panel, useArtifactStatus, useJobs, useStepRun } from "@shell";
 import { FollowUp } from "./Changes.jsx";
-import { formatUsd, STRUCTURAL, SUGGESTIONS_KEY } from "./suggestions.js";
+import { formatUsd, rerunText, STRUCTURAL, SUGGESTIONS_KEY } from "./suggestions.js";
 
-// "About this review": the reviewer's remark on the whole wiki, what is being applied in the
-// background and what came of it, the steps a plan change needs, and, calmly, whether the
-// review should run again. Every apply changes the wiki, so the frame would call the
-// suggestions out of date after each one; a new review is a paid whole-wiki call, so it is
-// mentioned once here, with its cost, and run only on request (the frame's banner for this
-// file is quiet: index.jsx `quietStale`). The counts by status are the list's sections.
+// "About this review": the reviewer's remarks, what is being applied in the background and
+// what came of it, the steps a plan change needs, and, calmly, whether the review should run
+// again. Every apply changes the wiki, so the frame would call the suggestions out of date
+// after each one; a new review is paid (one call per part of the wiki that changed, plus the
+// pass across every page's points, priced by the server: `data.rerun`), so it is mentioned
+// once here, with its cost, and run only on request (the frame's banner for this file is
+// quiet: index.jsx `quietStale`). The counts by status are the list's sections.
 
 const OUTCOME_BADGES = { applied: "badge-emerald", refused: "badge-amber", failed: "badge-rose" };
 const OUTCOME_LABELS = { applied: "Applied", refused: "Refused", failed: "Failed" };
@@ -17,15 +18,22 @@ function useReviewStep() {
   return { step: stepsByArtifact[SUGGESTIONS_KEY], running: runningByArtifact[SUGGESTIONS_KEY] };
 }
 
-function NotRunYet({ cost }) {
+function NotRunYet({ rerun }) {
   const { step, running } = useReviewStep();
   const run = useStepRun();
   return (
     <div className="max-w-2xl space-y-3 p-4 text-sm">
       <p>Step 8 (the review of the whole wiki) has not run yet, so there are no suggestions to look at.</p>
       <p className="text-slate-600">
-        The review reads every page in one model call, about {formatUsd(cost)} for the wiki at its current size, and
-        proposes up to a dozen fixes.
+        The review reads the wiki in parts of a few related pages, one model call each, plus one call that compares the
+        pages through their points (pages written before step 7 listed points are left out of it)
+        {rerun && (
+          <>
+            : {rerun.passes} calls sent together, about {formatUsd(rerun.usd)}
+            {rerun.batch ? " at the batch price" : ""} for the wiki at its current size
+          </>
+        )}
+        . Each call proposes only the few fixes worth your time.
       </p>
       {step && (
         <button type="button" className="btn btn-primary" disabled={Boolean(running)} onClick={() => run(step.key)}>
@@ -45,7 +53,7 @@ function Rerun({ data, applying }) {
   return (
     <p className="note note-plain">
       The wiki changed since this review. When you are done applying, you can run it again for suggestions on the
-      updated wiki (one model call, about {formatUsd(data.rerun_cost_usd)}); the decisions you made are kept.{" "}
+      parts that changed{data.rerun ? ` (${rerunText(data.rerun)})` : ""}; the decisions you made are kept.{" "}
       <button type="button" className="btn btn-sm ms-1" disabled={applying || Boolean(running)} onClick={() => run(step.key)}>
         Run the review again…
       </button>
@@ -104,7 +112,7 @@ export function Overview({ data, onSelect }) {
   return (
     <Panel title="About this review" subtitle={data.exists ? `The review ran ${formatDateTime(data.generated_at)}` : null}>
       {!data.exists ? (
-        <NotRunYet cost={data.rerun_cost_usd} />
+        <NotRunYet rerun={data.rerun} />
       ) : (
         <div className="max-w-4xl space-y-6 p-4 text-sm">
           {data.items.length === 0 && <p>The review found nothing to suggest.</p>}

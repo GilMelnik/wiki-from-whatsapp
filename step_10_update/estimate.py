@@ -8,8 +8,10 @@ token counter needs credits, so the prompts are counted here by characters
 conversations it reads, not with the number of calls (a split into more, smaller
 conversations repeats the instructions more often but yields about the same claims), so its
 output is ``extract_output_per_conversation_token`` times the conversations' tokens. Prices
-are ``usd_per_million_tokens`` per model, with ``batch_discount`` when step 3 uses the batch
-API. Every figure is therefore rough; the estimate says what it counted.
+are ``usd_per_million_tokens`` per model, with ``batch_discount`` when step 3 or step 8 uses
+the batch API. Step 8's Hebrew prompts are counted with their own measured ratio
+(``wiki_review.chars_per_token``), one output figure per due review pass. Every figure is
+therefore rough; the estimate says what it counted.
 
 ``paid_calls`` counts chat-model calls only. The cheap classifier (Jev) and the embeddings are
 priced but never stop the update: steps 1, 2, 4 and 5 use only them and run without a flag
@@ -80,6 +82,14 @@ def stage_model(stage: str) -> str:
     return LLM_CONFIG["stages"][stage]["model"]
 
 
+def review_usd(estimate: Mapping[str, Any]) -> float:
+    """The price of the review passes a step-8 estimate counted as due (``calls``,
+    ``input_tokens``, ``batch``): output at a typical figure per pass."""
+    output = estimate["calls"] * ESTIMATE_CONFIG["output_tokens_per_call"][REVIEW_CONFIG["stage"]]
+    cost = usd(stage_model(REVIEW_CONFIG["stage"]), estimate["input_tokens"], output)
+    return cost * ESTIMATE_CONFIG["batch_discount"] if estimate["batch"] else cost
+
+
 def embedding_usd(texts: Sequence[str]) -> float:
     """Rough price of embedding ``texts`` once (cached vectors cost nothing)."""
     chars = sum(len(text) for text in texts)
@@ -92,6 +102,7 @@ class Estimator:
     def __init__(self, run_function: Callable[[Step], RunFunction] | None = None) -> None:
         self._run_function = run_function or (lambda step: step.run_function())
         self._counter = CharTokenCounter()
+        self._review_counter = CharTokenCounter(REVIEW_CONFIG["chars_per_token"])
         self._by_step: Mapping[str, Callable[[RunFunction, str], Estimate]] = {
             STEP_3: self._claims,
             STEP_6_ASSIGN: self._assignments,
@@ -160,11 +171,11 @@ class Estimator:
         )
 
     def _review(self, run: RunFunction, key: str) -> Estimate:
-        result = run(estimate=True, count_tokens=self._counter)
+        result = run(estimate=True, count_tokens=self._review_counter)
         calls = result["calls"]
-        output = ESTIMATE_CONFIG["output_tokens_per_call"][REVIEW_CONFIG["stage"]]
-        cost = calls * usd(stage_model(REVIEW_CONFIG["stage"]), result["input_tokens"], output)
-        what = (f"one review call over the whole wiki ({result['input_tokens']} input tokens)"
+        what = (f"{calls} of {len(result['passes'])} review passes due "
+                f"({result['input_tokens']} input tokens)"
                 if calls else "no call: nothing the review reads changed since the last review")
-        return Estimate(key, calls, cost, what,
-                        "input tokens by characters, output at a typical figure")
+        return Estimate(key, calls, review_usd(result), what,
+                        "input tokens by characters, output at a typical figure per pass"
+                        f"{', batch price' if result['batch'] else ''}")

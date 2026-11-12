@@ -343,10 +343,18 @@
   },
   "wiki_review": {
     "stage": "review",
-    "prompt_version": 1,
+    "prompt_version": 2,
     "max_output_tokens": 100000,
     "context_window_tokens": 1000000,
-    "max_suggestions": 12,
+    "chars_per_token": 1.56,
+    "part": {
+      "max_input_tokens": 150000,
+      "max_suggestions": 6
+    },
+    "cross": {
+      "id": "cross",
+      "max_suggestions": 8
+    },
     "id_prefix": "sug-",
     "id_hash_chars": 8,
     "edited_by": "wiki_review",
@@ -400,7 +408,6 @@
     },
     "ui": {
       "apply_outcomes_kept": 20,
-      "rerun_cost_usd": 3.7,
       "messages": {
         "already_queued": "Suggestion {id} is already waiting to be applied or being applied now.",
         "busy": "Suggestion {id} is waiting to be applied or being applied now; take it out of the queue, or wait until it is done.",
@@ -712,7 +719,7 @@
       "output_tokens_per_call": {
         "write": 13000,
         "update": 6000,
-        "review": 22000,
+        "review": 10000,
         "propose": 4000
       },
       "proposal_input_tokens": 30000,

@@ -1,9 +1,11 @@
 """Synthetic step-8 workspace: step 7's synthetic wiki (``pages_fixtures``) written with longer
 pages, a plan pair, a suggestions pair, a fake review model and a fake page corrector.
 
-Pages (plan ``agencies`` / ``costs`` under ``choosing``, ``clinics`` / ``hospital`` under
-``medical``): every group of a page gets two sentences of its own, so a one-sentence
-correction keeps most of the page word for word. Nothing here comes from real data.
+Pages (plan ``agencies`` / ``costs`` under ``before`` > ``choosing``, ``clinics`` / ``hospital``
+under ``during`` > ``medical``): every group of a page gets two sentences of its own, so a
+one-sentence correction keeps most of the page word for word. The review cuts this wiki into
+the parts ``before`` and ``during`` plus the ``cross`` pass (every page has stored points).
+Nothing here comes from real data.
 """
 
 from __future__ import annotations
@@ -11,7 +13,7 @@ from __future__ import annotations
 import copy
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +29,7 @@ from tests.pages_fixtures import (
     page_id_in,
     points_of,
 )
-from utils.llm_client import _flatten
+from utils.llm_client import BatchRequest, _flatten
 from utils.paths import Artifact, resolve
 
 _BODY = re.compile(r"<body>\n(.*?)\n</body>", re.DOTALL)
@@ -83,17 +85,48 @@ def flat(kind: str, **fields: Any) -> dict[str, Any]:
 
 
 class FakeReviewer:
-    """A fake ``LLMClient`` for the review stage: answers ``answer`` and records the calls."""
+    """A fake ``LLMClient`` for the review stage. Every pass answers ``suggestions`` unless
+    ``by_pass`` has an answer of its own; the passes in ``fail`` get no answer (a sync call
+    raises). Records every call (``pass_id``: the pass it was for) and every batch."""
 
-    def __init__(self, suggestions: list[dict[str, Any]], note: str = "הערה") -> None:
+    def __init__(self, suggestions: list[dict[str, Any]], note: str = "הערה", *,
+                 by_pass: dict[str, list[dict[str, Any]]] | None = None,
+                 fail: Collection[str] = (), batch: bool = True) -> None:
         self.model = "fake-opus"
         self.answer = {"note": note, "suggestions": suggestions}
+        self.by_pass = by_pass or {}
+        self.fail = set(fail)
+        self.batch = batch
         self.calls: list[dict[str, Any]] = []
+        self.batches: list[list[str]] = []
+
+    def supports_batch(self) -> bool:
+        return self.batch
+
+    def _answer(self, system: Any, user: Any, task: str, schema: dict | None) -> dict[str, Any]:
+        pass_id = task.removeprefix("review:")
+        self.calls.append({"system": system, "user": _flatten(user), "task": task,
+                           "pass_id": pass_id, "schema": schema})
+        if pass_id in self.by_pass:
+            return {"note": f"הערה {pass_id}", "suggestions": copy.deepcopy(self.by_pass[pass_id])}
+        return copy.deepcopy(self.answer)
 
     def complete_json(self, system: Any, user: Any, task: str = "",
                       response_schema: dict | None = None) -> dict[str, Any]:
-        self.calls.append({"system": system, "user": _flatten(user), "task": task})
-        return copy.deepcopy(self.answer)
+        answer = self._answer(system, user, task, response_schema)
+        if task.removeprefix("review:") in self.fail:
+            raise RuntimeError("fake refusal")
+        return answer
+
+    def complete_batch_json(self, requests: Sequence[BatchRequest]) -> dict[str, Any]:
+        self.batches.append([request.request_id for request in requests])
+        answers = {request.request_id: self._answer(request.system, request.user, request.task,
+                                                    request.response_schema)
+                   for request in requests}
+        return {pass_id: answer for pass_id, answer in answers.items() if pass_id not in self.fail}
+
+    def passes(self) -> list[str]:
+        return [call["pass_id"] for call in self.calls]
 
 
 def count_tokens(system: str, user: str) -> int:
