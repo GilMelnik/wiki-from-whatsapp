@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
+from html import unescape
 from pathlib import Path
 
 import pytest
@@ -132,12 +133,16 @@ def test_disclaimer_is_in_the_html_of_every_page(built_site: Path) -> None:
         assert f"{SITE['disclaimer']['label']}</strong>" in html, name
 
 
-def test_terms_page_is_a_draft_slot_linked_from_banner_and_footer_not_in_nav(
+def test_terms_page_carries_the_contact_address_and_is_linked_from_banner_and_footer_not_in_nav(
     built_site: Path,
 ) -> None:
     html = _html(built_site, "terms/index.html")
-    assert SITE["terms"]["title"] in html and "טיוטה" in html
-    assert (PROJECT_ROOT / SITE["terms"]["source"]).is_file()
+    assert SITE["terms"]["title"] in html
+    # Markdown writes a mail link as character references; the banner no longer carries one
+    assert f'href="mailto:{SITE["contact_email"]}"' in unescape(html)
+    assert SITE["terms"]["contact_placeholder"] not in html
+    source = (PROJECT_ROOT / SITE["terms"]["source"]).read_text(encoding="utf-8")
+    assert SITE["terms"]["contact_placeholder"] in source and SITE["contact_email"] not in source
     footer_link = re.compile(
         r'<a href="(?:\.\./|/)*terms/">' + re.escape(SITE["terms"]["footer_link_text"])
     )
@@ -196,6 +201,12 @@ def test_about_page_follows_a_model_change_in_config(
     )
     body = about_body()
     assert body.count("`model-after-a-change`") == 1
+
+
+def test_no_stylesheet_lets_a_block_s_first_letter_choose_its_direction() -> None:
+    """A Hebrew paragraph or bullet that starts with a Latin word must stay right-to-left."""
+    for sheet in ("docs/stylesheets/hebrew.css", "overrides/assets/wiki/wiki.css"):
+        assert "plaintext" not in (PROJECT_ROOT / sheet).read_text(encoding="utf-8"), sheet
 
 
 def test_about_page_states_its_principles_before_the_steps() -> None:
