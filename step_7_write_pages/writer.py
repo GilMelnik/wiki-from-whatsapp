@@ -7,8 +7,9 @@ and no footnote definitions (step 9 renders the references from the groups), the
 the questions, ``related`` in the C9 form ``[{slug, relation}]``, whether the text changed,
 and a ``report`` (calls, problems found, repairs, points by kind, groups left out and why,
 statements, marks, uncited disputed groups). Each answer is checked
-(``step_7_write_pages.checks``); a failing answer gets ONE retry that names the problems, then
-whatever is still wrong is repaired and recorded. A page leaving out more than
+(``step_7_write_pages.checks``) after code has cut every statement down to the mark cap
+(``cap_marks``: a retry is never paid for that); a failing answer gets ONE retry that names the
+problems, then whatever is still wrong is repaired and recorded. A page leaving out more than
 ``pages.max_left_out_share`` of its main groups is logged as a warning.
 """
 
@@ -21,6 +22,7 @@ from typing import Any
 
 from step_7_write_pages.checks import (
     AnswerRules,
+    cap_marks,
     problems,
     prose_words,
     repair,
@@ -31,7 +33,7 @@ from step_7_write_pages.checks import (
     uncited_required,
 )
 from step_7_write_pages.inputs import MAIN, PAGES_CONFIG, PageContext
-from step_7_write_pages.points import LeftOut, Point, point_report
+from step_7_write_pages.points import MAX_MARKS, LeftOut, Point, point_report
 from step_7_write_pages.prompts import (
     UPDATE_SCHEMA,
     WRITE_SCHEMA,
@@ -143,15 +145,22 @@ class PageWriter:
     def _complete(self, llm: LLMClient, system: str, user: list[CacheSegment],
                   schema: dict[str, Any], rules: AnswerRules, context: PageContext, *, task: str,
                   current: Mapping[str, Any] | None) -> PageText:
-        answer = self._ask(llm, system, user, schema, task, current)
+        answer, dropped = cap_marks(self._ask(llm, system, user, schema, task, current), rules)
         first = problems(answer, rules)
         calls = 1
         if first:
             self.logger.info(f"{task}: {len(first)} problem(s), one retry: {first}")
-            answer = self._ask(llm, system, retry_prompt(user, answer, first), schema, task, current)
+            answer, more = cap_marks(
+                self._ask(llm, system, retry_prompt(user, answer, first), schema, task, current),
+                rules)
+            dropped += more
             calls = 2
         final = problems(answer, rules)
         fixed, repairs = repair(answer, rules)
+        if dropped:
+            repairs.insert(0, f"dropped {dropped} mark(s) beyond the cap of {MAX_MARKS} per statement")
+            self.logger.info(f"{task}: dropped {dropped} mark(s) beyond the cap of {MAX_MARKS} "
+                             "per statement")
         no_change = bool(current is not None and answer.get("no_change"))
         body = fixed["body"]
         report = {

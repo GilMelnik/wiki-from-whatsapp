@@ -308,7 +308,7 @@
     "update": {"stage": "update", "max_output_tokens": 64000, "rewrite_changed_share": 0.5},
     "concurrency": 4,
     "max_marks_per_statement": 3,
-    "max_statements_per_point": 2,
+    "max_statements_per_point": {"default": 2, "by_kind": {"dispute": 4, "change": 4}},
     "max_left_out_share": 0.3,
     "withhold": {"stance": "negative", "min_supporters": 2, "reason": "withheld"},
     "points": {
