@@ -47,6 +47,10 @@ class LLMProvider(ABC):
         self.logger = logger or logging.getLogger("utils.llm_client")
         self.thinking_param = thinking_param
         self._client: Any = None
+        # Token usage as the API reported it, one entry per response, in arrival order:
+        # ``{request_id (None for a sync call), input_tokens, output_tokens,
+        # cache_creation_input_tokens, cache_read_input_tokens}``.
+        self.usage: list[dict[str, Any]] = []
 
     @abstractmethod
     def generate(

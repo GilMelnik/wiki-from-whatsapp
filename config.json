@@ -179,7 +179,26 @@
     },
     "claim_id_hash_chars": 8,
     "message_fingerprint_chars": 12,
-    "privacy_review": {"phone_min_digits": 7, "country_code": "972"}
+    "privacy_review": {"phone_min_digits": 7, "country_code": "972"},
+    "split_experiment": {
+      "variants": {
+        "A": "new split",
+        "B": "owner's conversations",
+        "C": "old split",
+        "D": "new split + background",
+        "E": "new split, packed"
+      },
+      "context_messages": 8,
+      "pack_max_chars": 12000,
+      "match_min_overlap": 0.5,
+      "max_usd": 2.0,
+      "cache_write_price_factor": 1.25,
+      "cache_read_price_factor": 0.1,
+      "output_dir": "split_experiment",
+      "dry_run_dir": "dry_run",
+      "dry_run_claim_every": 4,
+      "page_file": "split_experiment.html"
+    }
   },
   "aggregate": {
     "embedding_kind": "similarity",

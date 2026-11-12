@@ -108,6 +108,7 @@ class AnthropicProvider(LLMProvider):
             **self._message_params(system, user, response_schema)
         ) as stream:
             message = stream.get_final_message()
+        self._record_usage(None, message.usage)
         self._log_cache_usage([message.usage])
         refusal = _refusal(message)
         if refusal:
@@ -115,6 +116,19 @@ class AnthropicProvider(LLMProvider):
                 f"Anthropic {self.model} declined the request ({refusal})"
             )
         return _message_text(message), message.stop_reason == "max_tokens"
+
+    def _record_usage(self, request_id: str | None, usage: Usage) -> None:
+        """Keep one response's reported usage in ``self.usage`` (see ``LLMProvider``)."""
+
+        self.usage.append(
+            {
+                "request_id": request_id,
+                "input_tokens": usage.input_tokens,
+                "output_tokens": usage.output_tokens,
+                "cache_creation_input_tokens": usage.cache_creation_input_tokens or 0,
+                "cache_read_input_tokens": usage.cache_read_input_tokens or 0,
+            }
+        )
 
     def _log_cache_usage(self, usages: Sequence[Usage]) -> None:
         """Log prompt-cache stats, summed over ``usages``, when ``log_cache`` is
@@ -185,6 +199,7 @@ class AnthropicProvider(LLMProvider):
                 continue
             message = result.result.message
             usages.append(message.usage)
+            self._record_usage(request_id, message.usage)
             refusal = _refusal(message)
             if refusal:
                 # Whatever text precedes a refusal is not a usable answer.
