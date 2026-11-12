@@ -2,16 +2,16 @@
 credit-gated endpoint), and as the API reported it after.
 
 The estimate counts every request as one fresh call (an upper bound: answers already in the
-disk cache cost nothing): input tokens = the system prompt and the user prompt by characters
-(``update.estimate.chars_per_token``), output tokens = ``extract_output_per_conversation_token``
-times the tokens of the unit's own messages (background and instructions write no claims),
-priced at the extract stage's model, with ``batch_discount`` for the batch API
-(``step_10_update.estimate``).
+disk cache cost nothing) and prices it as step 10 prices step 3 (``extract_price``, so the two
+agree): the user prompts by characters (``update.estimate.extract_chars_per_token``), every
+call's instructions read from the prompt cache, output in proportion to the tokens of the
+unit's own messages (background and instructions write no claims), at the extract stage's
+model, with ``batch_discount`` for the batch API.
 
 The reported cost is priced from the usage the provider returned (``LLMClient.usage``): fresh
-input, prompt-cache writes and reads (``cache_write_price_factor`` / ``cache_read_price_factor``
-times the input price) and output, with the batch discount when the call went through the
-batch API. ``UsageLedger`` keeps that usage per request across runs, so a repeated run that the
+input, prompt-cache writes and reads (``update.estimate.cache_write_price_factor`` /
+``cache_read_price_factor`` times the input price) and output, with the batch discount when the
+call went through the batch API. ``UsageLedger`` keeps that usage per request across runs, so a repeated run that the
 disk cache answers for free still shows what the answers cost when they were made.
 """
 
@@ -23,10 +23,14 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from step_10_update.estimate import ESTIMATE_CONFIG, CharTokenCounter, stage_model, usd
-from step_3_extract.prompt import EXTRACT_SYSTEM
+from step_10_update.estimate import (
+    ESTIMATE_CONFIG,
+    CharTokenCounter,
+    extract_price,
+    stage_model,
+    usd,
+)
 from step_3_extract.split_experiment.prompts import UnitJob
-from step_3_extract.split_experiment.units import EXPERIMENT_CONFIG
 from utils.json_io import write_json_file
 from utils.reconcile import fingerprint
 
@@ -36,18 +40,17 @@ TOKEN_KEYS = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_t
 
 
 def estimate(jobs: Sequence[UnitJob], use_batch: bool) -> dict[str, Any]:
-    """Calls, input / output tokens by characters and dollars of these jobs."""
-    count = CharTokenCounter()
-    input_tokens = sum(count(EXTRACT_SYSTEM, job.prompt()) for job in jobs)
+    """Calls, input (user prompts + cached instructions) / output tokens by characters and
+    dollars of these jobs."""
+    count = CharTokenCounter(ESTIMATE_CONFIG["extract_chars_per_token"])
+    prompts = sum(count("", job.prompt()) for job in jobs)
     conversation = sum(
         math.ceil(job.messages.rendered_chars(job.unit.message_ids) / count.chars_per_token)
         for job in jobs)
-    output_tokens = math.ceil(conversation * ESTIMATE_CONFIG["extract_output_per_conversation_token"])
-    cost = usd(PRICED_MODEL, input_tokens, output_tokens)
-    if use_batch:
-        cost *= ESTIMATE_CONFIG["batch_discount"]
-    return {"calls": len(jobs), "input_tokens": input_tokens, "output_tokens": output_tokens,
-            "conversation_tokens": conversation, "usd": round(cost, 4)}
+    price = extract_price(PRICED_MODEL, len(jobs), prompts, conversation, use_batch)
+    return {"calls": len(jobs), "input_tokens": prompts + price.cached_tokens,
+            "output_tokens": price.output_tokens, "conversation_tokens": conversation,
+            "usd": round(price.usd, 4)}
 
 
 def summed(entries: Sequence[Mapping[str, Any]]) -> dict[str, int]:
@@ -57,8 +60,8 @@ def summed(entries: Sequence[Mapping[str, Any]]) -> dict[str, int]:
 def reported_usd(usage: Mapping[str, Any], batch: bool) -> float:
     """Dollars of one request's reported usage (``TOKEN_KEYS``)."""
     fresh = (usage["input_tokens"]
-             + usage["cache_creation_input_tokens"] * EXPERIMENT_CONFIG["cache_write_price_factor"]
-             + usage["cache_read_input_tokens"] * EXPERIMENT_CONFIG["cache_read_price_factor"])
+             + usage["cache_creation_input_tokens"] * ESTIMATE_CONFIG["cache_write_price_factor"]
+             + usage["cache_read_input_tokens"] * ESTIMATE_CONFIG["cache_read_price_factor"])
     cost = usd(PRICED_MODEL, fresh, usage["output_tokens"])
     return cost * ESTIMATE_CONFIG["batch_discount"] if batch else cost
 
