@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { createApi, MESSAGE_VIEWS, useResource, useStoredState } from "@shell";
-import { addRange, DEFAULT_SEARCH, extraParams, MODES, TOOL_ID } from "./threads.js";
+import { addRange, CLASSIFIED_KEY, DEFAULT_SEARCH, extraParams, listParams, MODES, TOOL_ID } from "./threads.js";
 
 // The conversations tool's server data and what the page remembers: the mode (all
-// conversations / gold windows), the window, the view, the search and the opened
-// conversation; and per subject (a conversation, or a window) the extras loaded on request:
-// whole conversations to keep in view and stretches of the chat shown as context.
+// conversations / gold windows), the window, the view, the search (and the knowledge filter)
+// and the opened conversation; and per subject (a conversation, or a window) the extras
+// loaded on request: whole conversations to keep in view and stretches of the chat shown as
+// context. Step 2's knowledge labels come with the list rows and, for the opened
+// conversation, on their own.
 
 export const api = createApi(TOOL_ID);
 const NO_EXTRA = { include: [], context: [] };
@@ -32,18 +34,26 @@ export function useThreads(tool) {
     const base = previous.subject === subject ? previous : { subject, ...NO_EXTRA };
     return { ...base, ...patch(base) };
   });
-  const params = extraParams(extra);
-  const paramsKey = JSON.stringify(params);
+  const extraQuery = extraParams(extra);
+  const paramsKey = JSON.stringify(extraQuery);
 
-  const list = useResource(() => (ready && !gold ? api.get("/threads", search) : null), [ready, gold, search.q, search.sort], {
-    watch,
+  const labelled = [...watch, CLASSIFIED_KEY];
+  const params = listParams(search);
+  const list = useResource(() => (ready && !gold ? api.get("/threads", params) : null), [ready, gold, ...Object.values(params)], {
+    watch: labelled,
     keepPrevious: true,
   });
-  const windowView = useResource(() => (ready && gold ? api.get("/view", { window: windowIndex, ...params }) : null), [
+  const knowledge = useResource(() => api.get("/knowledge"), [], { watch: labelled });
+  const label = useResource(
+    () => (ready && selectedId ? api.get(`/knowledge/${encodeURIComponent(selectedId)}`) : null),
+    [ready, selectedId],
+    { watch: labelled }
+  );
+  const windowView = useResource(() => (ready && gold ? api.get("/view", { window: windowIndex, ...extraQuery }) : null), [
     ready, gold, windowIndex, paramsKey,
   ], { watch, keepPrevious: true });
   const wantThread = ready && Boolean(selectedId) && (!gold || view === MESSAGE_VIEWS.conversation);
-  const threadParams = gold ? { include: params.include, window: windowIndex } : params;
+  const threadParams = gold ? { include: extraQuery.include, window: windowIndex } : extraQuery;
   // While an edit is being saved the thread view is not fetched again: the file's change
   // event can come before the answer, and the open conversation may just have been merged away.
   const editing = useRef(false);
@@ -83,7 +93,7 @@ export function useThreads(tool) {
   const shownData = timeline && gold ? windowData : threadData;
 
   return {
-    summary, list, windowView, threadView, shown, windowData, shownData,
+    summary, list, knowledge, label, windowView, threadView, shown, windowData, shownData,
     mode, setMode, view, setView, search, setSearch, selectedId, setSelectedId,
     windows, gold, windowIndex, subject,
     selectWindow: (index) => windows[index] && setWindowStart(windows[index].start),
@@ -99,5 +109,6 @@ export function useThreads(tool) {
     },
     // After an edit; the thread view only when the same conversation stays open (a new one loads by itself).
     reloadAll: (sameThread) => Promise.all([summary.reload(), list.reload(), windowView.reload(), sameThread && threadView.reload()]),
+    reloadLabels: () => Promise.all([list.reload(), knowledge.reload(), label.reload()]),
   };
 }

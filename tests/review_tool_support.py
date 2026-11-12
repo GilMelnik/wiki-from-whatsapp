@@ -35,29 +35,33 @@ GRACEFUL_SHUTDOWN_SECONDS = 2  # uvicorn cancels whatever is still running after
 _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
-def build_graph(root: Path) -> ArtifactGraph:
-    """A three-step pipeline under ``root``: export -> threads -> claims (both reviewed)."""
-    return ArtifactGraph(
-        [
-            ArtifactNode("export", "Export", root / "export.json"),
-            ArtifactNode(
-                "threads",
-                "Threads",
-                root / "threads.json",
-                root / "threads_edited.json",
-                "step_1",
-                ("export",),
-            ),
-            ArtifactNode(
-                "claims",
-                "Claims",
-                root / "claims.json",
-                root / "claims_edited.json",
-                "step_3",
-                ("threads",),
-            ),
-        ]
+def build_graph(root: Path, *, optional_reads: bool = False) -> ArtifactGraph:
+    """A three-step pipeline under ``root``: export -> threads -> claims (both reviewed).
+
+    ``optional_reads`` adds what the conversations and privacy tools read when it exists:
+    step 2's classified conversations (between threads and claims) and step 4's entities.
+    """
+    threads = ArtifactNode(
+        "threads", "Threads", root / "threads.json", root / "threads_edited.json", "step_1", ("export",)
     )
+    classified = ArtifactNode(
+        "classified",
+        "Classified",
+        root / "classified.json",
+        root / "classified_edited.json",
+        "step_2",
+        ("threads",),
+    )
+    claims = ArtifactNode(
+        "claims", "Claims", root / "claims.json", root / "claims_edited.json", "step_3", ("threads",)
+    )
+    entities = ArtifactNode(
+        "entities", "Entities", root / "entities.json", root / "entities_edited.json", "step_4", ("claims",)
+    )
+    export = ArtifactNode("export", "Export", root / "export.json")
+    if not optional_reads:
+        return ArtifactGraph([export, threads, claims])
+    return ArtifactGraph([export, threads, classified, claims, entities])
 
 
 def write_file(path: Path, payload: dict[str, Any], *, mtime: float | None = None) -> None:

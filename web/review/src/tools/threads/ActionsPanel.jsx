@@ -1,9 +1,11 @@
 import { Bidi, countText, formatSpan, Kbd, Ltr, Panel, ThreadTag } from "@shell";
+import { KnowledgeControl } from "./KnowledgeControl.jsx";
 
 // The side column: what can be done with the selected messages (move them to a conversation
 // in view, make them a new conversation, split the conversation at one message) and with the
-// opened conversation (merge it with another), plus undo. Only what fits the selection is
-// shown, each with its key. While step 1 runs every button is off and the panel says why.
+// opened conversation (merge it with another; does it carry knowledge, step 2's label), plus
+// undo. Only what fits the selection is shown, each with its key. While step 1 or step 2 runs
+// every button is off and the panel says why.
 
 function ActionButton({ label, keyName, disabled, title, primary = false, onClick, children }) {
   return (
@@ -41,7 +43,7 @@ function Selected({ rules, colors }) {
   );
 }
 
-export function ActionsPanel({ rules, targets, rest, colors, current, undo, locked, busy, act }) {
+export function ActionsPanel({ rules, targets, rest, colors, current, undo, locked, busy, act, knowledge, label }) {
   const disabled = Boolean(locked) || busy;
   return (
     <Panel
@@ -57,7 +59,8 @@ export function ActionsPanel({ rules, targets, rest, colors, current, undo, lock
       <div className="space-y-5 p-4 text-sm">
         {locked && (
           <p className="note note-warning p-2 text-xs">
-            <Bidi>{locked.title}</Bidi> is running and rewriting the conversations. You can read; changes open again when it finishes.
+            <Bidi>{locked.title}</Bidi> is running and rewriting a file this tool writes. You can read; changes open again when it
+            finishes.
           </p>
         )}
         {rules.count === 0 ? (
@@ -82,6 +85,12 @@ export function ActionsPanel({ rules, targets, rest, colors, current, undo, lock
               <ThreadTag info={colors.peek(current)} threadId={current} /> <Ltr>{current}</Ltr>
             </p>
             <ActionButton label="Merge it with another…" keyName="m" disabled={disabled} onClick={act.openMerge} />
+          </div>
+        )}
+        {current && (
+          <div className="space-y-1.5">
+            <h3 className="section-title">Does it carry knowledge?</h3>
+            <KnowledgeControl knowledge={knowledge} label={label} disabled={disabled} onSet={act.setLabel} />
           </div>
         )}
       </div>

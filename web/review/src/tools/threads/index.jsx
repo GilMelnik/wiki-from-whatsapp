@@ -21,7 +21,17 @@ import {
 import { ActionsPanel } from "./ActionsPanel.jsx";
 import { MergeDialog } from "./MergeDialog.jsx";
 import { ThreadRow, WindowThreadRow } from "./Rows.jsx";
-import { mergeCandidates, monthOf, moveTargets, restOfThread, THREADS_KEY, TOOL_ID, windowRows } from "./threads.js";
+import {
+  CLASSIFIED_KEY,
+  emptyListText,
+  mergeCandidates,
+  monthOf,
+  moveTargets,
+  restOfThread,
+  THREADS_KEY,
+  TOOL_ID,
+  windowRows,
+} from "./threads.js";
 import { Toolbar } from "./Toolbar.jsx";
 import { api, useThreads } from "./useThreads.js";
 
@@ -32,8 +42,9 @@ import { api, useThreads } from "./useThreads.js";
 // to whom (and whether the quoted message sits in another conversation), the pauses, the
 // conversations right before and after, and, in the timeline, where chat messages are not
 // shown, with buttons to load them. The side column moves the selected messages, makes them
-// a conversation of their own, merges, and undoes. Every change is saved at once to step 1's
-// edited file by the server.
+// a conversation of their own, merges, undoes, and sets step 2's knowledge label of the
+// opened conversation (the list can be filtered by it). Every change is saved at once by the
+// server: to step 1's edited file, a label to step 2's.
 
 const CONVERSATION = MESSAGE_VIEWS.conversation;
 const TIMELINE = MESSAGE_VIEWS.timeline;
@@ -63,7 +74,7 @@ function ListColumn({ data, colors, rows }) {
   const { list, search } = data;
   return (
     <PanelState loading={list.loading} error={list.error} hasData={Boolean(list.data)} onRetry={list.reload}
-      empty={list.data?.items.length === 0} emptyText={`No message or sender contains “${search.q}”.`}>
+      empty={list.data?.items.length === 0} emptyText={emptyListText(search)}>
       {list.data && (
         <ItemList items={list.data.items} total={list.data.total} getKey={(row) => row.thread_id} selectedKey={data.selectedId}
           onSelect={data.setSelectedId} sectionOf={search.sort === "time" ? monthOf : undefined}
@@ -77,7 +88,8 @@ function ThreadsTool({ tool }) {
   const data = useThreads(tool);
   const toast = useToast();
   const { runningByArtifact } = useJobs();
-  const locked = runningByArtifact[THREADS_KEY] ?? null;
+  // The write guard refuses every change while step 1 or step 2 rewrites a file this tool writes.
+  const locked = runningByArtifact[THREADS_KEY] ?? runningByArtifact[CLASSIFIED_KEY] ?? null;
   const [busy, setBusy] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const selection = useMessageSelection(data.subject);
@@ -121,6 +133,22 @@ function ThreadsTool({ tool }) {
     splitHere: () => rest.keys && edit("/move", { message_ids: rest.keys, target_id: null }),
     openMerge: () => data.selectedId && !locked && setMergeOpen(true),
     undo: () => summary?.undo && edit("/undo", undefined, !data.gold),
+    setLabel: async (value) => {
+      const label = data.label.data?.label;
+      if (locked || busy || !label || !data.selectedId) return;
+      if ((value === null && !label.manual) || value === label.value) return;
+      setBusy(true);
+      try {
+        const answer = await api.post(`/knowledge/${encodeURIComponent(data.selectedId)}`, { value });
+        data.label.setData(answer);
+        await data.reloadLabels();
+        toast.success(value === null ? "Back to step 2's answer" : value ? "Marked: carries knowledge" : "Marked: carries no knowledge");
+      } catch (error) {
+        toast.error(error);
+      } finally {
+        setBusy(false);
+      }
+    },
   };
   const merge = async (ids) => afterEdit(await data.saving(() => api.post("/merge", { thread_ids: ids })), !data.gold);
   const toggleDone = async () => {
@@ -150,6 +178,9 @@ function ThreadsTool({ tool }) {
     { keys: "[", label: "Previous gold window", run: () => data.gold && data.selectWindow(data.windowIndex - 1) },
     { keys: "]", label: "Next gold window", run: () => data.gold && data.selectWindow(data.windowIndex + 1) },
     { keys: "/", label: "Search the messages", run: () => document.getElementById("threads-search")?.focus() },
+    { keys: "y", label: "The opened conversation carries knowledge (step 2's label)", run: () => act.setLabel(true) },
+    { keys: "x", label: "The opened conversation carries no knowledge", run: () => act.setLabel(false) },
+    { keys: "o", label: "Back to step 2's answer for the opened conversation", run: () => act.setLabel(null) },
   ]);
 
   const ready = summary?.state === "ready";
@@ -185,7 +216,7 @@ function ThreadsTool({ tool }) {
         main={main}
         side={ready && (
           <ActionsPanel rules={rules} targets={targets} rest={rest} colors={colors} current={data.selectedId}
-            undo={summary.undo} locked={locked} busy={busy} act={act} />
+            undo={summary.undo} locked={locked} busy={busy} act={act} knowledge={data.knowledge.data} label={data.label.data?.label} />
         )}
         listWidth={{ initial: 340 }}
       />

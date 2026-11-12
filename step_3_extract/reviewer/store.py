@@ -13,6 +13,9 @@ Review fields of a claim:
   ``restored`` (every value is back in the text) or ``partial`` (some are), and
   ``_pii_reviewed_at`` is when (ISO-8601 UTC). A step-3 re-run that re-extracts the claim
   brings ``_redactions`` back, which makes it pending again.
+
+The queue is every review item in sections, the way the owner works through them: to decide
+(pending), removal kept (accepted), restored (restored or partial); by claim id within each.
 """
 
 from __future__ import annotations
@@ -21,8 +24,6 @@ import json
 import time
 from collections import Counter
 from copy import deepcopy
-from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
@@ -30,9 +31,6 @@ from review_tool.fs import iso_utc
 from step_3_extract.scrub import REDACTION_MARK, restore_scrubbed_text
 from utils.json_io import write_json_file
 
-FilterKind = Literal["pending", "reviewed", "all"]
-SortKind = Literal["claim_id", "thread_id", "date", "redactions", "supporters"]
-SortOrder = Literal["asc", "desc"]
 Decision = Literal["accept", "restore"]
 
 PENDING = "pending"
@@ -40,6 +38,8 @@ ACCEPTED = "accepted"
 RESTORED = "restored"
 PARTIAL = "partial"
 REVIEWED = (ACCEPTED, RESTORED, PARTIAL)
+# The queue's sections, in order: each status's place.
+SECTION_OF = {PENDING: 0, ACCEPTED: 1, RESTORED: 2, PARTIAL: 2}
 EDITED_BY = "pii_reviewer"
 
 
@@ -49,15 +49,6 @@ class ClaimNotFound(LookupError):
 
 class ReviewConflict(ValueError):
     """The requested change does not fit the claim's current state."""
-
-
-@dataclass(frozen=True)
-class QueueView:
-    """Which review items are listed, and in what order."""
-
-    filter: FilterKind = "pending"
-    sort: SortKind = "claim_id"
-    order: SortOrder = "asc"
 
 
 def review_status(claim: dict[str, Any]) -> str | None:
@@ -133,16 +124,16 @@ class PiiReviewStore:
             "pending_by_type": dict(sorted(by_type.items())),
         }
 
-    def page(self, view: QueueView, offset: int, limit: int) -> dict[str, Any]:
+    def page(self, offset: int, limit: int) -> dict[str, Any]:
         """One page of the queue as list rows."""
-        queue = self._queue(view)
+        queue = self._queue()
         rows = [self._row(claim) for claim in queue[offset : offset + limit]]
         return {"items": rows, "total": len(queue), "offset": offset, "limit": limit}
 
-    def detail(self, claim_id: str, view: QueueView) -> dict[str, Any]:
+    def detail(self, claim_id: str) -> dict[str, Any]:
         """The claim with everything the decision needs, and its place in the queue."""
         claim = self._review_item(claim_id)
-        return {"claim": self._detail(claim), "queue": self._neighbours(claim_id, view)}
+        return {"claim": self._detail(claim), "queue": self._neighbours(claim_id)}
 
     # ----------------------------------------------------------------- changing
 
@@ -150,15 +141,13 @@ class PiiReviewStore:
         self,
         claim_id: str,
         decision: Decision,
-        view: QueueView,
         restore: list[int] | None = None,
     ) -> dict[str, Any]:
         """Record a decision on a pending claim and save; return it and where to go next.
 
         ``accept`` keeps every mark. ``restore`` puts the values back: all of them, or only
-        the marks numbered (from 0) in ``restore``. ``next_id`` is the first claim after this
-        one in ``view`` that is still in it, else this claim if it stays in the view, else
-        the first claim left in it (``None`` when the view is empty).
+        the marks numbered (from 0) in ``restore``. ``next_id`` is the next claim still to
+        decide after this one, else the first one still to decide, else this claim.
         """
         claim = self._review_item(claim_id)
         redactions = claim.get("_redactions") or []
@@ -167,7 +156,6 @@ class PiiReviewStore:
                 f"Claim {claim_id} has already been reviewed. To change the decision, undo it first."
             )
         chosen = self._restore_choice(claim, redactions, decision, restore)
-        before = [item["claim_id"] for item in self._queue(view)]
         if chosen:
             claim["claim_text"] = restore_scrubbed_text(claim["claim_text"], redactions, chosen)
         claim["_pii_review"] = (
@@ -178,7 +166,7 @@ class PiiReviewStore:
         self._save()
         return {
             "claim": self._detail(claim),
-            "next_id": self._next_after(claim_id, before, view),
+            "next_id": self._next_pending(claim_id),
             "summary": self.summary(),
         }
 
@@ -234,31 +222,12 @@ class PiiReviewStore:
             )
         return chosen
 
-    def _queue(self, view: QueueView) -> list[dict[str, Any]]:
-        wanted = {
-            "pending": (PENDING,),
-            "reviewed": REVIEWED,
-            "all": (PENDING, *REVIEWED),
-        }[view.filter]
-        items = [claim for claim in self._claims.values() if review_status(claim) in wanted]
-        items.sort(key=lambda claim: claim["claim_id"])  # equal sort keys keep the id order
-        items.sort(key=self._sort_key(view.sort), reverse=view.order == "desc")
-        return items
+    def _queue(self) -> list[dict[str, Any]]:
+        items = [claim for claim in self._claims.values() if review_status(claim) is not None]
+        return sorted(items, key=lambda claim: (SECTION_OF[review_status(claim)], claim["claim_id"]))
 
-    def _sort_key(self, sort: SortKind) -> Callable[[dict[str, Any]], Any]:
-        keys: dict[str, Callable[[dict[str, Any]], Any]] = {
-            "claim_id": lambda claim: claim["claim_id"],
-            "thread_id": lambda claim: claim.get("thread_id") or "",
-            "date": lambda claim: claim.get("first_date") or "",
-            "redactions": lambda claim: len(self._redactions_of(claim)),
-            "supporters": lambda claim: claim.get("supporter_count") or 0,
-        }
-        return keys[sort]
-
-    def _neighbours(self, claim_id: str, view: QueueView) -> dict[str, Any]:
-        ids = [claim["claim_id"] for claim in self._queue(view)]
-        if claim_id not in ids:
-            return {"position": None, "total": len(ids), "prev_id": None, "next_id": None}
+    def _neighbours(self, claim_id: str) -> dict[str, Any]:
+        ids = [claim["claim_id"] for claim in self._queue()]
         index = ids.index(claim_id)
         return {
             "position": index,
@@ -267,16 +236,12 @@ class PiiReviewStore:
             "next_id": ids[index + 1] if index + 1 < len(ids) else None,
         }
 
-    def _next_after(self, claim_id: str, before: list[str], view: QueueView) -> str | None:
-        after = [claim["claim_id"] for claim in self._queue(view)]
-        remaining = set(after)
-        following = before[before.index(claim_id) + 1 :] if claim_id in before else []
-        for candidate in following:
-            if candidate in remaining:
-                return candidate
-        if claim_id in remaining:
-            return claim_id
-        return after[0] if after else None
+    def _next_pending(self, claim_id: str) -> str:
+        pending = sorted(
+            other for other, claim in self._claims.items() if review_status(claim) == PENDING
+        )
+        after = [other for other in pending if other > claim_id]
+        return (after or pending or [claim_id])[0]
 
     def _redactions_of(self, claim: dict[str, Any]) -> list[dict[str, str]]:
         """Pending: the claim's own redactions. Reviewed: what the original file scrubbed."""
@@ -287,16 +252,11 @@ class PiiReviewStore:
     def _row(self, claim: dict[str, Any]) -> dict[str, Any]:
         return {
             "claim_id": claim["claim_id"],
-            "thread_id": claim.get("thread_id"),
             "text": claim.get("claim_text", ""),
             "status": review_status(claim),
             "redaction_counts": dict(
                 sorted(Counter(item["type"] for item in self._redactions_of(claim)).items())
             ),
-            "first_date": claim.get("first_date"),
-            "last_date": claim.get("last_date"),
-            "supporter_count": claim.get("supporter_count"),
-            "opposer_count": claim.get("opposer_count"),
         }
 
     def _detail(self, claim: dict[str, Any]) -> dict[str, Any]:
@@ -309,10 +269,12 @@ class PiiReviewStore:
         scrubbed = text if status == PENDING else original.get("claim_text", "")
         return {
             **self._row(claim),
+            "thread_id": claim.get("thread_id"),
+            "first_date": claim.get("first_date"),
+            "last_date": claim.get("last_date"),
             "entities": claim.get("entities") or [],
-            "stance": claim.get("stance"),
-            "supporting_message_count": len(claim.get("supporting_message_ids") or []),
-            "opposing_message_count": len(claim.get("opposing_message_ids") or []),
+            "supporting_message_ids": claim.get("supporting_message_ids") or [],
+            "opposing_message_ids": claim.get("opposing_message_ids") or [],
             "redactions": [
                 {**item, "in_text": status != PENDING and item["value"] in text}
                 for item in redactions

@@ -12,6 +12,7 @@ from review_tool.locks import ArtifactLockTimeout
 from review_tool.registry import ToolRegistry, ToolSpec
 from review_tool.settings import SETTINGS
 from review_tool.status_tool import StatusTool
+from review_tool.update_status import UpdateStatus
 from tests.review_tool_support import BASE_URL, build_app, build_graph, write_file
 from utils.json_io import write_json_file
 
@@ -221,7 +222,8 @@ def test_without_a_build_the_page_explains_how_to_build(tmp_path: Path) -> None:
 
 def status_client(root: Path) -> TestClient:
     graph = build_graph(root)
-    return client_for(root, graph=graph, specs=(StatusTool(graph, root).spec,))
+    update = UpdateStatus(root / "state.json", root / "running.json", (), graph)
+    return client_for(root, graph=graph, specs=(StatusTool(graph, root, update).spec,))
 
 
 def test_status_tool_reports_files_and_metadata_summary(tmp_path: Path) -> None:

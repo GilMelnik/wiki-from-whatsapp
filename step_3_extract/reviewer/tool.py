@@ -1,18 +1,22 @@
 """The PII review tool of the review server: ``python -m review_tool --tool pii``.
 
 The owner goes through every claim whose phone numbers or emails step 3 scrubbed and either
-accepts the removal or restores the values (all, or some). Endpoints, under ``/api/pii``:
+keeps the removal or restores the values (all, or some). Endpoints, under ``/api/pii``:
 
 - ``GET  /summary``                        counters, pending redactions by type, file read
-- ``GET  /claims?filter&sort&order&offset&limit``  one page of the queue
-- ``GET  /claims/{claim_id}?filter&sort&order``    the claim and its place in the queue
-- ``POST /claims/{claim_id}/decision``     ``{decision, restore?, filter, sort, order}`` →
-  ``{claim, next_id, summary}``
+- ``GET  /claims?offset&limit``            one page of the queue: to decide, removal kept,
+  restored (``status`` says which)
+- ``GET  /claims/{claim_id}``              the claim, its place in the queue, and what the
+  decision rests on: its chat messages (``messages``, each with the details it ``holds``) and
+  per removed detail the entities that list it as a contact (``owners``)
+- ``POST /claims/{claim_id}/decision``     ``{decision, restore?}`` → ``{claim, next_id,
+  summary}`` (``next_id``: the next claim still to decide)
 - ``POST /claims/{claim_id}/undo``         → ``{claim, summary}``
 
-``filter`` is pending | reviewed | all; ``sort`` is claim_id | thread_id | date | redactions |
-supporters; ``order`` is asc | desc. Unknown claim → 404; a change that does not fit the
-claim's state → 409; missing claims file → 409; claims file locked by a step → 423.
+Unknown claim → 404; a change that does not fit the claim's state → 409; missing claims file
+→ 409; claims file locked by a step → 423. The chat export and the entities are read when
+they exist (``step_3_extract.reviewer.context``); without them the claim shows no messages or
+owners.
 """
 
 from __future__ import annotations
@@ -28,28 +32,18 @@ from pydantic import BaseModel
 from review_tool.artifacts import ArtifactGraph
 from review_tool.registry import ToolSpec
 from review_tool.stores import StoreHandle
-from step_3_extract.reviewer.store import (
-    ClaimNotFound,
-    Decision,
-    FilterKind,
-    PiiReviewStore,
-    QueueView,
-    ReviewConflict,
-    SortKind,
-    SortOrder,
-)
+from step_3_extract.reviewer.context import ChatMessages, KnownContacts, with_context
+from step_3_extract.reviewer.store import ClaimNotFound, Decision, PiiReviewStore, ReviewConflict
 
 CLAIMS_KEY = "claims"
+EXPORT_KEY = "export"
+ENTITIES_KEY = "entities"
 
 
 class DecisionRequest(BaseModel):
     decision: Decision
     # Mark numbers (from 0, in text order) to restore; omitted = every mark.
     restore: list[int] | None = None
-    # The queue the owner is working through, to pick the next claim in it.
-    filter: FilterKind = "pending"
-    sort: SortKind = "claim_id"
-    order: SortOrder = "asc"
 
 
 class PiiTool:
@@ -66,6 +60,12 @@ class PiiTool:
             lock_paths=graph.files(*self.WRITES),
             lock_timeout=lock_timeout,
         )
+        export = graph.node(EXPORT_KEY).original
+        entities = graph.node(ENTITIES_KEY)
+        self._chat: StoreHandle[ChatMessages] = StoreHandle(partial(ChatMessages, export), (export,))
+        self._contacts: StoreHandle[KnownContacts] = StoreHandle(
+            partial(KnownContacts, entities.original, entities.edited), graph.files(ENTITIES_KEY)
+        )
         router = APIRouter()
         router.add_api_route("/summary", self.summary, methods=["GET"])
         router.add_api_route("/claims", self.claims, methods=["GET"])
@@ -79,30 +79,18 @@ class PiiTool:
     def summary(self) -> dict[str, Any]:
         return self._handle.get().summary()
 
-    def claims(
-        self,
-        limit: int = Query(ge=1),
-        offset: int = Query(0, ge=0),
-        filter: FilterKind = "pending",
-        sort: SortKind = "claim_id",
-        order: SortOrder = "asc",
-    ) -> dict[str, Any]:
-        return self._handle.get().page(QueueView(filter, sort, order), offset, limit)
+    def claims(self, limit: int = Query(ge=1), offset: int = Query(0, ge=0)) -> dict[str, Any]:
+        return self._handle.get().page(offset, limit)
 
-    def claim(
-        self,
-        claim_id: str,
-        filter: FilterKind = "pending",
-        sort: SortKind = "claim_id",
-        order: SortOrder = "asc",
-    ) -> dict[str, Any]:
+    def claim(self, claim_id: str) -> dict[str, Any]:
         with _as_http_errors():
-            return self._handle.get().detail(claim_id, QueueView(filter, sort, order))
+            detail = self._handle.get().detail(claim_id)
+        claim = with_context(detail["claim"], self._chat.get(), self._contacts.get())
+        return {**detail, "claim": claim}
 
     def decide(self, claim_id: str, body: DecisionRequest) -> dict[str, Any]:
-        view = QueueView(body.filter, body.sort, body.order)
         with _as_http_errors(), self._handle.mutate() as store:
-            return store.decide(claim_id, body.decision, view, body.restore)
+            return store.decide(claim_id, body.decision, body.restore)
 
     def undo(self, claim_id: str) -> dict[str, Any]:
         with _as_http_errors(), self._handle.mutate() as store:

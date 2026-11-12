@@ -27,6 +27,7 @@ from step_4_entities.records import (
 )
 from step_4_entities.reviewer.store.aggregations import EDITOR, ClaimAggregations
 from step_4_entities.reviewer.store.claims import ClaimLookup
+from step_4_entities.reviewer.store.context import ContextMixin
 from step_4_entities.reviewer.store.edits import EditsMixin
 from step_4_entities.reviewer.store.helpers import EntityNotFound
 from step_4_entities.reviewer.store.highlights import ClaimAnnotator
@@ -35,7 +36,7 @@ from step_4_entities.reviewer.store.views import ViewsMixin
 from utils.json_io import write_json_file
 
 
-class EntityStore(ViewsMixin, EditsMixin, MembersMixin):
+class EntityStore(ViewsMixin, ContextMixin, EditsMixin, MembersMixin):
     def __init__(
         self,
         entities_original: Path,

@@ -2,7 +2,8 @@
 
 The dashboard rows come from the common ``GET /api/artifacts``; this tool adds
 ``GET /api/status/artifacts/{key}``: the artifact's files (path, size, last change) and a
-summary of the ``metadata`` block of the file the next step would read.
+summary of the ``metadata`` block of the file the next step would read; and
+``GET /api/status/update``: the update in progress, if any (``review_tool.update_status``).
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from review_tool.artifacts import ArtifactGraph, ArtifactNode
 from review_tool.fs import stamp
 from review_tool.registry import ToolSpec
 from review_tool.stores import StoreHandle
+from review_tool.update_status import UpdateStatus
 
 MetadataSummary = dict[str, Any] | None
 
@@ -46,12 +48,14 @@ class StatusTool:
     NAME = "status"
     TITLE = "Status"
 
-    def __init__(self, graph: ArtifactGraph, data_dir: Path) -> None:
+    def __init__(self, graph: ArtifactGraph, data_dir: Path, update: UpdateStatus) -> None:
         self._graph = graph
         self._data_dir = data_dir
+        self._update = update
         self._metadata_handles: dict[str, StoreHandle[MetadataSummary]] = {}
         router = APIRouter()
         router.add_api_route("/artifacts/{key}", self.artifact_detail, methods=["GET"])
+        router.add_api_route("/update", self.update, methods=["GET"])
         self.spec = ToolSpec(name=self.NAME, title=self.TITLE, router=router)
 
     def artifact_detail(self, key: str) -> dict[str, Any]:
@@ -71,6 +75,9 @@ class StatusTool:
             except (json.JSONDecodeError, UnicodeDecodeError) as exc:
                 detail["metadata_error"] = f"not valid JSON: {exc}"
         return detail
+
+    def update(self) -> dict[str, Any]:
+        return self._update.view()
 
     def _metadata_handle(self, node: ArtifactNode) -> StoreHandle[MetadataSummary]:
         if node.key not in self._metadata_handles:

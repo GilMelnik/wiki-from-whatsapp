@@ -62,11 +62,17 @@ def export_entries() -> list[dict[str, Any]]:
     ]
 
 
+RUNNING_STEPS = {"threads": "Step 1 · Split into conversations", "classified": "Step 2 · Classify conversations"}
+
+
 class BusyRunner(JobRunner):
-    """A job runner that reports step 1 as running (for the frame's write guard)."""
+    """A job runner that reports a step as running (for the frame's write guard): the one that
+    produces ``produces``."""
+
+    produces = "threads"
 
     def running_jobs(self) -> list[Any]:
-        spec = StepSpec("threads", "Step 1 · Split into conversations", None)
+        spec = StepSpec(self.produces, RUNNING_STEPS[self.produces], None)
         return [SimpleNamespace(step=SimpleNamespace(spec=spec))]
 
 
@@ -75,7 +81,7 @@ class ThreadsSetup:
 
     def __init__(self, root: Path, *, payload: dict[str, Any] | None = None) -> None:
         self.root = root
-        self.graph = build_graph(root)
+        self.graph = build_graph(root, optional_reads=True)
         node = self.graph.node("threads")
         self.original, self.edited = node.original, node.edited
         self.progress = root / "gold_progress.json"
@@ -87,12 +93,14 @@ class ThreadsSetup:
         windows = [Window.from_dict(LATER_WINDOW), Window.from_dict(WINDOW)]
         return GoldWindows(windows, GoldProgress(self.progress))
 
-    def new_client(self, *, busy: bool = False) -> TestClient:
+    def new_client(self, *, busy: str | None = None) -> TestClient:
+        """``busy``: the artifact key a running step is rewriting (``None``: nothing runs)."""
         tool = ThreadsTool(self.graph, gold=self.gold(), lock_timeout=SHORT_LOCK_TIMEOUT)
         jobs = None
         if busy:
             jobs = BusyRunner(StepRegistry((), self.graph), EventBus(keepalive_seconds=0.2, queue_size=4),
                               cwd=self.root, data_dir=self.root, settings=JOB_SETTINGS)
+            jobs.produces = busy
         app = build_app(self.root, specs=(tool.spec,), graph=self.graph, jobs=jobs)
         return TestClient(app, base_url=BASE_URL)
 

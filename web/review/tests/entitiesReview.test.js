@@ -2,12 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   allPicked,
+  claimTip,
   colour,
+  contactRows,
   contactsChanged,
   contactsToForm,
   formToContacts,
+  moreShown,
   NOTHING_PICKED,
   pickedFor,
+  sectionsFor,
   segments,
   statusOf,
   togglePicked,
@@ -63,3 +67,40 @@ test("statuses and colours have fallbacks", () => {
   assert.equal(colour(null), colour(0));
 });
 
+
+test("the review order is cut into sections; other orders are not", () => {
+  const sectionOf = sectionsFor({ sort: "review" });
+  assert.equal(sectionOf({ section: "review" }), "Needs review");
+  assert.equal(sectionOf({ section: "several" }), "Several names");
+  assert.equal(sectionOf({ section: "accepted" }), "Accepted");
+  assert.equal(sectionsFor({ sort: "count" }), undefined);
+});
+
+test("a claim's ids go to its tooltip", () => {
+  assert.equal(claimTip({ claim_id: "t-1-abc", thread_id: "t-1" }), "Claim t-1-abc · conversation t-1");
+  assert.equal(claimTip({ claim_id: "c9" }), "Claim c9");
+});
+
+test("show more adds claims up to the name's count", () => {
+  assert.equal(moreShown(3, 40), 15);
+  assert.equal(moreShown(3, 7), 7);
+  assert.equal(moreShown(15, 40, 5), 20);
+});
+
+test("every contact is listed with its state and the claim it came from", () => {
+  const entity = {
+    contacts: { email: ["a@x.example"], phone: [], website: [] },
+    contacts_uncertain: { phone: ["050"] },
+    contacts_rejected: { website: ["x.example"] },
+    contact_sources: [{ kind: "email", value: "a@x.example", claim_id: "c1", claim_text: "mail a@x.example", name: "X" }],
+  };
+  const rows = contactRows(entity);
+  assert.deepEqual(rows.map((row) => [row.state, row.kind, row.value]), [
+    ["contact", "email", "a@x.example"],
+    ["uncertain", "phone", "050"],
+    ["rejected", "website", "x.example"],
+  ]);
+  assert.equal(rows[0].source.claim_id, "c1");
+  assert.equal(rows[1].source, null); // typed by hand, or its claim is gone
+  assert.deepEqual(contactRows({}), []);
+});

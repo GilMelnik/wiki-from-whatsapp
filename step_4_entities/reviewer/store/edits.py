@@ -38,12 +38,15 @@ class EditsMixin:
     ``MembersMixin`` (``absorb``, ``rebuild``)."""
 
     def _next_in_view(self, entity_id: str, view: EntityView, ids_before: list[str]) -> str | None:
-        """After a decision: the next entity of the view (the decided one stays if it is last)."""
+        """After a decision: the entity now at its place in the view (the decided one stays if it
+        is last and did not move)."""
 
         queue = self.queue(entity_id, view)
-        if queue["position"] is None:
-            return self.next_after_removal(ids_before, entity_id)
-        return queue["next_id"] or entity_id
+        before = ids_before.index(entity_id) if entity_id in ids_before else None
+        if queue["position"] is not None and queue["position"] == before:
+            return queue["next_id"] or entity_id
+        # It left the view or moved in it (the review order puts accepted ones last).
+        return self.next_after_removal(ids_before, entity_id)
 
     def set_status(self, entity_id: str, status: Status, view: EntityView) -> str | None:
         """Accepting confirms the whole entity: automatically attached members and the

@@ -1,6 +1,20 @@
 import { Bidi, countText, formatCount, formatSpan, ThreadTag } from "@shell";
+import { automaticText, knowledgeText } from "./threads.js";
 
-// The rows of the list column: a conversation of the whole chat, or of a gold window.
+// The rows of the list column: a conversation of the whole chat, or of a gold window. Of step
+// 2's knowledge label a row shows only what stands out (most conversations carry knowledge):
+// "No knowledge", and a label set by hand; the opened conversation shows the full answer.
+
+function Knowledge({ label }) {
+  if (!label || (label.value && !label.manual)) return null;
+  return (
+    <span className={label.value ? "text-sky-800" : "text-amber-800"} title={automaticText(label)}>
+      {" · "}
+      {knowledgeText(label)}
+      {label.manual && ", set by hand"}
+    </span>
+  );
+}
 
 export function ThreadRow({ row, query }) {
   return (
@@ -12,6 +26,7 @@ export function ThreadRow({ row, query }) {
       <div className="text-xs text-slate-500">
         {countText(row.size, "message")} · {countText(row.people, "person", formatCount, "people")}
         {row.matches > 0 && ` · ${countText(row.matches, "match", formatCount, "matches")}`}
+        <Knowledge label={row.knowledge} />
       </div>
     </div>
   );
