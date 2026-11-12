@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {#- Everything the reader sees on top of Material: the disclaimer, the references toggle, the
-    footer link to the terms. The wording and the settings come from config.json (`site`). -#}
+    footer lines (terms link, support line). The wording and the settings come from config.json (`site`). -#}
 
 {% block extrahead %}
   <link rel="stylesheet" href="{{ 'assets/wiki/wiki.css' | url }}">
@@ -15,9 +15,7 @@
     <div class="wiki-disclaimer" role="note">
       <p><strong>{{ disclaimer.label | e }}</strong>
         {{ disclaimer.text | e }}
-        <a href="{{ config.extra.terms_path | url }}">{{ disclaimer.terms_link_text | e }}</a>
-        &middot; {{ disclaimer.contact_label | e }}
-        <a dir="ltr" href="mailto:{{ config.extra.contact_email | e }}">{{ config.extra.contact_email | e }}</a></p>
+        <a href="{{ config.extra.terms_path | url }}">{{ disclaimer.terms_link_text | e }}</a></p>
     </div>
   </div>
 {% endblock %}
@@ -37,17 +35,16 @@
   {{ super() }}
 {% endblock %}
 
+{#- Two quiet lines above the footer: the terms link, and right under it the support line. -#}
 {% block footer %}
-  {% if config.extra.coffee_url %}
-    <div class="md-coffee">
-      <p class="md-coffee__text">
+  <div class="wiki-footer-lines">
+    <p><a href="{{ config.extra.terms_path | url }}">{{ config.extra.terms_footer_text | e }}</a></p>
+    {% if config.extra.coffee_url %}
+      <p>
         {{ config.extra.coffee_text | e }}
         <a href="{{ config.extra.coffee_url | e }}" target="_blank" rel="noopener">{{ config.extra.coffee_link_text | e }}</a>
       </p>
-    </div>
-  {% endif %}
-  <div class="md-coffee">
-    <p class="md-coffee__text"><a href="{{ config.extra.terms_path | url }}">{{ config.extra.terms_footer_text | e }}</a></p>
+    {% endif %}
   </div>
   {{ super() }}
 {% endblock %}

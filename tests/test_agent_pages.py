@@ -105,7 +105,8 @@ def test_every_twin_starts_with_the_disclaimer_and_has_no_marks_or_html(built: P
         text = path.read_text(encoding="utf-8")
         assert text.startswith("# "), path
         assert disclaimer["text"] in text.split("\n\n")[1], path
-        assert f"({BASE}terms/index.md)" in text and SITE["contact_email"] in text, path
+        header = text.split("\n\n")[1]
+        assert f"({BASE}terms/index.md)" in header and SITE["contact_email"] not in header, path
         assert not MARK.search(text), path
         assert not HTML_TAG.search(text), path
         assert "[[" not in text and "!!!" not in text, path

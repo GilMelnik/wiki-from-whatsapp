@@ -91,7 +91,6 @@ def build_config(
             "coffee_text": SITE_CONFIG["coffee_text"],
             "coffee_link_text": SITE_CONFIG["coffee_link_text"],
             "coffee_url": SITE_CONFIG["coffee_url"],
-            "contact_email": SITE_CONFIG["contact_email"],
             "disclaimer": SITE_CONFIG["disclaimer"],
             "refs_toggle": SITE_CONFIG["refs_toggle"],
             "terms_path": SITE_CONFIG["terms"]["file"].removesuffix(".md") + "/",
