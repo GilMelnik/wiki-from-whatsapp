@@ -720,7 +720,7 @@
       "output_tokens_per_call": {
         "write": 13000,
         "update": 6000,
-        "review": 10000,
+        "review": 6000,
         "propose": 4000
       },
       "proposal_input_tokens": 30000,
