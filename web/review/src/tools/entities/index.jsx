@@ -9,6 +9,7 @@ import {
   NOTHING_PICKED,
   PAGE_SIZE,
   SEARCH_DEBOUNCE_MS,
+  sectionsFor,
   togglePicked,
 } from "./entities.js";
 import { EntityDetail } from "./EntityDetail.jsx";
@@ -26,7 +27,7 @@ const CONTACT_TOASTS = { accept: "Contact attached to the entity", reject: "Cont
 
 function EntitiesTool({ tool }) {
   const toast = useToast();
-  const [view, setView] = useStoredState(ID, "view", DEFAULT_VIEW);
+  const [view, setView] = useStoredState(ID, "queue", DEFAULT_VIEW);
   const [query, setQuery] = useState(view.q);
   const [selectedId, setSelectedId] = useStoredState(ID, "selected", null);
   const [offset, setOffset] = useState(0);
@@ -64,7 +65,9 @@ function EntitiesTool({ tool }) {
   });
 
   const changeView = (patch) => {
-    setView((previous) => ({ ...previous, ...patch }));
+    // The review order reads top-down by sections: it has no direction of its own.
+    const order = patch.sort === "review" ? { order: "desc" } : {};
+    setView((previous) => ({ ...previous, ...patch, ...order }));
     goToPage(0);
   };
   useEffect(() => {
@@ -139,7 +142,7 @@ function EntitiesTool({ tool }) {
   useShortcuts([
     { keys: "a", label: "Accept the entity", run: () => ready && entity.status !== "accepted" && on.setStatus("accepted") },
     { keys: "m", label: "Merge into another entity", run: () => ready && on.merge() },
-    { keys: "x", label: "Reject the grouping (split into names)", run: () => ready && on.reject() },
+    { keys: "x", label: "Split into one entity per name", run: () => ready && entity.member_count > 1 && on.reject() },
     { keys: "g", label: "Combine the picked claims", run: () => ready && on.aggregate() },
     { keys: "delete", label: "Delete the entity", run: () => ready && on.remove() },
     { keys: "e", label: "Edit the canonical name", run: () => nameRef.current?.focus() },
@@ -164,6 +167,7 @@ function EntitiesTool({ tool }) {
         prevKey={queue?.prev_id}
         nextKey={queue?.next_id}
         header={<Pager offset={offset} limit={PAGE_SIZE} total={list.data?.total ?? 0} onChange={goToPage} />}
+        sectionOf={sectionsFor(view)}
         renderItem={(item) => <EntityRow entity={item} />}
       />
     </PanelState>
@@ -180,7 +184,7 @@ function EntitiesTool({ tool }) {
             onQuery={setQuery}
             view={view}
             onView={changeView}
-            summary={summary.data}
+            deletedNames={summary.data?.deleted_names ?? 0}
             onDeletedNames={() => setDialog({ kind: "deletedNames" })}
           />
         }

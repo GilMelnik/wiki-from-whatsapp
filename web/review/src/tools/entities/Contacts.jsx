@@ -1,104 +1,104 @@
 import { useEffect, useState } from "react";
-import { Ltr } from "@shell";
-import { CONTACT_KINDS, contactsChanged, contactsToForm, formToContacts } from "./entities.js";
+import { Bidi, Ltr } from "@shell";
+import { CONTACT_KINDS, contactRows, contactsChanged, contactsToForm, formToContacts } from "./entities.js";
 
-// Contacts of the entity: the confident ones (editable; saving makes them manual, so step 4
-// keeps them), the uncertain ones (seen only in claims naming several entities: accept, with
-// a correction if needed, or reject), and the rejected ones (step 4 never brings them back;
-// a rejection can be undone).
+// Contacts, two ways. In the main column, for the decision "which contacts are right": every
+// contact with the claim it was found in, and what can be done with it: an uncertain one
+// (seen only in claims naming several entities) attached, with a correction if needed, or
+// rejected; a rejected one (step 4 never brings it back) restored. In the side column, the
+// confident contacts edited by hand (saving makes them manual, so step 4 keeps them).
 
-function UncertainRow({ kind, value, saving, onResolve }) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-  const corrected = draft.trim() !== value ? draft.trim() : null;
+const KIND_LABELS = Object.fromEntries(CONTACT_KINDS.map(({ key, label }) => [key, label]));
+const STATE_LABELS = { contact: "Contact", uncertain: "Uncertain", rejected: "Rejected" };
+const STATE_TONES = { contact: "badge-emerald", uncertain: "badge-amber", rejected: "badge-slate" };
+
+function Source({ source }) {
+  if (!source) return <p className="text-xs text-slate-500">Not found in its claims (added by hand).</p>;
   return (
-    <li className="flex items-center gap-1">
-      <input dir="ltr" className="field min-w-0 flex-1 font-mono text-xs" value={draft} onChange={(event) => setDraft(event.target.value)} />
+    <p className="text-xs text-slate-600" title={`Claim ${source.claim_id}`}>
+      From a claim about “<Bidi>{source.name}</Bidi>”:{" "}
+      <Bidi className="text-slate-800">{source.claim_text}</Bidi>
+    </p>
+  );
+}
+
+function UncertainActions({ row, saving, onResolve }) {
+  const [draft, setDraft] = useState(row.value);
+  useEffect(() => setDraft(row.value), [row.value]);
+  const corrected = draft.trim() !== row.value ? draft.trim() : null;
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      <input dir="ltr" aria-label="The value, corrected if needed" className="field min-w-0 flex-1 font-mono text-xs" value={draft} onChange={(event) => setDraft(event.target.value)} />
       <button
         type="button"
         className="btn btn-sm"
         disabled={saving || !draft.trim()}
-        onClick={() => onResolve({ kind, value, action: "accept", new_value: corrected })}
+        onClick={() => onResolve({ kind: row.kind, value: row.value, action: "accept", new_value: corrected })}
       >
-        Attach
+        {corrected ? "Attach corrected" : "Attach"}
       </button>
-      <button type="button" className="btn btn-sm text-rose-700" disabled={saving} onClick={() => onResolve({ kind, value, action: "reject" })}>
+      <button type="button" className="btn btn-sm text-rose-700" disabled={saving} onClick={() => onResolve({ kind: row.kind, value: row.value, action: "reject" })}>
         Reject
       </button>
-    </li>
+    </span>
   );
 }
 
-function ByKind({ contacts, render }) {
-  return CONTACT_KINDS.map(({ key, label }) => {
-    const values = contacts?.[key] ?? [];
-    if (values.length === 0) return null;
-    return (
-      <div key={key}>
-        <p className="text-xs text-slate-500">{label}</p>
-        <ul className="space-y-1">{values.map((value) => render(key, value))}</ul>
-      </div>
-    );
-  });
+export function ContactsReview({ entity, saving, onResolve }) {
+  const rows = contactRows(entity);
+  if (rows.length === 0) return null;
+  return (
+    <section className="space-y-2">
+      <h3 className="section-title">Contacts {entity.contacts_manual && <span className="badge badge-sky ms-1">Edited by hand</span>}</h3>
+      <ul className="space-y-2">
+        {rows.map((row) => (
+          <li key={`${row.state}-${row.kind}-${row.value}`} className="card space-y-1.5">
+            <p className="flex flex-wrap items-center gap-2">
+              <span className={`badge ${STATE_TONES[row.state]}`}>{STATE_LABELS[row.state]}</span>
+              <span className="text-xs text-slate-500">{KIND_LABELS[row.kind]}</span>
+              <Ltr className={`break-all ${row.state === "rejected" ? "text-slate-500 line-through" : "text-slate-900"}`}>{row.value}</Ltr>
+              {row.state === "rejected" && (
+                <button type="button" className="btn btn-sm ms-auto" disabled={saving} onClick={() => onResolve({ kind: row.kind, value: row.value, action: "restore" })}>
+                  Undo the rejection
+                </button>
+              )}
+            </p>
+            <Source source={row.source} />
+            {row.state === "uncertain" && (
+              <>
+                <p className="text-xs text-amber-800">Seen only in claims that name several entities: is it this one's?</p>
+                <UncertainActions row={row} saving={saving} onResolve={onResolve} />
+              </>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
 
-const hasAny = (contacts) => CONTACT_KINDS.some(({ key }) => (contacts?.[key] ?? []).length > 0);
-
-export function Contacts({ entity, saving, onSave, onResolve }) {
+export function ContactsForm({ entity, saving, onSave }) {
   const [form, setForm] = useState(() => contactsToForm(entity.contacts));
   useEffect(() => setForm(contactsToForm(entity.contacts)), [entity.entity_id, entity.contacts]);
   const dirty = contactsChanged(entity.contacts, form);
-
   return (
-    <>
-      <section className="space-y-2">
-        <h3 className="section-title">
-          Contacts {entity.contacts_manual && <span className="badge badge-sky ms-1">Edited by hand</span>}
-        </h3>
-        {CONTACT_KINDS.map(({ key, label }) => (
-          <label key={key} className="block">
-            <span className="text-xs text-slate-500">{label} (one value per line)</span>
-            <textarea
-              dir="ltr"
-              rows={2}
-              className="field w-full font-mono text-xs"
-              value={form[key]}
-              onChange={(event) => setForm((previous) => ({ ...previous, [key]: event.target.value }))}
-            />
-          </label>
-        ))}
-        <button type="button" className="btn btn-sm" disabled={saving || !dirty} onClick={() => onSave(formToContacts(form))}>
-          Save contacts
-        </button>
-      </section>
-      {hasAny(entity.contacts_uncertain) && (
-        <section className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3">
-          <h3 className="section-title text-amber-800">Uncertain contacts</h3>
-          <p className="text-xs text-amber-900">
-            Seen only in claims that mention several entities, so it is not clear whom they belong to.
-          </p>
-          <ByKind
-            contacts={entity.contacts_uncertain}
-            render={(kind, value) => <UncertainRow key={value} kind={kind} value={value} saving={saving} onResolve={onResolve} />}
+    <details className="space-y-2" open={dirty || undefined}>
+      <summary className="cursor-pointer section-title">Edit the contacts by hand</summary>
+      {CONTACT_KINDS.map(({ key, label }) => (
+        <label key={key} className="block">
+          <span className="text-xs text-slate-500">{label} (one value per line)</span>
+          <textarea
+            dir="ltr"
+            rows={2}
+            className="field w-full font-mono text-xs"
+            value={form[key]}
+            onChange={(event) => setForm((previous) => ({ ...previous, [key]: event.target.value }))}
           />
-        </section>
-      )}
-      {hasAny(entity.contacts_rejected) && (
-        <section className="space-y-2">
-          <h3 className="section-title">Rejected contacts</h3>
-          <ByKind
-            contacts={entity.contacts_rejected}
-            render={(kind, value) => (
-              <li key={value} className="flex items-center gap-2">
-                <Ltr className="flex-1 break-all text-slate-500 line-through">{value}</Ltr>
-                <button type="button" className="btn btn-sm" disabled={saving} onClick={() => onResolve({ kind, value, action: "restore" })}>
-                  Undo rejection
-                </button>
-              </li>
-            )}
-          />
-        </section>
-      )}
-    </>
+        </label>
+      ))}
+      <button type="button" className="btn btn-sm" disabled={saving || !dirty} onClick={() => onSave(formToContacts(form))}>
+        Save contacts
+      </button>
+    </details>
   );
 }
