@@ -1,13 +1,12 @@
 """What step 7 reads, and what one page's text depends on.
 
 The step reads four upstream artifacts, each in its effective (edited-if-present) form: the
-claim groups (C6), the plan (C7), the assignment of groups to pages (C8) and the entities
-(step 4, only for their kinds). Nothing else: no claims, no private audit, no identities, no
+claim groups (C6), the plan (C7) and the assignment of groups to pages (C8). Nothing else: no claims, no private audit, no identities, no
 reaction summaries. C6 already counts the distinct people per group and per month, with
 neutral reactions (a heart, praying hands) left out.
 
 Groups the owner's rule withholds (``step_7_write_pages.withhold``: a negative statement about
-a named individual that fewer than two members reported) are treated as placed on no page:
+a named entity that fewer than two members reported) are treated as placed on no page:
 they are in no page's groups, in no other group's ``contradicts``, in no front matter and in
 no label count. Each is accounted for in its primary page's ``left_out`` (``withheld_on``)
 and listed in the run's metadata (``withheld_list``).
@@ -37,9 +36,9 @@ from typing import Any
 
 from step_6_plan.assign_rules import groups_on_page
 from step_6_plan.model import find_node, validation_errors, PlanError
-from step_7_write_pages.withhold import REASON as WITHHELD, WithholdRule
+from step_7_write_pages.withhold import REASON as WITHHELD, withheld_ids
 from utils.config import section
-from utils.paths import ASSIGNMENTS, PLAN, resolve, resolve_aggregated_path, resolve_entities_path
+from utils.paths import ASSIGNMENTS, PLAN, resolve, resolve_aggregated_path
 from utils.reconcile import fingerprint
 
 PAGES_CONFIG = section("pages")
@@ -114,16 +113,16 @@ class Corpus:
 
     @classmethod
     def load(cls, aggregated_path: Path | None = None, plan_path: Path | None = None,
-             assignments_path: Path | None = None, entities_path: Path | None = None) -> Corpus:
+             assignments_path: Path | None = None) -> Corpus:
         paths = (aggregated_path or resolve_aggregated_path(), plan_path or resolve(PLAN),
-                 assignments_path or resolve(ASSIGNMENTS), entities_path or resolve_entities_path())
+                 assignments_path or resolve(ASSIGNMENTS))
         groups = _read(paths[0], "claim groups (step 5)")["groups"]
         plan = _read(paths[1], "plan (step 6)")
         errors = validation_errors(plan)
         if errors:
             raise PlanError([f"{paths[1]} is not a valid C7 plan; fix it in the plan tool", *errors])
         assignments = _read(paths[2], "assignments (step 6b)")["assignments"]
-        withheld = WithholdRule.load(paths[3]).withheld_ids(groups)
+        withheld = withheld_ids(groups)
         corpus = cls({g["group_id"]: g for g in groups}, plan, assignments, paths,
                      withheld=withheld)
         corpus.skipped = [gid for gid in corpus.groups if gid not in assignments]

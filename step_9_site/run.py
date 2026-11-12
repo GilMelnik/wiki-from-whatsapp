@@ -1,8 +1,8 @@
 """Step 9: publish the wiki: ``docs/`` and ``mkdocs.yml`` from the plan (C7) and the pages (C9).
 
-Reads the effective plan, the effective written pages, the effective claim groups (C6, for
-the references) and the effective entities (their kinds, for the check that no page cites a
-group withheld by ``step_7_write_pages.withhold``), then writes:
+Reads the effective plan, the effective written pages and the effective claim groups (C6, for
+the references and for the check that no page cites a group withheld by
+``step_7_write_pages.withhold``), then writes:
 
 - ``docs/<page_id>.md``: each planned page that has a written page, OKF front matter (hidden by
   mkdocs) + body with its wiki links resolved and its references (group id, when, how many
@@ -39,7 +39,7 @@ import yaml
 
 from step_9_site import agent_hook, hebrew_search
 from step_9_site.agent_pages import AgentPages
-from step_7_write_pages.withhold import WithholdRule
+from step_7_write_pages.withhold import withheld_ids
 from step_9_site.content import INFO_FILES, WITHHELD_REFERENCE, NavEntry, Site
 from step_9_site.index import index_text
 from utils.config import PROJECT_ROOT, section
@@ -50,7 +50,6 @@ from utils.paths import (
     STEP_9,
     WIKI_INDEX_FILE,
     resolve_aggregated_path,
-    resolve_entities_path,
     resolve_plan_path,
     resolve_wiki_pages_path,
 )
@@ -164,7 +163,6 @@ def run(
     plan_path: Path | None = None,
     pages_path: Path | None = None,
     groups_path: Path | None = None,
-    entities_path: Path | None = None,
     docs_dir: Path = DOCS_DIR,
     mkdocs_path: Path = MKDOCS_PATH,
 ) -> dict[str, Any]:
@@ -177,7 +175,7 @@ def run(
     plan = _load(plan_path or resolve_plan_path(), "plan (step 6)")
     pages = _load(pages_path or resolve_wiki_pages_path(), "written pages (step 7)")["pages"]
     groups = _load(groups_path or resolve_aggregated_path(), "claim groups (step 5)")["groups"]
-    withheld = WithholdRule.load(entities_path or resolve_entities_path()).withheld_ids(groups)
+    withheld = withheld_ids(groups)
     site = Site(plan, pages, groups, withheld)
     files = {**site.files, **AgentPages(site).files(), WIKI_INDEX_FILE: index_text(site, docs_dir / WIKI_INDEX_FILE)}
     config = build_config(

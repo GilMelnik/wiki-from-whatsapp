@@ -300,7 +300,7 @@
     "max_marks_per_statement": 3,
     "max_statements_per_point": 2,
     "max_left_out_share": 0.3,
-    "withhold": {"stance": "negative", "kinds": ["person"], "min_supporters": 2, "reason": "withheld"},
+    "withhold": {"stance": "negative", "min_supporters": 2, "reason": "withheld"},
     "points": {
       "kinds": {
         "common_view": "what members generally recommend or report on a question (said once, however many groups repeat it)",

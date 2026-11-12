@@ -38,7 +38,7 @@ LOGGER = logging.getLogger("test-pages")
 @pytest.fixture()
 def corpus(tmp_path: Path) -> Corpus:
     ws = PagesWorkspace(tmp_path)
-    return Corpus.load(*ws.paths())
+    return Corpus.load(ws.groups_path, ws.plan_path, ws.assignments_path)
 
 
 def _context(corpus: Corpus, page_id: str = "agencies") -> PageContext:
@@ -84,7 +84,7 @@ def test_groups_without_assignment_are_skipped_and_counted(tmp_path: Path) -> No
     payload = ws.assignments()
     del payload["assignments"]["g-00000001"]
     ws.write_assignments(payload)
-    corpus = Corpus.load(*ws.paths())
+    corpus = Corpus.load(ws.groups_path, ws.plan_path, ws.assignments_path)
     assert corpus.skipped == ["g-00000001"]
     assert "g-00000001" not in _context(corpus, "costs").ids
 
@@ -93,7 +93,7 @@ def test_fingerprint_follows_text_inputs_not_the_catalogue(tmp_path: Path, monke
     ws = PagesWorkspace(tmp_path)
 
     def fp() -> str:
-        corpus = Corpus.load(*ws.paths())
+        corpus = Corpus.load(ws.groups_path, ws.plan_path, ws.assignments_path)
         return input_fingerprint(page_state(_context(corpus), writer_fingerprint("m")))
 
     first = fp()
@@ -173,13 +173,13 @@ def test_the_written_body_keeps_its_marks_and_no_definitions(corpus: Corpus) -> 
 
 def test_the_participant_count_never_reaches_the_prompt(tmp_path: Path) -> None:
     ws = PagesWorkspace(tmp_path)
-    before = {pid: write_prompt(_context(Corpus.load(*ws.paths()), pid))
+    before = {pid: write_prompt(_context(Corpus.load(ws.groups_path, ws.plan_path, ws.assignments_path), pid))
               for pid in ("agencies", "hospital")}
     groups = ws.groups()
     for group in groups:
         group["participant_count"] = 987654
     ws.write_groups(groups)
-    corpus = Corpus.load(*ws.paths())
+    corpus = Corpus.load(ws.groups_path, ws.plan_path, ws.assignments_path)
     for page_id, prompt in before.items():
         assert write_prompt(_context(corpus, page_id)) == prompt
         assert "987654" not in str(_context(corpus, page_id).records)

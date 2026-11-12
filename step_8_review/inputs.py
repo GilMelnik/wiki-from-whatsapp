@@ -111,10 +111,9 @@ class ReviewInput:
 
     @classmethod
     def load(cls, pages_artifact: Artifact = WIKI_PAGES, aggregated_path: Path | None = None,
-             plan_path: Path | None = None, assignments_path: Path | None = None,
-             entities_path: Path | None = None) -> ReviewInput:
+             plan_path: Path | None = None, assignments_path: Path | None = None) -> ReviewInput:
         payload, path = effective_pages(pages_artifact)
-        corpus = Corpus.load(aggregated_path, plan_path, assignments_path, entities_path)
+        corpus = Corpus.load(aggregated_path, plan_path, assignments_path)
         return cls(corpus, payload.get("pages") or {}, path)
 
     @property

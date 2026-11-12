@@ -161,7 +161,7 @@ def test_rerun_on_unchanged_inputs_writes_nothing(tmp_path: Path) -> None:
     stamps = {path: path.stat().st_mtime_ns for path in files}
     second = run_site(tmp_path, plan, _pages(plan))
     assert (second["written"], second["removed"]) == ([], [])
-    inputs = ("plan.json", "wiki_pages.json", "claims_aggregated.json", "entities.json")
+    inputs = ("plan.json", "wiki_pages.json", "claims_aggregated.json")
     changed = [path for path in files if path.name not in inputs]
     assert all(path.stat().st_mtime_ns == stamps[path] for path in changed)
 
