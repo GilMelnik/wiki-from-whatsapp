@@ -22,7 +22,7 @@ def tool(tmp_path: Path) -> ThreadsSetup:
 def test_the_tool_is_registered() -> None:
     spec = next(spec for spec in TOOL_SPECS if spec.name == "threads")
     assert spec.title == "Conversations"
-    assert spec.reads == ("threads", "export") and spec.writes == ("threads",)
+    assert spec.reads == ("threads", "export") and spec.writes == ("threads", "classified")
 
 
 def test_summary_of_a_c1_file(tool: ThreadsSetup) -> None:
@@ -169,7 +169,7 @@ def test_edits_are_refused_while_the_file_is_locked_or_step_1_runs(tool: Threads
         response = tool.client.post("/api/threads/move", json={"message_ids": ["a3"]})
         assert response.status_code == 423 and "being written by another process" in response.json()["detail"]
         tool.get("/view", window=0)
-    busy = tool.new_client(busy=True)
+    busy = tool.new_client(busy="threads")
     response = busy.post("/api/threads/move", json={"message_ids": ["a3"]})
     assert response.status_code == 423 and "Step 1" in response.json()["detail"]
     assert busy.get("/api/threads/view", params={"thread": "t-a1"}).status_code == 200

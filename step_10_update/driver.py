@@ -47,7 +47,7 @@ from step_10_update.exports import (
     message_time,
 )
 from step_10_update.record import UpdateReport, scalar_summary, update_log
-from step_10_update.state import BUSY, PAID, REVIEW, THROUGH, UpdateState
+from step_10_update.state import BUSY, COMMAND, PAID, REVIEW, THROUGH, UpdateState
 from utils.config import section
 from utils.json_io import write_json_file
 from utils.paths import (
@@ -65,7 +65,6 @@ from utils.split_chat_export import newest_export
 from utils.step_lease import LeaseHeld, StepLease
 
 UPDATE_CONFIG = section("update")
-COMMAND = "python -m step_10_update.run"
 PRIVATE_NOTE = "PRIVATE - chat messages. Do not publish."
 NOT_STARTED = "(not started)"
 COMPLETED, STOPPED, FAILED = "completed", "stopped", "failed"

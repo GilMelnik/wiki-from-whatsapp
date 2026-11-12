@@ -18,10 +18,18 @@ screens serve the hand-tagging of the gold windows. Endpoints, under ``/api/thre
 - ``POST /merge``  ``{thread_ids}`` (the earliest keeps its id)
 - ``POST /undo``   takes back the newest edit of this session
   Edits answer ``{label, focus, created?, removed?, summary}``.
+- ``GET  /knowledge``              step 2's labels: ``{ready, reason, threshold, manual_count}``
+- ``GET  /knowledge/{thread_id}``  ``{thread_id, label}``: step 2's answer for the conversation
+  and the label in force (``label`` null when step 2 has none for it)
+- ``POST /knowledge/{thread_id}``  ``{value: true | false | null}``: set by hand, or (null) back
+  to step 2's answer; saved in step 2's edited file (``reviewer.knowledge``)
+
+``GET /threads`` also takes ``knowledge`` = all | yes | no | manual (set by hand), and every row
+carries its ``knowledge`` label.
 
 Errors: unknown thread, message or window → 404; an edit that does not fit, nothing to undo,
-an old-format file → 409; a bad ``context`` range → 422; the file locked by a step → 423 (the
-frame's write guard also answers 423 while step 1 runs).
+an old-format file, a label before step 2 ran → 409; a bad ``context`` range → 422; the file
+locked by a step → 423 (the frame's write guard also answers 423 while step 1 or step 2 runs).
 """
 
 from __future__ import annotations
@@ -39,12 +47,14 @@ from review_tool.registry import ToolSpec
 from review_tool.stores import StoreHandle
 from step_1_threads_split.reviewer.gold_windows import GoldWindows
 from step_1_threads_split.reviewer.history import EditHistory
+from step_1_threads_split.reviewer.knowledge import KnowledgeFilter, KnowledgeLabels
 from step_1_threads_split.reviewer.operations import EditRefused, UnknownItem
 from step_1_threads_split.reviewer.store import OldFormat, ThreadsStore
 from step_1_threads_split.reviewer.views import REVIEW_CONFIG, SortKind, parse_ranges
 
 THREADS_KEY = "threads"
 EXPORT_KEY = "export"
+CLASSIFIED_KEY = "classified"
 
 
 class MoveRequest(BaseModel):
@@ -60,11 +70,17 @@ class DoneRequest(BaseModel):
     done: bool
 
 
+class LabelRequest(BaseModel):
+    value: bool | None
+
+
 class ThreadsTool:
     NAME = "threads"
     TITLE = "Conversations"
     READS = (THREADS_KEY, EXPORT_KEY)
-    WRITES = (THREADS_KEY,)
+    # Step 2's file is optional here (the label control waits for it), so it is not a read the
+    # frame reports as missing; writing it makes the write guard refuse labels while step 2 runs.
+    WRITES = (THREADS_KEY, CLASSIFIED_KEY)
 
     def __init__(
         self,
@@ -80,7 +96,13 @@ class ThreadsTool:
         self._handle: StoreHandle[ThreadsStore] = StoreHandle(
             partial(ThreadsStore, threads.original, threads.edited, export, self.gold, history),
             graph.files(*self.READS),
-            lock_paths=graph.files(*self.WRITES),
+            lock_paths=graph.files(THREADS_KEY),
+            lock_timeout=lock_timeout,
+        )
+        classified = graph.node(CLASSIFIED_KEY)
+        self._labels: StoreHandle[KnowledgeLabels] = StoreHandle(
+            partial(KnowledgeLabels, classified.original, classified.edited),
+            graph.files(CLASSIFIED_KEY),
             lock_timeout=lock_timeout,
         )
         router = APIRouter()
@@ -91,6 +113,9 @@ class ThreadsTool:
         router.add_api_route("/move", self.move, methods=["POST"])
         router.add_api_route("/merge", self.merge, methods=["POST"])
         router.add_api_route("/undo", self.undo, methods=["POST"])
+        router.add_api_route("/knowledge", self.knowledge, methods=["GET"])
+        router.add_api_route("/knowledge/{thread_id}", self.label, methods=["GET"])
+        router.add_api_route("/knowledge/{thread_id}", self.set_label, methods=["POST"])
         self.spec = ToolSpec(
             name=self.NAME, title=self.TITLE, router=router, reads=self.READS, writes=self.WRITES
         )
@@ -98,9 +123,18 @@ class ThreadsTool:
     def summary(self) -> dict[str, Any]:
         return self._handle.get().summary()
 
-    def rows(self, q: str = "", sort: SortKind = "time") -> dict[str, Any]:
+    def rows(
+        self, q: str = "", sort: SortKind = "time", knowledge: KnowledgeFilter = "all"
+    ) -> dict[str, Any]:
         with _as_http_errors():
-            return self._handle.get().views.rows(q, sort)
+            answer = self._handle.get().views.rows(q, sort)
+        labels = self._labels.get()
+        items = [
+            {**row, "knowledge": labels.label(row["thread_id"])}
+            for row in answer["items"]
+            if labels.shown(row["thread_id"], knowledge)
+        ]
+        return {**answer, "items": items, "knowledge": knowledge}
 
     def view(
         self,
@@ -137,6 +171,16 @@ class ThreadsTool:
     def undo(self) -> dict[str, Any]:
         with _as_http_errors(), self._handle.mutate() as store:
             return store.undo()
+
+    def knowledge(self) -> dict[str, Any]:
+        return self._labels.get().state()
+
+    def label(self, thread_id: str) -> dict[str, Any]:
+        return {"thread_id": thread_id, "label": self._labels.get().label(thread_id)}
+
+    def set_label(self, thread_id: str, body: LabelRequest) -> dict[str, Any]:
+        with _as_http_errors(), self._labels.mutate() as labels:
+            return {"thread_id": thread_id, "label": labels.set(thread_id, body.value)}
 
 
 @contextmanager

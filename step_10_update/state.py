@@ -28,6 +28,8 @@ from typing import Any
 from utils.json_io import write_json_file
 
 REVIEW, PAID, BUSY, THROUGH = "review", "paid", "busy", "through"
+# The command that starts an update and goes on with it (``--pay <step>`` allows a paid step).
+COMMAND = "python -m step_10_update.run"
 HISTORY_KEYS = ("stamp", "export_sha1", "counts", "completed_at")
 
 
