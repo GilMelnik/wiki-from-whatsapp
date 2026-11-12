@@ -1,26 +1,28 @@
 import { useEffect, useRef, useState } from "react";
-import { countText, formatCount, ItemList, Layout, Pager, PanelState, useResource, useShortcuts, useStoredState, useToast } from "@shell";
+import { countText, Dialog, formatCount, ItemList, Layout, Pager, PanelState, useResource, useShortcuts, useStoredState, useToast } from "@shell";
 import { api } from "./api.js";
 import { DecisionPanel } from "./DecisionPanel.jsx";
-import { Counters } from "./GroupsToolbar.jsx";
 import { followSuggestion, SUGGESTION_PAGE_SIZE } from "./groups.js";
+import { DisputeWarning } from "./MergeNotes.jsx";
 import { PairView } from "./PairView.jsx";
 import { SuggestionRow } from "./SuggestionRow.jsx";
 
 // The merge-suggestion queue: pairs of groups close to (but below) step 5's own bar, best
 // first. One key per decision: m merges, n remembers "not the same", s skips; after a
-// decision the next pair comes up in place. The list follows the files on disk.
+// decision the next pair comes up in place. A pair whose groups dispute each other asks
+// before merging. The list follows the files on disk.
 
-export function SuggestionsView({ tool, toolId, modeTabs, summary, onOpenGroup, runStep }) {
+export function SuggestionsView({ toolId, modeTabs, summary, watch, onOpenGroup, runStep }) {
   const toast = useToast();
   const [offset, setOffset] = useState(0);
   const [selectedKey, setSelectedKey] = useStoredState(toolId, "pair", null);
   const [lastNotSame, setLastNotSame] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [confirming, setConfirming] = useState(null);
   const lastIndex = useRef(0);
 
   const list = useResource(() => api.get("/suggestions", { offset, limit: SUGGESTION_PAGE_SIZE }), [offset], {
-    watch: tool.reads,
+    watch,
     keepPrevious: true,
   });
   const items = list.data?.items ?? [];
@@ -58,7 +60,12 @@ export function SuggestionsView({ tool, toolId, modeTabs, summary, onOpenGroup, 
     }
   };
   const groupIds = pair ? [pair.a.group_id, pair.b.group_id] : [];
-  const merge = () => decide(() => api.post("/groups/merge", { group_ids: groupIds }), "Groups merged");
+  const mergeNow = () => decide(() => api.post("/groups/merge", { group_ids: groupIds }), "Groups merged");
+  const merge = () => {
+    if (!pair || saving) return;
+    if (pair.dispute) setConfirming(pair);
+    else mergeNow();
+  };
   const notSame = () =>
     decide(() => api.post("/not-same", { group_ids: groupIds }), "Marked: not the same", (result) =>
       setLastNotSame({ id: result.record.id, key: pair.key })
@@ -133,17 +140,21 @@ export function SuggestionsView({ tool, toolId, modeTabs, summary, onOpenGroup, 
     </PanelState>
   );
 
-  return (
+  const layout = (
     <Layout
       toolId={toolId}
-      toolbar={
-        <>
-          {modeTabs}
-          <Counters summary={summary.data} />
-        </>
-      }
+      toolbar={modeTabs}
       list={listPanel}
-      main={<PairView list={list} pair={pair} position={offset + Math.max(index, 0)} onOpen={onOpenGroup} />}
+      main={
+        <PairView
+          list={list}
+          pair={pair}
+          position={offset + Math.max(index, 0)}
+          minSupporters={summary.data?.withhold_min_supporters}
+          watch={watch}
+          onOpen={onOpenGroup}
+        />
+      }
       side={
         <DecisionPanel
           pair={pair}
@@ -157,5 +168,22 @@ export function SuggestionsView({ tool, toolId, modeTabs, summary, onOpenGroup, 
       }
       listWidth={{ initial: 380 }}
     />
+  );
+  return (
+    <>
+      {layout}
+      {confirming && (
+        <Dialog
+          open
+          tone="danger"
+          title="Merge two groups that dispute each other?"
+          confirmLabel="Merge anyway"
+          onClose={() => setConfirming(null)}
+          onConfirm={() => (confirming.key === pair?.key ? mergeNow() : null)}
+        >
+          <DisputeWarning disputes={[confirming.dispute]} />
+        </Dialog>
+      )}
+    </>
   );
 }

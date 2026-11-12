@@ -4,12 +4,14 @@ import {
   barPercent,
   dateRange,
   DEFAULT_VIEW,
+  diffWords,
   entityOptions,
   followSuggestion,
-  formatScore,
   pickedIn,
+  releaseNote,
   togglePick,
   viewParams,
+  whySuggested,
 } from "../src/tools/groups/groups.js";
 
 const items = [{ key: "a|b" }, { key: "c|d" }, { key: "e|f" }];
@@ -38,10 +40,7 @@ test("picked claims belong to one group", () => {
   assert.deepEqual(togglePick(picked, "g-2", "c9"), { groupId: "g-2", claimIds: ["c9"] });
 });
 
-test("scores, dates, bars and entity options are formatted for the page", () => {
-  assert.equal(formatScore(0.93214), "0.932");
-  assert.equal(formatScore(-0.0181, { signed: true }), "−0.018");
-  assert.equal(formatScore(0.002, { signed: true }), "+0.002");
+test("dates, bars and entity options are formatted for the page", () => {
   assert.equal(dateRange("2024-01-01", "2024-01-01"), "2024-01-01");
   assert.equal(dateRange("2024-01-01", "2024-03-01"), "2024-01-01 – 2024-03-01");
   assert.equal(dateRange(null, null), "—");
@@ -52,4 +51,46 @@ test("scores, dates, bars and entity options are formatted for the page", () => 
     { value: "", label: "All entities" },
     { value: "e1", label: "\u2068Alpha\u2069 (2)" },
   ]);
+});
+
+const joined = (segments) => segments.map((segment) => segment.text).join("");
+const changed = (segments) => segments.filter((segment) => !segment.same).map((segment) => segment.text.trim());
+
+test("the words that differ between two texts are marked, punctuation and case aside", () => {
+  const diff = diffWords("The clinic in Alpha  is good.", "the clinic in Beta is very good");
+  assert.equal(joined(diff.a), "The clinic in Alpha is good.");
+  assert.equal(joined(diff.b), "the clinic in Beta is very good");
+  assert.deepEqual(changed(diff.a), ["Alpha"]);
+  assert.deepEqual(changed(diff.b), ["Beta", "very"]);
+  const same = diffWords("one two", "one two");
+  assert.deepEqual(same.a, [{ text: "one two", same: true }]);
+  assert.deepEqual(diffWords("", "new words").b, [{ text: "new words", same: false }]);
+  const long = Array.from({ length: 300 }, (_, index) => `w${index}`).join(" ");
+  assert.deepEqual(diffWords(long, `${long} x`).b, [{ text: `${long} x`, same: true }]); // too long: no highlight
+});
+
+test("why a pair is suggested says it in words, with shared names and stances", () => {
+  const pair = { a: { stance: "positive" }, b: { stance: "positive" }, shared_entity_names: ["Alpha"] };
+  const lines = whySuggested(pair);
+  assert.equal(lines.length, 3);
+  assert.equal(lines[1], "Both name “\u2068Alpha\u2069”.");
+  assert.match(lines[2], /same stance: positive/);
+  const apart = whySuggested({ a: { stance: "positive" }, b: { stance: "factual" }, shared_entity_names: [] });
+  assert.match(apart[1], /no entity in common/);
+  assert.match(apart[2], /differ: positive and factual/);
+  assert.ok(lines.every((line) => !/\d\.\d/.test(line))); // no similarity numbers
+});
+
+test("a merge says whether it releases a withheld group, keeps it withheld or withholds the result", () => {
+  const check = (withheld, after, supporters) => ({ withheld, withheld_after: after, supporter_count_after: supporters });
+  assert.equal(releaseNote(null, 2), null);
+  assert.equal(releaseNote(check([], false, 3), 2), null);
+  assert.equal(releaseNote(check(["g-1"], null, null), 2), null); // without vectors: unknown
+  assert.deepEqual(releaseNote(check(["g-1"], false, 2), 2), {
+    tone: "success",
+    text: "This merge releases it to the wiki: the merged group has 2 supporters.",
+  });
+  assert.equal(releaseNote(check(["g-1", "g-2"], true, 1), 2).tone, "info");
+  assert.match(releaseNote(check(["g-1", "g-2"], true, 1), 2).text, /still have 1 supporter \(it needs 2\)/);
+  assert.equal(releaseNote(check([], true, 1), 2).tone, "warning");
 });

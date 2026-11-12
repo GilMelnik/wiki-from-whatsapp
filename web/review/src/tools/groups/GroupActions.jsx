@@ -1,59 +1,34 @@
-import { countText, formatCount, Ltr, Panel, PanelState } from "@shell";
+import { ActionButton, countText, formatCount, Panel, PanelState } from "@shell";
 import { pickedIn } from "./groups.js";
-import { Key } from "./Key.jsx";
 
-// Side column of the groups view: what can be done with the selected group. Pick member
-// claims in the main column to split them off or move one; every change is saved at once.
+// Side column of a groups list: what can be done with the selected group, each with its key.
+// Split and move appear once member claims are picked in the middle column; every change is
+// saved at once and the numbers are counted again, as step 5 would.
 
 export function GroupActions({ detail, picked, saving, on }) {
   const group = detail.data?.group;
   const chosen = group ? pickedIn(picked, group.group_id) : [];
   const canSplit = group && chosen.length > 0 && chosen.length < group.size;
-  const footer = group && (
-    <>
-      <button type="button" className="btn btn-primary btn-block" disabled={saving} onClick={on.merge}>
-        Merge with another group
-        <Key>m</Key>
-      </button>
-      <button type="button" className="btn btn-block" disabled={saving || !canSplit} onClick={on.split}>
-        {canSplit ? `Split ${countText(chosen.length, "claim", formatCount)} into a new group` : "Split (pick claims)"}
-        <Key>x</Key>
-      </button>
-      <button type="button" className="btn btn-block" disabled={saving || chosen.length !== 1} onClick={on.move}>
-        Move the picked claim to another group
-        <Key>v</Key>
-      </button>
-      <button type="button" className="btn btn-block" disabled={saving} onClick={on.addLink}>
-        Add a contradiction link
-        <Key>c</Key>
-      </button>
-      {group.representative_manual && (
-        <button type="button" className="btn btn-sm btn-block" disabled={saving} onClick={() => on.setRepresentative(null)}>
-          Choose the representative text automatically
-        </button>
-      )}
-    </>
-  );
   return (
-    <Panel
-      title="Actions"
-      subtitle={
-        <>
-          Saved at once to <Ltr>claims_aggregated_edited.json</Ltr>
-        </>
-      }
-      footer={footer}
-    >
+    <Panel title="Actions">
       <PanelState empty={!group} emptyText="No group selected">
         {group && (
-          <div className="space-y-3 p-4 text-sm text-slate-600">
-            <p>
-              {formatCount(chosen.length)} of {countText(group.size, "claim", formatCount)} picked.
-            </p>
-            <p className="text-xs text-slate-500">
-              A merge keeps the older group. A split creates a new group, and the two will not be suggested for
-              a merge again. The numbers are recomputed at once, as in a step 5 run.
-            </p>
+          <div className="space-y-4 p-4 text-sm">
+            <div className="space-y-2">
+              <ActionButton label="Merge with another group…" keyName="m" primary disabled={saving} onClick={on.merge} />
+              {canSplit && (
+                <ActionButton label={`Split ${countText(chosen.length, "claim", formatCount)} into a new group…`} keyName="x" disabled={saving} onClick={on.split} />
+              )}
+              {chosen.length === 1 && <ActionButton label="Move the picked claim to another group…" keyName="v" disabled={saving} onClick={on.move} />}
+              <ActionButton label="Add a contradiction link…" keyName="c" disabled={saving} onClick={on.addLink} />
+              {group.representative_manual && (
+                <ActionButton label="Choose the text automatically again" disabled={saving} onClick={() => on.setRepresentative(null)} />
+              )}
+            </div>
+            <div className="space-y-2 text-xs text-slate-500">
+              {group.size > 1 && chosen.length === 0 && <p>Pick claims in the middle column to split them off, or one to move it.</p>}
+              <p>A merge keeps the older group. A split makes a new group, and the two are not suggested for a merge again.</p>
+            </div>
           </div>
         )}
       </PanelState>

@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { Bidi, Dialog, PanelState, useResource } from "@shell";
 import { api } from "./api.js";
-import { GroupNumbers } from "./GroupRow.jsx";
+import { GroupBadges, GroupNumbers } from "./GroupRow.jsx";
 import { PICKER_LIMIT, SEARCH_DEBOUNCE_MS } from "./groups.js";
 
 // Choosing the other group of a merge, a move or a contradiction link: search by text,
 // entity or id; `suggested` groups (merge suggestions for this group) are listed first.
-// Arrow keys in the search field move the choice, Enter confirms.
+// Arrow keys in the search field move the choice, Enter confirms. `notes(choice)` shows what
+// the choice would mean (a merge: a dispute, a withheld group released) under the list, and
+// `confirmFor(choice)` may word the confirm button for it.
 
 function Option({ group, chosen, hint, onChoose }) {
   return (
@@ -15,8 +17,9 @@ function Option({ group, chosen, hint, onChoose }) {
         <Bidi as="span" className="line-clamp-2 block">
           {group.claim_text}
         </Bidi>
-        <span className="flex items-center gap-2">
-          {hint && <span className="badge badge-amber">{hint}</span>}
+        <span className="flex flex-wrap items-center gap-2">
+          {hint && <span className="badge badge-sky">{hint}</span>}
+          <GroupBadges group={group} />
           <GroupNumbers group={group} />
         </span>
       </button>
@@ -24,10 +27,10 @@ function Option({ group, chosen, hint, onChoose }) {
   );
 }
 
-export function GroupPicker({ title, description, excludeId, suggested = [], confirmLabel, tone, onClose, onConfirm }) {
+export function GroupPicker({ title, description, excludeId, suggested = [], initial, confirmLabel, confirmFor, notes, tone, onClose, onConfirm }) {
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
-  const [choice, setChoice] = useState(suggested[0]?.group_id);
+  const [choice, setChoice] = useState(initial ?? suggested[0]?.group_id);
   useEffect(() => {
     const timer = setTimeout(() => setSearch(query.trim()), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
@@ -55,7 +58,7 @@ export function GroupPicker({ title, description, excludeId, suggested = [], con
       size="lg"
       title={title}
       tone={tone}
-      confirmLabel={confirmLabel}
+      confirmLabel={(choice && confirmFor?.(choice)) || confirmLabel}
       confirmDisabled={!choice}
       onClose={onClose}
       onConfirm={() => onConfirm(choice)}
@@ -89,6 +92,7 @@ export function GroupPicker({ title, description, excludeId, suggested = [], con
           {options.length === 0 && <li className="p-2 text-slate-500">No groups found.</li>}
         </ul>
       </PanelState>
+      {choice && notes && <div className="mt-3">{notes(choice)}</div>}
     </Dialog>
   );
 }

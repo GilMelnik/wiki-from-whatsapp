@@ -15,20 +15,24 @@ import { GroupActions } from "./GroupActions.jsx";
 import { DialogHost } from "./GroupDialogs.jsx";
 import { GroupDetail } from "./GroupDetail.jsx";
 import { GroupRow } from "./GroupRow.jsx";
-import { DEFAULT_VIEW, PAGE_SIZE, pickedIn, SEARCH_DEBOUNCE_MS, togglePick, viewParams } from "./groups.js";
+import { DEFAULT_VIEW, PAGE_SIZE, pickedIn, SEARCH_DEBOUNCE_MS, togglePick, viewParams, WITHHELD_MODE } from "./groups.js";
 import { GroupsToolbar } from "./GroupsToolbar.jsx";
 
-// The groups view: every group (list, paged and filtered by the server), the selected group
-// in full (main) and what can be done with it (side). Every change is saved at once; the
-// server answers which group to show next.
+// A groups list: every group, or (mode "withheld") the groups the owner's rule keeps off the
+// wiki (a negative statement that names an entity, from fewer than two members), computed
+// live by the server; the list is paged and filtered by the server, the selected group in
+// full (main) and what can be done with it (side). Every change is saved at once; the server
+// answers which group to show next. Each mode keeps its own filters and selection.
 
 const NOTHING_PICKED = { groupId: null, claimIds: [] };
 
-export function GroupsView({ tool, toolId, modeTabs, summary }) {
+export function GroupsView({ watch, toolId, mode, modeTabs, summary }) {
   const toast = useToast();
-  const [view, setView] = useStoredState(toolId, "view", DEFAULT_VIEW);
+  const withheldList = mode === WITHHELD_MODE;
+  const [stored, setView] = useStoredState(toolId, `${mode}.view`, DEFAULT_VIEW);
+  const view = withheldList ? { ...stored, withheld: true } : stored;
   const [query, setQuery] = useState(view.q);
-  const [selectedId, setSelectedId] = useStoredState(toolId, "selected", null);
+  const [selectedId, setSelectedId] = useStoredState(toolId, `${mode}.selected`, null);
   const [offset, setOffset] = useState(0);
   const [picked, setPicked] = useState(NOTHING_PICKED);
   const [dialog, setDialog] = useState(null);
@@ -36,12 +40,12 @@ export function GroupsView({ tool, toolId, modeTabs, summary }) {
   const searchRef = useRef(null);
   const params = viewParams(view);
 
-  const list = useResource(() => api.get("/groups", { ...params, offset, limit: PAGE_SIZE }), [view, offset], {
-    watch: tool.reads,
+  const list = useResource(() => api.get("/groups", { ...params, offset, limit: PAGE_SIZE }), [stored, offset], {
+    watch,
     keepPrevious: true,
   });
-  const detail = useResource(() => (selectedId ? api.get(groupPath(selectedId), params) : null), [selectedId, view], {
-    watch: tool.reads,
+  const detail = useResource(() => (selectedId ? api.get(groupPath(selectedId), params) : null), [selectedId, stored], {
+    watch,
   });
   const group = detail.data?.group;
   const queue = detail.data?.queue;
@@ -102,7 +106,11 @@ export function GroupsView({ tool, toolId, modeTabs, summary }) {
       fire(() => api.post(`${path}/representative`, { claim_id: claimId }), claimId ? "Representative text updated" : "The representative text will be chosen automatically"),
     link: (otherId, linked) =>
       fire(() => api.post(`${path}/contradictions`, { group_id: otherId, linked }), linked ? "Contradiction link restored" : "Contradiction link removed"),
-    mergeWith: (otherId) => fire(() => api.post("/groups/merge", { group_ids: [group.group_id, otherId] }), "Groups merged"),
+    mergeWith: (pair) => {
+      const other = pair.a.group_id === group.group_id ? pair.b : pair.a;
+      if (pair.dispute) setDialog({ kind: "merge", choice: other.group_id });
+      else fire(() => api.post("/groups/merge", { group_ids: [group.group_id, other.group_id] }), "Groups merged");
+    },
     notSame: (otherId) => fire(() => api.post("/not-same", { group_ids: [group.group_id, otherId] }), "Marked: not the same"),
     merge: () => setDialog({ kind: "merge" }),
     split: () => chosen.length > 0 && chosen.length < group.size && setDialog({ kind: "split" }),
@@ -125,7 +133,13 @@ export function GroupsView({ tool, toolId, modeTabs, summary }) {
       hasData={Boolean(list.data)}
       onRetry={list.reload}
       empty={list.data?.total === 0}
-      emptyText={view.q ? "No groups match the search" : "No groups in this filter"}
+      emptyText={
+        view.q
+          ? "No groups match the search"
+          : withheldList
+            ? "No group is withheld: every negative statement that names an entity was reported by enough members"
+            : "No groups in this filter"
+      }
     >
       <ItemList
         items={list.data?.items ?? []}
@@ -136,7 +150,7 @@ export function GroupsView({ tool, toolId, modeTabs, summary }) {
         prevKey={queue?.prev_id}
         nextKey={queue?.next_id}
         header={<Pager offset={offset} limit={PAGE_SIZE} total={list.data?.total ?? 0} onChange={goToPage} />}
-        renderItem={(item) => <GroupRow group={item} />}
+        renderItem={(item) => <GroupRow group={item} withheldList={withheldList} />}
       />
     </PanelState>
   );
@@ -146,14 +160,23 @@ export function GroupsView({ tool, toolId, modeTabs, summary }) {
       <Layout
         toolId={toolId}
         toolbar={
-          <GroupsToolbar ref={searchRef} modeTabs={modeTabs} query={query} onQuery={setQuery} view={view} onView={changeView} summary={summary.data} />
+          <GroupsToolbar
+            ref={searchRef}
+            modeTabs={modeTabs}
+            query={query}
+            onQuery={setQuery}
+            view={view}
+            onView={changeView}
+            summary={summary.data}
+            withheldList={withheldList}
+          />
         }
         list={listPanel}
-        main={<GroupDetail detail={detail} selectedId={selectedId} picked={picked} saving={saving} on={on} />}
+        main={<GroupDetail detail={detail} selectedId={selectedId} picked={picked} saving={saving} minSupporters={summary.data?.withhold_min_supporters} on={on} />}
         side={<GroupActions detail={detail} picked={picked} saving={saving} on={on} />}
         listWidth={{ initial: 360 }}
       />
-      <DialogHost dialog={dialog} group={group} picked={picked} close={() => setDialog(null)} act={act} />
+      <DialogHost dialog={dialog} group={group} picked={picked} minSupporters={summary.data?.withhold_min_supporters} watch={watch} close={() => setDialog(null)} act={act} />
     </>
   );
 }
