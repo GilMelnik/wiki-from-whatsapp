@@ -103,6 +103,14 @@ class LLMClient:
     def supports_batch(self) -> bool:
         return self._provider.supports_batch
 
+    @property
+    def usage(self) -> list[dict[str, Any]]:
+        """Token usage as the provider's API reported it, one entry per response, in order
+        (``request_id`` is the batch item's id, ``None`` for a sync call). Answers served
+        from the disk cache add nothing."""
+
+        return self._provider.usage
+
     def _cache_key(
         self,
         system: PromptInput,
