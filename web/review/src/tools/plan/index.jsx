@@ -2,22 +2,36 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ItemList, kindOf, labelItems, Layout, nodeById, PanelState, useBanner, useJobs, useResource, useShortcuts, useStoredState, useToast } from "@shell";
 import { ActionsPanel } from "./ActionsPanel.jsx";
 import { api } from "./api.js";
-import { assignmentRows, DETAILS_TAB, GROUPS_TAB, isAssignmentRow, PROPOSALS_ID, UNPLACED_ID, WAITING_ID } from "./assign.js";
+import {
+  assignmentRows,
+  DETAILS_TAB,
+  GROUPS_TAB,
+  isAssignmentRow,
+  isProposalRow,
+  nextProposalRow,
+  proposalOfRow,
+  proposalRowId,
+  PROPOSALS_ID,
+  UNPLACED_ID,
+  WAITING_ID,
+} from "./assign.js";
 import { GroupsPanel } from "./AssignmentViews.jsx";
 import { DialogHost } from "./Dialogs.jsx";
 import { CategoryView, LabelView } from "./ItemViews.jsx";
 import { Overview } from "./Overview.jsx";
 import { PageView } from "./PageView.jsx";
 import { LABELS_VIEW, OVERVIEW_ID, reorderOp, TOOL_ID, TREE_VIEW, treeItems } from "./plan.js";
-import { ProposalsView } from "./ProposalsView.jsx";
+import { ProposalDetail, ProposalsView } from "./ProposalsView.jsx";
 import { LabelRow, TreeRow } from "./Rows.jsx";
 import { Toolbar } from "./Toolbar.jsx";
 
 // The wiki plan: the page tree the planning model proposed, made the owner's, and (once step
 // 6b has run) where the classifier put every claim group. The list is the tree (phases →
-// categories → pages, with the groups on no page and the step's proposals on top) or the
-// labels by kind; the main column shows the selected item (for a page: its scope with
-// example claims and coverage, or its claim groups); the side column holds the actions.
+// categories → pages, with the groups on no page and the step's proposals, each to decide,
+// on top) or the labels by kind; the main column shows the selected item (the overview: what
+// there is to do; a page: its scope next to a sample of its groups, the closest groups it did
+// not get and its exact size, or all its claim groups; a proposal: its groups and dry run);
+// the side column holds the actions, or the decision on a proposal.
 // Every plan change is one validated operation on the server, previewed in a dialog first
 // when it changes the structure or a scope; group moves pin the groups; the last changes of
 // both kinds can be undone. A re-plan or an assignment run underneath shows up without a
@@ -39,22 +53,31 @@ function PlanTool({ tool }) {
   // The assignments are a write of the tool (an optional file): views follow them too.
   const watch = useMemo(() => [...new Set([...tool.reads, ...tool.writes])], [tool.reads, tool.writes]);
   // While a step rewrites a file the tool writes, the server refuses saves (423).
-  const locked = tool.writes.some((key) => runningByArtifact[key]);
+  const lockedBy = tool.writes.map((key) => runningByArtifact[key]).find(Boolean) ?? null;
+  const locked = Boolean(lockedBy);
 
   const plan = useResource(() => api.get("/plan"), [], { watch });
   const overview = plan.data;
   const ready = Boolean(overview?.nodes);
+  const assigned = Boolean(overview?.assignments?.exists && !overview.assignments.problem);
+  const proposals = useResource(() => (assigned ? api.get("/proposals") : null), [assigned], { watch });
+  const proposalItems = proposals.data?.items ?? [];
   const labelsView = view === LABELS_VIEW;
-  const items = labelsView ? labelItems(overview) : ready ? [treeItems(overview)[0], ...assignmentRows(overview), ...overview.nodes] : [];
+  const items = labelsView ? labelItems(overview) : ready ? [treeItems(overview)[0], ...assignmentRows(overview, proposalItems), ...overview.nodes] : [];
   const selectedId = labelsView ? labelId : nodeId;
   const kind = kindOf(overview, selectedId);
+  const proposal = labelsView ? null : proposalOfRow(proposalItems, selectedId);
 
   // Keep the selection on something that exists (after a merge, a delete or a re-plan).
   useEffect(() => {
     if (!ready) return;
     if (nodeId !== OVERVIEW_ID && !isAssignmentRow(nodeId) && !nodeById(overview, nodeId)) setNodeId(OVERVIEW_ID);
+    // A proposal decided elsewhere (or gone with a new run) leaves its row: back to the list.
+    if (proposals.data && isProposalRow(nodeId) && !proposalOfRow(proposalItems, nodeId)) {
+      setNodeId(PROPOSALS_ID);
+    }
     if (!overview.labels[labelId]) setLabelId(labelItems(overview)[0]?.id ?? null);
-  }, [overview]);
+  }, [overview, proposals.data]);
 
   const select = (id) => {
     if (id && overview.labels[id]) {
@@ -114,19 +137,27 @@ function PlanTool({ tool }) {
       else toast.info("Nothing to change: the groups are already like that.");
       return result;
     });
-  const accept = (proposal, op) =>
+  // After a decision on the shown proposal, the next one to decide is shown (else the list).
+  const moveOn = (decided) => {
+    if (nodeId === proposalRowId(decided.id)) setNodeId(nextProposalRow(proposalItems, decided.id));
+  };
+  const accept = (decided, op) =>
     saveWith(async () => {
-      const result = await api.post(`/proposals/${encodeURIComponent(proposal.id)}/accept`, { operation: op });
+      const result = await api.post(`/proposals/${encodeURIComponent(decided.id)}/accept`, { operation: op });
       plan.setData(result.overview);
+      proposals.reload();
       toast.success(result.label);
       setOffer({ label: result.label, focus: result.focus, at: new Date().toISOString() });
+      moveOn(decided);
       return result;
     });
-  const decide = (proposal, action) =>
+  const decide = (decided, action) =>
     saveWith(async () => {
-      const result = await api.post(`/proposals/${encodeURIComponent(proposal.id)}/${action}`);
+      const result = await api.post(`/proposals/${encodeURIComponent(decided.id)}/${action}`);
       plan.setData(result.overview);
+      proposals.reload();
       toast.success(result.label);
+      if (action === "reject") moveOn(decided);
     }).catch((error) => toast.error(error));
   const undo = async () => {
     if (saving || !overview?.undo) return;
@@ -156,7 +187,7 @@ function PlanTool({ tool }) {
       if (op) quick(op).catch(() => {});
     },
     showTab: setTab,
-    openAccept: (proposal) => open("accept", null, { proposal }),
+    openAccept: (chosen) => open("accept", null, { proposal: chosen }),
     decide,
     dismissOffer: () => setOffer(null),
   };
@@ -185,6 +216,14 @@ function PlanTool({ tool }) {
       run: () => (kind === "page" || kind === "label") && setTab(tab === GROUPS_TAB ? DETAILS_TAB : GROUPS_TAB),
     },
   ]);
+  // The decision on the shown proposal (bound only then: a and x pick and remove in a group list).
+  useShortcuts(
+    [
+      { keys: "a", label: "Accept the proposal (opens it to correct first)", run: () => can && proposal && !(proposal.kind === "scope" && !proposal.target.page_id) && on.openAccept(proposal) },
+      { keys: "x", label: "Reject the proposal", run: () => can && proposal && decide(proposal, "reject") },
+    ],
+    { enabled: Boolean(proposal) }
+  );
 
   const list = (
     <PanelState
@@ -213,7 +252,9 @@ function PlanTool({ tool }) {
   else if (!labelsView && (selectedId === UNPLACED_ID || selectedId === WAITING_ID)) {
     main = <GroupsPanel {...groups} scope={selectedId === UNPLACED_ID ? "unplaced" : "waiting"} />;
   } else if (!labelsView && selectedId === PROPOSALS_ID) {
-    main = <ProposalsView overview={overview} watch={watch} busy={saving || locked} offer={offer} on={on} />;
+    main = <ProposalsView overview={overview} proposals={proposals} busy={saving || locked} offer={offer} on={on} />;
+  } else if (proposal) {
+    main = <ProposalDetail proposal={proposal} overview={overview} offer={offer} on={on} />;
   } else if (kind === "page") {
     main = <PageView overview={overview} pageId={selectedId} saving={saving} reads={watch} scopeRef={scopeRef} tab={tab} groups={groups} on={on} />;
   } else if (kind === "category") main = <CategoryView overview={overview} nodeId={selectedId} saving={saving} on={on} />;
@@ -224,10 +265,23 @@ function PlanTool({ tool }) {
     <>
       <Layout
         toolId={tool.id}
-        toolbar={<Toolbar overview={overview} view={view} onView={setView} onSelect={select} onUndo={undo} saving={saving || locked} />}
+        toolbar={<Toolbar overview={overview} view={view} onView={setView} onUndo={undo} saving={saving || locked} />}
         list={list}
         main={main}
-        side={ready && <ActionsPanel overview={overview} selectedId={selectedId} labelsView={labelsView} saving={saving || locked} tab={tab} on={on} />}
+        side={
+          ready && (
+            <ActionsPanel
+              overview={overview}
+              selectedId={selectedId}
+              proposal={proposal}
+              labelsView={labelsView}
+              saving={saving || locked}
+              lockedBy={lockedBy}
+              tab={tab}
+              on={on}
+            />
+          )
+        }
         listWidth={{ initial: 340 }}
       />
       <DialogHost dialog={dialog} overview={overview} close={() => setDialog(null)} save={save} accept={accept} />

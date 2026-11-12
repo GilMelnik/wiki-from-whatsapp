@@ -26,21 +26,23 @@ export function ChangeBadge({ overview, id }) {
   );
 }
 
-/** The warnings that name `id` (or the given list), each with links to the items it names. */
-export function Warnings({ overview, id, warnings, onSelect }) {
-  const list = warnings ?? warningsFor(overview, id);
+const WARNING_TONES = { warning: "note-warning", info: "note-plain" };
+
+/** The warnings that name `id`, each with links to the other items it names. */
+export function Warnings({ overview, id, onSelect }) {
+  const list = warningsFor(overview, id);
   if (list.length === 0) return null;
   return (
     <ul className="space-y-2">
       {list.map((warning) => (
-        <li key={`${warning.code}:${warning.ids.join(",")}`} className="rounded border border-amber-200 bg-amber-50 p-3 text-amber-900">
+        <li key={`${warning.code}:${warning.ids.join(",")}`} className={`note ${WARNING_TONES[warning.tone] ?? "note-warning"}`}>
           <p>{warning.text}</p>
           {warning.ids.some((other) => other !== id) && (
             <p className="mt-1 flex flex-wrap gap-1">
               {warning.ids
                 .filter((other) => other !== id)
                 .map((other) => (
-                  <button key={other} type="button" className="badge badge-amber hover:bg-amber-200" onClick={() => onSelect(other)}>
+                  <button key={other} type="button" className="badge badge-amber hover:underline" onClick={() => onSelect(other)}>
                     <Bidi>{titleOf(overview, other)}</Bidi>
                   </button>
                 ))}
@@ -64,14 +66,6 @@ export function MergedFrom({ ids }) {
         </Ltr>
       ))}
     </p>
-  );
-}
-
-export function Key({ children }) {
-  return (
-    <kbd dir="ltr" className="ms-1 rounded border border-current px-1 font-mono text-[10px] opacity-70">
-      {children}
-    </kbd>
   );
 }
 

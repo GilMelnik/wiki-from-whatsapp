@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
-import { Bidi, countText, EditableText, formatCount, groupCount, Ltr, Panel, PanelState, pathTitles, TextArea, textToAliases, useResource } from "@shell";
+import { Bidi, countText, EditableText, formatCount, Ltr, Panel, PanelState, pathTitles, TextArea, textToAliases, useResource } from "@shell";
 import { api, pagePath } from "./api.js";
 import { GROUPS_TAB } from "./assign.js";
 import { ItemGroups, ItemTabs } from "./AssignmentViews.jsx";
 import { ChangeBadge, MergedFrom, Warnings } from "./bits.jsx";
 import { aliasesToText } from "./plan.js";
+import { ScopeEvidence } from "./ScopeEvidence.jsx";
 
 // Main column for a page, in two tabs. Details: the scope is the star, a large editor, with
-// the evidence to judge it right next to it, the page's example claim groups (their text,
-// from the groups file) and the coverage numbers of the planning run; saving a scope goes
-// through a dialog that says the page's claims will be classified again. Claim groups: what
-// the assignment step put on the page, least certain first, to check and move.
+// the evidence to judge it right next to it (ScopeEvidence: its size, a sample of its groups,
+// the closest groups it did not get, the model's examples); its warnings (a size outside the
+// guide among them) above; saving a scope goes through a dialog that says the page's claims
+// will be classified again. Claim groups: what the assignment step put on the page, least
+// certain first, to check and move.
 
 function ScopeEditor({ page, saving, scopeRef, onSave }) {
   const [draft, setDraft] = useState(page.scope);
@@ -89,55 +91,6 @@ function AliasesEditor({ page, saving, onSave }) {
   );
 }
 
-function CoverageCard({ coverage, report }) {
-  if (!report) return <p className="text-slate-400">No coverage report (it is made at planning time).</p>;
-  if (!coverage?.measured) return <p className="text-slate-500">The page was added after the coverage check, so it has no numbers.</p>;
-  return (
-    <div className="space-y-1">
-      <p>
-        <span className="text-2xl font-semibold">{formatCount(coverage.count + coverage.merged_count)}</span>
-        <span className="text-slate-600"> of {groupCount(report.sample_size, formatCount)} in the sample were assigned to the page</span>
-      </p>
-      <p className="text-slate-600">
-        About {formatCount(coverage.projected + coverage.merged_projected)} of {groupCount(report.total_groups, formatCount)} in all
-        {coverage.merged_count > 0 && ` (including ${formatCount(coverage.merged_count)} of pages merged into it)`}.
-      </p>
-      {coverage.small && <p className="badge badge-amber">Very few claims</p>}
-      {coverage.large && <p className="badge badge-amber">Very many claims</p>}
-      {coverage.scope_changed && <p className="text-xs text-amber-800">The scope changed since the check; the numbers describe the previous scope.</p>}
-      <p className="text-xs text-slate-400">By the cheap model's classification at planning (confidence, not measured accuracy).</p>
-    </div>
-  );
-}
-
-function Examples({ examples, groupsAvailable }) {
-  if (!groupsAvailable) return <p className="text-slate-400">The claim groups file was not found, so there is no text to show.</p>;
-  if (examples.length === 0) return <p className="text-slate-400">The page has no example groups.</p>;
-  return (
-    <ul className="space-y-2">
-      {examples.map((group) =>
-        group.missing ? (
-          <li key={group.group_id} className="text-xs text-slate-400">
-            The group <Ltr>{group.group_id}</Ltr> is no longer in the groups file.
-          </li>
-        ) : (
-          <li key={group.group_id} className="rounded border border-slate-200 bg-white p-2">
-            <Bidi as="p" className="leading-relaxed">{group.claim_text}</Bidi>
-            <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-              <span>{countText(group.supporter_count, "supporter", formatCount)} · {countText(group.opposer_count, "opposer", formatCount)}</span>
-              {group.claim_count > 1 && <span>{formatCount(group.claim_count)} similar claims</span>}
-              {(group.entity_names ?? []).map((name) => (
-                <Bidi key={name} className="badge badge-slate">{name}</Bidi>
-              ))}
-              <Ltr className="text-slate-400">{group.group_id}</Ltr>
-            </p>
-          </li>
-        )
-      )}
-    </ul>
-  );
-}
-
 export function PageView({ overview, pageId, saving, reads, scopeRef, tab, groups, on }) {
   const page = overview.pages[pageId];
   const detail = useResource(() => api.get(pagePath(pageId)), [pageId], { watch: reads });
@@ -149,7 +102,7 @@ export function PageView({ overview, pageId, saving, reads, scopeRef, tab, group
         <span className="flex flex-wrap items-center gap-2">
           <span className="badge badge-emerald">Page</span>
           <Bidi>{pathTitles(overview, pageId).join(" › ")}</Bidi>
-          <Ltr>{pageId}</Ltr>
+          <Ltr className="text-slate-400">{pageId}</Ltr>
           <ChangeBadge overview={overview} id={pageId} />
         </span>
       }
@@ -178,19 +131,10 @@ function PageDetails({ overview, page, pageId, detail, saving, scopeRef, on }) {
           <AliasesEditor key={pageId} page={page} saving={saving} onSave={(aliases) => on.edit(pageId, { aliases })} />
           <MergedFrom ids={page.merged_from} />
         </div>
-        <div className="space-y-6 xl:col-span-2">
-          <section>
-            <h3 className="section-title">Coverage check</h3>
-            <PanelState loading={detail.loading} error={detail.error} hasData={Boolean(detail.data)} onRetry={detail.reload}>
-              <CoverageCard coverage={detail.data?.coverage} report={overview.coverage} />
-            </PanelState>
-          </section>
-          <section>
-            <h3 className="section-title">Example claim groups</h3>
-            <PanelState loading={detail.loading} error={detail.error} hasData={Boolean(detail.data)} onRetry={detail.reload}>
-              <Examples examples={detail.data?.examples ?? []} groupsAvailable={overview.groups_available} />
-            </PanelState>
-          </section>
+        <div className="xl:col-span-2">
+          <PanelState loading={detail.loading} error={detail.error} hasData={Boolean(detail.data)} onRetry={detail.reload}>
+            {detail.data && <ScopeEvidence overview={overview} detail={detail} onGroups={() => on.showTab(GROUPS_TAB)} />}
+          </PanelState>
         </div>
       </div>
     </>

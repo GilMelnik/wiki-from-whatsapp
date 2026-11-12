@@ -1,28 +1,16 @@
-import { Bidi, kindOf, Ltr, nodeById, Panel, titleOf } from "@shell";
+import { ActionButton, Bidi, Kbd, kindOf, nodeById, Panel } from "@shell";
 import { DETAILS_TAB, GROUPS_TAB, isAssignmentRow } from "./assign.js";
-import { Key } from "./bits.jsx";
-import { OVERVIEW_ID, reorderOp } from "./plan.js";
+import { reorderOp } from "./plan.js";
 
-// Side column: what can be done with the selected item. Every button opens a dialog that
-// shows the consequences first, except reordering, which only changes the navigation order.
-
-function Button({ onClick, disabled, children, danger, title }) {
-  return (
-    <button type="button" title={title} className={`btn btn-sm btn-block justify-between ${danger ? "text-rose-700" : ""}`} disabled={disabled} onClick={onClick}>
-      {children}
-    </button>
-  );
-}
+// Side column: what can be done with the selected item, each with its key; for a proposal of
+// the assignment step, the decision on it. Every structural change opens a dialog that shows
+// its consequences first; reordering only changes the navigation order.
 
 function Reorder({ node, saving, on }) {
   return (
     <div className="grid grid-cols-2 gap-2">
-      <Button disabled={saving || !reorderOp(node, -1)} onClick={() => on.reorder(node.id, -1)}>
-        ↑ Up <Key>Alt+↑</Key>
-      </Button>
-      <Button disabled={saving || !reorderOp(node, 1)} onClick={() => on.reorder(node.id, 1)}>
-        ↓ Down <Key>Alt+↓</Key>
-      </Button>
+      <ActionButton label="↑ Up" keyName="Alt+↑" disabled={saving || !reorderOp(node, -1)} onClick={() => on.reorder(node.id, -1)} />
+      <ActionButton label="↓ Down" keyName="Alt+↓" disabled={saving || !reorderOp(node, 1)} onClick={() => on.reorder(node.id, 1)} />
     </div>
   );
 }
@@ -30,33 +18,28 @@ function Reorder({ node, saving, on }) {
 function PageActions({ id, saving, on }) {
   return (
     <>
-      <Button disabled={saving} onClick={() => on.open("split", id)}>Split a new page off it… <Key>s</Key></Button>
-      <Button disabled={saving} onClick={() => on.open("merge", id)}>Merge with other pages… <Key>m</Key></Button>
-      <Button disabled={saving} onClick={() => on.open("move", id)}>Move to another category… <Key>t</Key></Button>
-      <Button disabled={saving} onClick={() => on.open("changeId", id)}>Change the id…</Button>
-      <Button danger disabled={saving} onClick={() => on.open("delete", id)}>Delete the page… <Key>Del</Key></Button>
+      <ActionButton label="Split a new page off it…" keyName="s" disabled={saving} onClick={() => on.open("split", id)} />
+      <ActionButton label="Merge with other pages…" keyName="m" disabled={saving} onClick={() => on.open("merge", id)} />
+      <ActionButton label="Move to another category…" keyName="t" disabled={saving} onClick={() => on.open("move", id)} />
+      <ActionButton label="Change the id…" disabled={saving} onClick={() => on.open("changeId", id)} />
+      <ActionButton label="Delete the page…" keyName="Del" danger disabled={saving} onClick={() => on.open("delete", id)} />
     </>
   );
 }
 
 function CategoryActions({ node, saving, on }) {
+  const empty = node.children.length === 0;
   return (
     <>
-      <Button disabled={saving} onClick={() => on.open("addPage", null, { parentId: node.id })}>
-        New page in the category… <Key>n</Key>
-      </Button>
-      <Button disabled={saving} onClick={() => on.open("addCategory", null, { parentId: node.id })}>New subcategory…</Button>
-      <Button disabled={saving} onClick={() => on.open("move", node.id)}>Move… <Key>t</Key></Button>
-      <Button disabled={saving} onClick={() => on.open("changeId", node.id)}>Change the id…</Button>
-      <Button
-        danger
-        disabled={saving || node.children.length > 0}
-        title={node.children.length > 0 ? "Only an empty category can be deleted: first move or delete what is in it" : undefined}
-        onClick={() => on.open("delete", node.id)}
-      >
-        Delete the category… <Key>Del</Key>
-      </Button>
-      {node.children.length > 0 && <p className="text-xs text-slate-500">Only an empty category can be deleted.</p>}
+      <ActionButton label="New page in the category…" keyName="n" disabled={saving} onClick={() => on.open("addPage", null, { parentId: node.id })} />
+      <ActionButton label="New subcategory…" disabled={saving} onClick={() => on.open("addCategory", null, { parentId: node.id })} />
+      <ActionButton label="Move…" keyName="t" disabled={saving} onClick={() => on.open("move", node.id)} />
+      <ActionButton label="Change the id…" disabled={saving} onClick={() => on.open("changeId", node.id)} />
+      {empty ? (
+        <ActionButton label="Delete the category…" keyName="Del" danger disabled={saving} onClick={() => on.open("delete", node.id)} />
+      ) : (
+        <p className="text-xs text-slate-500">Only an empty category can be deleted: first move or delete what is in it.</p>
+      )}
     </>
   );
 }
@@ -64,82 +47,82 @@ function CategoryActions({ node, saving, on }) {
 function LabelActions({ id, overview, saving, on }) {
   return (
     <>
-      <Button disabled={saving} onClick={() => on.open("merge", id)}>Merge with other labels… <Key>m</Key></Button>
-      <Button disabled={saving} onClick={() => on.open("changeId", id)}>Change the id…</Button>
-      <Button danger disabled={saving} onClick={() => on.open("delete", id)}>Delete the label… <Key>Del</Key></Button>
-      <Button disabled={saving} onClick={() => on.open("addLabel", null, { kind: overview.labels[id].kind })}>
-        New label of the same kind… <Key>n</Key>
-      </Button>
+      <ActionButton label="Merge with other labels…" keyName="m" disabled={saving} onClick={() => on.open("merge", id)} />
+      <ActionButton label="New label of the same kind…" keyName="n" disabled={saving} onClick={() => on.open("addLabel", null, { kind: overview.labels[id].kind })} />
+      <ActionButton label="Change the id…" disabled={saving} onClick={() => on.open("changeId", id)} />
+      <ActionButton label="Delete the label…" keyName="Del" danger disabled={saving} onClick={() => on.open("delete", id)} />
     </>
   );
 }
 
-function GroupsTab({ tab, on }) {
-  const groups = tab === GROUPS_TAB;
+function ProposalActions({ proposal, saving, on }) {
+  const blocked = proposal.kind === "scope" && !proposal.target.page_id;
   return (
-    <Button onClick={() => on.showTab(groups ? DETAILS_TAB : GROUPS_TAB)}>
-      {groups ? "Back to the details" : "Assigned claim groups…"} <Key>g</Key>
-    </Button>
+    <>
+      {!blocked && <ActionButton label="Accept…" keyName="a" primary disabled={saving} onClick={() => on.openAccept(proposal)} />}
+      <ActionButton label="Reject" keyName="x" danger disabled={saving} onClick={() => on.decide(proposal, "reject")} />
+      <p className="text-xs text-slate-500">
+        Accepting opens the change prefilled, to correct before it is saved; the next assignment run then places its
+        groups. A rejected proposal is not made again.
+      </p>
+    </>
   );
 }
 
 function MoveHelp() {
   return (
     <div className="space-y-1 text-xs text-slate-600">
-      <p>Pick groups with the boxes (or <Key>a</Key> for every shown one), then:</p>
-      <p><Key>p</Key> move to a page · <Key>2</Key> second page · <Key>x</Key> remove from here · <Key>o</Key> off every page</p>
-      <p><Key>b</Key> labels · <Key>r</Key> back to automatic assignment · <Key>f</Key> search · <Key>u</Key> undo</p>
+      <p>
+        Pick groups with the boxes (or <Kbd>a</Kbd> for every shown one), then:
+      </p>
+      <p>
+        <Kbd>p</Kbd> move to a page · <Kbd>2</Kbd> second page · <Kbd>x</Kbd> remove from here · <Kbd>o</Kbd> off every page
+      </p>
+      <p>
+        <Kbd>b</Kbd> labels · <Kbd>r</Kbd> back to automatic assignment · <Kbd>f</Kbd> search · <Kbd>u</Kbd> undo
+      </p>
       <p>Every move is saved at once and marks the group as assigned by hand: the assignment step will not decide it again.</p>
     </div>
   );
 }
 
-export function ActionsPanel({ overview, selectedId, labelsView, saving, tab, on }) {
+export function ActionsPanel({ overview, selectedId, proposal, labelsView, saving, lockedBy, tab, on }) {
   const kind = kindOf(overview, selectedId);
   const node = nodeById(overview, selectedId);
-  const special = !labelsView && isAssignmentRow(selectedId);
+  const special = !labelsView && isAssignmentRow(selectedId) && !proposal;
+  const itemGroups = (kind === "page" || kind === "label") && tab === GROUPS_TAB;
   return (
     <Panel
-      title="Actions"
-      subtitle={
-        selectedId && selectedId !== OVERVIEW_ID && kind ? (
-          <>
-            <Bidi>{titleOf(overview, selectedId)}</Bidi> <Ltr>{selectedId}</Ltr>
-          </>
-        ) : (
-          "Every change is checked before it is saved"
-        )
-      }
+      title={proposal ? "Decide" : "Actions"}
       footer={
-        <>
-          {labelsView ? (
-            <Button disabled={saving} onClick={() => on.open("addLabel", null, {})}>New label…</Button>
-          ) : (
-            <Button disabled={saving} onClick={() => on.open("addCategory", null, { parentId: null })}>New top-level category…</Button>
-          )}
-          <Button disabled={saving || !overview.undo} onClick={on.undo} title={overview.undo?.label}>
-            Undo the last change <Key>u</Key>
-          </Button>
-        </>
+        <ActionButton
+          label={labelsView ? "New label…" : "New top-level category…"}
+          disabled={saving}
+          onClick={() => on.open(labelsView ? "addLabel" : "addCategory", null, labelsView ? {} : { parentId: null })}
+        />
       }
     >
       <div className="space-y-2 p-4 text-sm">
-        {(kind === "page" || kind === "label") && <GroupsTab tab={tab} on={on} />}
+        {lockedBy && (
+          <p className="note note-warning p-2 text-xs">
+            <Bidi>{lockedBy.title}</Bidi> is running and rewriting a file this tool writes. You can read; changes open again
+            when it finishes.
+          </p>
+        )}
+        {proposal && <ProposalActions proposal={proposal} saving={saving} on={on} />}
+        {(kind === "page" || kind === "label") && (
+          <ActionButton label={itemGroups ? "Back to the details" : "Its claim groups"} keyName="g" onClick={() => on.showTab(itemGroups ? DETAILS_TAB : GROUPS_TAB)} />
+        )}
         {kind === "page" && <PageActions id={selectedId} saving={saving} on={on} />}
         {kind === "category" && <CategoryActions node={node} saving={saving} on={on} />}
         {kind === "label" && <LabelActions id={selectedId} overview={overview} saving={saving} on={on} />}
         {node && <Reorder node={node} saving={saving} on={on} />}
-        {(special || ((kind === "page" || kind === "label") && tab === GROUPS_TAB)) && <MoveHelp />}
-        {!kind && !special && (
+        {(special || itemGroups) && <MoveHelp />}
+        {!kind && !special && !proposal && (
           <p className="text-slate-500">
-            Select a page, category or label in the list. Text changes are saved at once; changes to
-            the structure or a scope open a window that first shows what will disappear, what will be
-            redirected and which claims will be classified again.
-          </p>
-        )}
-        {overview.undo && (
-          <p className="pt-2 text-xs text-slate-500">
-            Last change: {overview.undo.label}
+            Select a page, category or label in the list (<Kbd>j</Kbd> / <Kbd>k</Kbd>). Text changes are saved at once;
+            changes to the structure or a scope open a window that first shows what will disappear, what will be redirected
+            and which claims will be classified again.
           </p>
         )}
       </div>

@@ -52,7 +52,7 @@ export function GroupRow({ row, overview, scope, itemId, picked, onToggle }) {
   const labels = (row.labels ?? []).filter((id) => !(scope === "label" && id === itemId));
   const pickable = Boolean(row.record);
   return (
-    <li className={`flex gap-3 px-3 py-2 ${picked ? "bg-blue-50" : "hover:bg-slate-50"}`}>
+    <li className={`flex gap-3 px-3 py-2 ${picked ? "bg-blue-50" : "hover:bg-slate-50"}`} title={row.group_id}>
       <input
         type="checkbox"
         className="mt-1 shrink-0"
@@ -85,12 +85,16 @@ export function GroupRow({ row, overview, scope, itemId, picked, onToggle }) {
           {row.last_date && <span>until <Ltr>{row.last_date}</Ltr></span>}
           {row.claim_count > 1 && <span>{countText(row.claim_count, "claim", formatCount)}</span>}
           {row.manual && <span className="badge badge-sky" title="Assigned by hand: the assignment step will not decide it again">Manual</span>}
+          {row.withheld && (
+            <span className="badge badge-amber" title="A negative statement that names an entity, reported by too few members: kept off every page, and not counted in the page's size">
+              Withheld from the wiki
+            </span>
+          )}
           <Where row={row} overview={overview} scope={scope} itemId={itemId} />
           {labels.map((id) => (
             <Bidi key={id} className="badge badge-slate">{titleOf(overview, id)}</Bidi>
           ))}
           <Waiting row={row} />
-          <Ltr className="text-slate-400">{row.group_id}</Ltr>
         </p>
       </div>
     </li>
