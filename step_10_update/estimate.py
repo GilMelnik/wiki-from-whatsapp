@@ -4,9 +4,12 @@ Each paid step has an estimate mode that plans its run and makes no model call (
 8: ``run(estimate=True, count_tokens=...)``; step 6b: ``run(estimate=True)``). The Anthropic
 token counter needs credits, so the prompts are counted here by characters
 (``update.estimate.chars_per_token``). Output tokens are a typical figure per call
-(``output_tokens_per_call``); prices are ``usd_per_million_tokens`` per model, with
-``batch_discount`` when step 3 uses the batch API. Every figure is therefore rough; the
-estimate says what it counted.
+(``output_tokens_per_call``), except for step 3: the claims it writes grow with the
+conversations it reads, not with the number of calls (a split into more, smaller
+conversations repeats the instructions more often but yields about the same claims), so its
+output is ``extract_output_per_conversation_token`` times the conversations' tokens. Prices
+are ``usd_per_million_tokens`` per model, with ``batch_discount`` when step 3 uses the batch
+API. Every figure is therefore rough; the estimate says what it counted.
 
 ``paid_calls`` counts chat-model calls only. The cheap classifier (Jev) and the embeddings are
 priced but never stop the update: steps 1, 2, 4 and 5 use only them and run without a flag
@@ -21,6 +24,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from review_tool.steps import Step
+from step_3_extract.prompt import EXTRACT_SYSTEM
 from step_6_plan.assign_proposals import PROPOSALS_CONFIG
 from step_6_plan.assign_rules import ASSIGN_CONFIG
 from step_7_write_pages.run import UPDATE_CONFIG as PAGE_UPDATE_CONFIG
@@ -102,7 +106,9 @@ class Estimator:
     def _claims(self, run: RunFunction, key: str) -> Estimate:
         result = run(estimate=True, count_tokens=self._counter)
         calls = result["model_calls"]
-        output = calls * ESTIMATE_CONFIG["output_tokens_per_call"]["extract"]
+        instructions = calls * self._counter(EXTRACT_SYSTEM, "")
+        conversations = max(0, result["input_tokens"] - instructions)
+        output = math.ceil(conversations * ESTIMATE_CONFIG["extract_output_per_conversation_token"])
         cost = usd(result["model"], result["input_tokens"], output)
         if result["batch_mode"]:
             cost *= ESTIMATE_CONFIG["batch_discount"]
@@ -110,8 +116,9 @@ class Estimator:
             key, calls, cost,
             f"{calls} conversations to read ({result['update_calls']} of them already have "
             f"claims and are read for their new messages)",
-            f"{result['input_tokens']} input tokens by characters, {output} output tokens at "
-            f"a typical figure per call{', batch price' if result['batch_mode'] else ''}",
+            f"{result['input_tokens']} input tokens by characters ({instructions} of them the "
+            f"instructions repeated in every call), {output} output tokens in proportion to the "
+            f"conversations' length{', batch price' if result['batch_mode'] else ''}",
         )
 
     def _assignments(self, run: RunFunction, key: str) -> Estimate:

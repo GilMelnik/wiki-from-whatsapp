@@ -574,7 +574,7 @@
               "llm_client.stages.review.model",
               "llm_client.stages.apply.model"
             ],
-            "reviewed": true
+            "reviewed": false
           },
           {
             "title": "בניית האתר וגישה לסוכני AI",
@@ -695,8 +695,8 @@
     "estimate": {
       "chars_per_token": 3.0,
       "batch_discount": 0.5,
+      "extract_output_per_conversation_token": 1.1,
       "output_tokens_per_call": {
-        "extract": 1500,
         "write": 13000,
         "update": 6000,
         "review": 22000,
