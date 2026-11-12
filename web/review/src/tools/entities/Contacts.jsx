@@ -13,7 +13,7 @@ const STATE_LABELS = { contact: "Contact", uncertain: "Uncertain", rejected: "Re
 const STATE_TONES = { contact: "badge-emerald", uncertain: "badge-amber", rejected: "badge-slate" };
 
 function Source({ source }) {
-  if (!source) return <p className="text-xs text-slate-500">Not found in its claims (added by hand).</p>;
+  if (!source) return <p className="text-xs text-slate-500">None of its claims holds it now (typed by hand, or its claim changed).</p>;
   return (
     <p className="text-xs text-slate-600" title={`Claim ${source.claim_id}`}>
       From a claim about “<Bidi>{source.name}</Bidi>”:{" "}

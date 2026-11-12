@@ -32,6 +32,7 @@ function Owners({ owners, entitiesKnown }) {
 
 function Sources({ messages, index, value, chatKnown }) {
   if (!chatKnown) return <p className="text-xs text-slate-500">The chat export is not there, so the messages cannot be shown.</p>;
+  if (messages.length === 0) return <p className="text-xs text-slate-500">The claim names no chat message to show.</p>;
   const holding = messagesHolding(messages, index);
   if (holding.length === 0) {
     return <p className="text-xs text-slate-500">None of the claim's messages has this value word for word; its other messages are below.</p>;

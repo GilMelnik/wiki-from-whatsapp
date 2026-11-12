@@ -1,16 +1,17 @@
 import { Bidi, countText, formatCount, formatSpan, ThreadTag } from "@shell";
 import { automaticText, knowledgeText } from "./threads.js";
 
-// The rows of the list column: a conversation of the whole chat (with step 2's knowledge
-// label once step 2 has run), or of a gold window.
+// The rows of the list column: a conversation of the whole chat, or of a gold window. Of step
+// 2's knowledge label a row shows only what stands out (most conversations carry knowledge):
+// "No knowledge", and a label set by hand; the opened conversation shows the full answer.
 
 function Knowledge({ label }) {
-  const text = knowledgeText(label);
-  if (!text) return null;
+  if (!label || (label.value && !label.manual)) return null;
   return (
-    <span className={label.value ? "text-slate-500" : "text-amber-800"} title={automaticText(label)}>
-      {text}
-      {label.manual && " · set by hand"}
+    <span className={label.value ? "text-sky-800" : "text-amber-800"} title={automaticText(label)}>
+      {" · "}
+      {knowledgeText(label)}
+      {label.manual && ", set by hand"}
     </span>
   );
 }
@@ -18,16 +19,14 @@ function Knowledge({ label }) {
 export function ThreadRow({ row, query }) {
   return (
     <div className="space-y-0.5">
-      <div className="flex justify-between gap-2 text-xs text-slate-500">
-        <span>{formatSpan(row.start_time, row.last_time)}</span>
-        <Knowledge label={row.knowledge} />
-      </div>
+      <div className="text-xs text-slate-500">{formatSpan(row.start_time, row.last_time)}</div>
       <Bidi as="p" className="line-clamp-2 text-sm text-slate-900">
         {query && row.match ? row.match : row.opening}
       </Bidi>
       <div className="text-xs text-slate-500">
         {countText(row.size, "message")} · {countText(row.people, "person", formatCount, "people")}
         {row.matches > 0 && ` · ${countText(row.matches, "match", formatCount, "matches")}`}
+        <Knowledge label={row.knowledge} />
       </div>
     </div>
   );
