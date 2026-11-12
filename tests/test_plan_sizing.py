@@ -12,13 +12,14 @@ import pytest
 
 from step_6_plan import coverage
 from step_6_plan.model import PLAN_CONFIG, check_plan, validation_errors
-from step_6_plan.prompt import PLAN_SYSTEM
+from step_6_plan.prompt import plan_system
 from step_6_plan.run import run
 from tests.plan_fixtures import PAGE_IDS, FakeClassifier, FakeLLM, make_groups, make_plan, make_proposal
 from utils.json_io import write_json_file
 from utils.paths import Artifact
 
 GUIDE = PLAN_CONFIG["page_groups"]
+PLAN_SYSTEM = plan_system(100, 100)  # the instructions for a full list
 
 
 def test_prompt_carries_the_guide_from_config_and_no_page_count() -> None:

@@ -1,7 +1,8 @@
 """Step 6: let the planning model propose the wiki's structure from the claim groups (contract C7).
 
 How it works, in plain words: the model configured for stage ``plan.stage`` (Opus 5.5) reads
-every claim group of the effective step-5 file, one compact line each, and proposes a tree of
+every claim group of the effective step-5 file, one compact line each (or, when they do not fit
+``plan.max_input_tokens``, a sample of them: ``step_6_plan.fit``), and proposes a tree of
 content: an abstraction layer on top (for example the phases of the process), categories
 below it, and pages as the leaves (sized by ``plan.page_groups``, with ``plan.max_pages``
 only as a safety ceiling), each with a scope that says
@@ -10,9 +11,9 @@ country). The answer is validated (``step_6_plan.model``); on failure the model 
 with the errors. A coverage check (``step_6_plan.coverage``) then asks the cheap classifier to
 place a fixed sample of groups using only titles and scopes; if it finds real problems, the
 model gets ONE revision call, kept only when it does not lower the confident share. At most
-``plan.max_model_calls`` model calls per run. The prompt's token count is checked before each
-call: a corpus that would not fit the context window fails with a clear message instead of
-being truncated.
+``plan.max_model_calls`` model calls per run. The prompt's token count is checked with the
+counting endpoint before each call: a prompt that would not fit the context window fails with a
+clear message instead of being truncated.
 
 A plan is curated, not derived: the owner edits it (``step_6_plan.operations``, the plan
 review tool). So a normal run on an existing plan makes NO model call and writes nothing: it
@@ -37,12 +38,11 @@ from typing import Any
 
 import anthropic
 
-from step_6_plan.coverage import COVERAGE_CONFIG, coverage_check, findings
+from step_6_plan.coverage import COVERAGE_CONFIG, coverage_check, findings, named_group_ids
+from step_6_plan.fit import fitted_prompt
 from step_6_plan.model import PLAN_CONFIG, PlanError, validation_errors
 from step_6_plan.prompt import (
-    PLAN_SYSTEM,
     PROPOSAL_SCHEMA,
-    groups_block,
     initial_request,
     plan_from_proposal,
     retry_request,
@@ -75,7 +75,8 @@ class AnthropicTokenCounter:
 
 
 class Planner:
-    """The model calls of one planning run over a fixed list of groups."""
+    """The model calls of one planning run over a fixed list of groups (the prompt lists all of
+    them or a sample that fits ``plan.max_input_tokens``)."""
 
     def __init__(
         self,
@@ -89,8 +90,14 @@ class Planner:
         self.llm = llm
         self.count_tokens = count_tokens
         self.logger = logger
-        self.groups_text = groups_block(groups)
+        self.prompt = fitted_prompt(groups)
+        self.shown_count = len(self.prompt.shown)
         self.input_tokens: list[int] = []
+        logger.info(
+            f"Plan prompt: {self.shown_count} of {len(groups)} groups listed; about "
+            f"{self.prompt.estimated_tokens} input tokens by characters (plan.max_input_tokens "
+            f"{PLAN_CONFIG['max_input_tokens']})"
+        )
 
     @property
     def calls_left(self) -> int:
@@ -99,43 +106,51 @@ class Planner:
     def _ask(self, user: str, task: str) -> dict[str, Any]:
         if self.calls_left <= 0:
             raise RuntimeError(f"plan.max_model_calls ({PLAN_CONFIG['max_model_calls']}) used up")
-        user = f"{self.groups_text}\n\n{user}"
-        tokens = self.count_tokens(PLAN_SYSTEM, user)
+        user = self.prompt.user(user)
+        tokens = self.count_tokens(self.prompt.system, user)
         budget = PLAN_CONFIG["context_window_tokens"] - PLAN_CONFIG["max_output_tokens"]
         if tokens > budget:
             raise ValueError(
-                f"The planning prompt has {tokens} input tokens ({len(self.groups)} groups); "
-                f"with plan.max_output_tokens={PLAN_CONFIG['max_output_tokens']} it does not fit "
-                f"plan.context_window_tokens={PLAN_CONFIG['context_window_tokens']}. Nothing was "
-                "sent. The corpus outgrew one call: plan from a subset or split the input."
+                f"The planning prompt has {tokens} input tokens ({self.shown_count} of "
+                f"{len(self.groups)} groups listed); with plan.max_output_tokens="
+                f"{PLAN_CONFIG['max_output_tokens']} it does not fit plan.context_window_tokens="
+                f"{PLAN_CONFIG['context_window_tokens']}. Nothing was sent. The list was fitted "
+                f"to plan.max_input_tokens={PLAN_CONFIG['max_input_tokens']} by characters "
+                f"(plan.chars_per_token={PLAN_CONFIG['chars_per_token']}): lower one of them."
             )
         self.input_tokens.append(tokens)
         self.logger.info(f"Plan {task}: {tokens} input tokens; calling {self.llm.model}")
-        return self.llm.complete_json(PLAN_SYSTEM, user, task=task, response_schema=PROPOSAL_SCHEMA)
+        return self.llm.complete_json(
+            self.prompt.system, user, task=task, response_schema=PROPOSAL_SCHEMA
+        )
 
     def propose(self) -> dict[str, Any]:
         """A fresh, valid plan (one retry with the validation errors), else ``PlanError``."""
 
-        raw = self._ask(initial_request(len(self.groups)), "plan")
+        raw = self._ask(initial_request(self.shown_count, len(self.groups)), "plan")
         plan, errors = plan_from_proposal(raw, self.group_ids)
         if errors and self.calls_left > 0:
             self.logger.warning(f"Plan failed validation ({len(errors)} problems); retrying: {errors}")
-            raw = self._ask(retry_request(len(self.groups), raw, errors), "plan-retry")
+            raw = self._ask(
+                retry_request(self.shown_count, len(self.groups), raw, errors), "plan-retry"
+            )
             plan, errors = plan_from_proposal(raw, self.group_ids)
         if errors:
             raise PlanError(["the planning model's answer failed validation twice", *errors])
         return plan
 
-    def revise(
-        self, plan: dict[str, Any], sample_size: int, found: list[str]
-    ) -> dict[str, Any] | None:
-        """One revision call fed with the coverage findings; ``None`` if no call is left or
-        the revised plan is invalid (the caller keeps the plan it has)."""
+    def revise(self, plan: dict[str, Any], report: dict[str, Any]) -> dict[str, Any] | None:
+        """One revision call fed with the coverage report's findings (and the lines of the
+        groups they name that the list does not show); ``None`` if no call is left or the
+        revised plan is invalid (the caller keeps the plan it has)."""
 
         if self.calls_left <= 0:
             self.logger.info("Plan revision skipped: no model call left")
             return None
-        raw = self._ask(revision_request(plan, sample_size, found), "plan-revise")
+        named = set(named_group_ids(report)) - {group["group_id"] for group in self.prompt.shown}
+        unlisted = [group for group in self.groups if group["group_id"] in named]
+        request = revision_request(plan, report["sample_size"], report["findings"], unlisted)
+        raw = self._ask(request, "plan-revise")
         revised, errors = plan_from_proposal(raw, self.group_ids)
         if errors:
             self.logger.warning(f"Revised plan is invalid; keeping the first plan: {errors}")
@@ -162,7 +177,7 @@ def _plan_and_check(
     planner.logger.info(f"Coverage: {_coverage_line(report)}")
     if not (report["findings"] and COVERAGE_CONFIG["revise"]):
         return plan, report
-    revised = planner.revise(plan, report["sample_size"], report["findings"])
+    revised = planner.revise(plan, report)
     if revised is None:
         return plan, report
     revised_report = coverage_check(revised, groups, classifier)
@@ -232,6 +247,8 @@ def run(
         "git_commit": _git_commit(),
         "config": PLAN_CONFIG,
         "group_count": len(groups),
+        "shown_group_count": planner.shown_count,
+        "sample_seed": PLAN_CONFIG["sample_seed"],
         "planned_group_ids": sorted(planner.group_ids),
         "model_calls": len(planner.input_tokens),
         "input_tokens": planner.input_tokens,
