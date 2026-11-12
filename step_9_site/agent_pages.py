@@ -112,9 +112,7 @@ class AgentPages:
     @staticmethod
     def _disclaimer() -> str:
         disclaimer = SITE_CONFIG["disclaimer"]
-        return AGENT_CONFIG["disclaimer"].format(
-            terms_url=twin_url(TERMS_FILE), email=SITE_CONFIG["contact_email"], **disclaimer
-        )
+        return AGENT_CONFIG["disclaimer"].format(terms_url=twin_url(TERMS_FILE), **disclaimer)
 
     def _header(self, title: str, docs_file: str) -> list[str]:
         """Title, the disclaimer in one line, the address of the HTML page."""

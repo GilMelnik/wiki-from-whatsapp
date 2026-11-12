@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -62,3 +63,6 @@ def test_strict_build_renders_footer_on_every_page(tmp_path: Path) -> None:
         html = page.read_text(encoding="utf-8")
         assert site["coffee_text"] in html
         assert f'<a href="{site["coffee_url"]}" target="_blank" rel="noopener">{site["coffee_link_text"]}</a>' in html
+        lines = re.search(r'<div class="wiki-footer-lines">(.*?)</div>', html, re.S).group(1)
+        # the terms link first, the support line right under it
+        assert lines.index(site["terms"]["footer_link_text"]) < lines.index(site["coffee_text"])

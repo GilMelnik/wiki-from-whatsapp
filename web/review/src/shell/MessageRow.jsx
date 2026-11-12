@@ -1,4 +1,4 @@
-import { formatDateTime, formatTime } from "./format.js";
+import { formatDateTime, formatMoment } from "./format.js";
 import { Bidi, Ltr } from "./text.jsx";
 
 // The pieces of the shared message views: one message, the conversation chip, and the thin
@@ -55,7 +55,7 @@ function Highlighted({ text, query }) {
 }
 
 /**
- * Who this message replies to: the quoted person and time, and, when the quoted message sits
+ * Who this message replies to: the quoted person, date and time, and, when the quoted message sits
  * in another conversation, that conversation's chip — a strong hint that one of the two is
  * in the wrong place. A click scrolls to the quoted message (or opens its conversation).
  */
@@ -71,7 +71,7 @@ function ReplyLink({ reply, own, colors, onJump }) {
       className={`inline-flex items-center gap-1 hover:underline ${other ? "text-amber-800" : "text-blue-700"}`}
       title={other ? `The quoted message is in conversation ${reply.thread_id}` : "Show the quoted message"}
     >
-      ↩ replies to <Bidi>{reply.sender}</Bidi> {formatTime(reply.datetime)}
+      ↩ replies to <Bidi>{reply.sender}</Bidi> {formatMoment(reply.datetime)}
       {other && (
         <>
           {" "}in <ThreadTag info={colors.get(reply.thread_id)} threadId={reply.thread_id} /> <Ltr>{reply.thread_id}</Ltr>
@@ -82,7 +82,8 @@ function ReplyLink({ reply, own, colors, onJump }) {
 }
 
 /**
- * One message. `info`: its conversation's colour; `selected` / `onToggle` (omit `onToggle`
+ * One message, always with its exact date and time and its sender. `info`: its
+ * conversation's colour; `selected` / `onToggle` (omit `onToggle`
  * for a read-only view); `outside`: dimmed (outside the gold window); `showTag`: the
  * conversation chip before the time (timeline); `highlight`: a search to mark.
  */
@@ -113,7 +114,7 @@ export function MessageRow({ message, info, colors, selected, onToggle, outside,
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
           {showTag && <ThreadTag info={info} threadId={message.thread_id} />}
-          <span>{formatTime(message.datetime)}</span>
+          <span>{formatMoment(message.datetime)}</span>
           <Bidi className="font-medium text-slate-700">{message.sender}</Bidi>
           {message.reply_to && <ReplyLink reply={message.reply_to} own={message.thread_id} colors={colors} onJump={onJump} />}
         </div>

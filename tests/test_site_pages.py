@@ -90,10 +90,7 @@ def test_generated_config_turns_the_generator_notice_off_and_carries_the_page_se
     )
     extra = config["extra"]
     assert extra["generator"] is False
-    assert (
-        extra["disclaimer"] == SITE["disclaimer"]
-        and extra["contact_email"] == SITE["contact_email"]
-    )
+    assert extra["disclaimer"] == SITE["disclaimer"]
     assert extra["terms_path"] == "terms/"
     assert extra["refs_toggle"]["storage_key"] == SITE["refs_toggle"]["storage_key"]
 
@@ -121,7 +118,9 @@ def test_disclaimer_is_in_the_html_of_every_page(built_site: Path) -> None:
         if name.startswith("search/"):
             continue
         assert APPROVED_BANNER in html, name
-        assert f'href="mailto:{SITE["contact_email"]}"' in html, name
+        banner = re.search(r'<div class="wiki-disclaimer" role="note">(.*?)</div>', html, re.S).group(1)
+        # the contact address is on the terms page only
+        assert "mailto:" not in banner and SITE["contact_email"] not in banner, name
         terms_href = (
             r"\./" if name == "terms/index.html" else r"(?:\.\./|/)*terms/"
         )  # the terms page links to itself
@@ -197,6 +196,16 @@ def test_about_page_follows_a_model_change_in_config(
     )
     body = about_body()
     assert body.count("`model-after-a-change`") == 1
+
+
+def test_about_page_states_its_principles_before_the_steps() -> None:
+    about = SITE["about"]
+    body = about_body()
+    headings = [f"## {about[key]}" for key in ("principles_heading", "steps_heading", "links_heading")]
+    assert [body.index(heading) for heading in headings] == sorted(body.index(heading) for heading in headings)
+    assert all(f"- {principle}" in body for principle in about["principles"])
+    # step 1 uses the embedder since the new splitter
+    assert about["steps"][0]["models"] == ["embedding.model"]
 
 
 def test_config_value_names_the_missing_part() -> None:

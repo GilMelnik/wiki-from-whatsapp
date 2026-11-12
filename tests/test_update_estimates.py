@@ -3,17 +3,20 @@ prices come from config, and no test can build a real model client (the conftest
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from review_tool.steps import SERVED_STEPS
+from step_3_extract.prompt import EXTRACT_SYSTEM
 from step_10_update.estimate import CharTokenCounter, Estimator, embedding_usd
 from tests.assign_fixtures import FakeClassifier, Workspace
 from tests.plan_fixtures import make_groups
 from tests.review_fixtures import FakeReviewer, ReviewWorkspace, valid_answers
 from tests.test_extract_run import Corpus, FakeLLM, _message, answer_by_text
+from utils.config import section
 from utils.embedder import embed_texts
 from utils.llm_client import Classifier, LLMClient, Question
 from utils.paths import STEP_3, STEP_6_ASSIGN, STEP_7, STEP_8
@@ -59,6 +62,14 @@ def test_step_8_estimate_says_whether_a_call_is_due(tmp_path: Path) -> None:
     assert len(reviewer.calls) == calls
 
 
+# Step 3 writes in proportion to the conversations it reads: the million input tokens of the
+# two calls below, less the instructions sent with each call, times the configured ratio.
+EXTRACT_OUTPUT = math.ceil(
+    (1_000_000 - 2 * CharTokenCounter()(EXTRACT_SYSTEM, ""))
+    * section("update")["estimate"]["extract_output_per_conversation_token"]
+)
+
+
 def _results() -> dict[str, dict[str, Any]]:
     return {
         STEP_3: {"model": "claude-sonnet-5-5", "model_calls": 2, "update_calls": 1,
@@ -73,7 +84,7 @@ def _results() -> dict[str, dict[str, Any]]:
 
 
 @pytest.mark.parametrize(("key", "calls", "usd"), [
-    (STEP_3, 2, (1_000_000 * 2 + 2 * 1500 * 10) / 1e6 * 0.5),
+    (STEP_3, 2, (1_000_000 * 2 + EXTRACT_OUTPUT * 10) / 1e6 * 0.5),
     (STEP_6_ASSIGN, 1, 10 * 12200 * 0.042 / 1e6 + (30000 * 2 + 4000 * 10) / 1e6),
     (STEP_7, 2, (500_000 * 2 + 13000 * 10 + 500_000 * 2 + 6000 * 10) / 1e6),
     (STEP_8, 0, 0.0),

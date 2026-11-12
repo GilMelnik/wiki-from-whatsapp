@@ -58,6 +58,11 @@ export function formatDay(iso) {
   return iso ? day.format(new Date(iso)) : "—";
 }
 
+/** "Thu, 15 Aug 2024, 17:05": the exact moment of a chat message. */
+export function formatMoment(iso) {
+  return iso ? `${formatDay(iso)}, ${formatTime(iso)}` : "—";
+}
+
 /** "August 2024" */
 export function formatMonth(iso) {
   return iso ? month.format(new Date(iso)) : "—";
@@ -66,8 +71,6 @@ export function formatMonth(iso) {
 /** "Thu 15 Aug 2024, 17:05–19:40" (the end's day too when it differs). */
 export function formatSpan(start, end) {
   const sameDay = start?.slice(0, 10) === end?.slice(0, 10);
-  if (start === end) return `${formatDay(start)}, ${formatTime(start)}`;
-  return sameDay
-    ? `${formatDay(start)}, ${formatTime(start)}–${formatTime(end)}`
-    : `${formatDay(start)}, ${formatTime(start)} – ${formatDay(end)}, ${formatTime(end)}`;
+  if (start === end) return formatMoment(start);
+  return sameDay ? `${formatMoment(start)}–${formatTime(end)}` : `${formatMoment(start)} – ${formatMoment(end)}`;
 }
