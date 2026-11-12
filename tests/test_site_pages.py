@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import sys
+from html import unescape
 from pathlib import Path
 
 import pytest
@@ -137,7 +138,8 @@ def test_terms_page_carries_the_contact_address_and_is_linked_from_banner_and_fo
 ) -> None:
     html = _html(built_site, "terms/index.html")
     assert SITE["terms"]["title"] in html
-    assert f'href="mailto:{SITE["contact_email"]}"' in html
+    # Markdown writes a mail link as character references; the banner no longer carries one
+    assert f'href="mailto:{SITE["contact_email"]}"' in unescape(html)
     assert SITE["terms"]["contact_placeholder"] not in html
     source = (PROJECT_ROOT / SITE["terms"]["source"]).read_text(encoding="utf-8")
     assert SITE["terms"]["contact_placeholder"] in source and SITE["contact_email"] not in source
