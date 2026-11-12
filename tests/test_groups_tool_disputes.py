@@ -149,3 +149,8 @@ def test_a_group_names_the_page_it_is_or_would_be_on(groups: GroupsSetup) -> Non
     records[o2] = {"pages": ["clinics"]}
     (root / "assignments.json").write_text(json.dumps({"assignments": records}), encoding="utf-8")
     assert groups.get(f"/groups/{o2}")["group"]["page"]["page_id"] == "clinics"
+
+
+def test_a_group_can_be_found_by_its_id(groups: GroupsSetup) -> None:
+    gid = groups.gid("o2")
+    assert [row["group_id"] for row in groups.get("/groups", limit=50, q=gid)["items"]] == [gid]
