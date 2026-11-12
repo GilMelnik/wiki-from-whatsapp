@@ -2,12 +2,14 @@ import { countText, Dialog, formatCount } from "@shell";
 import { api, groupPath } from "./api.js";
 import { GroupPicker } from "./GroupPicker.jsx";
 import { pickedIn } from "./groups.js";
+import { MergeNotes } from "./MergeNotes.jsx";
 
 // The one dialog that is open in the groups view (`dialog.kind`) and what its confirmation
 // saves. `act(request, message)` saves and throws on failure (the dialog shows the error and
-// stays open).
+// stays open). A merge shows, for the group chosen, whether the two dispute each other (the
+// merge stays possible) and whether it releases a withheld group.
 
-export function DialogHost({ dialog, group, picked, close, act }) {
+export function DialogHost({ dialog, group, picked, minSupporters, watch, close, act }) {
   if (!dialog || !group) return null;
   const path = groupPath(group.group_id);
   const suggested = group.partners.map((pair) => (pair.a.group_id === group.group_id ? pair.b : pair.a));
@@ -21,7 +23,10 @@ export function DialogHost({ dialog, group, picked, close, act }) {
           description="The claims of both groups become one group; the older group's id is kept."
           excludeId={group.group_id}
           suggested={suggested}
+          initial={dialog.choice}
           confirmLabel="Merge"
+          confirmFor={(choice) => (group.contradicts.some((link) => link.group_id === choice) ? "Merge anyway" : null)}
+          notes={(choice) => <MergeNotes ids={[group.group_id, choice]} minSupporters={minSupporters} watch={watch} />}
           onClose={close}
           onConfirm={(otherId) => act(() => api.post("/groups/merge", { group_ids: [group.group_id, otherId] }), "Groups merged")}
         />

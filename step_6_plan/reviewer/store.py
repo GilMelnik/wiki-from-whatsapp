@@ -35,7 +35,7 @@ from step_6_plan.model import (
 )
 from step_6_plan.operations import PlanEdit, kind_of
 from step_6_plan.reviewer import proposals as decisions
-from step_6_plan.reviewer.assignment_views import AssignmentView
+from step_6_plan.reviewer.assignment_views import REVIEW_CONFIG, AssignmentView
 from step_6_plan.reviewer.assignments import (
     AssignmentsConflict,
     AssignmentsFile,
@@ -174,7 +174,7 @@ class PlanStore:
                 "warnings": plan_warnings(
                     plan,
                     group_ids=set(self.groups) if self.groups is not None else None,
-                    coverage=coverage,
+                    sizes=self.view.summary()["sizes"] if self.assignments.usable else None,
                 ),
                 "newer_groups": self._newer_groups(),
                 "assignments": self._assignments_overview(),
@@ -212,17 +212,29 @@ class PlanStore:
         return coverage_view(self.coverage_report, self.plan, self._readable_proposal())
 
     def page_detail(self, page_id: str) -> dict[str, Any]:
-        """A page's example groups with their claim text, and its coverage numbers."""
+        """What judging a page's scope needs: once step 6b has run, its exact size, a sample of
+        its groups (least certain first) and the closest groups it did not get; the model's
+        example groups with their claim text, and the coverage numbers of the planning run."""
 
         page = self.plan["pages"].get(page_id)
         if page is None:
             raise ItemNotFound(f"The plan has no page with the id {page_id}.")
         coverage = self._coverage()
-        return {
+        answer = {
             "page_id": page_id,
             "examples": self._summaries(page["example_group_ids"]),
             "coverage": coverage["pages"][page_id] if coverage else None,
+            "size": None,
+            "sample": None,
+            "near": None,
         }
+        if not self.assignments.usable:
+            return answer
+        limit = REVIEW_CONFIG["scope_sample"]
+        sample = self.view.groups_list(scope="page", item_id=page_id, role="primary",
+                                       sort="uncertain", q="", offset=0, limit=limit)
+        return {**answer, "size": self.view.summary()["sizes"][page_id],
+                "sample": sample["items"], "near": self.view.near_groups(page_id, limit)}
 
     def _summaries(self, group_ids: list[str]) -> list[dict[str, Any]]:
         groups = self.groups or {}

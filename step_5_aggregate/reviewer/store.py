@@ -32,6 +32,8 @@ from review_tool.artifacts import ArtifactNode
 from step_5_aggregate.derive import GroupDeriver, link_contradictions
 from step_5_aggregate.groups import Group, allocate_group_id, claim_order, used_group_ids
 from step_5_aggregate.inputs import load_inputs
+from step_5_aggregate.reviewer.disputes import Disputes
+from step_5_aggregate.reviewer.placement import Placement
 from step_5_aggregate.reviewer.suggestions import (
     CandidatePairs,
     EmbeddingsMissing,
@@ -42,6 +44,7 @@ from step_5_aggregate.reviewer.suggestions import (
 )
 from step_5_aggregate.reviewer.views import GroupViews
 from step_5_aggregate.similarity import ClaimScorer
+from step_7_write_pages.withhold import withheld_ids
 from utils.json_io import write_json_file
 
 NOT_SAME_KEY = "not_same"
@@ -76,10 +79,18 @@ def _set_or_drop(group: Group, key: str, ids: Iterable[str]) -> None:
 
 
 class GroupsStore:
-    """The groups file (edited copy if present), step 5's inputs, vectors and suggestions."""
+    """The groups file (edited copy if present), step 5's inputs, vectors and suggestions,
+    and (optional, read only) the plan and assignments that say on which page a group is."""
 
     def __init__(
-        self, groups: ArtifactNode, claims: ArtifactNode, entities: ArtifactNode, audit_path: Path
+        self,
+        groups: ArtifactNode,
+        claims: ArtifactNode,
+        entities: ArtifactNode,
+        audit_path: Path,
+        *,
+        plan: ArtifactNode | None = None,
+        assignments: ArtifactNode | None = None,
     ) -> None:
         self.edited = groups.edited
         self.source = groups.effective
@@ -107,6 +118,9 @@ class GroupsStore:
         else:
             self.scorer = ClaimScorer(self.inputs.claims, self.inputs.claim_entities, vectors)
             self.candidates = CandidatePairs(self.inputs, self.scorer)
+        self.placement = Placement(
+            plan.effective if plan else None, assignments.effective if assignments else None
+        )
         self.views = GroupViews(self)
         self._reindex()
 
@@ -128,6 +142,9 @@ class GroupsStore:
         for suggestion in self.suggestions:
             for gid in (suggestion.a, suggestion.b):
                 self.partners.setdefault(gid, []).append(suggestion)
+        # Kept off every page by the owner's rule, decided live from the groups alone.
+        self.withheld = withheld_ids(self.groups)
+        self.disputes = Disputes(self.groups, self.scorer)
 
     def group(self, group_id: str) -> Group:
         group = self.by_id.get(group_id)

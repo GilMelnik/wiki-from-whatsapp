@@ -1,8 +1,7 @@
 import { useRef, useState } from "react";
-import { formatCount, groupCount, Pager, PanelState, Select, usePicking, useResource, useShortcuts, useStoredState, useToast } from "@shell";
+import { formatCount, groupCount, Kbd, Pager, PanelState, Select, usePicking, useResource, useShortcuts, useStoredState, useToast } from "@shell";
 import { api } from "./api.js";
 import { DEFAULT_GROUP_VIEW, groupsQuery, ROLE_OPTIONS, SORT_OPTIONS } from "./assign.js";
-import { Key } from "./bits.jsx";
 import { GroupRow } from "./GroupRow.jsx";
 import { LabelsDialog, PagePickerDialog } from "./MoveDialogs.jsx";
 import { TOOL_ID } from "./plan.js";
@@ -29,24 +28,24 @@ function ActionBar({ scope, count, busy, locked, act, open, clear }) {
       <button type="button" className="btn btn-sm" onClick={clear}>Clear</button>
       <span className="flex-1" />
       <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={() => open("primary")}>
-        Move to a page… <Key>p</Key>
+        Move to a page… <Kbd>p</Kbd>
       </button>
       <button type="button" className="btn btn-sm" disabled={busy} onClick={() => open("second")}>
-        Second page… <Key>2</Key>
+        Second page… <Kbd>2</Kbd>
       </button>
       {(scope === "page" || scope === "label") && (
         <button type="button" className="btn btn-sm" disabled={busy} onClick={act.removeHere}>
-          {removeLabel} <Key>x</Key>
+          {removeLabel} <Kbd>x</Kbd>
         </button>
       )}
       <button type="button" className="btn btn-sm" disabled={busy} onClick={() => act.run([{ action: "unplace" }])}>
-        Off every page <Key>o</Key>
+        Off every page <Kbd>o</Kbd>
       </button>
       <button type="button" className="btn btn-sm" disabled={busy} onClick={() => open("labels")}>
-        Labels… <Key>b</Key>
+        Labels… <Kbd>b</Kbd>
       </button>
       <button type="button" className="btn btn-sm" disabled={busy} onClick={() => act.run([{ action: "unpin" }])} title="The assignment step will decide them again at its next run">
-        Back to automatic <Key>r</Key>
+        Back to automatic <Kbd>r</Kbd>
       </button>
       {locked && <span className="basis-full text-amber-800">A step is running and updating the files: you can look around; moves open again when it finishes.</span>}
     </div>
@@ -113,7 +112,7 @@ export function GroupTable({ overview, scope, itemId = null, watch, locked, savi
             disabled={visible.length === 0}
             onChange={() => picking.setMany(visible, shown !== "all")}
           />
-          All shown <Key>a</Key>
+          All shown <Kbd>a</Kbd>
         </label>
         <input
           ref={searchRef}

@@ -246,6 +246,7 @@
       "undo_depth": 20,
       "groups_page_size": 50,
       "max_groups_page_size": 200,
+      "scope_sample": 5,
       "label_findings": {"few_groups": 10, "large_share": 0.25}
     }
   },

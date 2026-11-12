@@ -29,6 +29,43 @@ function Quote({ overview, id }) {
   return <>“<Bidi>{titleOf(overview, id)}</Bidi>”</>;
 }
 
+/** The scopes of the pages next to `pageId` (same category), to write a split or a merged
+ * scope against: what the neighbours already cover. */
+function NeighbourScopes({ overview, pageId }) {
+  const node = nodeById(overview, pageId);
+  const parent = node ? nodeById(overview, node.parent_id) : null;
+  const neighbours = (parent?.children ?? []).filter((id) => id !== pageId && overview.pages[id]);
+  if (neighbours.length === 0) return null;
+  return (
+    <details className="card">
+      <summary className="cursor-pointer text-xs font-semibold text-slate-500">
+        The scopes of the other pages in “<Bidi>{parent.title_he}</Bidi>” ({formatCount(neighbours.length)})
+      </summary>
+      <ul className="mt-2 space-y-2">
+        {neighbours.map((id) => (
+          <li key={id}>
+            <p className="text-xs font-medium text-slate-600">
+              <Bidi>{overview.pages[id].title_he}</Bidi>
+            </p>
+            <Bidi as="p" className="whitespace-pre-line text-xs leading-relaxed text-slate-700">
+              {overview.pages[id].scope}
+            </Bidi>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+function PageSplitDialog(props) {
+  return <SplitDialog {...props} intro={<NeighbourScopes overview={props.overview} pageId={props.itemId} />} />;
+}
+
+function PlanMergeDialog(props) {
+  const page = kindOf(props.overview, props.itemId) === "page";
+  return <MergeDialog {...props} intro={page ? <NeighbourScopes overview={props.overview} pageId={props.itemId} /> : null} />;
+}
+
 function MoveDialog({ overview, itemId, onClose, save }) {
   const node = nodeById(overview, itemId);
   const targets = moveTargets(overview, itemId);
@@ -131,7 +168,7 @@ export function ScopeDialog({ overview, itemId, scope, onClose, save, editable =
       <div className="grid gap-3 md:grid-cols-2">
         <section>
           <h3 className="section-title">Scope now</h3>
-          <Bidi as="p" className="whitespace-pre-line rounded bg-slate-50 p-2 leading-relaxed">
+          <Bidi as="p" className="card whitespace-pre-line leading-relaxed">
             {overview.pages[itemId].scope}
           </Bidi>
         </section>
@@ -140,19 +177,20 @@ export function ScopeDialog({ overview, itemId, scope, onClose, save, editable =
           {editable ? (
             <TextArea value={draft} onChange={setDraft} rows={8} />
           ) : (
-            <Bidi as="p" className="whitespace-pre-line rounded bg-sky-50 p-2 leading-relaxed">
+            <Bidi as="p" className="note note-info whitespace-pre-line leading-relaxed">
               {scope}
             </Bidi>
           )}
         </section>
       </div>
+      <NeighbourScopes overview={overview} pageId={itemId} />
     </OperationDialog>
   );
 }
 
 function Intro({ proposal }) {
   return (
-    <div className="rounded border border-sky-200 bg-sky-50 p-3 text-sky-900">
+    <div className="note note-info">
       <p>
         Proposal: <Bidi className="font-medium">{proposal.title_he}</Bidi>. <Bidi>{proposal.reason}</Bidi>
       </p>
@@ -182,12 +220,12 @@ function AcceptDialog({ proposal, overview, onClose, accept }) {
 }
 
 const DIALOGS = {
-  merge: MergeDialog,
+  merge: PlanMergeDialog,
   move: MoveDialog,
   changeId: ChangeIdDialog,
   delete: DeleteDialog,
   scope: ScopeDialog,
-  split: SplitDialog,
+  split: PageSplitDialog,
   addPage: AddPageDialog,
   addCategory: AddCategoryDialog,
   addLabel: AddLabelDialog,

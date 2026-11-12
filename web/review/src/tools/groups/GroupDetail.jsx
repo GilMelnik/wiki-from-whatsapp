@@ -1,12 +1,14 @@
 import { Bidi, countText, formatCount, Ltr, Panel, PanelState } from "@shell";
-import { GroupBadges, GroupNumbers } from "./GroupRow.jsx";
-import { dateRange, formatScore, pickedIn } from "./groups.js";
+import { Disputes } from "./Disputes.jsx";
+import { dateRange, pickedIn } from "./groups.js";
+import { EntityNames, GroupBadges, GroupNumbers, PageLine } from "./GroupRow.jsx";
 import { MemberList } from "./MemberList.jsx";
 import { Timeline } from "./Timeline.jsx";
 
-// Main column of the groups view: the selected group in full — representative text, every
-// member claim, the people and the timeline, entities, contradiction links (click to open
-// the other group) and the merge suggestions that involve it.
+// Main column of a groups list: the selected group in full, in the order the owner judges it:
+// whether the wiki shows it (withheld: why, and what releases it), its text, both sides of
+// every dispute it has, its member claims, people and dates, the timeline, its entities and
+// the merge suggestions that involve it (no similarity numbers: the pair view says why).
 
 function Section({ title, children }) {
   return (
@@ -34,46 +36,59 @@ function QueueNav({ queue, onSelect }) {
   );
 }
 
-function LinkRow({ link, actionLabel, onOpen, onAction, saving }) {
+/** Why the rule keeps the group off the wiki, and the two ways it gets published. */
+function Withheld({ group, minSupporters }) {
+  const names = group.entities.map((entity) => entity.name);
   return (
-    <li className="flex items-start gap-2 rounded border border-slate-200 bg-white p-2">
-      <button type="button" className="min-w-0 flex-1 text-start hover:underline" onClick={() => onOpen(link.group_id)}>
-        <Bidi as="p" className="line-clamp-2">
-          {link.claim_text}
-        </Bidi>
-        <span className="text-xs text-slate-500">
-          <Ltr>{link.group_id}</Ltr>
-          {link.manual && <span className="badge badge-sky ms-2">Manual</span>}
-        </span>
-      </button>
-      <button type="button" className="btn btn-sm shrink-0" disabled={saving} onClick={() => onAction(link.group_id)}>
-        {actionLabel}
-      </button>
-    </li>
+    <div className="note note-warning space-y-2">
+      <p className="font-medium">Withheld from the wiki</p>
+      <p>
+        A negative statement that names{" "}
+        {names.map((name, index) => (
+          <span key={name}>
+            {index > 0 && ", "}“<Bidi>{name}</Bidi>”
+          </span>
+        ))}
+        , {group.supporter_count > 0 ? `reported by only ${countText(group.supporter_count, "member")}` : "with no member counted as reporting it"}: the wiki publishes such a statement only when at least{" "}
+        {countText(minSupporters ?? 2, "member")} reported it, so it is kept off every page
+        {group.page ? (
+          <>
+            {" "}
+            (it would be on “<Bidi>{group.page.title_he}</Bidi>”)
+          </>
+        ) : null}
+        .
+      </p>
+      <p className="text-xs">
+        It is released by itself when another member reports the same, or when you merge it with a group that says the same
+        thing{group.partners.length > 0 ? " (the merge suggestions for it are below)" : ""}. There is no other way to release it.
+      </p>
+    </div>
   );
 }
 
-function Contradictions({ group, saving, on }) {
+function LinkActions({ link, saving, on, restore = false }) {
   return (
-    <Section title="Contradicts">
-      {group.contradicts.length === 0 ? (
-        <p className="text-slate-400">No contradiction links.</p>
-      ) : (
-        <ul className="space-y-1">
-          {group.contradicts.map((link) => (
-            <LinkRow key={link.group_id} link={link} actionLabel="Remove the link" saving={saving} onOpen={on.open} onAction={(id) => on.link(id, false)} />
-          ))}
-        </ul>
-      )}
+    <button type="button" className="btn btn-sm" disabled={saving} onClick={() => on.link(link.group_id, restore)}>
+      {restore ? "Restore the link" : "Remove the link"}
+    </button>
+  );
+}
+
+function BothSides({ group, saving, on }) {
+  if (group.contradicts.length === 0 && group.contradicts_rejected.length === 0) return null;
+  return (
+    <Section title="Both sides">
+      <Disputes group={group} onOpen={on.open} actionsFor={(link) => <LinkActions link={link} saving={saving} on={on} />} />
       {group.contradicts_rejected.length > 0 && (
-        <>
-          <p className="mb-1 mt-3 text-xs text-slate-500">Links removed by hand (step 5 will not bring them back):</p>
-          <ul className="space-y-1">
-            {group.contradicts_rejected.map((link) => (
-              <LinkRow key={link.group_id} link={link} actionLabel="Restore" saving={saving} onOpen={on.open} onAction={(id) => on.link(id, true)} />
-            ))}
-          </ul>
-        </>
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs text-slate-500">Links you removed (step 5 will not bring them back)</summary>
+          <Disputes
+            group={{ ...group, contradicts: group.contradicts_rejected }}
+            onOpen={on.open}
+            actionsFor={(link) => <LinkActions link={link} saving={saving} on={on} restore />}
+          />
+        </details>
       )}
     </Section>
   );
@@ -83,30 +98,28 @@ function Partners({ group, saving, on }) {
   if (group.partners.length === 0) return null;
   return (
     <Section title="Merge suggestions for this group">
-      <ul className="space-y-1">
+      <ul className="space-y-2">
         {group.partners.map((pair) => {
           const other = pair.a.group_id === group.group_id ? pair.b : pair.a;
           return (
-            <li key={pair.key} className="rounded border border-amber-200 bg-amber-50/40 p-2">
+            <li key={pair.key} className="card space-y-2">
               <button type="button" className="w-full text-start hover:underline" onClick={() => on.open(other.group_id)}>
-                <Bidi as="p" className="line-clamp-2">
+                <Bidi as="span" className="line-clamp-3 block">
                   {other.claim_text}
                 </Bidi>
               </button>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                <span>
-                  Lowest similarity <Ltr>{formatScore(pair.min_cosine)}</Ltr>
-                </span>
+              <span className="flex flex-wrap items-center gap-2">
+                <GroupBadges group={other} />
                 <GroupNumbers group={other} />
                 <span className="ms-auto flex gap-1">
-                  <button type="button" className="btn btn-sm" disabled={saving} onClick={() => on.mergeWith(other.group_id)}>
-                    Merge
+                  <button type="button" className="btn btn-sm" disabled={saving} onClick={() => on.mergeWith(pair)}>
+                    {pair.dispute ? "The same – merge…" : "The same – merge"}
                   </button>
                   <button type="button" className="btn btn-sm" disabled={saving} onClick={() => on.notSame(other.group_id)}>
                     Not the same
                   </button>
                 </span>
-              </div>
+              </span>
             </li>
           );
         })}
@@ -115,24 +128,33 @@ function Partners({ group, saving, on }) {
   );
 }
 
-export function GroupDetail({ detail, selectedId, picked, saving, on }) {
+export function GroupDetail({ detail, selectedId, picked, saving, minSupporters, on }) {
   if (!selectedId) return <PanelState empty emptyText="Select a group in the list" />;
   const group = detail.data?.group;
   return (
     <PanelState loading={detail.loading} error={detail.error} hasData={Boolean(group)} onRetry={detail.reload}>
       {group && (
         <Panel
-          title={<Ltr>{group.group_id}</Ltr>}
+          title={
+            <span className="flex flex-wrap items-center gap-2">
+              Claim group <Ltr className="font-normal text-slate-400">{group.group_id}</Ltr>
+            </span>
+          }
           subtitle={<GroupBadges group={group} />}
           actions={<QueueNav queue={detail.data.queue} onSelect={on.open} />}
         >
-          <div className="space-y-6 p-4 text-sm">
-            <Section title={group.representative_manual ? "Representative text (chosen by hand)" : "Representative text"}>
-              <Bidi as="p" className="text-base leading-relaxed">
+          <div className="max-w-4xl space-y-6 p-4 text-sm">
+            {group.withheld && <Withheld group={group} minSupporters={minSupporters} />}
+            <Section title={group.representative_manual ? "What it says (the text you chose)" : "What it says"}>
+              <Bidi as="p" className="card text-base leading-relaxed">
                 {group.claim_text}
               </Bidi>
             </Section>
-            <Section title="People and dates">
+            <BothSides group={group} saving={saving} on={on} />
+            <Section title={group.size > 1 ? `Its claims (${formatCount(group.size)})` : "Its claim"}>
+              <MemberList members={group.members} picked={pickedIn(picked, group.group_id)} saving={saving} on={on} />
+            </Section>
+            <Section title="People, dates and page">
               <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
                 <dt className="text-slate-500">Supporters</dt>
                 <dd>{countText(group.supporter_count, "different person", formatCount, "different people")}</dd>
@@ -142,30 +164,22 @@ export function GroupDetail({ detail, selectedId, picked, saving, on }) {
                 <dd>
                   <Ltr>{dateRange(group.first_date, group.last_date)}</Ltr>
                 </dd>
-                <dt className="text-slate-500">Threads</dt>
+                <dt className="text-slate-500">Conversations</dt>
                 <dd>{formatCount(group.thread_count)}</dd>
+                <dt className="text-slate-500">Page</dt>
+                <dd>
+                  <PageLine group={group} />
+                </dd>
               </dl>
-            </Section>
-            <Section title={`Claims in the group (${formatCount(group.size)})`}>
-              <MemberList members={group.members} picked={pickedIn(picked, group.group_id)} saving={saving} on={on} />
             </Section>
             <Section title="By month">
               <Timeline months={group.timeline} />
             </Section>
-            <Section title="Entities">
-              {group.entities.length === 0 ? (
-                <p className="text-slate-400">—</p>
-              ) : (
-                <div className="flex flex-wrap gap-1">
-                  {group.entities.map((entity) => (
-                    <Bidi key={entity.entity_id} className="badge badge-slate">
-                      {entity.name}
-                    </Bidi>
-                  ))}
-                </div>
-              )}
-            </Section>
-            <Contradictions group={group} saving={saving} on={on} />
+            {group.entities.length > 0 && (
+              <Section title="Entities">
+                <EntityNames names={group.entities.map((entity) => entity.name)} />
+              </Section>
+            )}
             <Partners group={group} saving={saving} on={on} />
             {group.merged_from.length > 0 && (
               <Section title="Groups merged into it">

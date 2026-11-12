@@ -14,7 +14,7 @@ GROUP_IDS = {group["group_id"] for group in make_groups()}
 
 def codes(plan: dict) -> dict[str, list[list[str]]]:
     found: dict[str, list[list[str]]] = {}
-    for warning in plan_warnings(plan, group_ids=GROUP_IDS, coverage=None):
+    for warning in plan_warnings(plan, group_ids=GROUP_IDS, sizes=None):
         assert warning["text"]
         found.setdefault(warning["code"], []).append(warning["ids"])
     return found
@@ -42,7 +42,7 @@ def test_same_titles_empty_categories_and_lonely_kinds() -> None:
 
 def test_pages_without_known_examples() -> None:
     assert codes(make_plan())["no_examples"] == [["hospital"]]
-    assert plan_warnings(make_plan(), group_ids=set(), coverage=None)[0]["ids"] == ["agencies"]
+    assert plan_warnings(make_plan(), group_ids=set(), sizes=None)[0]["ids"] == ["agencies"]
 
 
 def test_a_full_page_budget_is_flagged(monkeypatch: pytest.MonkeyPatch) -> None:

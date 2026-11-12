@@ -1,68 +1,93 @@
-import { Bidi, formatCount, Ltr, Panel, PanelState } from "@shell";
-import { GroupBadges, GroupNumbers } from "./GroupRow.jsx";
-import { formatScore } from "./groups.js";
+import { Bidi, formatCount, Panel, PanelState } from "@shell";
+import { DisputeCard } from "./Disputes.jsx";
+import { diffWords, whySuggested } from "./groups.js";
+import { EntityNames, GroupBadges, GroupNumbers, PageLine } from "./GroupRow.jsx";
 import { MemberList } from "./MemberList.jsx";
+import { DisputeWarning, ReleaseNote, useMergeCheck } from "./MergeNotes.jsx";
 
-// Main column of the suggestions view: the two groups of the current suggestion side by
-// side — representative text, every member claim with its own text and numbers, the people
-// and dates — and how close they came to step 5's own bar.
+// Main column of the merge suggestions: do the two groups say the same thing? In the order the
+// owner decides: the two texts side by side with the words that differ highlighted, why the
+// pair was suggested, what a merge would do beyond that (a dispute between them, a withheld
+// group released), then each group in full: its claims with date and stance, entities, page,
+// and the disputes it has with other groups.
 
-function Side({ label, group, onOpen }) {
+function Highlighted({ segments, text }) {
   return (
-    <section className="min-w-0 space-y-3 rounded border border-slate-200 bg-white p-3">
-      <header className="flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold text-slate-500">{label}</span>
-        <button type="button" className="text-xs text-slate-400 hover:underline" title="Open in the groups view" onClick={() => onOpen(group.group_id)}>
-          <Ltr>{group.group_id}</Ltr>
+    <Bidi as="p" text={text} className="text-base leading-relaxed">
+      {segments.map((segment, index) =>
+        segment.same ? (
+          <span key={index}>{segment.text}</span>
+        ) : (
+          <mark key={index} className="rounded bg-amber-200 px-0.5 text-slate-900">
+            {segment.text}
+          </mark>
+        )
+      )}
+    </Bidi>
+  );
+}
+
+function Texts({ pair }) {
+  const diff = diffWords(pair.a.claim_text, pair.b.claim_text);
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      {[
+        ["A", "kept in a merge (the older group)", pair.a, diff.a],
+        ["B", "joins A in a merge", pair.b, diff.b],
+      ].map(([name, role, group, segments]) => (
+        <div key={name} className="card space-y-2">
+          <p className="text-xs text-slate-500">
+            <span className="font-semibold text-slate-700">{name}</span> · {role}
+          </p>
+          <Highlighted segments={segments} text={group.claim_text} />
+          <GroupBadges group={group} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Side({ name, group, other, onOpen }) {
+  // The link between the two groups is in the warning above; here only their other disputes.
+  const links = group.contradicts.filter((link) => link.group_id !== other.group_id);
+  return (
+    <section className="min-w-0 space-y-3">
+      <header className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="section-title mb-0">Group {name}</h3>
+        <button type="button" className="btn btn-sm btn-quiet" onClick={() => onOpen(group.group_id)}>
+          Open it in all groups
         </button>
       </header>
-      <GroupBadges group={group} />
-      <Bidi as="p" className="text-base leading-relaxed">
-        {group.claim_text}
-      </Bidi>
       <GroupNumbers group={group} />
-      {group.entity_names.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {group.entity_names.map((name) => (
-            <Bidi key={name} className="badge badge-slate">
-              {name}
-            </Bidi>
-          ))}
-        </div>
-      )}
+      <PageLine group={group} />
+      <EntityNames names={group.entity_names} />
       {group.size > 1 && (
         <div>
-          <h3 className="section-title">Claims in the group ({formatCount(group.size)})</h3>
+          <h4 className="section-title">Its claims ({formatCount(group.size)})</h4>
           <MemberList members={group.members} />
+        </div>
+      )}
+      {links.length > 0 && (
+        <div>
+          <h4 className="section-title">Other disputes it has</h4>
+          <ul className="space-y-2">
+            {links.map((link) => (
+              <DisputeCard key={link.group_id} group={group} link={link} onOpen={onOpen} />
+            ))}
+          </ul>
         </div>
       )}
     </section>
   );
 }
 
-function Score({ pair, bars }) {
-  const bar = pair.shared_entity ? bars?.shared_entity : bars?.no_shared_entity;
-  return (
-    <p className="text-sm text-slate-600">
-      Weakest similarity between two claims: <Ltr>{formatScore(pair.min_cosine)}</Ltr>
-      {pair.max_cosine !== pair.min_cosine && (
-        <>
-          {" "}
-          (strongest: <Ltr>{formatScore(pair.max_cosine)}</Ltr>)
-        </>
-      )}{" "}
-      · {pair.shared_entity ? "Shared entity" : "No shared entity"}
-      {bar !== undefined && (
-        <>
-          {" "}
-          · step 5 merges by itself from <Ltr>{formatScore(bar)}</Ltr> (gap <Ltr>{formatScore(pair.margin, { signed: true })}</Ltr>)
-        </>
-      )}
-    </p>
-  );
+function Release({ pair, minSupporters, watch }) {
+  const involved = pair.a.withheld || pair.b.withheld;
+  const check = useMergeCheck(involved ? [pair.a.group_id, pair.b.group_id] : [], watch);
+  return <ReleaseNote check={check.data} minSupporters={minSupporters} />;
 }
 
-export function PairView({ list, pair, position, onOpen }) {
+export function PairView({ list, pair, position, minSupporters, watch, onOpen }) {
   return (
     <PanelState
       loading={list.loading}
@@ -73,15 +98,22 @@ export function PairView({ list, pair, position, onOpen }) {
       emptyText="No suggestion selected"
     >
       {pair && (
-        <Panel
-          title={`Suggestion ${formatCount(position + 1)} of ${formatCount(list.data.total)}`}
-          subtitle="Do the two groups say the same thing?"
-        >
-          <div className="space-y-4 p-4 text-sm">
-            <Score pair={pair} bars={list.data.bars} />
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-              <Side label="Group A (the older one, kept in a merge)" group={pair.a} onOpen={onOpen} />
-              <Side label="Group B" group={pair.b} onOpen={onOpen} />
+        <Panel title="Do the two groups say the same thing?" subtitle={`Suggestion ${formatCount(position + 1)} of ${formatCount(list.data.total)}`}>
+          <div className="max-w-5xl space-y-6 p-4 text-sm">
+            <Texts pair={pair} />
+            <DisputeWarning disputes={pair.dispute ? [pair.dispute] : []} />
+            <Release pair={pair} minSupporters={minSupporters} watch={watch} />
+            <section>
+              <h3 className="section-title">Why suggested</h3>
+              <ul className="list-disc space-y-1 ps-5 text-slate-700">
+                {whySuggested(pair).map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </section>
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              <Side name="A" group={pair.a} other={pair.b} onOpen={onOpen} />
+              <Side name="B" group={pair.b} other={pair.a} onOpen={onOpen} />
             </div>
           </div>
         </Panel>

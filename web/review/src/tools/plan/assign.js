@@ -4,12 +4,13 @@
 // shape requests and texts. Functions that write numbers take the shell's `formatCount` as
 // `format` (this file is tested with only the shell's pure helpers: scripts/shell-alias.mjs).
 
-import { groupCount, quote, titleOf } from "@shell";
+import { groupCount, quote, textToAliases, titleOf } from "@shell";
 import { percent } from "./plan.js";
 
 export const UNPLACED_ID = "__unplaced";
 export const WAITING_ID = "__waiting";
 export const PROPOSALS_ID = "__proposals";
+const PROPOSAL_PREFIX = "__proposal:";
 export const ASSIGNMENTS_KEY = "assignments";
 export const DETAILS_TAB = "details";
 export const GROUPS_TAB = "groups";
@@ -28,17 +29,46 @@ export const DEFAULT_GROUP_VIEW = { sort: "uncertain", role: "all", q: "" };
 export const PROPOSAL_KINDS = { page: "New page", label: "New label", scope: "Wider scope" };
 export const STATUS_LABELS = { pending: "Pending", accepted: "Accepted", rejected: "Rejected" };
 
-/** The rows the tree list shows above the tree: groups on no page, waiting, proposals. */
-export function assignmentRows(overview) {
+/** The list row of one proposal of the assignment step. */
+export function proposalRowId(proposalId) {
+  return `${PROPOSAL_PREFIX}${proposalId}`;
+}
+
+export function isProposalRow(id) {
+  return Boolean(id?.startsWith(PROPOSAL_PREFIX));
+}
+
+/** The proposal a list row stands for (null for any other row). */
+export function proposalOfRow(proposals, rowId) {
+  if (!isProposalRow(rowId)) return null;
+  return proposals.find((proposal) => proposalRowId(proposal.id) === rowId) ?? null;
+}
+
+/**
+ * The rows the tree list shows above the tree: groups on no page, waiting (only when some
+ * wait), the proposals, and under them each proposal still to decide.
+ */
+export function assignmentRows(overview, proposals = []) {
   const summary = overview?.assignments;
   const rows = [{ id: UNPLACED_ID, kind: "unplaced" }];
   if (summary?.counts?.waiting > 0) rows.push({ id: WAITING_ID, kind: "waiting" });
   rows.push({ id: PROPOSALS_ID, kind: "proposals" });
+  for (const proposal of proposals) {
+    if (proposal.status === "pending") rows.push({ id: proposalRowId(proposal.id), kind: "proposal", proposal });
+  }
   return rows;
 }
 
 export function isAssignmentRow(id) {
-  return id === UNPLACED_ID || id === WAITING_ID || id === PROPOSALS_ID;
+  return id === UNPLACED_ID || id === WAITING_ID || id === PROPOSALS_ID || isProposalRow(id);
+}
+
+/** The row to show after deciding on `proposalId`: the next one to decide, else the list. */
+export function nextProposalRow(proposals, proposalId) {
+  const pending = proposals.filter((proposal) => proposal.status === "pending");
+  const index = pending.findIndex((proposal) => proposal.id === proposalId);
+  const next = pending[index + 1] ?? pending[index - 1];
+  return next && next.id !== proposalId ? proposalRowId(next.id) : PROPOSALS_ID;
 }
 
 /** The query of GET /assignments/groups (unset values left out by the api client). */
@@ -115,6 +145,24 @@ export function proposalForm(proposal, overview) {
     parentId: categories.includes(proposal.parent_id) ? proposal.parent_id : (categories[0] ?? null),
     kind: proposal.label_kind ?? "",
   };
+}
+
+/**
+ * The plan operation a proposal stands for, as accepting it unchanged would send it (the
+ * dry run shown next to the proposal): a new page, a new label, or the wider scope of a
+ * page. Null when there is nothing to run (a scope proposal whose page left the plan).
+ */
+export function proposalOperation(proposal, overview) {
+  const form = proposalForm(proposal, overview);
+  if (proposal.kind === "page") {
+    const aliases = { he: textToAliases(""), en: textToAliases("") };
+    return { op: "add_page", page_id: form.id, parent_id: form.parentId, title_he: form.title, description: form.description, scope: form.scope, aliases, position: null };
+  }
+  if (proposal.kind === "label") {
+    return { op: "add_label", label_id: form.id, title_he: form.title, description: form.description, kind: form.kind };
+  }
+  const pageId = proposal.target?.page_id;
+  return pageId ? { op: "edit", item_id: pageId, changes: { scope: form.scope } } : null;
 }
 
 /** A label that attaches to very few groups or to a very large share, in words. */
