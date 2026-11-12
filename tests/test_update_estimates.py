@@ -92,7 +92,7 @@ def _results() -> dict[str, dict[str, Any]]:
     (STEP_3, 2, ((EXTRACT_CONVERSATIONS + 2 * 2170 * 0.1) * 2 + EXTRACT_OUTPUT * 10) / 1e6 * 0.5),
     (STEP_6_ASSIGN, 1, 10 * 12200 * 0.042 / 1e6 + (30000 * 2 + 4000 * 10) / 1e6),
     (STEP_7, 2, (500_000 * 2 + 13000 * 10 + 500_000 * 2 + 6000 * 10) / 1e6),
-    (STEP_8, 2, (200_000 * 4 + 10000 * 2 * 20) / 1e6 * 0.5),
+    (STEP_8, 2, (200_000 * 4 + 6000 * 2 * 20) / 1e6 * 0.5),
 ])
 def test_estimates_are_priced_from_config(key: str, calls: int, usd: float) -> None:
     seen: dict[str, Any] = {}
