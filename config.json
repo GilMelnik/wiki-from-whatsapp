@@ -410,8 +410,8 @@
   "site": {
     "url": "https://gaysurrogacy.co.il/",
     "coffee_url": "https://buymeacoffee.com/gilmelnik",
-    "coffee_text": "אחזקת האתר והאחסון שלו עולים כסף. קפה אני כבר שותה מספיק — אבל התינוק שלי שוב איבד מוצץ.",
-    "coffee_link_text": "אפשר לקנות לו חדש 🍼",
+    "coffee_text": "האתר הזה נבנה ומתוחזק בהתנדבות, בזמן שבעלי שומר על הבת שלנו. אם בא לכם, אפשר",
+    "coffee_link_text": "להזמין אותי לקפה ☕",
     "custom_dir": "overrides",
     "docs_dir": "docs",
     "mkdocs_file": "mkdocs.yml",

@@ -1,9 +1,9 @@
 """What step 7 reads, and what one page's text depends on.
 
 The step reads four upstream artifacts, each in its effective (edited-if-present) form: the
-claim groups (C6), the plan (C7) and the assignment of groups to pages (C8). Nothing else: no claims, no private audit, no identities, no
-reaction summaries. C6 already counts the distinct people per group and per month, with
-neutral reactions (a heart, praying hands) left out.
+claim groups (C6), the plan (C7) and the assignment of groups to pages (C8). Nothing else: no
+claims, no private audit, no identities, no reaction summaries. C6 already counts the distinct
+people per group and per month, with neutral reactions (a heart, praying hands) left out.
 
 Groups the owner's rule withholds (``step_7_write_pages.withhold``: a negative statement about
 a named entity that fewer than two members reported) are treated as placed on no page:
