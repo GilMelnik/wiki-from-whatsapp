@@ -9,9 +9,10 @@ entities, stance, message numbers and the claims a claim disputes; everything in
 and only recompute its derived fields.
 
 ``counters`` holds the ids of the claims of the same thread that this claim disputes (a member
-answered another one). The link is mutual (if B counters A, A counters B), is set only from
-the model's answers (a new claim may dispute an existing one in update mode), and loses an id
-when that claim leaves the output. It is a derived key: a manual edit of the claim survives
+answered another one). The model names them by the number ``n`` it gave each claim of its
+answer (never by position; ``n`` is not stored). The link is mutual (if B counters A, A
+counters B), is set only from the model's answers (a new claim may dispute an existing one in
+update mode), and loses an id when that claim leaves the output. It is a derived key: a manual edit of the claim survives
 when a later dissent adds a link to it.
 
 ``participant_count`` is the number of distinct people who wrote in the claim's thread (not
@@ -27,13 +28,15 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from step_3_extract.prompt import STANCES, build_fresh_prompt, build_update_prompt
-from utils.config import section
+from step_3_extract.prompt import (
+    EXTRACT_CONFIG,
+    STANCES,
+    build_fresh_prompt,
+    build_update_prompt,
+)
 from utils.reconcile import fingerprint
 from utils.support import collect_evidence, person_key
 from utils.threads_io import render_thread_for_llm
-
-EXTRACT_CONFIG = section("extract")
 
 # The fields the step always owns and recomputes; a manual edit of a claim keeps its text
 # but these follow the thread (``utils.reconcile`` ``refresh_keys``).
@@ -98,7 +101,9 @@ def _check_numbers(item: dict[str, Any], keys: tuple[str, ...], where: str) -> N
 
 
 def validate_output(data: Any, *, update: bool) -> None:
-    """Raise ``OutputError`` unless ``data`` has the shape of FRESH / UPDATE schema."""
+    """Raise ``OutputError`` unless ``data`` has the shape of FRESH / UPDATE schema. A claim's
+    ``n`` is not checked: a missing or wrong one only makes the claim unreachable by
+    ``counters`` (``ThreadClaims._link_counters``) and never costs the whole answer."""
 
     _require(isinstance(data, dict), "top level must be an object")
     claims = data.get("claims")
@@ -151,8 +156,9 @@ class ThreadClaims:
 
     def prompt(self, existing: list[dict[str, Any]]) -> str:
         if existing:
-            return build_update_prompt(self.rendered, [c["claim_text"] for c in existing])
-        return build_fresh_prompt(self.rendered)
+            new = sum(1 for message_id in self.refs if message_id in self.new_ids)
+            return build_update_prompt(self.rendered, [c["claim_text"] for c in existing], new)
+        return build_fresh_prompt(self.rendered, len(self.refs))
 
     def _ordered(self, ids: set[str]) -> list[str]:
         return sorted(ids, key=self._position.__getitem__)
@@ -229,25 +235,33 @@ class ThreadClaims:
         resolved: list[dict[str, Any] | None],
         existing: list[dict[str, Any]],
     ) -> None:
-        """Turn each answered claim's ``counters`` (numbers in the answer) and
+        """Turn each answered claim's ``counters`` (``n`` values of claims of the answer) and
         ``counters_existing`` (numbers of existing claims) into mutual links between records.
-        A reference to no claim, to a dropped claim or to the claim itself is dropped and
-        explained in ``invalid_counters``."""
+        A reference to no claim, to a dropped claim, to an ``n`` that several claims carry or
+        to the claim itself is dropped and explained in ``invalid_counters``. A claim whose
+        ``n`` is missing or not a positive integer is kept but no reference can reach it."""
 
+        by_n: dict[int, list[int]] = {}
+        for index, raw in enumerate(raws):
+            n = raw.get("n")
+            if isinstance(n, int) and not isinstance(n, bool) and n >= 1:
+                by_n.setdefault(n, []).append(index)
+        missing = "no such claim (or it was dropped)"
         for index, (raw, record) in enumerate(zip(raws, resolved)):
             targets = [
-                ("counters", ref, resolved[ref - 1] if 1 <= ref <= len(resolved) else None)
+                ("counters", ref, *_numbered(by_n.get(ref, []), resolved, missing))
                 for ref in raw["counters"]
             ] + [
-                ("counters_existing", ref, existing[ref - 1] if 1 <= ref <= len(existing) else None)
+                ("counters_existing", ref, existing[ref - 1] if 1 <= ref <= len(existing) else None,
+                 missing)
                 for ref in raw.get("counters_existing") or []
             ]
-            for field, ref, target in targets:
+            for field, ref, target, problem in targets:
                 where = f"claims[{index}].{field} {ref}"
                 if record is None:
                     self.invalid_counters.append(f"{where}: the claim itself was dropped")
                 elif target is None:
-                    self.invalid_counters.append(f"{where}: no such claim (or it was dropped)")
+                    self.invalid_counters.append(f"{where}: {problem}")
                 elif target is record:
                     self.invalid_counters.append(f"{where}: a claim cannot dispute itself")
                 else:
@@ -318,6 +332,17 @@ class ThreadClaims:
         for claim, _ in kept:
             claim["counters"] = [cid for cid in claim["counters"] if cid in ids]
         return kept, len(records) - len(kept)
+
+
+def _numbered(
+    indices: list[int], resolved: list[dict[str, Any] | None], missing: str
+) -> tuple[dict[str, Any] | None, str]:
+    """The record of the one answered claim at ``indices`` (the claims carrying one ``n``),
+    or ``None`` and why there is none."""
+
+    if len(indices) > 1:
+        return None, f"{len(indices)} claims of the answer have this n"
+    return (resolved[indices[0]], missing) if indices else (None, missing)
 
 
 def _link(a: dict[str, Any], b: dict[str, Any]) -> None:

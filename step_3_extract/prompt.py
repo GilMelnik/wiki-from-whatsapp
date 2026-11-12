@@ -9,11 +9,19 @@ One system prompt serves both modes, so its cached prefix is shared:
 - update (the thread gained messages): the thread with the new messages marked plus its
   existing claims as ``C1``, ``C2``, ... -> ``UPDATE_SCHEMA`` ``{claims, existing}``.
 
+Every claim of an answer carries its own number ``n`` (1 for the first claim of ``claims``),
+so a link never depends on the model counting positions in a long answer.
+
 Disagreements are recorded here, where the model sees who answered whom: a dissent of
-substance becomes a claim of its own whose ``counters`` lists the claims it disputes by their
-number in the answer (1 = the first claim of ``claims``); in update mode
-``counters_existing`` lists existing claims it disputes (1 = ``C1``). Code turns them into
-claim ids and makes the link mutual (``ThreadClaims.absorb``).
+substance becomes a claim of its own whose ``counters`` lists the ``n`` of the claims it
+disputes; in update mode ``counters_existing`` lists existing claims it disputes (1 = ``C1``).
+Code turns them into claim ids and makes the link mutual (``ThreadClaims.absorb``).
+
+A long conversation (more than ``extract.long_messages`` messages to extract from: all of them
+in fresh mode, the new ones in update mode) is sent with ``THOROUGH_NOTE`` (update mode:
+``THOROUGH_UPDATE_NOTE``) at the top of the user prompt: the model writes about 15 claims per
+call however long the conversation is unless asked for every claim (task 52). The system prompt
+never gets the note, so it stays one cached text for every call.
 """
 
 from __future__ import annotations
@@ -21,8 +29,10 @@ from __future__ import annotations
 from typing import Any
 
 from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION
+from utils.config import section
 from utils.threads_io import RENDER_CONFIG
 
+EXTRACT_CONFIG = section("extract")
 STANCES = ("positive", "negative", "neutral", "factual")
 
 _NUMBERS: dict[str, Any] = {"type": "array", "items": {"type": "integer"}}
@@ -30,6 +40,7 @@ _CLAIM_ITEM: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
+        "n": {"type": "integer"},
         "text": {"type": "string"},
         "entities": {"type": "array", "items": {"type": "string"}},
         "stance": {"type": "string", "enum": list(STANCES)},
@@ -37,7 +48,7 @@ _CLAIM_ITEM: dict[str, Any] = {
         "opposing": _NUMBERS,
         "counters": _NUMBERS,
     },
-    "required": ["text", "entities", "stance", "supporting", "opposing", "counters"],
+    "required": ["n", "text", "entities", "stance", "supporting", "opposing", "counters"],
 }
 # In update mode a new claim may also dispute an existing one.
 _UPDATE_CLAIM_ITEM: dict[str, Any] = {
@@ -112,6 +123,8 @@ doctors, lawyers, travel agents, insurers and other providers) and of countries 
 - {FORBIDDEN_TERM_INSTRUCTION}
 
 Fields of a claim
+- n: the claim's number in your answer: 1 for the first claim you write, 2 for the second, and \
+so on. Every claim has its own n.
 - text: the claim, in Hebrew.
 - entities: the providers, organisations, countries, cities and places the claim is about, \
 spelled as in the conversation. Empty when there are none.
@@ -121,8 +134,8 @@ opinion or experience without a clear valence; "factual" is a fact, price, rule 
 least the message(s) the claim comes from.
 - opposing: numbers of the messages that dispute or contradict the claim or report a contrary \
 experience; usually empty.
-- counters: the claims of your answer that this claim disputes, by their number in your list \
-(1 for the first claim you write); usually empty (see "When members disagree").
+- counters: the n of each claim of your answer that this claim disputes; usually empty (see \
+"When members disagree").
 - counters_existing (only when the request lists existing claims): the existing claims this \
 new claim disputes, by number (1 for {_PREFIX}1).
 - A message number is never in both lists of one claim.
@@ -132,7 +145,8 @@ When members disagree
 - When the dissent says anything of substance (a different experience, a correction, a reason, \
 a newer or different fact, price or timeline), also write the dissenting position as a claim of \
 its own: self-contained like every claim, with its own stance, the dissenting messages in its \
-supporting, and the disputed claim in its counters (an existing claim in counters_existing). \
+supporting, and the disputed claim's n in its counters (an existing claim's number in \
+counters_existing). \
 Lean towards writing it: the wiki should say what the other side said, not only that someone \
 disagreed. Write the position itself, never who held it.
 - Only a dissent that says nothing beyond "no", "not true" or "I disagree" stays a number in the \
@@ -154,12 +168,42 @@ anything of substance, it also becomes a new claim whose counters_existing lists
 """
 
 
-def build_fresh_prompt(rendered: str) -> str:
-    return f"Conversation:\n{rendered}"
+# Tested word for word on paid calls (task 52, variant G): +47 % claims on long
+# conversations. Update mode changes only the first sentence.
+_THOROUGH_BODY = """\
+Work through it from the first message to the \
+last and extract every claim it holds. There is no limit on the number of claims: it grows \
+with the length of the conversation, so do not stop after the main points and do not \
+summarise. A detail that one member mentions once (a price, a provider, a duration, a \
+document, a tip, an experience) is a claim of its own when another member could act on it. \
+What to skip is unchanged."""
+THOROUGH_NOTE = f"This conversation is long: {{count}} messages. {_THOROUGH_BODY}"
+THOROUGH_UPDATE_NOTE = (
+    f"The new part of this conversation is long: {{count}} new messages. {_THOROUGH_BODY}"
+)
 
 
-def build_update_prompt(rendered: str, existing_texts: list[str]) -> str:
+def _with_note(note: str, count: int, prompt: str) -> str:
+    """``prompt`` under ``note`` when ``count`` messages to extract from are more than
+    ``extract.long_messages``; otherwise ``prompt`` as it is."""
+
+    if count > int(EXTRACT_CONFIG["long_messages"]):
+        return f"{note.format(count=count)}\n\n{prompt}"
+    return prompt
+
+
+def build_fresh_prompt(rendered: str, count: int) -> str:
+    """``count``: the messages shown, all of which claims are extracted from."""
+
+    return _with_note(THOROUGH_NOTE, count, f"Conversation:\n{rendered}")
+
+
+def build_update_prompt(rendered: str, existing_texts: list[str], new_count: int) -> str:
+    """``new_count``: the messages shown as new, the only ones new claims come from."""
+
     listed = "\n".join(
         f"{_PREFIX}{number}: {text}" for number, text in enumerate(existing_texts, start=1)
     )
-    return f"Existing claims:\n{listed}\n\nConversation:\n{rendered}"
+    return _with_note(
+        THOROUGH_UPDATE_NOTE, new_count, f"Existing claims:\n{listed}\n\nConversation:\n{rendered}"
+    )

@@ -2,7 +2,9 @@
 
 Per thread (fingerprint = message ids + contents + reactions, ``metadata.inputs``):
 
-- new thread -> the model reads the whole thread and returns claims;
+- new thread -> the model reads the whole thread and returns claims (a thread of more than
+  ``extract.long_messages`` messages, or an update with more new ones, is sent under a note
+  that asks for every claim: ``step_3_extract.prompt``);
 - unchanged thread -> no call; its claims are carried;
 - only reactions changed, or messages left the thread -> no call; counts, dates and evidence
   ids are recomputed;

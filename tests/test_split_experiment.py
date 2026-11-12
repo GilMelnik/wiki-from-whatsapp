@@ -11,8 +11,9 @@ from typing import Any
 import pytest
 
 from step_3_extract.claims import ThreadClaims
+from step_3_extract.prompt import EXTRACT_CONFIG, THOROUGH_NOTE
 from step_3_extract.split_experiment.compare import VariantRun, match, metrics, table
-from step_3_extract.split_experiment.prompts import EARLIER_NOTE, THOROUGH_NOTE, UnitJob
+from step_3_extract.split_experiment.prompts import EARLIER_NOTE, UnitJob
 from step_3_extract.split_experiment.run import (
     OUTPUT_DIR,
     CostCapError,
@@ -75,16 +76,18 @@ def test_every_variant_cuts_the_same_messages() -> None:
                                 "E2-01": [["m14", "m15"], ["m16"]]}
     assert units["E"][0].source == "A1-01 A1-02"
     assert {u.window for u in units["B"]} == {0, 1}
-    # No conversation of the synthetic chat is long: F and G cut exactly as A does.
-    for variant in "FG":
-        assert list(_ids(units[variant]).values()) == list(_ids(units["A"]).values())
-        assert not any(u.background for u in units[variant])
+    # No conversation of the synthetic chat is long: F cuts exactly as A does.
+    assert list(_ids(units["F"]).values()) == list(_ids(units["A"]).values())
+    assert not any(u.background for u in units["F"])
+    assert "G" not in units and "G" not in EXPERIMENT_CONFIG["variants"]
 
 
-def test_a_long_conversation_goes_in_parts_or_with_the_thoroughness_note(
+def test_a_long_conversation_goes_in_parts_or_with_step_3s_thoroughness_note(
         monkeypatch: pytest.MonkeyPatch) -> None:
     messages = message_set()
     units = _units()
+    monkeypatch.setitem(EXTRACT_CONFIG, "long_messages", 3)
+    assert _ids(_units()["F"])["F1-02"] == [["m06", "m07"]]  # parts follow extract.long_messages
     parts = in_parts(units["A"], messages, 3, 1)  # A1-02 has four messages: two parts of two
     assert _ids(parts) == {"F1-01": [["m04", "m05"]], "F1-02": [["m06", "m07"]],
                            "F1-03": [["m08", "m09"]], "F2-01": [["m14", "m15"]],
@@ -96,13 +99,13 @@ def test_a_long_conversation_goes_in_parts_or_with_the_thoroughness_note(
     assert later.startswith(EARLIER_NOTE.format(last=1, count=1))
     assert "Earlier in the conversation (read only):\n[1] " in later
     assert "Conversation:\n[2] " in later and ": synthetic text m06\n" not in later  # only quoted
-    plain = UnitJob(units["A"][1], messages).prompt()
     assert UnitJob(parts[0], messages).prompt() == UnitJob(units["A"][0], messages).prompt()
-    assert UnitJob(units["G"][1], messages).prompt() == plain  # four messages are not long
-    monkeypatch.setitem(EXPERIMENT_CONFIG, "long_messages", 3)
-    assert UnitJob(units["G"][1], messages).prompt() == (
-        f"{THOROUGH_NOTE.format(count=4)}\n\n{plain}")
-    assert UnitJob(units["G"][0], messages).prompt() == UnitJob(units["A"][0], messages).prompt()
+    # A plain unit of four messages is long now: it gets step 3's note, a part of two does not.
+    long_unit = UnitJob(units["A"][1], messages).prompt()
+    assert long_unit.startswith(f"{THOROUGH_NOTE.format(count=4)}\n\nConversation:\n[1] ")
+    assert UnitJob(parts[1], messages).prompt().startswith("Conversation:\n[1] ")
+    monkeypatch.undo()
+    assert UnitJob(units["A"][1], messages).prompt().startswith("Conversation:\n[1] ")
 
 
 def test_background_count_packing_limit_and_cover_check() -> None:
@@ -151,7 +154,7 @@ def test_packed_claims_map_to_their_conversations() -> None:
     assert prompt.startswith("This request holds 2 separate conversations")
     assert "Conversation 1 of 2:\n[1] " in prompt and "\n\nConversation 2 of 2:\n[3] " in prompt
     outcome = job.claims({"claims": [claim("Across", [1, 3]), claim("Second only", [4], "negative",
-                                                                    counters=[1])]})
+                                                                    counters=[1], n=2)]})
     across, second = outcome.claims
     assert across["conversations"] == 2 and second["conversations"] == 1
     assert across["supporting_message_ids"] == ["m04", "m06"] and across["unit_id"] == "E1-01"
@@ -201,8 +204,8 @@ def test_the_estimate_and_the_refusal_above_the_cap(tmp_path: Path) -> None:
     model = DryRunModel()
     experiment = _experiment(model, tmp_path)
     estimate = experiment.estimate()
-    assert estimate["total"]["calls"] == 4 + 4 + 2 + 4 + 2 + 4 + 4
-    assert all(estimate[v]["input_tokens"] > 0 and estimate[v]["usd"] > 0 for v in "ABCDEFG")
+    assert estimate["total"]["calls"] == 4 + 4 + 2 + 4 + 2 + 4
+    assert all(estimate[v]["input_tokens"] > 0 and estimate[v]["usd"] > 0 for v in "ABCDEF")
     assert estimate["C"]["input_tokens"] < estimate["A"]["input_tokens"]  # fewer instructions
     sync = _experiment(model, tmp_path, use_batch=False).estimate()
     assert sync["total"]["usd"] > estimate["total"]["usd"]
@@ -222,7 +225,7 @@ def _anthropic(cache: Path) -> tuple[LLMClient, FakeBatches]:
 def test_costs_come_from_the_api_and_a_repeated_run_uses_the_cache(tmp_path: Path) -> None:
     llm, batches = _anthropic(tmp_path / "cache")
     first = _experiment(llm, tmp_path / "out").run(max_usd=None)
-    assert batches.created == 1 and len(batches.submitted) == 24
+    assert batches.created == 1 and len(batches.submitted) == 20
     one_call = reported_usd(USAGE, batch=True)
     for variant, run in first.items():
         calls = len(run.units)
@@ -276,9 +279,9 @@ def test_the_page_shows_every_window_and_variant(tmp_path: Path) -> None:
     assert "prefers-color-scheme: dark" in page and "<script" not in page and "http" not in page
     assert "no claim for B" in page and "conversation 2 of 2" in page and "background" in page
     table = json.loads((tmp_path / "table.json").read_text(encoding="utf-8"))["table"]
-    assert set(table) == set("ABCDEFG") and table["E"]["units"] == 2
+    assert set(table) == set("ABCDEF") and table["E"]["units"] == 2
     results = json.loads((tmp_path / "results.json").read_text(encoding="utf-8"))
-    assert set(results["matches"]) == set("ACDEFG")
+    assert set(results["matches"]) == set("ACDEF")
 
 
 def test_the_command_line_estimates_dry_runs_and_refuses(tmp_path: Path,
@@ -289,7 +292,7 @@ def test_the_command_line_estimates_dry_runs_and_refuses(tmp_path: Path,
     args = [arg for name, path in paths.items() for arg in (f"--{name}", str(path))]
     with caplog.at_level(logging.INFO):
         main([*args, "--estimate"])
-    assert "Estimate total: 24 calls" in caplog.text and not OUTPUT_DIR.exists()
+    assert "Estimate total: 20 calls" in caplog.text and not OUTPUT_DIR.exists()
     main([*args, "--dry-run", "--variants", "a,b", "--windows", "2"])
     dry = OUTPUT_DIR / EXPERIMENT_CONFIG["dry_run_dir"]
     table = json.loads((dry / "table.json").read_text(encoding="utf-8"))

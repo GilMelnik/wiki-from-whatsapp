@@ -1,6 +1,7 @@
 """Step 3 and disputes: a dissent of substance is a claim that ``counters`` the claim it
-answers, in fresh and update mode; invalid references are dropped; the link is mutual; the
-consistency check; the scrub; the cache key. Fake model, synthetic data only.
+answers (by the claim's ``n``), in fresh and update mode; invalid references are dropped; the
+link is mutual; the consistency check; the scrub; the cache key. Fake model, synthetic data
+only.
 """
 
 from __future__ import annotations
@@ -36,6 +37,11 @@ def _claim(text: str, supporting: list[int], opposing: list[int] = (), counters:
             "opposing": list(opposing), "counters": list(counters), **extra}
 
 
+def _numbered(*claims: dict) -> list[dict]:
+    """Claims of one answer, each with ``n`` = its position unless it carries its own."""
+    return [{"n": n, **claim} for n, claim in enumerate(claims, start=1)]
+
+
 def _existing(claim_id: str, supporting: list[str], opposing: list[str] = ()) -> dict:
     """An existing claim record as an older step-3 run wrote it (no ``counters`` key yet)."""
     return {"claim_id": claim_id, "thread_id": "t-A", "claim_text": f"text of {claim_id}",
@@ -47,9 +53,9 @@ def _existing(claim_id: str, supporting: list[str], opposing: list[str] = ()) ->
 
 def test_a_dissent_in_the_same_answer_links_both_claims() -> None:
     job = ThreadClaims(_thread())
-    answer = {"claims": [_claim("Alpha is good", [1], [2]),
-                         _claim("Alpha lost a file", [2], counters=[1], stance="negative"),
-                         _claim("Beta is open on Fridays", [3])]}
+    answer = {"claims": _numbered(_claim("Alpha is good", [1], [2]),
+                                  _claim("Alpha lost a file", [2], counters=[1], stance="negative"),
+                                  _claim("Beta is open on Fridays", [3]))}
     good, bad, beta = job.absorb(answer, [])
     assert good["counters"] == [bad["claim_id"]]
     assert bad["counters"] == [good["claim_id"]]
@@ -59,18 +65,19 @@ def test_a_dissent_in_the_same_answer_links_both_claims() -> None:
 
 def test_a_link_given_on_both_sides_is_stored_once() -> None:
     job = ThreadClaims(_thread())
-    answer = {"claims": [_claim("x", [1], [2], counters=[2]), _claim("y", [2], counters=[1, 1])]}
+    answer = {"claims": _numbered(_claim("x", [1], [2], counters=[2]),
+                                  _claim("y", [2], counters=[1, 1]))}
     x, y = job.absorb(answer, [])
     assert (x["counters"], y["counters"]) == ([y["claim_id"]], [x["claim_id"]])
 
 
 def test_invalid_references_are_dropped_and_explained() -> None:
     job = ThreadClaims(_thread())
-    answer = {"claims": [
-        _claim("x", [1], counters=[9, 1, 0]),       # out of range, itself, out of range
+    answer = {"claims": _numbered(
+        _claim("x", [1], counters=[9, 1, 0]),       # unknown, itself, unknown
         _claim("ungrounded", [42], counters=[1]),   # dropped: no evidence
         _claim("y", [2], counters=[2]),             # refers to the dropped claim
-    ]}
+    )}
     x, y = job.absorb(answer, [])
     assert x["counters"] == [] and y["counters"] == []
     assert len(job.invalid_counters) == 5
@@ -83,8 +90,9 @@ def test_update_a_new_claim_disputes_an_existing_one() -> None:
     existing = [_existing("t-A-old1", ["A"]), _existing("t-A-old2", ["B"])]
     snapshot = copy.deepcopy(existing)
     answer = {
-        "claims": [_claim("Alpha changed its price", [4], counters=[], counters_existing=[2]),
-                   _claim("nonsense ref", [4], counters=[5], counters_existing=[7])],
+        "claims": _numbered(_claim("Alpha changed its price", [4], counters=[],
+                                   counters_existing=[2]),
+                            _claim("nonsense ref", [4], counters=[5], counters_existing=[7])),
         "existing": [{"claim": 2, "supporting": [], "opposing": [4]}],
     }
     old1, old2, new, other = job.absorb(answer, existing)
@@ -93,6 +101,61 @@ def test_update_a_new_claim_disputes_an_existing_one() -> None:
     assert "counters" not in old1 and other["counters"] == []
     assert len(job.invalid_counters) == 2
     assert existing == snapshot  # the previous output is not mutated
+
+
+def test_counters_follow_the_numbers_the_model_wrote_not_positions() -> None:
+    job = ThreadClaims(_thread())
+    answer = {"claims": [
+        _claim("third", [3], counters=[2], n=3),     # n out of order: 2 is the last but one
+        _claim("first", [1], [2], n=1),
+        _claim("second", [2], counters=[5], n=2),    # 5: a number the answer skipped to
+        _claim("fifth", [4], counters=[4], n=5),     # 4: no claim has it
+    ]}
+    third, first, second, fifth = job.absorb(answer, [])
+    assert third["counters"] == [second["claim_id"]]
+    assert second["counters"] == [third["claim_id"], fifth["claim_id"]]
+    assert first["counters"] == [] and fifth["counters"] == [second["claim_id"]]
+    assert job.invalid_counters == ["claims[3].counters 4: no such claim (or it was dropped)"]
+    kept, _ = job.finalize_all([third, first, second, fifth])
+    assert not any("n" in claim for claim, _ in kept)  # n is never stored
+
+
+def test_a_repeated_a_self_and_a_missing_number_are_dropped_and_counted() -> None:
+    job = ThreadClaims(_thread())
+    answer = {"claims": [
+        _claim("a", [1], counters=[2], n=1),          # two claims carry 2: dropped
+        _claim("b", [2], counters=[2], n=2),          # repeated (and itself): dropped
+        _claim("c", [3], counters=[1, 7], n=2),
+        _claim("d", [4], counters=[1]),               # no n: kept, can still dispute ...
+        _claim("e", [4], [1], n=0),                   # ... but n 0 can never be reached
+        _claim("f", [4], counters=[0, -1, 6], n=6),   # 6: itself
+    ]}
+    a, b, c, d, e, f = job.absorb(answer, [])
+    assert a["counters"] == [c["claim_id"], d["claim_id"]]
+    assert c["counters"] == [a["claim_id"]] and d["counters"] == [a["claim_id"]]
+    assert b["counters"] == [] and e["counters"] == [] and f["counters"] == []
+    assert job.invalid_counters == [
+        "claims[0].counters 2: 2 claims of the answer have this n",
+        "claims[1].counters 2: 2 claims of the answer have this n",
+        "claims[2].counters 7: no such claim (or it was dropped)",
+        "claims[5].counters 0: no such claim (or it was dropped)",
+        "claims[5].counters -1: no such claim (or it was dropped)",
+        "claims[5].counters 6: a claim cannot dispute itself",
+    ]
+
+
+def test_update_counters_use_n_and_counters_existing_keeps_c_numbers() -> None:
+    job = ThreadClaims(_thread(), new_ids=frozenset({"C", "D"}))
+    existing = [_existing("t-A-old1", ["A"]), _existing("t-A-old2", ["B"])]
+    answer = {
+        "claims": [_claim("later", [4], counters=[1], counters_existing=[1], n=2),
+                   _claim("earlier", [3], counters_existing=[], n=1)],
+        "existing": [{"claim": 1, "supporting": [], "opposing": [4]}],
+    }
+    old1, old2, later, earlier = job.absorb(answer, existing)
+    assert later["counters"] == [earlier["claim_id"], old1["claim_id"]]
+    assert old1["counters"] == [later["claim_id"]] and earlier["counters"] == [later["claim_id"]]
+    assert "counters" not in old2 and job.invalid_counters == []
 
 
 def test_update_answers_must_carry_counters_existing() -> None:
@@ -105,7 +168,8 @@ def test_update_answers_must_carry_counters_existing() -> None:
 
 def test_finalize_all_drops_links_to_claims_that_left_the_output() -> None:
     job = ThreadClaims(_thread())
-    a, b = job.absorb({"claims": [_claim("a", [1], [2]), _claim("b", [2], counters=[1])]}, [])
+    a, b = job.absorb({"claims": _numbered(_claim("a", [1], [2]), _claim("b", [2], counters=[1]))},
+                      [])
     b["supporting_message_ids"] = ["GONE"]  # b's message left the thread
     kept, dropped = job.finalize_all([a, b])
     assert dropped == 1 and [c["claim_id"] for c, _ in kept] == [a["claim_id"]]
@@ -151,8 +215,8 @@ def _fresh_with_dissent(user: str, schema: dict) -> dict:
     assert schema == FRESH_SCHEMA
     if "alpha is good" not in user:
         return {"claims": []}
-    return {"claims": [_claim("Alpha is recommended", [1], [2]),
-                       _claim(DISSENT_TEXT, [2], counters=[1], stance="negative")]}
+    return {"claims": _numbered(_claim("Alpha is recommended", [1], [2]),
+                                _claim(DISSENT_TEXT, [2], counters=[1], stance="negative"))}
 
 
 def test_fresh_run_writes_mutual_links_and_scrubs_the_dissent(corpus: Corpus) -> None:
@@ -179,8 +243,8 @@ def test_update_links_a_new_dissent_to_an_existing_claim_and_keeps_manual_edits(
     def update(user: str, schema: dict) -> dict:
         assert schema == UPDATE_SCHEMA and "C1: Alpha is recommended" in user
         new = [int(line[1:line.index("]")]) for line in user.splitlines() if "(חדשה)" in line]
-        return {"claims": [_claim(LATE_TEXT, new, counters=[], counters_existing=[1],
-                                  stance="negative")],
+        return {"claims": _numbered(_claim(LATE_TEXT, new, counters=[], counters_existing=[1],
+                                           stance="negative")),
                 "existing": [{"claim": 1, "supporting": [], "opposing": new}]}
 
     corpus.run(FakeLLM(fresh))
@@ -213,7 +277,7 @@ def test_a_rerun_without_changes_keeps_the_links(corpus: Corpus) -> None:
 
 def test_invalid_references_are_counted_in_the_run(corpus: Corpus) -> None:
     def bad_refs(user: str, schema: dict) -> dict:
-        return {"claims": [_claim("x", [1], counters=[3, 1])]}
+        return {"claims": _numbered(_claim("x", [1], counters=[3, 1]))}
 
     summary = corpus.run(FakeLLM(bad_refs))
     assert summary["invalid_counter_refs_dropped"] == 4  # two threads, two bad refs each

@@ -1,8 +1,8 @@
-"""Task 52's split experiment: extract claims from the gold messages under seven ways of cutting
+"""Task 52's split experiment: extract claims from the gold messages under six ways of cutting
 or sending them, and compare the claims side by side (``units`` says how each variant
 cuts, ``prompts`` what is sent, ``compare`` how claims are matched, ``page`` the owner's page).
 
-PAID (the ``extract`` stage, step 3's model): about $2 at the batch price for all seven
+PAID (the ``extract`` stage, step 3's model): about $2 at the batch price for all six
 variants on the eight gold windows. The run refuses to start when its estimate is above
 ``extract.split_experiment.max_usd``. Answers go through the LLM disk cache, so a repeated run
 costs nothing::
@@ -101,9 +101,9 @@ class DryRunModel:
         lines = user.split("\n")
         start = next(i for i, line in enumerate(lines) if line.startswith("Conversation"))
         numbers = [int(m.group(1)) for line in lines[start:] if (m := _NUMBERED.match(line))]
-        claims = [{"text": f"Dry-run claim {k + 1} of this unit (message [{n}])", "entities": [],
-                   "stance": STANCES[k % len(STANCES)], "supporting": [n], "opposing": [],
-                   "counters": []}
+        claims = [{"n": k + 1, "text": f"Dry-run claim {k + 1} of this unit (message [{n}])",
+                   "entities": [], "stance": STANCES[k % len(STANCES)], "supporting": [n],
+                   "opposing": [], "counters": []}
                   for k, n in enumerate(numbers[::int(EXPERIMENT_CONFIG["dry_run_claim_every"])])]
         per_token = ESTIMATE_CONFIG["chars_per_token"]
         self.usage.append({"request_id": request_id,

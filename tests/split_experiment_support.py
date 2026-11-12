@@ -82,9 +82,9 @@ def write_inputs(root: Path) -> dict[str, Path]:
 
 
 def claim(text: str, supporting: list[int], stance: str = "factual",
-          counters: list[int] | None = None) -> dict[str, Any]:
-    """One claim of a model answer."""
-    return {"text": text, "entities": [], "stance": stance, "supporting": supporting,
+          counters: list[int] | None = None, n: int = 1) -> dict[str, Any]:
+    """One claim of a model answer, the ``n``-th of its answer."""
+    return {"n": n, "text": text, "entities": [], "stance": stance, "supporting": supporting,
             "opposing": [], "counters": counters or []}
 
 
