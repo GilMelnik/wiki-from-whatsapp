@@ -20,7 +20,6 @@
 
 .wiki-disclaimer p {
   margin: 0;
-  unicode-bidi: plaintext;
 }
 
 .wiki-disclaimer a {
@@ -94,7 +93,6 @@ html.wiki-refs-on .wiki-refs-toggle__state--off {
 
 .wiki-footer-lines p {
   margin: 0;
-  unicode-bidi: plaintext;
 }
 
 .wiki-footer-lines p + p {

@@ -10,20 +10,8 @@ html[dir="rtl"] body {
   text-align: right;
 }
 
-[dir="rtl"] .md-typeset p,
-[dir="rtl"] .md-typeset li,
-[dir="rtl"] .md-typeset dd,
-[dir="rtl"] .md-typeset dt,
-[dir="rtl"] .md-typeset blockquote,
-[dir="rtl"] .md-typeset .admonition,
-[dir="rtl"] .md-typeset h1,
-[dir="rtl"] .md-typeset h2,
-[dir="rtl"] .md-typeset h3,
-[dir="rtl"] .md-typeset h4,
-[dir="rtl"] .md-typeset h5,
-[dir="rtl"] .md-typeset h6 {
-  unicode-bidi: plaintext;
-}
+/* Every block stays right-to-left, also when it starts with a Latin word ("LLM ...", "IVF
+   ..."): the page's direction decides, never a block's first letter. */
 
 [dir="rtl"] .md-typeset ul,
 [dir="rtl"] .md-typeset ol {

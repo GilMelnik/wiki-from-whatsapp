@@ -203,6 +203,12 @@ def test_about_page_follows_a_model_change_in_config(
     assert body.count("`model-after-a-change`") == 1
 
 
+def test_no_stylesheet_lets_a_block_s_first_letter_choose_its_direction() -> None:
+    """A Hebrew paragraph or bullet that starts with a Latin word must stay right-to-left."""
+    for sheet in ("docs/stylesheets/hebrew.css", "overrides/assets/wiki/wiki.css"):
+        assert "plaintext" not in (PROJECT_ROOT / sheet).read_text(encoding="utf-8"), sheet
+
+
 def test_about_page_states_its_principles_before_the_steps() -> None:
     about = SITE["about"]
     body = about_body()
