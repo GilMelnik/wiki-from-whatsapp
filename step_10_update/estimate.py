@@ -4,14 +4,16 @@ Each paid step has an estimate mode that plans its run and makes no model call (
 8: ``run(estimate=True, count_tokens=...)``; step 6b: ``run(estimate=True)``). The Anthropic
 token counter needs credits, so the prompts are counted here by characters
 (``update.estimate.chars_per_token``). Output tokens are a typical figure per call
-(``output_tokens_per_call``), except for step 3: the claims it writes grow with the
-conversations it reads, not with the number of calls (a split into more, smaller
-conversations repeats the instructions more often but yields about the same claims), so its
-output is ``extract_output_per_conversation_token`` times the conversations' tokens. Prices
-are ``usd_per_million_tokens`` per model, with ``batch_discount`` when step 3 or step 8 uses
-the batch API. Step 8's Hebrew prompts are counted with their own measured ratio
-(``wiki_review.chars_per_token``), one output figure per due review pass. Every figure is
-therefore rough; the estimate says what it counted.
+(``output_tokens_per_call``), except for step 3 (``extract_price``, calibrated on the API's
+reported usage, task 55): its Hebrew conversations are counted at their own
+``extract_chars_per_token``, the instructions every call repeats
+(``extract_instruction_tokens``) are read from the prompt cache at
+``cache_read_price_factor`` of the input price, and the claims it writes grow with the
+conversations it reads, not with the number of calls: output is ``extract_output_ratio``
+times the conversations' tokens. Prices are ``usd_per_million_tokens`` per model, with
+``batch_discount`` when step 3 or step 8 uses the batch API. Step 8's Hebrew prompts are
+counted with their own measured ratio (``wiki_review.chars_per_token``), one output figure per
+due review pass. Every figure is therefore rough; the estimate says what it counted.
 
 ``paid_calls`` counts chat-model calls only. The cheap classifier (Jev) and the embeddings are
 priced but never stop the update: steps 1, 2, 4 and 5 use only them and run without a flag
@@ -78,6 +80,32 @@ def usd(model: str, input_tokens: float, output_tokens: float = 0.0) -> float:
     return (input_tokens * price["input"] + output_tokens * price["output"]) / 1_000_000
 
 
+@dataclass(frozen=True)
+class ExtractPrice:
+    """A step-3 run's tokens and dollars (``extract_price``)."""
+
+    prompt_tokens: int  # the user prompts: conversations (+ notes, existing claims)
+    cached_tokens: int  # the instructions, read from the prompt cache once per call
+    output_tokens: int
+    usd: float
+
+
+def extract_price(
+    model: str, calls: int, prompt_tokens: int, conversation_tokens: int, batch: bool
+) -> ExtractPrice:
+    """Price ``calls`` step-3 calls: ``prompt_tokens`` at the input price, every call's
+    instructions at ``cache_read_price_factor`` of it, output = ``extract_output_ratio`` times
+    the tokens of the messages claims are extracted from (``conversation_tokens``), all at the
+    batch discount when ``batch``."""
+
+    cached = calls * int(ESTIMATE_CONFIG["extract_instruction_tokens"])
+    output = math.ceil(conversation_tokens * ESTIMATE_CONFIG["extract_output_ratio"])
+    cost = usd(model, prompt_tokens + cached * ESTIMATE_CONFIG["cache_read_price_factor"], output)
+    if batch:
+        cost *= ESTIMATE_CONFIG["batch_discount"]
+    return ExtractPrice(prompt_tokens, cached, output, cost)
+
+
 def stage_model(stage: str) -> str:
     return LLM_CONFIG["stages"][stage]["model"]
 
@@ -102,6 +130,7 @@ class Estimator:
     def __init__(self, run_function: Callable[[Step], RunFunction] | None = None) -> None:
         self._run_function = run_function or (lambda step: step.run_function())
         self._counter = CharTokenCounter()
+        self._extract_counter = CharTokenCounter(ESTIMATE_CONFIG["extract_chars_per_token"])
         self._review_counter = CharTokenCounter(REVIEW_CONFIG["chars_per_token"])
         self._by_step: Mapping[str, Callable[[RunFunction, str], Estimate]] = {
             STEP_3: self._claims,
@@ -115,21 +144,22 @@ class Estimator:
         return None if price is None else price(self._run_function(step), step.key)
 
     def _claims(self, run: RunFunction, key: str) -> Estimate:
-        result = run(estimate=True, count_tokens=self._counter)
+        # The counter sees the system prompt too: its share is taken out again, so that only
+        # the user prompts (the conversations) are counted at the Hebrew ratio.
+        result = run(estimate=True, count_tokens=self._extract_counter)
         calls = result["model_calls"]
-        instructions = calls * self._counter(EXTRACT_SYSTEM, "")
-        conversations = max(0, result["input_tokens"] - instructions)
-        output = math.ceil(conversations * ESTIMATE_CONFIG["extract_output_per_conversation_token"])
-        cost = usd(result["model"], result["input_tokens"], output)
-        if result["batch_mode"]:
-            cost *= ESTIMATE_CONFIG["batch_discount"]
+        conversations = max(0, result["input_tokens"]
+                            - calls * self._extract_counter(EXTRACT_SYSTEM, ""))
+        price = extract_price(result["model"], calls, conversations, conversations,
+                              result["batch_mode"])
         return Estimate(
-            key, calls, cost,
+            key, calls, price.usd,
             f"{calls} conversations to read ({result['update_calls']} of them already have "
             f"claims and are read for their new messages)",
-            f"{result['input_tokens']} input tokens by characters ({instructions} of them the "
-            f"instructions repeated in every call), {output} output tokens in proportion to the "
-            f"conversations' length{', batch price' if result['batch_mode'] else ''}",
+            f"{conversations} conversation tokens by characters, {price.cached_tokens} tokens "
+            f"of instructions read from the prompt cache, {price.output_tokens} output tokens "
+            f"in proportion to the conversations' length"
+            f"{', batch price' if result['batch_mode'] else ''}",
         )
 
     def _assignments(self, run: RunFunction, key: str) -> Estimate:

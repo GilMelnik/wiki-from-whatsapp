@@ -11,10 +11,14 @@ import pytest
 
 from review_tool.steps import SERVED_STEPS
 from step_3_extract.prompt import EXTRACT_SYSTEM
-from step_10_update.estimate import CharTokenCounter, Estimator, embedding_usd
+from step_3_extract.split_experiment.prompts import UnitJob
+from step_3_extract.split_experiment.units import build_units
+from step_3_extract.split_experiment.usage import estimate as experiment_estimate
+from step_10_update.estimate import CharTokenCounter, Estimator, embedding_usd, extract_price
 from tests.assign_fixtures import FakeClassifier, Workspace
 from tests.plan_fixtures import make_groups
 from tests.review_fixtures import FakeReviewer, ReviewWorkspace, valid_answers
+from tests.split_experiment_support import NEW_SPLIT, OLD_SPLIT, message_set, threads
 from tests.test_extract_run import Corpus, FakeLLM, _message, answer_by_text
 from utils.config import section
 from utils.embedder import embed_texts
@@ -62,12 +66,12 @@ def test_step_8_estimate_says_whether_a_call_is_due(tmp_path: Path) -> None:
     assert len(reviewer.calls) == calls
 
 
-# Step 3 writes in proportion to the conversations it reads: the million input tokens of the
-# two calls below, less the instructions sent with each call, times the configured ratio.
-EXTRACT_OUTPUT = math.ceil(
-    (1_000_000 - 2 * CharTokenCounter()(EXTRACT_SYSTEM, ""))
-    * section("update")["estimate"]["extract_output_per_conversation_token"]
-)
+# Step 3: the million input tokens of the two calls below (counted at the Hebrew ratio) less
+# the system prompt counted with each call are the conversations; every call reads the
+# 2,170 instruction tokens from the prompt cache (0.1 of the input price); output is 0.37 times
+# the conversations' tokens.
+EXTRACT_CONVERSATIONS = 1_000_000 - 2 * CharTokenCounter(1.39)(EXTRACT_SYSTEM, "")
+EXTRACT_OUTPUT = math.ceil(EXTRACT_CONVERSATIONS * 0.37)
 
 
 def _results() -> dict[str, dict[str, Any]]:
@@ -85,7 +89,7 @@ def _results() -> dict[str, dict[str, Any]]:
 
 
 @pytest.mark.parametrize(("key", "calls", "usd"), [
-    (STEP_3, 2, (1_000_000 * 2 + EXTRACT_OUTPUT * 10) / 1e6 * 0.5),
+    (STEP_3, 2, ((EXTRACT_CONVERSATIONS + 2 * 2170 * 0.1) * 2 + EXTRACT_OUTPUT * 10) / 1e6 * 0.5),
     (STEP_6_ASSIGN, 1, 10 * 12200 * 0.042 / 1e6 + (30000 * 2 + 4000 * 10) / 1e6),
     (STEP_7, 2, (500_000 * 2 + 13000 * 10 + 500_000 * 2 + 6000 * 10) / 1e6),
     (STEP_8, 2, (200_000 * 4 + 10000 * 2 * 20) / 1e6 * 0.5),
@@ -102,6 +106,45 @@ def test_estimates_are_priced_from_config(key: str, calls: int, usd: float) -> N
     assert seen["estimate"] is True and estimate.line().startswith(estimate.what)
     if key != STEP_6_ASSIGN:
         assert isinstance(seen["count_tokens"], CharTokenCounter)
+    if key == STEP_3:
+        assert seen["count_tokens"].chars_per_token == 1.39
+
+
+def test_step_3_is_priced_as_the_api_reported_it() -> None:
+    """Task 52's calibration (36 batch calls of the new split, Sonnet 5.5): 1.39 characters
+    per token, 2,170 instruction tokens per call read from the prompt cache, output 0.37 times
+    the conversations' tokens."""
+    assert {key: section("update")["estimate"][key] for key in (
+        "extract_chars_per_token", "extract_instruction_tokens", "extract_output_ratio",
+        "cache_read_price_factor")} == {"extract_chars_per_token": 1.39,
+                                        "extract_instruction_tokens": 2170,
+                                        "extract_output_ratio": 0.37,
+                                        "cache_read_price_factor": 0.1}
+    # Repeated instructions are almost free: about $0.26 for the 1,203 calls of the real input.
+    assert extract_price("claude-sonnet-5-5", 1203, 0, 0, True).usd == pytest.approx(0.26, abs=0.005)
+    price = extract_price("claude-sonnet-5-5", 36, 100_000, 90_000, True)
+    assert (price.prompt_tokens, price.cached_tokens, price.output_tokens) == (
+        100_000, 36 * 2170, 33_300)
+    assert price.usd == pytest.approx((100_000 + 36 * 2170 * 0.1) * 1e-6 + 33_300 * 5e-6)
+    assert extract_price("claude-sonnet-5-5", 36, 100_000, 90_000, False).usd == pytest.approx(
+        2 * price.usd)
+
+
+def test_the_split_experiment_prices_step_3_as_step_10_does() -> None:
+    """The same conversations, once as the experiment's units and once as what step 3's
+    estimate mode reports for them, cost the same (within the few tokens of the
+    "Conversation:" heading, which only step 10 counts as conversation)."""
+    messages = message_set()
+    jobs = [UnitJob(unit, messages) for unit in
+            build_units(messages, threads(NEW_SPLIT), threads(OLD_SPLIT), ["A"])["A"]]
+    counter = CharTokenCounter(1.39)
+    reported = {"model": "claude-sonnet-5-5", "model_calls": len(jobs), "update_calls": 0,
+                "input_tokens": sum(counter(EXTRACT_SYSTEM, job.prompt()) for job in jobs),
+                "batch_mode": True}
+    step_10 = Estimator(lambda step: lambda **kwargs: reported)(STEPS[STEP_3])
+    experiment = experiment_estimate(jobs, use_batch=True)
+    assert experiment["calls"] == step_10.paid_calls == 4
+    assert experiment["usd"] == pytest.approx(step_10.usd, rel=0.1)
 
 
 def test_unpaid_steps_have_no_estimate_and_embeddings_are_cheap() -> None:

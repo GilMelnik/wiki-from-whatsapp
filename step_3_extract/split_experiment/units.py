@@ -1,4 +1,4 @@
-"""The units of the split experiment (task 52): the same chat messages cut seven ways.
+"""The units of the split experiment (task 52): the same chat messages cut six ways.
 
 The messages ("the set") are those of the gold file with its context part
 (``step_1_threads_split.gold_context``): per gold window, the window's own messages and the
@@ -14,16 +14,17 @@ whole chat messages and belongs to one window. Per window, in chat order:
   messages right before its first message, as read-only background;
 - E, packed: A's units, several per call while their rendered text stays within
   ``pack_max_chars`` (a longer unit goes alone);
-- F, long conversations in parts: A's units, but a unit of more than ``long_messages``
+- F, long conversations in parts: A's units, but a unit of more than ``extract.long_messages``
   messages goes in consecutive parts of about equal size, none longer than that; every part
   after the first is shown after the ``context_messages`` messages of the unit before it, as
-  read-only background;
-- G, thoroughness note: A's units; a unit of more than ``long_messages`` messages is sent with
-  a note that asks for every claim (``prompts.THOROUGH_NOTE``).
+  read-only background.
+
+(Variant G, a long conversation sent whole under a note that asks for every claim, became
+step 3's own way of sending a long conversation, task 55: every plain unit now gets it.)
 
 Every variant covers each message of the set exactly once (``check_cover`` raises otherwise),
 so the variants differ only in how the messages are grouped. Unit ids are
-``<variant><window number>-<unit number>`` (``A3-02``); D and G keep the number of their A unit.
+``<variant><window number>-<unit number>`` (``A3-02``); D keeps the number of its A unit.
 """
 
 from __future__ import annotations
@@ -35,10 +36,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from step_1_threads_split.gold_context import all_labels, scored_ids
-from utils.config import section
+from step_3_extract.prompt import EXTRACT_CONFIG
 from utils.threads_io import render_thread_for_llm, with_export
 
-EXPERIMENT_CONFIG = section("extract")["split_experiment"]
+EXPERIMENT_CONFIG = EXTRACT_CONFIG["split_experiment"]
 VARIANTS = tuple(EXPERIMENT_CONFIG["variants"])
 
 
@@ -205,9 +206,7 @@ def build_units(messages: MessageSet, new_split: Sequence[dict[str, Any]],
         "C": cut("C", thread_owner(old_split), messages),
         "D": with_background(new_units, messages, context),
         "E": pack(new_units, messages, int(EXPERIMENT_CONFIG["pack_max_chars"])),
-        "F": in_parts(new_units, messages, int(EXPERIMENT_CONFIG["long_messages"]), context),
-        "G": [Unit(f"G{unit.unit_id[1:]}", "G", unit.window, unit.source, unit.conversations)
-              for unit in new_units],
+        "F": in_parts(new_units, messages, int(EXTRACT_CONFIG["long_messages"]), context),
     }
     for units in built.values():
         check_cover(units, messages)
