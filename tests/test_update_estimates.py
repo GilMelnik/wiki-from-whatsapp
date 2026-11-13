@@ -82,7 +82,8 @@ def _results() -> dict[str, dict[str, Any]]:
                         "proposal_calls_max": 1},
         STEP_7: {"estimate": [{"page": "a", "mode": "write", "input_tokens": 500_000},
                               {"page": "b", "mode": "update", "input_tokens": 500_000}],
-                 "input_tokens": 1_000_000, "modes": {"write": 1, "update": 1, "keep": 4}},
+                 "input_tokens": 1_000_000, "modes": {"write": 1, "update": 1, "keep": 4},
+                 "proofread": [{"page": "a", "chars": 15_600}, {"page": "b", "chars": 15_601}]},
         STEP_8: {"calls": 2, "input_tokens": 200_000, "batch": True,
                  "passes": [{"id": "a"}, {"id": "b"}, {"id": "cross"}]},
     }
@@ -91,7 +92,10 @@ def _results() -> dict[str, dict[str, Any]]:
 @pytest.mark.parametrize(("key", "calls", "usd"), [
     (STEP_3, 2, ((EXTRACT_CONVERSATIONS + 2 * 2170 * 0.1) * 2 + EXTRACT_OUTPUT * 10) / 1e6 * 0.5),
     (STEP_6_ASSIGN, 1, 10 * 12200 * 0.042 / 1e6 + (30000 * 2 + 4000 * 10) / 1e6),
-    (STEP_7, 2, (500_000 * 2 + 13000 * 10 + 500_000 * 2 + 6000 * 10) / 1e6),
+    # two writer calls (Sonnet) + two proofreading calls (Opus, batch): 10,000 and 10,001
+    # input tokens at the review's 1.56 characters per token, 13,000 output tokens each
+    (STEP_7, 4, (500_000 * 2 + 13000 * 10 + 500_000 * 2 + 6000 * 10) / 1e6
+     + ((10_000 + 10_001) * 4 + 2 * 13000 * 20) / 1e6 * 0.5),
     (STEP_8, 2, (200_000 * 4 + 6000 * 2 * 20) / 1e6 * 0.5),
 ])
 def test_estimates_are_priced_from_config(key: str, calls: int, usd: float) -> None:

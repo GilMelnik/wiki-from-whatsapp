@@ -13,7 +13,10 @@ conversations it reads, not with the number of calls: output is ``extract_output
 times the conversations' tokens. Prices are ``usd_per_million_tokens`` per model, with
 ``batch_discount`` when step 3 or step 8 uses the batch API. Step 8's Hebrew prompts are
 counted with their own measured ratio (``wiki_review.chars_per_token``), one output figure per
-due review pass. Every figure is therefore rough; the estimate says what it counted.
+due review pass. Step 7's Hebrew language edit (one batch call per page written or rewritten,
+and per page owed one) reads the page body: its prompt is counted at the review's ratio too,
+output at the typical figure of ``output_tokens_per_call.proofread``, at the batch discount.
+Every figure is therefore rough; the estimate says what it counted.
 
 ``paid_calls`` counts chat-model calls only. The cheap classifier (Jev) and the embeddings are
 priced but never stop the update: steps 1, 2, 4 and 5 use only them and run without a flag
@@ -31,6 +34,7 @@ from review_tool.steps import Step
 from step_3_extract.prompt import EXTRACT_SYSTEM
 from step_6_plan.assign_proposals import PROPOSALS_CONFIG
 from step_6_plan.assign_rules import ASSIGN_CONFIG
+from step_7_write_pages.proofread import PROOFREAD_CONFIG
 from step_7_write_pages.run import UPDATE_CONFIG as PAGE_UPDATE_CONFIG
 from step_7_write_pages.run import WRITE_CONFIG
 from step_8_review.inputs import REVIEW_CONFIG
@@ -191,13 +195,21 @@ class Estimator:
                 ESTIMATE_CONFIG["output_tokens_per_call"][stages[row["mode"]]])
             for row in result["estimate"]
         )
+        proofread = result["proofread"]
+        proofread_tokens = sum(math.ceil(row["chars"] / self._review_counter.chars_per_token)
+                               for row in proofread)
+        cost += ESTIMATE_CONFIG["batch_discount"] * usd(
+            stage_model(PROOFREAD_CONFIG["stage"]), proofread_tokens,
+            len(proofread) * ESTIMATE_CONFIG["output_tokens_per_call"][PROOFREAD_CONFIG["stage"]])
         modes = result["modes"]
         return Estimate(
-            key, len(result["estimate"]), cost,
+            key, len(result["estimate"]) + len(proofread), cost,
             f"{len(result['estimate'])} pages to write ({modes.get('write', 0)} in full, "
-            f"{modes.get('update', 0)} updated), {modes.get('keep', 0)} untouched",
+            f"{modes.get('update', 0)} updated), {modes.get('keep', 0)} untouched; "
+            f"{len(proofread)} pages to proofread",
             f"{result['input_tokens']} input tokens by characters, output at a typical figure "
-            "per page (+ retries)",
+            f"per page (+ retries); proofreading {proofread_tokens} input tokens by characters, "
+            "output at a typical figure per page, batch price",
         )
 
     def _review(self, run: RunFunction, key: str) -> Estimate:
