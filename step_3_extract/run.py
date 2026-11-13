@@ -48,7 +48,7 @@ from step_3_extract.claims import (
     input_fingerprint,
     message_fingerprints,
 )
-from step_3_extract.prompt import EXTRACT_SYSTEM, FRESH_SCHEMA, UPDATE_SCHEMA
+from step_3_extract.prompt import EXTRACT_CONFIG, EXTRACT_SYSTEM, FRESH_SCHEMA, UPDATE_SCHEMA
 from step_3_extract.scrub import scrub_claims
 from step_6_plan.run import AnthropicTokenCounter, TokenCounter
 from utils.json_io import write_json_file
@@ -233,7 +233,9 @@ def run(
     """
 
     logger = setup_step_logging(STEP_3)
-    llm = LLMClient.for_stage("extract", logger=logger) if llm is None else llm
+    if llm is None:
+        llm = LLMClient.for_stage("extract", logger=logger,
+                                  max_tokens=EXTRACT_CONFIG["max_output_tokens"])
     llm.set_logger(logger)
     audit_path = Path(audit_path)
 

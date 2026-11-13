@@ -7,7 +7,7 @@
   },
   "llm_client": {
     "stages": {
-      "extract": {"provider": "anthropic", "model": "claude-sonnet-5-5", "thinking_param": "medium"},
+      "extract": {"provider": "anthropic", "model": "claude-sonnet-5-5", "thinking_param": "high"},
       "plan": {"provider": "anthropic", "model": "claude-opus-5-5", "thinking_param": "high"},
       "write": {"provider": "anthropic", "model": "claude-sonnet-5-5", "thinking_param": "high"},
       "review": {"provider": "anthropic", "model": "claude-opus-5-5", "thinking_param": "high"},
@@ -180,6 +180,7 @@
     "claim_id_hash_chars": 8,
     "message_fingerprint_chars": 12,
     "long_messages": 30,
+    "max_output_tokens": 64000,
     "privacy_review": {"phone_min_digits": 7, "country_code": "972"},
     "split_experiment": {
       "variants": {
@@ -719,7 +720,7 @@
       "cache_read_price_factor": 0.1,
       "extract_chars_per_token": 1.39,
       "extract_instruction_tokens": 2170,
-      "extract_output_ratio": 0.37,
+      "extract_output_ratio": 0.85,
       "output_tokens_per_call": {
         "write": 13000,
         "update": 6000,

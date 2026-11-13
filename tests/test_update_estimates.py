@@ -68,10 +68,10 @@ def test_step_8_estimate_says_whether_a_call_is_due(tmp_path: Path) -> None:
 
 # Step 3: the million input tokens of the two calls below (counted at the Hebrew ratio) less
 # the system prompt counted with each call are the conversations; every call reads the
-# 2,170 instruction tokens from the prompt cache (0.1 of the input price); output is 0.37 times
+# 2,170 instruction tokens from the prompt cache (0.1 of the input price); output is 0.85 times
 # the conversations' tokens.
 EXTRACT_CONVERSATIONS = 1_000_000 - 2 * CharTokenCounter(1.39)(EXTRACT_SYSTEM, "")
-EXTRACT_OUTPUT = math.ceil(EXTRACT_CONVERSATIONS * 0.37)
+EXTRACT_OUTPUT = math.ceil(EXTRACT_CONVERSATIONS * 0.85)
 
 
 def _results() -> dict[str, dict[str, Any]]:
@@ -112,20 +112,20 @@ def test_estimates_are_priced_from_config(key: str, calls: int, usd: float) -> N
 
 def test_step_3_is_priced_as_the_api_reported_it() -> None:
     """Task 52's calibration (36 batch calls of the new split, Sonnet 5.5): 1.39 characters
-    per token, 2,170 instruction tokens per call read from the prompt cache, output 0.37 times
-    the conversations' tokens."""
+    per token, 2,170 instruction tokens per call read from the prompt cache; output 0.85 times the
+    conversations' tokens (measured at effort high on 11 conversations, 2026-11-12)."""
     assert {key: section("update")["estimate"][key] for key in (
         "extract_chars_per_token", "extract_instruction_tokens", "extract_output_ratio",
         "cache_read_price_factor")} == {"extract_chars_per_token": 1.39,
                                         "extract_instruction_tokens": 2170,
-                                        "extract_output_ratio": 0.37,
+                                        "extract_output_ratio": 0.85,
                                         "cache_read_price_factor": 0.1}
     # Repeated instructions are almost free: about $0.26 for the 1,203 calls of the real input.
     assert extract_price("claude-sonnet-5-5", 1203, 0, 0, True).usd == pytest.approx(0.26, abs=0.005)
     price = extract_price("claude-sonnet-5-5", 36, 100_000, 90_000, True)
     assert (price.prompt_tokens, price.cached_tokens, price.output_tokens) == (
-        100_000, 36 * 2170, 33_300)
-    assert price.usd == pytest.approx((100_000 + 36 * 2170 * 0.1) * 1e-6 + 33_300 * 5e-6)
+        100_000, 36 * 2170, 76_500)
+    assert price.usd == pytest.approx((100_000 + 36 * 2170 * 0.1) * 1e-6 + 76_500 * 5e-6)
     assert extract_price("claude-sonnet-5-5", 36, 100_000, 90_000, False).usd == pytest.approx(
         2 * price.usd)
 

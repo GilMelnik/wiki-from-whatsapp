@@ -37,7 +37,7 @@ from typing import Any
 from step_1_threads_split.gold import load_gold
 from step_1_threads_split.run import load_export_messages
 from step_3_extract.claims import OutputError
-from step_3_extract.prompt import EXTRACT_SYSTEM, FRESH_SCHEMA, STANCES
+from step_3_extract.prompt import EXTRACT_CONFIG, EXTRACT_SYSTEM, FRESH_SCHEMA, STANCES
 from step_3_extract.split_experiment.compare import (
     VariantRun,
     against_reference,
@@ -282,7 +282,8 @@ def main(argv: list[str] | None = None) -> None:
                         load_threads(args.old_split)["threads"], args.variants)
     logger.info(f"Split experiment: {messages.size()} messages in {len(messages.windows)} "
                 f"windows; units {', '.join(f'{v} {len(u)}' for v, u in units.items())}")
-    llm = DryRunModel() if args.dry_run else LLMClient.for_stage("extract", logger=logger)
+    llm = DryRunModel() if args.dry_run else LLMClient.for_stage(
+        "extract", logger=logger, max_tokens=EXTRACT_CONFIG["max_output_tokens"])
     out_dir = OUTPUT_DIR / EXPERIMENT_CONFIG["dry_run_dir"] if args.dry_run else OUTPUT_DIR
     experiment = Experiment(units, messages, llm, logger, use_batch=not args.sync,
                             out_dir=out_dir)
