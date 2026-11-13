@@ -49,7 +49,7 @@ from review_tool.registry import ToolSpec
 from review_tool.stores import StoreHandle
 from step_10_update.estimate import CharTokenCounter, review_usd
 from step_6_plan.model import PlanError
-from step_8_review.inputs import REVIEW_CONFIG, read_json
+from step_8_review.inputs import REVIEW_CONFIG
 from step_8_review.parts import ReviewPasses, batch_available, stored_passes
 from step_8_review.proposals import ACCEPTED
 from step_8_review.reviewer.applies import APPLY_EVENT, ApplyRunner, is_paid
@@ -57,6 +57,7 @@ from step_8_review.reviewer.changes import AppliedChanges
 from step_8_review.reviewer.evidence import WikiView
 from step_8_review.store import SuggestionConflict, SuggestionNotFound, SuggestionsStore
 from utils.config import LLM_CONFIG
+from utils.json_io import read_json_if_present
 from utils.paths import BACKUPS_DIR
 
 logger = logging.getLogger(__name__)
@@ -224,7 +225,7 @@ class SuggestionsTool:
 
     def _metadata(self) -> dict[str, Any]:
         artifact = self.store.artifact
-        payload = read_json(artifact.edited) or read_json(artifact.original) or {}
+        payload = read_json_if_present(artifact.edited) or read_json_if_present(artifact.original) or {}
         return payload.get("metadata") or {}
 
     def _known(self, suggestion_ids: list[str], items: list[dict[str, Any]] | None = None) -> None:

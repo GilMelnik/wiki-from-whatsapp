@@ -44,7 +44,7 @@ from step_7_write_pages.front_matter import LabelRule, page_front_matter
 from step_7_write_pages.inputs import PAGES_CONFIG, Corpus, PageContext
 from step_7_write_pages.proofread import PROOFREAD_CONFIG, Proofreader, proofread_job
 from step_7_write_pages.writer import GroupDelta, PageText, PageWriter, current_text
-from step_8_review.inputs import REVIEW_CONFIG, ReviewInput, read_json
+from step_8_review.inputs import REVIEW_CONFIG, ReviewInput
 from step_8_review.proposals import (
     MISTAKE,
     STRUCTURAL,
@@ -54,6 +54,7 @@ from step_8_review.proposals import (
     problems,
 )
 from utils.config import LLM_CONFIG
+from utils.json_io import read_json_if_present
 from utils.llm_client import LLMClient
 from utils.paths import AUDIT_PATH, PLAN, WIKI_PAGES, Artifact, resolve
 from utils.reconcile import backup_file, guarded_write
@@ -275,7 +276,7 @@ class Applier:
         """Write the corrected pages into the pages' EDITED file (created from the original
         when the owner has no edits yet); returns the backup of the previous edited file."""
         artifact = self.pages_artifact
-        payload = read_json(artifact.edited) or read_json(artifact.original)
+        payload = read_json_if_present(artifact.edited) or read_json_if_present(artifact.original)
         payload = copy.deepcopy(payload)
         payload["pages"].update(items)
         return guarded_write(artifact.edited, payload, backup=True)

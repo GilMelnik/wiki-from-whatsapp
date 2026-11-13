@@ -7,12 +7,12 @@ as if step 3 had never produced them.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from step_4_entities.records import claim_entity_index
+from utils.json_io import read_json_file
 from utils.paths import (
     AUDIT_PATH,
     MANUAL_AGGREGATIONS_PATH,
@@ -20,11 +20,6 @@ from utils.paths import (
     resolve_entities_path,
 )
 from utils.reconcile import fingerprint
-
-
-def _read(path: Path) -> dict[str, Any]:
-    with path.open(encoding="utf-8") as f:
-        return json.load(f)
 
 
 @dataclass(frozen=True)
@@ -77,9 +72,9 @@ def load_inputs(
     """
 
     source = claims_path or resolve_claims_path()
-    payload = _read(source)
+    payload = read_json_file(source)
     entities_file = entities_path or resolve_entities_path()
-    entities = _read(entities_file) if entities_file.is_file() else {}
+    entities = read_json_file(entities_file) if entities_file.is_file() else {}
     deleted = set(entities.get("deleted_claims") or [])
     claims = {c["claim_id"]: c for c in payload.get("claims") or [] if c["claim_id"] not in deleted}
     if not audit_path.is_file():
@@ -87,7 +82,7 @@ def load_inputs(
             f"step 5 needs the private audit {audit_path} (who backed / disputed each claim); "
             f"run step 3 first"
         )
-    audit = {r["claim_id"]: r for r in _read(audit_path).get("audit") or []}
+    audit = {r["claim_id"]: r for r in read_json_file(audit_path).get("audit") or []}
     index = claim_entity_index(entities.get("entities") or [], deleted_claims=deleted)
     legacy = {
         old: new
@@ -114,7 +109,7 @@ def load_must_links(inputs: StepInputs, path: Path = MANUAL_AGGREGATIONS_PATH) -
     if not path.is_file():
         return []
     links: list[MustLink] = []
-    for raw in _read(path).get("aggregations") or []:
+    for raw in read_json_file(path).get("aggregations") or []:
         mapped = (c if c in inputs.claims else inputs.legacy_ids.get(c, "") for c in raw["claim_ids"])
         ids = list(dict.fromkeys(cid for cid in mapped if cid in inputs.claims))
         if len(ids) < 2:

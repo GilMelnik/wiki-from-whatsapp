@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import argparse
 import itertools
-import json
 import logging
 import random
 from collections.abc import Sequence
@@ -29,6 +28,7 @@ from sklearn.metrics import precision_recall_curve, roc_auc_score
 
 from utils.config import ROOT_CONFIG, section
 from utils.embedder import Embedder, Kind
+from utils.json_io import read_json_file
 from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import SHARED
 
@@ -38,19 +38,14 @@ Pair = tuple[str, str]
 AB_KIND: Kind = "similarity"
 
 
-def _load_json(path: Path) -> Any:
-    with path.open(encoding="utf-8") as f:
-        return json.load(f)
-
-
 def _normalize(text: str) -> str:
     return " ".join(text.split())
 
 
 def positive_groups(backup_dir: Path) -> list[list[str]]:
     """Claim-id groups a human judged equivalent (manual groups + multi-source merged claims)."""
-    manual = _load_json(backup_dir / "step_4_entities" / "claim_aggregations.json")
-    merged = _load_json(backup_dir / "step_5_aggregate" / "claims_aggregated_edited.json")
+    manual = read_json_file(backup_dir / "step_4_entities" / "claim_aggregations.json")
+    merged = read_json_file(backup_dir / "step_5_aggregate" / "claims_aggregated_edited.json")
     groups = [g["claim_ids"] for g in manual["aggregations"]]
     for topic in merged["topics"].values():
         groups.extend(m["source_claim_ids"] for m in topic["merged_claims"])
@@ -178,7 +173,7 @@ def main() -> None:
     rng = random.Random(args.seed)
     logger.info(f"embedding A/B commit={git_commit()} args={vars(args)} config={ROOT_CONFIG['embedding']}")
 
-    claim_list = _load_json(args.backup_dir / "step_3_extract" / "claims_edited.json")["claims"]
+    claim_list = read_json_file(args.backup_dir / "step_3_extract" / "claims_edited.json")["claims"]
     claims = {c["claim_id"]: c for c in claim_list}
     positives, negatives = build_pairs(claims, positive_groups(args.backup_dir), args.pairs, rng)
     logger.info(f"{len(positives)} positive and {len(negatives)} negative pairs")

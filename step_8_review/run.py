@@ -48,10 +48,11 @@ from pathlib import Path
 from typing import Any
 
 from step_6_plan.run import AnthropicTokenCounter, TokenCounter
-from step_8_review.inputs import REVIEW_CONFIG, ReviewInput, page_marks, read_json
+from step_8_review.inputs import REVIEW_CONFIG, ReviewInput, page_marks
 from step_8_review.parts import ReviewPass, ReviewPasses, batch_available, stored_passes
 from step_8_review.proposals import OPEN, PENDING, answer_schema, from_answer
 from utils.config import LLM_CONFIG
+from utils.json_io import read_json_if_present
 from utils.llm_client import BatchRequest, LLMClient, _flatten
 from utils.llm_client.ask import ask_json
 from utils.logging_setup import git_commit, setup_step_logging
@@ -112,10 +113,10 @@ class ReviewRun:
         self.model = model
         self.passes = ReviewPasses(review, model)
         self.previous = {} if rebuild else load_previous(artifact)
-        original = read_json(artifact.original) or {}
+        original = read_json_if_present(artifact.original) or {}
         self.stored = stored_passes(original.get("metadata"))
         self.due = self.passes.due(self.stored, only, rebuild)
-        effective = read_json(artifact.edited) or original
+        effective = read_json_if_present(artifact.edited) or original
         self.current: list[dict[str, Any]] = list(effective.get("suggestions") or [])
         self.statuses = {s["id"]: s["status"] for s in self.current}
 

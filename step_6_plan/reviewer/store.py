@@ -19,7 +19,6 @@ Undo: ``history.PlanHistory`` (owned by the tool, so it survives reloads) covers
 
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -56,7 +55,7 @@ from step_6_plan.reviewer.views import (
     group_summary,
     labels_by_kind,
 )
-from utils.json_io import write_json_file
+from utils.json_io import read_json_file, write_json_file
 from utils.reconcile import backup_file
 
 logger = logging.getLogger(__name__)
@@ -83,10 +82,6 @@ def _conflict(lead: str, error: PlanError) -> PlanConflict:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def _read(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _edit_fields(edit: PlanEdit) -> dict[str, Any]:
@@ -117,14 +112,14 @@ class PlanStore:
             raise FileNotFoundError(
                 f"{plan_original} (no wiki plan yet: run step 6, python -m step_6_plan.run)"
             )
-        self.plan: dict[str, Any] = _read(self.source)
-        self.proposal = _read(plan_original) if plan_original.is_file() else None
+        self.plan: dict[str, Any] = read_json_file(self.source)
+        self.proposal = read_json_file(plan_original) if plan_original.is_file() else None
         groups_path = groups_edited if groups_edited.is_file() else groups_original
         self.groups: dict[str, dict[str, Any]] | None = (
-            {group["group_id"]: group for group in _read(groups_path)["groups"]}
+            {group["group_id"]: group for group in read_json_file(groups_path)["groups"]}
             if groups_path.is_file() else None
         )
-        self.coverage_report = _read(coverage_path) if coverage_path.is_file() else None
+        self.coverage_report = read_json_file(coverage_path) if coverage_path.is_file() else None
         self.assignments = AssignmentsFile(assignments_original, assignments_edited)
         self.history = history
         self._view: AssignmentView | None = None

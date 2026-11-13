@@ -22,7 +22,6 @@ yet, an edit is refused with a hint to run it.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,7 +44,7 @@ from step_5_aggregate.reviewer.suggestions import (
 from step_5_aggregate.reviewer.views import GroupViews
 from step_5_aggregate.similarity import ClaimScorer
 from step_7_write_pages.withhold import withheld_ids
-from utils.json_io import write_json_file
+from utils.json_io import read_json_file, write_json_file
 
 NOT_SAME_KEY = "not_same"
 LINK_KEYS = ("contradicts_manual", "contradicts_rejected")
@@ -57,11 +56,6 @@ class GroupNotFound(Exception):
 
 class EditConflict(Exception):
     """The edit does not fit the current groups; the message says why (English, for the UI)."""
-
-
-def _read(path: Path) -> dict[str, Any]:
-    with path.open(encoding="utf-8") as f:
-        return json.load(f)
 
 
 def _now() -> str:
@@ -103,7 +97,7 @@ class GroupsStore:
             raise FileNotFoundError(
                 f"The claims file {claims_file.name} is missing: run step 3, then step 5"
             )
-        self.payload = _read(self.source)
+        self.payload = read_json_file(self.source)
         self.groups: list[Group] = self.payload.setdefault("groups", [])
         self.not_same: list[dict[str, Any]] = self.payload.setdefault(NOT_SAME_KEY, [])
         self.inputs = load_inputs(claims_file, entities.effective, audit_path)

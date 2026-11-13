@@ -31,15 +31,12 @@ from step_4_entities.records import explicit_member_claims, member_names
 from step_4_entities.reviewer.store import EntityStore, EntityView
 from step_4_entities.run import run
 from utils.config import ENTITIES_CONFIG
+from utils.json_io import read_json_file
 from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import ENTITIES, ENTITY_ANALYSIS_PATH, STEP_4, Artifact, resolve, step_path
 
 EVAL_CONFIG = ENTITIES_CONFIG["eval"]
 logger = logging.getLogger(STEP_4)
-
-
-def _load(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def name_labels(payload: dict[str, Any]) -> dict[str, str]:
@@ -252,9 +249,9 @@ class IncrementalExperiment:
         self.work.mkdir(parents=True)
         base_run = self._run("base", self.base, self.artifact)
         self._edit()
-        before = _load(self.artifact.edited)
+        before = read_json_file(self.artifact.edited)
         update_run = self._run("all", self.all, self.artifact)
-        state = _load(self.artifact.edited)
+        state = read_json_file(self.artifact.edited)
         full = Artifact(self.work / "full.json", self.work / "full_edited.json")
         self._run("full", self.all, full)
         return {
@@ -265,7 +262,7 @@ class IncrementalExperiment:
             "edits_survived": self._check(state, before),
             "new_strings": self._landing(state, before),
             "incremental_vs_reviewed": compare(name_labels(state), self.reviewed),
-            "full_vs_reviewed": compare(name_labels(_load(full.edited)), self.reviewed),
+            "full_vs_reviewed": compare(name_labels(read_json_file(full.edited)), self.reviewed),
         }
 
 
@@ -274,9 +271,9 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--incremental", action="store_true", help="also run the 80/20 experiment")
     args = parser.parse_args(argv)
     setup_step_logging(STEP_4)
-    reviewed = name_labels(_load(Path(EVAL_CONFIG["reviewed"])))
+    reviewed = name_labels(read_json_file(Path(EVAL_CONFIG["reviewed"])))
     logger.info(f"evaluate | git commit {git_commit()} | args {vars(args)} | config {ENTITIES_CONFIG}")
-    logger.info(f"current entities vs reviewed: {compare(name_labels(_load(resolve(ENTITIES))), reviewed)}")
+    logger.info(f"current entities vs reviewed: {compare(name_labels(read_json_file(resolve(ENTITIES))), reviewed)}")
     if args.incremental:
         claims = load_claims_for_entities()[0]
         result = IncrementalExperiment(claims, reviewed, step_path(STEP_4, "eval")).run()

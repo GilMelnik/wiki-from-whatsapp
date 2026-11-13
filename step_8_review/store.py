@@ -30,7 +30,6 @@ from step_8_review.inputs import (
     REVIEW_CONFIG,
     page_fingerprint,
     page_marks,
-    read_json,
 )
 from step_8_review.proposals import (
     ACCEPTED,
@@ -41,7 +40,7 @@ from step_8_review.proposals import (
     problems,
 )
 from utils.file_lock import file_lock
-from utils.json_io import write_json_file
+from utils.json_io import read_json_if_present, write_json_file
 from utils.paths import PLAN, SUGGESTIONS, WIKI_PAGES, Artifact, resolve
 from utils.reconcile import backup_file
 
@@ -77,8 +76,8 @@ def _now() -> str:
 def current_fingerprints(pages_artifact: Artifact = WIKI_PAGES,
                          plan_artifact: Artifact = PLAN) -> dict[str, str]:
     """The fingerprint of every effective page that is still in the plan."""
-    payload = read_json(pages_artifact.edited) or read_json(pages_artifact.original) or {}
-    plan = read_json(resolve(plan_artifact)) or {"pages": {}}
+    payload = read_json_if_present(pages_artifact.edited) or read_json_if_present(pages_artifact.original) or {}
+    plan = read_json_if_present(resolve(plan_artifact)) or {"pages": {}}
     return {pid: page_fingerprint(page) for pid, page in (payload.get("pages") or {}).items()
             if pid in plan["pages"]}
 
@@ -96,7 +95,7 @@ class SuggestionsStore:
     # ------------------------------------------------------------------ reads
 
     def _payload(self) -> dict[str, Any]:
-        payload = read_json(self.artifact.edited) or read_json(self.artifact.original)
+        payload = read_json_if_present(self.artifact.edited) or read_json_if_present(self.artifact.original)
         if payload is None:
             raise FileNotFoundError(f"no review suggestions yet at {self.artifact.original}; "
                                     "run step 8 (python -m step_8_review.run)")

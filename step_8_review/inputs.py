@@ -15,7 +15,6 @@ left the wiki since (``page_marks``).
 
 from __future__ import annotations
 
-import json
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -34,6 +33,7 @@ from step_7_write_pages.inputs import (
     writer_fingerprint,
 )
 from utils.config import LLM_CONFIG, section
+from utils.json_io import read_json_if_present
 from utils.paths import WIKI_PAGES, Artifact
 from utils.reconcile import fingerprint
 
@@ -41,20 +41,10 @@ REVIEW_CONFIG = section("wiki_review")
 CHANGED, GONE = "changed", "gone"
 
 
-def read_json(path: Path) -> dict[str, Any] | None:
-    """The JSON object at ``path``; ``None`` when there is no file."""
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"{path} is not valid JSON: {exc}") from exc
-
-
 def effective_pages(artifact: Artifact = WIKI_PAGES) -> tuple[dict[str, Any], Path]:
     """The pages as the site will publish them (edited copy if present) and their file."""
     for path in (artifact.edited, artifact.original):
-        payload = read_json(path)
+        payload = read_json_if_present(path)
         if payload is not None:
             return payload, path
     raise FileNotFoundError(f"step 8 needs the wiki pages at {artifact.original}; run step 7 first")

@@ -64,6 +64,7 @@ from step_6_plan.assign_rules import (
 )
 from step_6_plan.coverage import group_state, page_question
 from step_6_plan.model import PlanError, validation_errors
+from utils.json_io import read_json_if_present
 from utils.llm_client import Classifier, LLMClient, Question
 from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import ASSIGNMENTS, PLAN, STEP_6, Artifact, resolve, resolve_aggregated_path
@@ -71,15 +72,6 @@ from utils.reconcile import diff_inputs, fingerprint, guarded_write
 
 COMPARED = ("assignments", "proposals")
 COMPARED_METADATA = ("inputs", "plan", "considered")
-
-
-def _read(path: Path) -> dict[str, Any] | None:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"{path} is not valid JSON: {exc}") from exc
 
 
 def _chunks(items: Sequence[Question], size: int) -> list[Sequence[Question]]:
@@ -381,8 +373,8 @@ def run(
     errors = validation_errors(plan)
     if errors:
         raise PlanError([f"{plan_source} is not a valid C7 plan; fix it in the plan tool", *errors])
-    base = _read(artifact.original) or {}
-    before = _read(artifact.edited) or base
+    base = read_json_if_present(artifact.original) or {}
+    before = read_json_if_present(artifact.edited) or base
     job = AssignmentRun(groups, plan, before, base, rebuild=rebuild, only=only, logger=logger)
     if estimate:
         result = job.estimate()

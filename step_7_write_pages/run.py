@@ -55,7 +55,6 @@ supporter_count}]`` (ids and numbers only).
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 from collections import Counter
 from collections.abc import Collection, Mapping
@@ -91,6 +90,7 @@ from step_7_write_pages.proofread import (
 )
 from step_7_write_pages.withhold import WITHHOLD_CONFIG
 from step_7_write_pages.writer import GroupDelta, PageText, PageWriter, changed_share, current_text
+from utils.json_io import read_json_if_present
 from utils.llm_client import LLMClient, _flatten
 from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import STEP_7, WIKI_PAGES, Artifact
@@ -104,15 +104,6 @@ COMPARED_METADATA = ("inputs", "pages", "withheld")
 
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _read(path: Path) -> dict[str, Any] | None:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"{path} is not valid JSON: {exc}") from exc
 
 
 @dataclass
@@ -440,7 +431,7 @@ def run(
                                                    max_tokens=UPDATE_CONFIG["max_output_tokens"])
     full_rebuild = rebuild and only is None
     previous = {} if full_rebuild else load_previous(artifact)
-    edited = None if full_rebuild else _read(artifact.edited)
+    edited = None if full_rebuild else read_json_if_present(artifact.edited)
     effective = (edited or previous).get("pages") or {}
     job = PagesRun(corpus, previous, effective, model=llm.model, rebuild=rebuild, only=only,
                    logger=logger)
