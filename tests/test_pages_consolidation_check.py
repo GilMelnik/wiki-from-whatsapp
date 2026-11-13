@@ -9,7 +9,7 @@ import pytest
 
 from step_7_write_pages.consolidation_check import ConsolidationCheck, Measures, _under, main
 from step_7_write_pages.run import run
-from tests.pages_fixtures import FakeWriter, page_assignments, page_groups
+from tests.pages_fixtures import FakeProofreader, FakeWriter, page_assignments, page_groups
 from tests.plan_fixtures import make_plan
 from utils.json_io import write_json_file
 from utils.paths import AGGREGATED, ASSIGNMENTS, PLAN, WIKI_PAGES, resolve
@@ -27,7 +27,7 @@ def _source(root: Path) -> Path:
     pages = _under(WIKI_PAGES, root)
     run(aggregated_path=_under(AGGREGATED, root).original, plan_path=_under(PLAN, root).original,
         assignments_path=_under(ASSIGNMENTS, root).original, artifact=pages, llm=FakeWriter(),
-        update_llm=FakeWriter("fake-update"))
+        update_llm=FakeWriter("fake-update"), proofread_llm=FakeProofreader())
     payload = resolve(pages).read_text(encoding="utf-8")
     pages.original.write_text(payload.replace("פתיח קצר על הדף.", f"פתיח קצר על הדף. {CHRONICLE}"),
                               encoding="utf-8")
@@ -43,7 +43,7 @@ def test_the_check_writes_the_pages_in_a_copy_and_compares_them(tmp_path: Path,
     check.prepare()
     llm = FakeWriter()
     with caplog.at_level(logging.INFO):
-        result = check.write(llm, FakeWriter("fake-update"))
+        result = check.write(llm, FakeWriter("fake-update"), FakeProofreader())
         comparisons = check.compare()
     assert sorted(llm.tasks()) == ["write:agencies", "write:hospital"] and result["write"] == 2
     assert {p: p.read_bytes() for p in source.rglob("*.json")} == before  # the source is untouched

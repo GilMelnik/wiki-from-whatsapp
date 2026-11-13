@@ -52,7 +52,9 @@ def test_first_run_writes_c9_pages_that_step_9_accepts(ws: PagesWorkspace) -> No
     payload = ws.pages()
     assert list(payload["pages"]) == PAGES
     for page_id, page in payload["pages"].items():
-        assert list(page) == ["front_matter", "body_md", "points", "left_out", "input_fingerprint"]
+        assert list(page) == ["front_matter", "body_md", "points", "left_out", "language_edits",
+                              "input_fingerprint"]
+        assert page["language_edits"] == {"model": "fake-proofread", "applied": [], "dropped": {}}
         validate_front_matter(page["front_matter"])
         assert not page["body_md"].startswith(("---", "# "))
         cited = cited_ids(page["body_md"])

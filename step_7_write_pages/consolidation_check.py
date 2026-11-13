@@ -141,14 +141,15 @@ class ConsolidationCheck:
             raise ValueError(f"pages not in the plan: {unknown}")
         self.logger.info(f"Copied the inputs from {self.source} into {self.target}")
 
-    def write(self, llm: LLMClient | None = None, update_llm: LLMClient | None = None
-              ) -> dict[str, Any]:
-        """Step 7 in the target, on the chosen pages only, in full, with the current prompt."""
+    def write(self, llm: LLMClient | None = None, update_llm: LLMClient | None = None,
+              proofread_llm: LLMClient | None = None) -> dict[str, Any]:
+        """Step 7 in the target, on the chosen pages only, in full, with the current prompt
+        (and the language edit, as step 7 runs it)."""
         return run(aggregated_path=resolve(_under(AGGREGATED, self.target)),
                    plan_path=resolve(_under(PLAN, self.target)),
                    assignments_path=resolve(_under(ASSIGNMENTS, self.target)),
                    artifact=_under(WIKI_PAGES, self.target), only=self.pages, rebuild=True,
-                   llm=llm, update_llm=update_llm)
+                   llm=llm, update_llm=update_llm, proofread_llm=proofread_llm)
 
     def compare(self) -> list[PageComparison]:
         before = _read(resolve(_under(WIKI_PAGES, self.source)))["pages"]
