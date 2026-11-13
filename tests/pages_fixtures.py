@@ -6,8 +6,8 @@ its second page; group 11 is unplaced. Groups carry private-looking fields (clai
 identities, a reaction summary) that no prompt may show. ``FakeWriter`` answers like the
 model: one point per ``main`` group of the prompt's ``<groups>`` block, then an article with
 one sentence per group (each citing it) and links to one other page and a label.
-``FakeProofreader`` stands in for the Hebrew language edit (no edits unless told). Nothing
-here comes from real data.
+``FakeProofreader`` stands in for the Hebrew language edit of ``step_8_review.proofread`` (no
+edits unless told). Nothing here comes from real data.
 """
 
 from __future__ import annotations
@@ -202,8 +202,8 @@ class PagesWorkspace:
         write_json_file(payload, self.artifact.edited)
 
     def run(self, llm: FakeWriter | None = None, update_llm: FakeWriter | None = None,
-            proofread_llm: FakeProofreader | None = None, **kwargs: Any) -> dict[str, Any]:
+            **kwargs: Any) -> dict[str, Any]:
         return run(aggregated_path=self.groups_path, plan_path=self.plan_path,
                    assignments_path=self.assignments_path, artifact=self.artifact,
                    llm=llm or FakeWriter(), update_llm=update_llm or FakeWriter("fake-update"),
-                   proofread_llm=proofread_llm or FakeProofreader(), **kwargs)
+                   **kwargs)

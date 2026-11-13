@@ -22,7 +22,6 @@ from step_8_review.proposals import ANSWER_FIELDS
 from step_8_review.run import run
 from step_8_review.store import SuggestionsStore
 from tests.pages_fixtures import (
-    FakeProofreader,
     FakeWriter,
     PagesWorkspace,
     group_ids_in,
@@ -164,12 +163,10 @@ class ReviewWorkspace(PagesWorkspace):
                    count_tokens=kwargs.pop("count_tokens", count_tokens), **kwargs)
 
     def applier(self, llm: FakeWriter | None = None,
-                linker: Callable[[], GroupLinker] | None = None,
-                proofread_llm: FakeProofreader | None = None) -> Applier:
+                linker: Callable[[], GroupLinker] | None = None) -> Applier:
         return Applier(pages_artifact=self.artifact, plan_artifact=self.plan_artifact,
                        aggregated_path=self.groups_path, assignments_path=self.assignments_path,
                        llm=llm or FakeWriter("fake-apply"),
-                       proofread_llm=proofread_llm or FakeProofreader(),
                        linker=linker or (lambda: self.linker))
 
     def store(self, llm: FakeWriter | None = None,

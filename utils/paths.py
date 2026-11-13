@@ -23,6 +23,9 @@ STEP_6 = "step_6_plan"
 STEP_6_ASSIGN = "step_6_assign"
 STEP_7 = "step_7_write_pages"
 STEP_8 = "step_8_review"
+# The proofreading pass's id in the review tool's step registry; it writes into STEP_8's folder
+# (its record) and into the pages' edited file.
+STEP_8_PROOFREAD = "step_8_proofread"
 STEP_9 = "step_9_site"
 STEP_10 = "step_10_update"
 SHARED = "shared"
@@ -84,6 +87,8 @@ WIKI_PAGES = Artifact(
 SUGGESTIONS = Artifact(
     step_path(STEP_8, "suggestions.json"), step_path(STEP_8, "suggestions_edited.json")
 )
+# What the last proofreading pass did (``step_8_review.proofread``; the text is in the pages).
+PROOFREAD_RECORD = step_path(STEP_8, "proofread.json")
 
 # ponytail: named aliases for call-site readability
 ORIGINAL_THREADS_PATH = THREADS.original

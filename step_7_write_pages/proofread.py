@@ -1,11 +1,12 @@
-"""The Hebrew language edit: one more call for every page text a model wrote or rewrote.
+"""The Hebrew language edit: the editor's call and the rules code applies its answer by.
 
-The stage ``proofread`` (config section ``proofread``: ``enabled``, ``stage``,
-``max_output_tokens``) reads one page body as a Hebrew language editor (``SYSTEM``, ``SCHEMA``:
-the prompt tested on two pages, 2026-11-13) and answers with a list of replacements ``{old,
-new, kind, why}``. Code applies an edit, in the model's order, only when ALL of these hold; an
-edit that fails one is dropped and counted under its reason (the keys of ``dropped``), and the
-page is never failed for it:
+Run by ``step_8_review.proofread`` after the review and the owner's decisions, on the text
+that was never proofread. The stage ``proofread`` (config section ``proofread``: ``enabled``,
+``stage``, ``max_output_tokens``) reads one page body as a Hebrew language editor (``SYSTEM``,
+``SCHEMA``: the prompt tested on two pages, 2026-11-13) and answers with a list of replacements
+``{old, new, kind, why}``. Code applies an edit, in the model's order, only when ALL of these
+hold; an edit that fails one is dropped and counted under its reason (the keys of
+``dropped``), and the page is never failed for it:
 
 - ``malformed``: ``old`` and ``new`` are text (and ``kind``, ``why``);
 - ``no_change``: ``old != new``;
@@ -14,19 +15,22 @@ page is never failed for it:
   and digit runs are the same multiset in ``old`` and ``new``, and in the whole body before
   and after (an ``old`` that cuts a link or a mark in two cannot change it either);
 - ``overlap``: it does not touch the text of an edit already applied;
-- ``frozen``: it does not touch a sentence an update kept (``AnswerRules.frozen``: the
-  sentences of the page's previous effective body, which stay byte-identical so the owner's
-  reviewed text does not drift), and every such sentence is still a sentence afterwards.
+- ``frozen``: it does not touch a sentence that was proofread before (``AnswerRules.frozen``:
+  those sentences stay byte-identical, so text the editor already read does not drift), and
+  every such sentence is still a sentence afterwards.
 
 Then the page must still pass the checks that accepted it (``checks.problems`` with the same
-rules): a problem the edits brought in sends the body back to what the writer wrote, the
-applied edits counted as ``reverted`` and the problems listed.
+rules): a problem the edits brought in sends the body back to what it was, the applied edits
+counted as ``reverted`` and the problems listed.
 
-Every page's ``language_edits`` record describes its body: ``{model, applied: [{old, new, kind,
-why}], dropped: {reason: count}}`` (+ ``reverted: [problem]``), or, when the call gave no
-usable answer (an API error, a refusal, a truncated or unparseable answer), ``{model, failed,
-frozen}``: the body is the writer's, and ``frozen`` holds the fingerprints of the sentences
-that were kept, so the step can send the page again on its next run under the same rule.
+A page's ``language_edits`` record describes its last pass: ``{model, applied: [{old, new,
+kind, why}], dropped: {reason: count}, sentences}`` (+ ``reverted: [problem]``), where
+``sentences`` holds the fingerprints of every sentence of the body after the pass: the text
+that has been through the editor (``sentence_split``). A page whose edits were reverted is
+recorded the same way, with no edit applied, so it is not paid for again. When the call gave
+no usable answer (an API error, a refusal, a truncated or unparseable answer) the outcome is
+``{model, failed}`` and the body is unchanged: the caller stores nothing for the page, so the
+next pass sends it again.
 """
 
 from __future__ import annotations
@@ -98,6 +102,7 @@ MALFORMED, NO_CHANGE, NOT_UNIQUE = "malformed", "no_change", "not_unique"
 FIXED_CHANGED, OVERLAP, FROZEN, REVERTED = "fixed_changed", "overlap", "frozen", "reverted"
 _EDIT_KEYS = ("old", "new", "kind", "why")
 _FIXED = re.compile(r"\[\^[^\]]+\]|\[\[[^|\]]+(?:\||\]\])|\d+")
+SENTENCES = "sentences"
 NO_ANSWER = "no usable answer (the call failed, was refused or was cut off; see the LLM log)"
 
 
@@ -187,8 +192,8 @@ def apply_edits(body: str, edits: Sequence[Any], frozen: Collection[str] = ()) -
 
 @dataclass(frozen=True)
 class ProofreadJob:
-    """One page to proofread: its answer as the checks read it (``body``, ``points``,
-    ``left_out``) and the rules that accepted it (``rules.frozen``: never edited)."""
+    """One page to proofread: its text as the checks read it (``body``, ``points``,
+    ``left_out``) and the rules it is held to (``rules.frozen``: never edited)."""
 
     page_id: str
     answer: Mapping[str, Any]
@@ -197,20 +202,26 @@ class ProofreadJob:
 
 def proofread_job(context: PageContext, plan: Mapping[str, Any], answer: Mapping[str, Any],
                   frozen: Collection[str] = ()) -> ProofreadJob:
-    """The job of a page the writer answered with ``answer``; ``frozen``: the sentences the
-    update kept (none for a page written in full)."""
+    """The job of a page whose stored text is ``answer`` (``body``, ``points``,
+    ``left_out``); ``frozen``: its sentences that were proofread before."""
     rules = rules_for(context.page_id, context.records, plan, required=context.required_ids(),
                       frozen=frozen, withheld=context.withheld)
     return ProofreadJob(context.page_id, answer, rules)
 
 
-def owed_frozen(record: Mapping[str, Any] | None, body: str) -> list[str] | None:
-    """The kept sentences of ``body`` when its ``language_edits`` ``record`` says the last
-    call failed (the page is owed a proofreading), else None."""
-    if not record or "failed" not in record:
-        return None
-    wanted = set(record.get("frozen") or [])
-    return [sentence for sentence in sentences(body) if fingerprint(sentence) in wanted]
+def sentence_fingerprints(body: str) -> list[str]:
+    """The fingerprints of ``body``'s sentences, sorted, each once."""
+    return sorted({fingerprint(sentence) for sentence in sentences(body)})
+
+
+def sentence_split(page: Mapping[str, Any]) -> tuple[list[str], list[str]]:
+    """``(proofread, never proofread)``: the sentences of the page's body that have been
+    through the editor (by its ``language_edits`` record) and those that never were."""
+    seen = set((page.get("language_edits") or {}).get(SENTENCES) or ())
+    done, new = [], []
+    for sentence in sentences(page["body_md"]):
+        (done if fingerprint(sentence) in seen else new).append(sentence)
+    return done, new
 
 
 @dataclass(frozen=True)
@@ -226,12 +237,13 @@ class Proofread:
 
 
 class Proofreader:
-    """Proofreads the pages of one run with the ``proofread`` stage client: one batch when the
-    provider has a batch API (half price), else one sync call per page."""
+    """Proofreads the pages of one pass with the ``proofread`` stage client: one batch when
+    ``batch`` and the provider has a batch API (half price), else one sync call per page."""
 
-    def __init__(self, llm: LLMClient, logger: logging.Logger) -> None:
+    def __init__(self, llm: LLMClient, logger: logging.Logger, *, batch: bool = True) -> None:
         self.llm = llm
         self.logger = logger
+        self.batch = batch
 
     def run(self, jobs: Sequence[ProofreadJob]) -> dict[str, Proofread]:
         """``{page_id: Proofread}`` for every job (a failed call keeps the job's body)."""
@@ -243,7 +255,7 @@ class Proofreader:
         self.logger.info(f"Proofreading {len(jobs)} pages ({self.llm.model})")
         error = NO_ANSWER
         try:
-            answers = ask_json(self.llm, requests, batch=self.llm.supports_batch(),
+            answers = ask_json(self.llm, requests, batch=self.batch and self.llm.supports_batch(),
                                logger=self.logger)
         except (anthropic.APIError, RuntimeError, ValueError, OSError) as exc:
             answers, error = {}, repr(exc)
@@ -253,22 +265,22 @@ class Proofreader:
         body, model = job.answer["body"], self.llm.model
         if not isinstance(answer, dict) or not isinstance(answer.get("edits"), list):
             why = error if answer is None else f"the answer has no edits list: {str(answer)[:200]}"
-            self.logger.error(f"proofread:{job.page_id}: {why}; the body stays as written and "
-                              "the page is sent again on the step's next run")
-            return Proofread(body, {"model": model, "failed": why,
-                                    "frozen": sorted(fingerprint(s) for s in job.rules.frozen)})
+            self.logger.error(f"proofread:{job.page_id}: {why}; the body stays as it is and "
+                              "the page is sent again on the next pass")
+            return Proofread(body, {"model": model, "failed": why})
         edited = apply_edits(body, answer["edits"], job.rules.frozen)
-        record = {"model": model, "applied": edited.applied, "dropped": dict(edited.dropped)}
+        record = {"model": model, "applied": edited.applied, "dropped": dict(edited.dropped),
+                  SENTENCES: sentence_fingerprints(edited.body)}
         if edited.applied:
             before = problems(job.answer, job.rules)
             new = [problem for problem in problems({**job.answer, "body": edited.body}, job.rules)
                    if problem not in before]
             if new:
                 self.logger.warning(f"proofread:{job.page_id}: the edits broke a check the page "
-                                    f"passed; the body stays as written: {new}")
+                                    f"passed; the body stays as it was: {new}")
                 dropped = {**edited.dropped, REVERTED: len(edited.applied)}
                 return Proofread(body, {"model": model, "applied": [], "dropped": dropped,
-                                        "reverted": new})
+                                        "reverted": new, SENTENCES: sentence_fingerprints(body)})
         self.logger.info(f"proofread:{job.page_id}: {len(edited.applied)} edits applied, dropped "
                          f"{dict(edited.dropped)}")
         return Proofread(edited.body, record)

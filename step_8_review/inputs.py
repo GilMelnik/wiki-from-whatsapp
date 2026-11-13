@@ -7,7 +7,8 @@ evidence, the very group lines step 7's writer read for that page: step 7's own 
 text; nothing about people). The page body is sent without its footnote definitions: the
 group lines say more (counts, dates) than a definition does.
 
-Fingerprints (contract C14): one per page (its title and effective body); the review passes
+Fingerprints (contract C14): one per page (its title and effective body, language edits not
+counted: ``page_fingerprint``); the review passes
 build theirs on it (``step_8_review.parts``). A suggestion stores the fingerprints of its pages
 when it is raised, so a later run (and the suggestions store) can tell that a page changed or
 left the wiki since (``page_marks``).
@@ -39,6 +40,7 @@ from utils.reconcile import fingerprint
 
 REVIEW_CONFIG = section("wiki_review")
 CHANGED, GONE = "changed", "gone"
+REVIEW_FINGERPRINT = "review_fingerprint"
 
 
 def effective_pages(artifact: Artifact = WIKI_PAGES) -> tuple[dict[str, Any], Path]:
@@ -51,8 +53,14 @@ def effective_pages(artifact: Artifact = WIKI_PAGES) -> tuple[dict[str, Any], Pa
 
 
 def page_fingerprint(page: Mapping[str, Any]) -> str:
-    """What a reader of the page sees: its title and its body."""
-    return fingerprint({"title": page["front_matter"].get("title", ""), "body": page["body_md"]})
+    """What a reader of the page sees: its title and its body. A page that only the language
+    edit changed since (``language_edits.review_fingerprint``, written by
+    ``step_8_review.proofread``: ``after`` the pass, it ``counts_as`` the page before it)
+    keeps the fingerprint it had: proofreading never makes a review pass due or marks a
+    suggestion's page as changed. Any later change of the page breaks the match."""
+    seen = fingerprint({"title": page["front_matter"].get("title", ""), "body": page["body_md"]})
+    carried = (page.get("language_edits") or {}).get(REVIEW_FINGERPRINT) or {}
+    return carried.get("counts_as", seen) if carried.get("after") == seen else seen
 
 
 def page_marks(raised_on: Mapping[str, str], current: Mapping[str, str]) -> dict[str, str]:

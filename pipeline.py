@@ -11,17 +11,21 @@ step registry, ``review_tool.steps.STEP_SPECS`` (the review tool and the update 
     5. aggregate   -> claim groups (C6)                          review: groups
     6. plan        -> the wiki plan (C7; planned once, then curated)   review: plan
     6b. assign     -> groups on pages + labels, proposals (C8)   review: plan
-    7. write pages -> wiki pages (C9; one call per new or changed page, then one batch that
-                      proofreads the bodies written)
+    7. write pages -> wiki pages (C9; one call per new or changed page)
     8. review      -> suggestions (C12; one batched call per part of the wiki that changed, plus
                       one across the pages' points)
                                                                   review: suggestions
+    8b. proofread  -> the Hebrew language edit of every page holding text that was never
+                      proofread (one batch), into the pages' edited file; after the owner's
+                      decisions on the suggestions are applied
     9. site        -> docs/ (pages, label pages, wiki_index.json, the agents' docs/_agent/ and
                       llms.txt) + mkdocs.yml
 
 A review is ``python -m review_tool --tool <name>``. This function runs every step once, in
-order, without stopping; a later chat export goes through ``python -m step_10_update.run``,
-which stops at the reviews and before paid steps.
+order, without stopping (so a first build proofreads before any suggestion is applied; the
+text an apply writes then waits for the next ``python -m step_8_review.proofread``); a later
+chat export goes through ``python -m step_10_update.run``, which stops at the reviews and
+before paid steps.
 """
 
 from __future__ import annotations

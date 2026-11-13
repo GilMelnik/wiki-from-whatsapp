@@ -14,10 +14,22 @@ from review_tool.update_status import UpdateStatus
 from step_10_update.driver import StepFailed
 from tests.review_tool_support import BASE_URL, build_app
 from tests.update_support import PAID_STEPS, World, newer_chat
-from utils.paths import STEP_1, STEP_2, STEP_3, STEP_4, STEP_5, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_9
+from utils.paths import (
+    STEP_1,
+    STEP_2,
+    STEP_3,
+    STEP_4,
+    STEP_5,
+    STEP_6_ASSIGN,
+    STEP_7,
+    STEP_8,
+    STEP_8_PROOFREAD,
+    STEP_9,
+)
 from utils.step_lease import StepLease
 
-UPDATE_ORDER = [STEP_1, STEP_2, STEP_3, STEP_4, STEP_5, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_9]
+UPDATE_ORDER = [STEP_1, STEP_2, STEP_3, STEP_4, STEP_5, STEP_6_ASSIGN, STEP_7, STEP_8,
+                STEP_8_PROOFREAD, STEP_9]
 
 
 @pytest.fixture
@@ -48,7 +60,8 @@ def test_stopped_before_a_paid_step_with_its_estimate(world: World) -> None:
     assert answer["state"] == "in_progress" and answer["export"].endswith("_chat_android.json")
     assert answer["counts"] == {"new": 2, "changed": 0, "missing": 0}
     assert [statuses(answer)[key] for key in UPDATE_ORDER] == [
-        "done", "done", "stopped", "waiting", "waiting", "waiting", "waiting", "waiting", "waiting"
+        "done", "done", "stopped", "waiting", "waiting", "waiting", "waiting", "waiting", "waiting",
+        "waiting",
     ]
     assert answer["stopped"]["kind"] == "paid" and answer["stopped"]["review_tool"] is None
     assert f"--pay {STEP_3}" in answer["stopped"]["message"]

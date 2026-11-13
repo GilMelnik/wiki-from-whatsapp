@@ -1,7 +1,7 @@
 """What a paid step would process and roughly cost, without calling any paid endpoint.
 
 Each paid step has an estimate mode that plans its run and makes no model call (steps 3, 7,
-8: ``run(estimate=True, count_tokens=...)``; step 6b: ``run(estimate=True)``). The Anthropic
+8: ``run(estimate=True, count_tokens=...)``; steps 6b and 8b: ``run(estimate=True)``). The Anthropic
 token counter needs credits, so the prompts are counted here by characters
 (``update.estimate.chars_per_token``). Output tokens are a typical figure per call
 (``output_tokens_per_call``), except for step 3 (``extract_price``, calibrated on the API's
@@ -13,9 +13,10 @@ conversations it reads, not with the number of calls: output is ``extract_output
 times the conversations' tokens. Prices are ``usd_per_million_tokens`` per model, with
 ``batch_discount`` when step 3 or step 8 uses the batch API. Step 8's Hebrew prompts are
 counted with their own measured ratio (``wiki_review.chars_per_token``), one output figure per
-due review pass. Step 7's Hebrew language edit (one batch call per page written or rewritten,
-and per page owed one) reads the page body: its prompt is counted at the review's ratio too,
-output at the typical figure of ``output_tokens_per_call.proofread``, at the batch discount.
+due review pass. Step 8b, the Hebrew language edit (one call per page holding text that was
+never proofread), reads the page body: its prompt is counted at the review's ratio too, output
+at the typical figure of ``output_tokens_per_call.proofread``, at the batch discount when it
+uses the batch API.
 Every figure is therefore rough; the estimate says what it counted.
 
 ``paid_calls`` counts chat-model calls only. The cheap classifier (Jev) and the embeddings are
@@ -40,7 +41,7 @@ from step_7_write_pages.run import WRITE_CONFIG
 from step_8_review.inputs import REVIEW_CONFIG
 from utils.config import LLM_CONFIG, section
 from utils.llm_client.settings import CLASSIFIER_CONFIG
-from utils.paths import STEP_3, STEP_6_ASSIGN, STEP_7, STEP_8
+from utils.paths import STEP_3, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_8_PROOFREAD
 
 ESTIMATE_CONFIG = section("update")["estimate"]
 EMBEDDING_MODEL = section("embedding")["model"]
@@ -141,6 +142,7 @@ class Estimator:
             STEP_6_ASSIGN: self._assignments,
             STEP_7: self._pages,
             STEP_8: self._review,
+            STEP_8_PROOFREAD: self._proofread,
         }
 
     def __call__(self, step: Step) -> Estimate | None:
@@ -195,21 +197,13 @@ class Estimator:
                 ESTIMATE_CONFIG["output_tokens_per_call"][stages[row["mode"]]])
             for row in result["estimate"]
         )
-        proofread = result["proofread"]
-        proofread_tokens = sum(math.ceil(row["chars"] / self._review_counter.chars_per_token)
-                               for row in proofread)
-        cost += ESTIMATE_CONFIG["batch_discount"] * usd(
-            stage_model(PROOFREAD_CONFIG["stage"]), proofread_tokens,
-            len(proofread) * ESTIMATE_CONFIG["output_tokens_per_call"][PROOFREAD_CONFIG["stage"]])
         modes = result["modes"]
         return Estimate(
-            key, len(result["estimate"]) + len(proofread), cost,
+            key, len(result["estimate"]), cost,
             f"{len(result['estimate'])} pages to write ({modes.get('write', 0)} in full, "
-            f"{modes.get('update', 0)} updated), {modes.get('keep', 0)} untouched; "
-            f"{len(proofread)} pages to proofread",
+            f"{modes.get('update', 0)} updated), {modes.get('keep', 0)} untouched",
             f"{result['input_tokens']} input tokens by characters, output at a typical figure "
-            f"per page (+ retries); proofreading {proofread_tokens} input tokens by characters, "
-            "output at a typical figure per page, batch price",
+            "per page (+ retries)",
         )
 
     def _review(self, run: RunFunction, key: str) -> Estimate:
@@ -221,3 +215,20 @@ class Estimator:
         return Estimate(key, calls, review_usd(result), what,
                         "input tokens by characters, output at a typical figure per pass"
                         f"{', batch price' if result['batch'] else ''}")
+
+    def _proofread(self, run: RunFunction, key: str) -> Estimate:
+        result = run(estimate=True)
+        rows = result.get("estimate") or []  # none when proofreading is off
+        stage = PROOFREAD_CONFIG["stage"]
+        tokens = sum(math.ceil(row["chars"] / self._review_counter.chars_per_token)
+                     for row in rows)
+        cost = usd(stage_model(stage), tokens,
+                   len(rows) * ESTIMATE_CONFIG["output_tokens_per_call"][stage])
+        if result.get("batch"):
+            cost *= ESTIMATE_CONFIG["batch_discount"]
+        what = (f"{len(rows)} pages hold text that was never proofread "
+                f"({sum(row['new_sentences'] for row in rows)} sentences)"
+                if rows else "no call: no page holds text that was never proofread")
+        return Estimate(key, len(rows), cost, what,
+                        f"{tokens} input tokens by characters, output at a typical figure per "
+                        f"page{', batch price' if result.get('batch') else ''}")
