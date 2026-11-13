@@ -92,10 +92,10 @@ def _results() -> dict[str, dict[str, Any]]:
 @pytest.mark.parametrize(("key", "calls", "usd"), [
     (STEP_3, 2, ((EXTRACT_CONVERSATIONS + 2 * 2170 * 0.1) * 2 + EXTRACT_OUTPUT * 10) / 1e6 * 0.5),
     (STEP_6_ASSIGN, 1, 10 * 12200 * 0.042 / 1e6 + (30000 * 2 + 4000 * 10) / 1e6),
-    # two writer calls (Sonnet) + two proofreading calls (Opus, batch): 10,000 and 10,001
-    # input tokens at the review's 1.56 characters per token, 13,000 output tokens each
+    # two writer calls (Sonnet) + two proofreading calls (Fable, batch): 10,000 and 10,001
+    # input tokens at the review's 1.56 characters per token, 23,000 output tokens each
     (STEP_7, 4, (500_000 * 2 + 13000 * 10 + 500_000 * 2 + 6000 * 10) / 1e6
-     + ((10_000 + 10_001) * 4 + 2 * 13000 * 20) / 1e6 * 0.5),
+     + ((10_000 + 10_001) * 8 + 2 * 23000 * 40) / 1e6 * 0.5),
     (STEP_8, 2, (200_000 * 4 + 6000 * 2 * 20) / 1e6 * 0.5),
 ])
 def test_estimates_are_priced_from_config(key: str, calls: int, usd: float) -> None:

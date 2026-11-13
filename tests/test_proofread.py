@@ -158,7 +158,7 @@ def test_the_stage_sends_only_what_opus_and_fable_accept(model: str, tmp_path: P
                                                          monkeypatch: pytest.MonkeyPatch) -> None:
     stage = LLM_CONFIG["stages"][PROOFREAD_CONFIG["stage"]]
     assert (stage["provider"], stage["model"], stage["thinking_param"]) == (
-        "anthropic", "claude-opus-5-5", "high")
+        "anthropic", "claude-fable-5-2", "high")
     monkeypatch.setitem(stage, "model", model)
     llm = LLMClient.for_stage(PROOFREAD_CONFIG["stage"], cache_dir=tmp_path,
                               max_tokens=PROOFREAD_CONFIG["max_output_tokens"])

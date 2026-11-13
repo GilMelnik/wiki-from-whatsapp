@@ -14,7 +14,7 @@
       "apply": {"provider": "anthropic", "model": "claude-sonnet-5-5", "thinking_param": "medium"},
       "propose": {"provider": "anthropic", "model": "claude-sonnet-5-5", "thinking_param": "low"},
       "update": {"provider": "anthropic", "model": "claude-sonnet-5-5", "thinking_param": "medium"},
-      "proofread": {"provider": "anthropic", "model": "claude-opus-5-5", "thinking_param": "high"}
+      "proofread": {"provider": "anthropic", "model": "claude-fable-5-2", "thinking_param": "high"}
     },
     "batch_poll_interval": 30.0,
     "max_tokens_ceiling": 16384,
@@ -732,7 +732,7 @@
         "update": 6000,
         "review": 6000,
         "propose": 4000,
-        "proofread": 13000
+        "proofread": 23000
       },
       "proposal_input_tokens": 30000,
       "classifier_tokens_per_group": 12200,
