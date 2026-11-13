@@ -23,12 +23,12 @@ from pathlib import Path
 from typing import Any, Literal
 
 from step_1_threads_split.reviewer.operations import EditRefused, UnknownItem
+from step_1_threads_split.reviewer.store import EDITED_BY
 from utils.json_io import write_json_file
 from utils.reconcile import backup_file
 from utils.timestamps import local_now
 
 KnowledgeFilter = Literal["all", "yes", "no", "manual"]
-EDITED_BY = "threads_reviewer"
 NOT_RUN = (
     "Step 2 has not classified the conversations yet, so there is no knowledge label to "
     "check. Run step 2 (python -m step_2_classify.run); its answers show here."

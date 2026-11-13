@@ -15,7 +15,6 @@ A wrong apply is repaired from the backup the result names; there is no undo her
 from __future__ import annotations
 
 import difflib
-import json
 import re
 from collections.abc import Mapping
 from datetime import datetime
@@ -25,19 +24,13 @@ from typing import Any
 from step_8_review.apply import sentences
 from step_8_review.proposals import APPLIED, CONTRADICTION, STRUCTURAL, plain_text
 from step_8_review.reviewer.evidence import WikiView
+from utils.json_io import read_json_if_present
 from utils.paths import Artifact
+from utils.reconcile import BACKUP_STAMP
 
 PLAN_FIELDS = ("created", "removed_pages", "removed_labels", "redirects", "reassign")
 # The steps a plan change needs before the pages show it, by the artifact they produce.
 FOLLOW_UP = ("assignments", "pages")
-_STAMP = "%Y%m%d_%H%M%S"
-
-
-def _read(path: Path) -> dict[str, Any] | None:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return None
 
 
 def _backup_key(path: Path, pattern: re.Pattern[str]) -> tuple[str, int] | None:
@@ -57,7 +50,7 @@ def snapshot_after(path: Path, backup: Path | None, folder: Path, applied_at: st
         later = [candidate for key, candidate in stamped if key > after]
     else:
         moment = datetime.fromisoformat(applied_at.replace("Z", "+00:00")).astimezone()
-        floor = moment.strftime(_STAMP)  # backups are named in local time
+        floor = moment.strftime(BACKUP_STAMP)  # backups are named in local time
         later = [candidate for key, candidate in stamped if key[0] >= floor]
     return later[0] if later else path
 
@@ -102,8 +95,8 @@ class AppliedChanges:
         backup = Path(result["backup"]) if result.get("backup") else None
         before_path = backup or self.pages_artifact.original
         after_path = snapshot_after(self.pages_artifact.edited, backup, self.backups_dir, applied_at)
-        before = (_read(before_path) or {}).get("pages") or {}
-        after = (_read(after_path) or {}).get("pages") or {}
+        before = (read_json_if_present(before_path) or {}).get("pages") or {}
+        after = (read_json_if_present(after_path) or {}).get("pages") or {}
         pages = []
         for page_id, info in (result.get("pages") or {}).items():
             changed = info.get("changed", True)
