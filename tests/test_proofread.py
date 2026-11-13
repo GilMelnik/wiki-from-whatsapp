@@ -92,8 +92,7 @@ def test_a_sentence_the_update_kept_is_never_edited() -> None:
 def _rules(**changes: Any) -> AnswerRules:
     return AnswerRules(page_id="p", allowed_ids=frozenset(IDS), main_ids=tuple(IDS),
                        required_ids=(), page_targets=frozenset({"p", "costs"}),
-                       label_targets=frozenset({"usa"}),
-                       backing={gid: (1, "2024-01-01") for gid in IDS}, **changes)
+                       label_targets=frozenset({"usa"}), **changes)
 
 
 ANSWER = {"body": "פתיח.\n\nאחד.[^g-00000001][^g-00000002] שניים.[^g-00000003][^g-00000004]\n",
@@ -102,14 +101,20 @@ ANSWER = {"body": "פתיח.\n\nאחד.[^g-00000001][^g-00000002] שניים.[^g
 
 
 def test_edits_that_break_a_check_send_the_body_back() -> None:
-    assert problems(ANSWER, _rules()) == []
-    merge = edit("אחד.[^g-00000001][^g-00000002] שניים", "אחד[^g-00000001][^g-00000002] וגם שניים")
-    fake = FakeProofreader(lambda page_id, body: [edit("פתיח.", "פתיחה."), merge])
-    outcome = Proofreader(fake, LOGGER).run([ProofreadJob("p", ANSWER, _rules())])["p"]
-    assert outcome.body == ANSWER["body"] and not outcome.failed
+    told = {"body": "פתיח.\n\nאחד.[^g-00000001] שניים[^g-00000002] וגם שלושה[^g-00000001]. "
+                    "ארבע.[^g-00000003] חמש.[^g-00000004]\n",
+            "points": [{"kind": "fact", "statement": "נקודה", "groups": IDS[:2]},
+                       {"kind": "fact", "statement": "עוד", "groups": IDS[2:3]},
+                       {"kind": "fact", "statement": "ועוד", "groups": IDS[3:]}],
+            "left_out": []}
+    assert problems(told, _rules()) == []
+    split = edit("שניים[^g-00000002] וגם שלושה", "שניים[^g-00000002]. וגם שלושה")
+    fake = FakeProofreader(lambda page_id, body: [edit("פתיח.", "פתיחה."), split])
+    outcome = Proofreader(fake, LOGGER).run([ProofreadJob("p", told, _rules())])["p"]
+    assert outcome.body == told["body"] and not outcome.failed
     assert outcome.language_edits["applied"] == [] and outcome.language_edits["dropped"] == {
         "reverted": 2}
-    assert "more than 3 marks" in outcome.language_edits["reverted"][0]
+    assert "told in more than 2 statements" in outcome.language_edits["reverted"][0]
 
 
 def test_a_failed_call_keeps_the_body_and_records_what_was_kept() -> None:
