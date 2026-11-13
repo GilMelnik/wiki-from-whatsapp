@@ -1,97 +1,16 @@
-"""Step 4 entity resolution: clustering precision, transliteration, guard, mentions."""
+"""Step 4 entity resolution: clustering precision, transliteration, guard, contacts."""
 
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
 from itertools import count
 from pathlib import Path
 
 from step_4_entities.cluster import EntityClusterer
-from step_4_entities.collect import ClaimCorpus, tagged_names
-from step_4_entities.mentions import (
-    Analyzer,
-    MentionIndex,
-    SimpleAnalyzer,
-    Word,
-    analyze_claims,
-    build_or_load_analysis,
-    find_mentions,
-)
+from step_4_entities.mentions import SimpleAnalyzer, analyze_claims
 from step_4_entities.normalize import normalize_name, transliteration_skeleton
 from step_4_entities.records import claim_contacts
-
-
-def collect_entities(
-    claims: list[dict],
-    *,
-    original_by_id: dict | None = None,
-    analysis: dict[str, list[Word]] | None = None,
-    analyzer: Analyzer | None = None,
-) -> list[dict]:
-    """One member record per distinct entity string, most claims first (``analysis`` is built
-    with ``analyzer``, default the model-free ``SimpleAnalyzer``, when not given). Names are
-    taken most-tagged first, ties by name, so the order is stable."""
-
-    if analysis is None:
-        analysis = analyze_claims(claims, analyzer or SimpleAnalyzer())
-    corpus = ClaimCorpus(claims, analysis, original_by_id)
-    tagged = {name for claim in corpus.claims_by_id.values() for name in tagged_names(claim)}
-    names = sorted(tagged, key=lambda n: (-len(corpus.tagged_claims(n)), n))
-    members = [corpus.member(name, corpus.claims_for(name)) for name in names]
-    members.sort(key=lambda m: m["count"], reverse=True)
-    return members
-
-
-class FakeAnalyzer:
-    """Deterministic, model-free analyzer for tests.
-
-    Whitespace tokens with caller-supplied per-token ``core`` (mimicking dictabert
-    prefix segmentation) and ``pos`` overrides. Lets us exercise proclitic stripping
-    and the POS gate without loading the model.
-    """
-
-    model_name = "fake"
-
-    def __init__(
-        self,
-        cores: dict[str, str] | None = None,
-        pos: dict[str, str] | None = None,
-        ner: set[str] | None = None,
-    ) -> None:
-        self._cores = cores or {}
-        self._pos = pos or {}
-        self._ner = ner or set()
-
-    def analyze_batch(self, texts: Sequence[str]) -> list[list[Word]]:
-        return [
-            [
-                {
-                    "token": tok,
-                    "core": self._cores.get(tok, tok),
-                    "prefixes": [],
-                    "pos": self._pos.get(tok),
-                    "lemma": None,
-                    "ner": "ORG" if tok in self._ner else None,
-                }
-                for tok in (text or "").split()
-            ]
-            for text in texts
-        ]
-
-
-def _words(text: str, analyzer: Analyzer | None = None) -> list[Word]:
-    analyzer = analyzer or SimpleAnalyzer()
-    return analyze_claims([{"claim_id": "c", "claim_text": text}], analyzer)["c"]
-
-
-def _claim(claim_id: str, entities: list[str], text: str | None = None) -> dict:
-    return {
-        "claim_id": claim_id,
-        "thread_id": claim_id.split("-")[0],
-        "claim_text": " / ".join(entities) if text is None else text,
-        "entities": entities,
-    }
+from tests.entities_fixtures import collect_entities, entity_claim
 
 
 def _cluster_of(entities: list[dict], name: str) -> str:
@@ -130,16 +49,16 @@ def _entity_with(entities: list[dict], name: str) -> dict:
 
 def test_clustering_merges_variants_keeps_distinct_separate(tmp_path: Path) -> None:
     claims = [
-        _claim("t1-c0", ["עמית פלס"]),
-        _claim("t1-c1", ["Amit Peles"]),
-        _claim("t2-c0", ["אל על"]),
-        _claim("t2-c1", ["אלעל"]),
-        _claim("t3-c0", ["קופת חולים"]),
-        _claim("t3-c1", ["קופות החולים"]),
-        _claim("t4-c0", ["תל אביב"]),
-        _claim("t4-c1", ["ירושלים"]),
-        _claim("t5-c0", ["מכבי"]),
-        _claim("t5-c1", ["כללית"]),
+        entity_claim("t1-c0", ["עמית פלס"]),
+        entity_claim("t1-c1", ["Amit Peles"]),
+        entity_claim("t2-c0", ["אל על"]),
+        entity_claim("t2-c1", ["אלעל"]),
+        entity_claim("t3-c0", ["קופת חולים"]),
+        entity_claim("t3-c1", ["קופות החולים"]),
+        entity_claim("t4-c0", ["תל אביב"]),
+        entity_claim("t4-c1", ["ירושלים"]),
+        entity_claim("t5-c0", ["מכבי"]),
+        entity_claim("t5-c1", ["כללית"]),
     ]
     entities = _cluster(claims, tmp_path)
 
@@ -157,8 +76,8 @@ def test_prefix_and_cooccurrence_merge(tmp_path: Path) -> None:
     # "עו"ד הראל" normalizes to "הראל", a whole-word prefix of "הראל ברק", and the
     # two co-occur on one claim -> a must-link alias (not two entities).
     claims = [
-        _claim("t1-c0", ['עו"ד הראל', "הראל ברק"]),
-        _claim("t1-c1", ["הראל ברק"]),
+        entity_claim("t1-c0", ['עו"ד הראל', "הראל ברק"]),
+        entity_claim("t1-c1", ["הראל ברק"]),
     ]
     entities = _cluster(claims, tmp_path)
     assert _cluster_of(entities, 'עו"ד הראל') == _cluster_of(entities, "הראל ברק")
@@ -172,8 +91,8 @@ def test_context_guard_holds_look_alike_short_names_apart(tmp_path: Path) -> Non
     # Same short name up to punctuation, but the claims around them share no word:
     # held apart and flagged for review instead of silently merged.
     claims = [
-        _claim("t1-c0", ["Gaya"], "Gaya lawyer handled the court papers"),
-        _claim("t2-c0", ["Gayaa"], "Gayaa kindergarten opens at seven"),
+        entity_claim("t1-c0", ["Gaya"], "Gaya lawyer handled the court papers"),
+        entity_claim("t2-c0", ["Gayaa"], "Gayaa kindergarten opens at seven"),
     ]
     entities = _cluster(claims, tmp_path)
     assert _cluster_of(entities, "Gaya") != _cluster_of(entities, "Gayaa")
@@ -184,8 +103,8 @@ def test_context_guard_holds_look_alike_short_names_apart(tmp_path: Path) -> Non
 
 def test_context_guard_lets_look_alikes_with_shared_context_merge(tmp_path: Path) -> None:
     claims = [
-        _claim("t1-c0", ["Gaya"], "Gaya agency charges a fee for the surrogacy process"),
-        _claim("t2-c0", ["Gayaa"], "Gayaa agency fee for the surrogacy process is high"),
+        entity_claim("t1-c0", ["Gaya"], "Gaya agency charges a fee for the surrogacy process"),
+        entity_claim("t2-c0", ["Gayaa"], "Gayaa agency fee for the surrogacy process is high"),
     ]
     entities = _cluster(claims, tmp_path)
     assert _cluster_of(entities, "Gaya") == _cluster_of(entities, "Gayaa")
@@ -195,8 +114,8 @@ def test_context_guard_lets_look_alikes_with_shared_context_merge(tmp_path: Path
 def test_context_guard_ignores_long_names(tmp_path: Path) -> None:
     # Long names are distinctive enough: string similarity alone decides.
     claims = [
-        _claim("t1-c0", ["Sunrise Fertility Center"], "Sunrise Fertility Center court papers"),
-        _claim("t2-c0", ["Sunrise Fertility Centre"], "Sunrise Fertility Centre kindergarten"),
+        entity_claim("t1-c0", ["Sunrise Fertility Center"], "Sunrise Fertility Center court papers"),
+        entity_claim("t2-c0", ["Sunrise Fertility Centre"], "Sunrise Fertility Centre kindergarten"),
     ]
     entities = _cluster(claims, tmp_path)
     assert _cluster_of(entities, "Sunrise Fertility Center") == _cluster_of(
@@ -317,11 +236,11 @@ def test_seed_status_applies_only_to_a_group_made_of_that_seed(tmp_path: Path) -
         encoding="utf-8",
     )
     claims = [
-        _claim("t1-c0", ["Acme Agency"]),
-        _claim("t2-c0", ["אקמי"]),
-        _claim("t3-c0", ["Zenith Clinic"]),
+        entity_claim("t1-c0", ["Acme Agency"]),
+        entity_claim("t2-c0", ["אקמי"]),
+        entity_claim("t3-c0", ["Zenith Clinic"]),
         # Not in the seed, but a spelling variant that clusters with the seeded name.
-        _claim("t4-c0", ["Zenith Clinics"]),
+        entity_claim("t4-c0", ["Zenith Clinics"]),
     ]
     entities = _cluster(claims, tmp_path, seed_path=seed_path)
 
@@ -338,7 +257,7 @@ def test_transliteration_skeleton_aligns_across_scripts() -> None:
 
 
 def test_contacts_preserved_from_claims(tmp_path: Path) -> None:
-    claim = _claim("t1-c0", ["David Shield"])
+    claim = entity_claim("t1-c0", ["David Shield"])
     claim["_redactions"] = [{"type": "email", "value": "x@davidshield.com"}]
     claim["claim_text"] = "ביטוח David Shield דרך davidshield.com"
     entities = _cluster([claim], tmp_path)
@@ -349,10 +268,10 @@ def test_contacts_preserved_from_claims(tmp_path: Path) -> None:
 
 def test_contacts_from_original_when_edited_lacks_redactions(tmp_path: Path) -> None:
     """PII review drops ``_redactions`` from edited claims; original still has them."""
-    original = _claim("t1-c0", ["David Shield"])
+    original = entity_claim("t1-c0", ["David Shield"])
     original["_redactions"] = [{"type": "email", "value": "x@davidshield.com"}]
     original["claim_text"] = 'ביטוח "David Shield" בדוא"ל [הוסר]'
-    edited = _claim("t1-c0", ["David Shield"])
+    edited = entity_claim("t1-c0", ["David Shield"])
     edited["claim_text"] = (
         'ניתן לפנות ל-David Shield בדוא"ל joindavidshield@davidshield.com'
     )
@@ -371,143 +290,10 @@ def test_contacts_from_original_when_edited_lacks_redactions(tmp_path: Path) -> 
 
 
 def test_contacts_from_claim_text_without_redactions() -> None:
-    claim = _claim("t1-c0", ["David Shield"])
+    claim = entity_claim("t1-c0", ["David Shield"])
     claim["claim_text"] = (
         'ניתן לפנות ל-David Shield בדוא"ל joindavidshield@davidshield.com'
     )
     emails, phones, sites = claim_contacts(claim)
     assert emails == ["joindavidshield@davidshield.com"]
     assert "davidshield.com" in sites
-
-
-def test_collect_entities_includes_text_mentions() -> None:
-    claims = [
-        {
-            "claim_id": "t1-c0",
-            "thread_id": "t1",
-            "claim_text": "לטיפת חלב יש תור",
-            "entities": ["טיפת חלב"],
-        },
-        {
-            "claim_id": "t2-c0",
-            "thread_id": "t2",
-            "claim_text": "בטיפת חלב מקבלים חיסון",
-            "entities": ["כללית"],
-        },
-    ]
-    # dictabert segments the proclitic (לטיפת -> ל+טיפת); emulate that offline.
-    analyzer = FakeAnalyzer(cores={"לטיפת": "טיפת", "בטיפת": "טיפת"})
-    entities = collect_entities(claims, analyzer=analyzer)
-    tipat = next(e for e in entities if e["name"] == "טיפת חלב")
-    assert tipat["count"] == 2
-    assert set(tipat["claim_ids"]) == {"t1-c0", "t2-c0"}
-    assert "topics" not in tipat
-
-
-def test_word_level_matching_rejects_inner_substrings() -> None:
-    # The reported bug: a short name must not match inside a longer word.
-    assert not find_mentions(_words("כללית מרפאה"), "כלל")
-    assert not find_mentions(_words("באופן כללי מאוד"), "כלל")
-    assert not find_mentions(_words("שנתיים חלפו מאז"), "נתי")
-    # ...but the whole word, and multi-word phrases, still match.
-    assert find_mentions(_words("כלל חברת ביטוח"), "כלל")
-    assert find_mentions(_words("שירותי טיפת חלב בעיר"), "טיפת חלב")
-
-
-def test_proclitic_prefix_matches_via_segmentation() -> None:
-    # With segmentation, an attached Hebrew proclitic still matches, and the span
-    # covers only the entity word (not the proclitic).
-    analyzer = FakeAnalyzer(cores={"בטיפת": "טיפת"})
-    words = _words("בטיפת חלב מחר", analyzer)
-    spans = find_mentions(words, "טיפת חלב")
-    assert spans
-    start, end = spans[0]
-    assert "בטיפת חלב מחר"[start:end] == "טיפת חלב"
-
-
-def test_single_word_requires_name_like_evidence() -> None:
-    # The reported "בדרך כלל" case: a single common Hebrew word matches only with
-    # name-like evidence (PROPN or NER), not as a bare common noun / function word.
-    idiom = FakeAnalyzer(pos={"כלל": "NOUN"})
-    assert not find_mentions(_words("בדרך כלל זה בסדר", idiom), "כלל")
-    adverb = FakeAnalyzer(pos={"כלל": "ADV"})
-    assert not find_mentions(_words("זה לא כלל ברור", adverb), "כלל")
-    # Proper-noun or NER context is accepted (the insurance company "כלל").
-    propn = FakeAnalyzer(pos={"כלל": "PROPN"})
-    assert find_mentions(_words("חברת כלל גדולה", propn), "כלל")
-    # NER rescues an entity the model tags as ADJ (e.g. "כללית").
-    ner = FakeAnalyzer(
-        cores={"בכללית": "כללית"}, pos={"בכללית": "ADJ"}, ner={"בכללית"}
-    )
-    assert find_mentions(_words("רשומה בכללית היום", ner), "כללית")
-
-
-def test_multi_word_match_is_not_gated_by_name_likeness() -> None:
-    # Distinctive multi-word phrases (NOUN NOUN, no NER) stay matchable.
-    plain = FakeAnalyzer(pos={"טיפת": "NOUN", "חלב": "NOUN"})
-    assert find_mentions(_words("שירותי טיפת חלב בעיר", plain), "טיפת חלב")
-
-
-def test_short_hotline_phones_detected() -> None:
-    from step_3_extract.scrub import find_phones
-
-    text = 'מוקד משרד הבריאות (5400*), גם *5400'
-    assert "(5400*)" in find_phones(text)
-    assert "*5400" in find_phones(text)
-
-
-class CountingAnalyzer(SimpleAnalyzer):
-    """SimpleAnalyzer that records every text it was asked to analyze."""
-
-    def __init__(self) -> None:
-        self.seen: list[str] = []
-
-    def analyze_batch(self, texts: Sequence[str]) -> list[list[dict]]:
-        self.seen.extend(texts)
-        return super().analyze_batch(texts)
-
-
-def test_analysis_cache_is_per_claim(tmp_path: Path) -> None:
-    cache = tmp_path / "analysis.json"
-    claims = [_claim("t1-c0", ["Alpha"], "Alpha one"), _claim("t2-c0", ["Beta"], "Beta two")]
-    first = CountingAnalyzer()
-    build_or_load_analysis(claims, first, cache_path=cache)
-    assert first.seen == ["Alpha one", "Beta two"]
-
-    # Unchanged claims are never re-analyzed; a new or edited text is.
-    claims[1]["claim_text"] = "Beta three"
-    claims.append(_claim("t3-c0", ["Gamma"], "Gamma four"))
-    second = CountingAnalyzer()
-    analysis = build_or_load_analysis(claims, second, cache_path=cache)
-    assert sorted(second.seen) == ["Beta three", "Gamma four"]
-    assert set(analysis) == {"t1-c0", "t2-c0", "t3-c0"}
-
-    third = CountingAnalyzer()
-    build_or_load_analysis(claims, third, cache_path=cache)
-    assert third.seen == []
-
-
-def test_mention_index_matches_a_full_scan() -> None:
-    analyzer = FakeAnalyzer(cores={"לטיפת": "טיפת", "בכללית": "כללית"})
-    claims = [
-        _claim("t1-c0", ["טיפת חלב"], "לטיפת חלב יש תור"),
-        _claim("t2-c0", ["כללית"], "רשומה בכללית ובטיפת חלב"),
-        _claim("t3-c0", [], "כללית מרפאה טיפת"),
-    ]
-    analysis = analyze_claims(claims, analyzer)
-    index = MentionIndex(analysis)
-    for name in ("טיפת חלב", "כללית", "טיפת", "חלב", "nothing"):
-        scan = {cid for cid, words in analysis.items() if find_mentions(words, name)}
-        assert index.claims_mentioning(name) == scan
-
-
-def test_claim_corpus_claims() -> None:
-    claims = [
-        _claim("t1-c0", ["Alpha", "Beta"], "Alpha and Beta"),
-        _claim("t2-c0", ["Alpha"], "Alpha again"),
-        _claim("t3-c0", [], "Beta only in the text"),
-    ]
-    corpus = ClaimCorpus(claims, analyze_claims(claims, SimpleAnalyzer()))
-    assert corpus.tagged_claims("Alpha") == {"t1-c0", "t2-c0"}
-    assert corpus.claims_for("Beta") == {"t1-c0", "t3-c0"}
-    assert corpus.claims_for("Beta", within={"t3-c0"}) == {"t3-c0"}
