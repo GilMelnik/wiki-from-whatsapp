@@ -133,7 +133,9 @@ def test_the_answer_lists_the_points_before_the_body() -> None:
 def test_the_system_prompt_carries_the_owners_rules() -> None:
     for system in (WRITE_SYSTEM, UPDATE_SYSTEM):
         assert all(f"`{kind}`" in system for kind in KINDS)
-        assert "ONE statement per point" in system and "at most 3 per sentence" in system
+        assert "ONE statement per point" in system
+        assert "there is no limit on the marks of a sentence" in system
+        assert "per sentence" not in system
         assert "ONLY for prices" in system and "do NOT add or contrast their counts" in system
         assert "ההמלצה הנפוצה בקבוצה היא להגיע ליעד סביב שבועות 36–37 להריון." in system
         assert "{" not in system.split("## What you return")[0]  # every placeholder filled
@@ -156,7 +158,7 @@ def test_the_owners_paragraph_fails_and_their_reduction_passes(example: tuple[Co
     assert report == {"points": 4, "points_by_kind": {"common_view": 1, "condition": 1,
                                                       "number": 1, "warning": 1},
                       "left_out": 0, "left_out_share": 0.0, "left_out_by_reason": {},
-                      "unaccounted": [], "statements": 4, "marks": 7, "over_cap": 0,
+                      "unaccounted": [], "statements": 4, "marks": 7,
                       "retold": 0, "uncarried": 0}
     assert prose_words(SHORT) < 0.4 * prose_words(LONG)
 
@@ -192,16 +194,12 @@ def test_accounting_names_missing_repeated_and_foreign_groups(example: tuple[Cor
     assert accounting.reasons == ("bored",) and accounting.missing == (_g(5), _g(6))
 
 
-def test_a_point_the_body_never_says_and_a_statement_over_the_cap(
+def test_a_point_the_body_never_says_and_a_statement_with_many_marks(
         example: tuple[Corpus, PageContext]) -> None:
     corpus, context = example
     rules = _rules(corpus, context)
     heavy = SHORT.replace(_m(8, 7, 1), _m(8, 7, 1, 2))
-    found = problems(_answer(heavy, POINTS), rules)
-    assert len(found) == 1 and found[0].startswith(
-        "these statements carry more than 3 marks; keep at most 3 per sentence, the point's "
-        "most backed and most recent groups (the point keeps the full list): «ההמלצה הנפוצה")
-    assert found[0].endswith("…» (4 marks)")
+    assert problems(_answer(heavy, POINTS), rules) == []
     silent = SHORT.replace(_m(9), "")
     found = problems(_answer(silent, POINTS), rules)
     assert len(found) == 1 and "carried by no statement" in found[0]
@@ -211,13 +209,13 @@ def test_a_point_the_body_never_says_and_a_statement_over_the_cap(
 def test_kept_sentences_of_an_update_are_not_held_to_the_new_rules(
         example: tuple[Corpus, PageContext]) -> None:
     corpus, context = example
-    old = SHORT.replace(_m(8, 7, 1), _m(8, 7, 1, 2))
+    old = SHORT.replace(f"להריון.{_m(8, 7, 1)}", f"להריון.{_m(8, 7, 1)} עוד פעם.{_m(2)} ועוד.{_m(5)}")
+    assert problems(_answer(old, POINTS), _rules(corpus, context))
     frozen = tuple(s.text for s in statements(old))
     assert problems(_answer(old, POINTS), _rules(corpus, context, frozen)) == []
-    added = old.replace("\n", f" עוד משפט חדש.{_m(4, 6, 3, 9)}\n", 1)
-    assert added != old
+    added = f"{old.rstrip()} עוד משפט חדש.{_m(8)}\n"
     found = problems(_answer(added, POINTS), _rules(corpus, context, frozen))
-    assert len(found) == 1 and "«עוד משפט חדש." in found[0]
+    assert len(found) == 1 and "«להגיע סביב שבועות 36–37» (4 statements)" in found[0]
 
 
 def test_left_out_groups_are_reported_and_a_large_share_is_warned_about(

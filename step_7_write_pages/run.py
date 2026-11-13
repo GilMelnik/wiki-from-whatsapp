@@ -9,7 +9,7 @@ members disagree, dates only where they help the reader decide, and Wikipedia-st
 other pages and labels (``prompts``). Code then enforces what must not be left to the model
 (``checks``): only the page's own groups are cited, only planned pages and labels are linked,
 disputed groups are cited, every main group is accounted for in a point or left out with a
-reason, every point is said, no statement carries more than three marks and no point is told
+reason, every point is said and no point is told
 again and again (one retry that names the problems, then repair); the OKF front matter is
 written in code (``front_matter``). A negative statement about a named entity that fewer
 than two members reported never reaches the writer (``withhold``): code adds it to its page's

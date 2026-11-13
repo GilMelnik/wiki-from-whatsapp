@@ -27,7 +27,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from step_7_write_pages.inputs import MAIN, PageContext, Record, hebrew_month
-from step_7_write_pages.points import KINDS, MAX_MARKS, POINTS_CONFIG, REASONS, Point, tidy
+from step_7_write_pages.points import KINDS, POINTS_CONFIG, REASONS, Point, tidy
 from utils.llm_client import CacheSegment
 
 _RULES = """\
@@ -123,9 +123,11 @@ community experience, not professional advice: write it that way ("לפי ניס
 הקבוצה", "הורים סיפרו"), without repeating disclaimers in every paragraph.
 2. Grounded. Every sentence that states a fact, an experience, a recommendation, a price, a \
 duration, a date or a name rests on the groups of its point and ends with their marks: \
-`[^g-xxxxxxxx]`, several in a row when several groups back it (`[^g-aaaaaaaa][^g-bbbbbbbb]`), \
-at most {max_marks} per sentence: the point's most backed and most recent groups (the point \
-keeps the full list, so nothing is lost). Use ONLY what the groups say. No outside \
+`[^g-xxxxxxxx]`, several in a row when several groups back it (`[^g-aaaaaaaa][^g-bbbbbbbb]`). \
+Cite every group of the point that backs what the sentence says: there is no limit on the \
+marks of a sentence. When a point rests on many groups and one sentence would grow too \
+long, you may tell it in two sentences, each carrying the marks of the groups that back it \
+(a group may be marked on both). Use ONLY what the groups say. No outside \
 knowledge, no general background, no filling of gaps, no invented names, numbers, prices, \
 laws or dates, no advice the groups do not give. If the groups do not cover a point, do not \
 write about it, and do not write about the material itself ("no answer was found in the \
@@ -239,8 +241,7 @@ def _listing(described: Mapping[str, str]) -> str:
 
 
 _SYSTEM = _RULES.format(kinds=_listing(POINTS_CONFIG["kinds"]),
-                        reasons=_listing(POINTS_CONFIG["left_out_reasons"]),
-                        max_marks=MAX_MARKS)
+                        reasons=_listing(POINTS_CONFIG["left_out_reasons"]))
 
 WRITE_SYSTEM = _SYSTEM + _WRITE_OUTPUT
 UPDATE_SYSTEM = _SYSTEM + _UPDATE_RULES

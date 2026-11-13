@@ -27,7 +27,6 @@ from step_7_write_pages.inputs import PAGES_CONFIG
 POINTS_CONFIG = PAGES_CONFIG["points"]
 KINDS = tuple(POINTS_CONFIG["kinds"])
 REASONS = tuple(POINTS_CONFIG["left_out_reasons"])
-MAX_MARKS = PAGES_CONFIG["max_marks_per_statement"]
 TOLD_CONFIG = PAGES_CONFIG["max_statements_per_point"]
 Point = dict[str, Any]
 LeftOut = dict[str, str]
@@ -152,11 +151,6 @@ def retold(points: Sequence[Point], statements: Sequence[Statement],
     return found
 
 
-def over_cap(statements: Sequence[Statement], frozen: Collection[str] = ()) -> list[Statement]:
-    """Statements with more than ``MAX_MARKS`` marks (``frozen`` ones are not counted)."""
-    return [s for s in statements if len(s.marks) > MAX_MARKS and s.text not in frozen]
-
-
 def point_report(points: Sequence[Point], left_out: Sequence[LeftOut],
                  statements: Sequence[Statement], main_ids: Collection[str]) -> dict[str, Any]:
     """The per-page numbers stored in the run report (see the module docstring)."""
@@ -171,7 +165,6 @@ def point_report(points: Sequence[Point], left_out: Sequence[LeftOut],
         "unaccounted": list(account(points, left_out, main_ids).missing),
         "statements": len(statements),
         "marks": sum(len(statement.marks) for statement in statements),
-        "over_cap": len(over_cap(statements)),
         "retold": len(retold(points, statements)),
         "uncarried": sum(1 for point in points if not citing(point, statements)),
     }

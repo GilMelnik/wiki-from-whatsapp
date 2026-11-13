@@ -11,16 +11,12 @@ writer sends them back in its one retry):
   of a text written before the rule);
 - the points (``step_7_write_pages.points``): every main group in exactly one point or left
   out with a reason; no mark on a group that was left out; every point carried by a statement
-  that cites one of its groups; at most ``pages.max_marks_per_statement`` marks per statement;
+  that cites one of its groups (a statement may carry any number of marks);
   a point told in at most ``pages.max_statements_per_point`` statements after the lead (that
   cap is per point kind: a dispute and a change may take more than the default).
-``cap_marks`` runs on every answer before the checks: a statement with more marks than the cap
-keeps the marks of disputed or contradicted groups first, then the most backed, then the most
-recent, and loses the rest from the body (never the last citation of a disputed or
-contradicted group, never in text of an update that was kept); the retry is for what code
-cannot fix. ``repair`` fixes what code can fix: a sentence that cites a withheld group is deleted whole
-(its statement is never kept without its mark), an unknown citation is removed, an unknown or malformed
-link becomes its plain text (``utils.wiki_links``), a front-matter block, a ``#`` heading and
+The retry is for what code cannot fix. ``repair`` fixes what code can fix: a sentence that
+cites a withheld group is deleted whole (its statement is never kept without its mark), an
+unknown citation is removed, an unknown or malformed link becomes its plain text (``utils.wiki_links``), a front-matter block, a ``#`` heading and
 any footnote definition the model wrote are taken out, ``related`` keeps only planned pages,
 the points keep only the page's main groups, each once. A missing citation or an unaccounted
 group cannot be repaired; it is recorded. A page body holds the marks only: step 9 renders the
@@ -31,18 +27,15 @@ before that change.
 from __future__ import annotations
 
 import re
-from collections import Counter
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from step_7_write_pages.inputs import MAIN, PAGES_CONFIG, Record
 from step_7_write_pages.points import (
-    MAX_MARKS,
     Statement,
     account,
     citing,
-    over_cap,
     retold,
     tidy,
     told_cap,
@@ -126,7 +119,6 @@ class AnswerRules:
     label_targets: frozenset[str]
     frozen: frozenset[str] = frozenset()
     withheld: frozenset[str] = frozenset()
-    backing: Mapping[str, tuple[int, str]] = field(default_factory=dict)  # id -> (supporters, last)
 
     def valid_link(self, link: WikiLink) -> bool:
         if link.kind == "label":
@@ -195,12 +187,6 @@ def _point_problems(answer: Mapping[str, Any], rules: AnswerRules) -> list[str]:
         found.append("these points are carried by no statement; say each in the article, citing "
                      "one or more of its groups (or fold it into the point it belongs to): "
                      + "; ".join(uncarried))
-    heavy = over_cap(stated, rules.frozen)
-    if heavy:
-        found.append(f"these statements carry more than {MAX_MARKS} marks; keep at most "
-                     f"{MAX_MARKS} per sentence, the point's most backed and most recent groups "
-                     "(the point keeps the full list): "
-                     + "; ".join(f"{_quote(s.text)} ({len(s.marks)} marks)" for s in heavy))
     told = retold(points, stated, rules.frozen)
     for cap in dict.fromkeys(told_cap(p["kind"]) for p, _ in told):
         found.append(f"these points are told in more than {cap} statements after the lead; "
@@ -216,40 +202,6 @@ def problems(answer: Mapping[str, Any], rules: AnswerRules) -> list[str]:
     if not body.strip():
         return ["the body is empty: return the whole article"]
     return _body_problems(body, rules) + _point_problems(answer, rules)
-
-
-def cap_marks(answer: Mapping[str, Any], rules: AnswerRules) -> tuple[dict[str, Any], int]:
-    """``answer`` with each statement over ``MAX_MARKS`` marks cut to the cap, and the number of
-    marks dropped (see the module docstring for which marks stay).
-
-    A statement is left as it is, for the check to fail, when it cites an id that is not a group
-    of the page (a repair of its own), when it is kept text of an update, or when dropping would
-    leave a disputed or contradicted group cited by no other sentence."""
-    body = answer["body"]
-    cited = Counter(gid for match in _SENTENCE.finditer(body)
-                    for gid in set(CITATION.findall(match.group(0))))
-    required = set(rules.required_ids)
-    dropped = 0
-
-    def cut(match: re.Match[str]) -> str:
-        nonlocal dropped
-        text = match.group(0)
-        marks = list(dict.fromkeys(CITATION.findall(text)))
-        if (len(marks) <= MAX_MARKS or text.strip() in rules.frozen
-                or not rules.allowed_ids.issuperset(marks)):
-            return text
-        ranked = sorted(marks, key=lambda gid: (gid in required, *rules.backing[gid]), reverse=True)
-        out = ranked[MAX_MARKS:]
-        if any(gid in required and cited[gid] < 2 for gid in out):
-            return text
-        cited.subtract(out)
-        dropped += len(out)
-        for gid in out:
-            text = re.sub(rf"\[\^{re.escape(gid)}\](?!:)", "", text)
-        return text
-
-    capped = _SENTENCE.sub(cut, body)
-    return {**answer, "body": capped}, dropped
 
 
 def _clean_links(body: str, rules: AnswerRules, repairs: list[str]) -> str:
@@ -361,5 +313,4 @@ def rules_for(page_id: str, records: Sequence[Record], plan: Mapping[str, Any], 
         label_targets=frozenset(plan["labels"]),
         frozen=frozenset(frozen),
         withheld=frozenset(withheld),
-        backing={record["id"]: (record["supporters"], record["last"]) for record in records},
     )
