@@ -18,7 +18,6 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Sequence
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +25,7 @@ from step_1_threads_split.gold import Window, WindowSet, message_moment
 from utils.config import section
 from utils.json_io import write_json_file
 from utils.paths import GOLD_PROGRESS_PATH
+from utils.timestamps import local_now
 
 THREADS_CONFIG = section("threads")
 
@@ -58,7 +58,7 @@ class GoldProgress:
     def set_done(self, window: Window, done: bool) -> None:
         with self._lock:
             entries = self._entries()
-            now = datetime.now().isoformat(timespec="seconds")
+            now = local_now()
             entry = next((e for e in entries if Window.from_dict(e) == window), None)
             if entry is None:
                 entry = window.to_dict()

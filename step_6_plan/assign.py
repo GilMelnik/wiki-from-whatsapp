@@ -44,7 +44,6 @@ import json
 import logging
 import math
 from collections.abc import Collection, Iterable, Mapping, Sequence
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -69,6 +68,7 @@ from utils.llm_client import Classifier, LLMClient, Question
 from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import ASSIGNMENTS, PLAN, STEP_6, Artifact, resolve, resolve_aggregated_path
 from utils.reconcile import diff_inputs, fingerprint, guarded_write
+from utils.timestamps import utc_now
 
 COMPARED = ("assignments", "proposals")
 COMPARED_METADATA = ("inputs", "plan", "considered")
@@ -322,7 +322,7 @@ class AssignmentRun:
                 "params": ASSIGN_CONFIG,
                 "classifier": f"{classifier.provider}/{classifier.model}",
                 "git_commit": git_commit(),
-                "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "generated_at": utc_now(),
                 "run": self.stats,
                 "summary": summary(self.records, self.plan),
             },

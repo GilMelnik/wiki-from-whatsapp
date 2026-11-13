@@ -22,7 +22,6 @@ import copy
 import logging
 from collections import Counter
 from collections.abc import Mapping
-from datetime import datetime, timezone
 from typing import Any
 
 from step_8_review.apply import Applier
@@ -43,6 +42,7 @@ from utils.file_lock import file_lock
 from utils.json_io import read_json_if_present, write_json_file
 from utils.paths import PLAN, SUGGESTIONS, WIKI_PAGES, Artifact, resolve
 from utils.reconcile import backup_file
+from utils.timestamps import utc_now_z
 
 logger = logging.getLogger(__name__)
 MESSAGES = REVIEW_CONFIG["messages"]
@@ -67,10 +67,6 @@ class SuggestionConflict(Exception):
     def __init__(self, message: str, details: list[str] | None = None) -> None:
         super().__init__(message)
         self.details = details or []
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def current_fingerprints(pages_artifact: Artifact = WIKI_PAGES,
@@ -195,6 +191,6 @@ class SuggestionsStore:
         result = self.applier.apply(suggestion)
         logger.info(f"Applied {suggestion_id} ({suggestion['kind']}): {result.message}")
         applied = self._change(suggestion_id, "apply", (ACCEPTED,), status=APPLIED,
-                               applied_at=_now(),
+                               applied_at=utc_now_z(),
                                apply_result={"message": result.message, **result.details})
         return {"suggestion": applied, "result": {"message": result.message, **result.details}}

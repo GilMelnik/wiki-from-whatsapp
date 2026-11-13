@@ -26,15 +26,12 @@ from pathlib import Path
 from typing import Any
 
 from utils.json_io import write_json_file
+from utils.timestamps import local_now
 
 REVIEW, PAID, BUSY, THROUGH = "review", "paid", "busy", "through"
 # The command that starts an update and goes on with it (``--pay <step>`` allows a paid step).
 COMMAND = "python -m step_10_update.run"
 HISTORY_KEYS = ("stamp", "export_sha1", "counts", "completed_at")
-
-
-def now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
 
 
 class UpdateState:
@@ -92,7 +89,7 @@ class UpdateState:
             )
         self.data["update"] = {
             **record,
-            "started_at": now(),
+            "started_at": local_now(),
             "completed_at": None,
             "input": {"backup": None, "replaced": False},
             "steps": {},
@@ -113,7 +110,7 @@ class UpdateState:
 
     def mark_run(self, key: str, *, changed: bool) -> None:
         record = self.current()["steps"].setdefault(key, {"runs": 0, "gate_passed": False})
-        record.update(runs=record["runs"] + 1, changed=changed, at=now())
+        record.update(runs=record["runs"] + 1, changed=changed, at=local_now())
         if changed:
             record["gate_passed"] = False
 
@@ -121,7 +118,7 @@ class UpdateState:
         self.current()["steps"][key]["gate_passed"] = True
 
     def stop(self, kind: str, key: str, message: str) -> None:
-        self.current()["stopped"] = {"kind": kind, "step": key, "message": message, "at": now()}
+        self.current()["stopped"] = {"kind": kind, "step": key, "message": message, "at": local_now()}
 
     def take_stop(self) -> dict[str, Any] | None:
         """The stop the last run ended with, cleared (this run goes on from it)."""
@@ -130,10 +127,10 @@ class UpdateState:
         return stopped
 
     def fail(self, key: str, error: str) -> None:
-        self.current()["failed"] = {"step": key, "error": error, "at": now()}
+        self.current()["failed"] = {"step": key, "error": error, "at": local_now()}
 
     def clear_failure(self) -> None:
         self.current()["failed"] = None
 
     def finish(self) -> None:
-        self.current()["completed_at"] = now()
+        self.current()["completed_at"] = local_now()

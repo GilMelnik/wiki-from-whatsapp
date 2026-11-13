@@ -23,7 +23,6 @@ yet, an edit is refused with a hint to run it.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +44,7 @@ from step_5_aggregate.reviewer.views import GroupViews
 from step_5_aggregate.similarity import ClaimScorer
 from step_7_write_pages.withhold import withheld_ids
 from utils.json_io import read_json_file, write_json_file
+from utils.timestamps import utc_now
 
 NOT_SAME_KEY = "not_same"
 LINK_KEYS = ("contradicts_manual", "contradicts_rejected")
@@ -56,10 +56,6 @@ class GroupNotFound(Exception):
 
 class EditConflict(Exception):
     """The edit does not fit the current groups; the message says why (English, for the UI)."""
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _set_or_drop(group: Group, key: str, ids: Iterable[str]) -> None:
@@ -304,7 +300,7 @@ class GroupsStore:
             "claims_b": list(claims_b),
             "group_ids": group_ids,
             "source": source,
-            "at": _now(),
+            "at": utc_now(),
         }
         self.not_same.append(record)
         return record

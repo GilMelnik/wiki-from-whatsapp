@@ -12,13 +12,13 @@ the group that holds them).
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from step_9_site.agent_pages import disclaimer_line
 from step_9_site.content import Site
 from utils.config import section
+from utils.timestamps import utc_now_z
 from utils.wiki_links import find_wiki_links
 
 MCP_CONFIG = section("mcp")
@@ -75,7 +75,7 @@ def build_index(site: Site, generated_at: str) -> dict[str, Any]:
 
 def index_text(site: Site, previous_path: Path) -> str:
     """The index as written (2-space JSON); ``generated_at`` is kept when nothing else changed."""
-    index = build_index(site, datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    index = build_index(site, utc_now_z())
     if previous_path.is_file():
         try:
             previous = json.loads(previous_path.read_text(encoding="utf-8"))

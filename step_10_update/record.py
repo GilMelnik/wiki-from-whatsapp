@@ -16,10 +16,10 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
-from step_10_update.state import now
 from utils.config import LOGGING_CONFIG, ROOT_CONFIG
 from utils.json_io import write_json_file
 from utils.logging_setup import LOG_FORMAT, git_commit
+from utils.timestamps import local_now
 
 
 def json_safe(value: Any) -> Any:
@@ -52,7 +52,7 @@ class UpdateReport:
 
     def add(self, kind: str, step: str | None, **fields: Any) -> None:
         report = json.loads(self.path.read_text(encoding="utf-8"))
-        report["events"].append(json_safe({"at": now(), "kind": kind, "step": step, **fields}))
+        report["events"].append(json_safe({"at": local_now(), "kind": kind, "step": step, **fields}))
         report["git_commit_last"] = git_commit()
         write_json_file(report, self.path)
 

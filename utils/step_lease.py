@@ -20,9 +20,10 @@ import json
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import IO, Any
+
+from utils.timestamps import utc_now
 
 
 class LeaseHeld(RuntimeError):
@@ -67,7 +68,7 @@ class StepLease:
             "step": step,
             "produces": produces,
             "title": title,
-            "since": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "since": utc_now(),
         }
         self._file.seek(0)
         self._file.truncate(0)

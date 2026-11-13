@@ -30,7 +30,6 @@ import logging
 import math
 import re
 from collections.abc import Mapping, Sequence
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +60,7 @@ from utils.llm_client import BatchRequest, LLMClient
 from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import CHAT_ANDROID_PATH, GOLD_THREADS_PATH, STEP_1, STEP_3, THREADS, step_path
 from utils.threads_io import load_threads
+from utils.timestamps import local_now
 
 OUTPUT_DIR = step_path(STEP_3, EXPERIMENT_CONFIG["output_dir"])
 OLD_SPLIT_PATH = step_path(STEP_1, section("threads")["measure"]["baseline_file"])
@@ -289,7 +289,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.estimate:
         experiment.estimate()
         return
-    metadata = {"generated_at": datetime.now().isoformat(timespec="seconds"),
+    metadata = {"generated_at": local_now(),
                 "git_commit": git_commit(), "provider": llm.provider, "model": llm.model,
                 "batch": experiment.use_batch, "dry_run": args.dry_run,
                 "windows": [w + 1 for w in messages.windows], "variants": list(units),

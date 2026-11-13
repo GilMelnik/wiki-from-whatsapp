@@ -32,7 +32,6 @@ import argparse
 import json
 import logging
 from collections.abc import Callable, Sequence
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +53,7 @@ from utils.llm_client import Classifier, LLMClient
 from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import PLAN, PLAN_COVERAGE_PATH, STEP_6, Artifact, resolve, resolve_aggregated_path
 from utils.reconcile import guarded_write
+from utils.timestamps import utc_now
 
 TokenCounter = Callable[[str, str], int]
 
@@ -242,7 +242,7 @@ def run(
         "prompt_version": PLAN_CONFIG["prompt_version"],
         "model": llm.model,
         "effort": LLM_CONFIG["stages"][PLAN_CONFIG["stage"]].get("thinking_param"),
-        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "generated_at": utc_now(),
         "git_commit": git_commit(),
         "config": PLAN_CONFIG,
         "group_count": len(groups),

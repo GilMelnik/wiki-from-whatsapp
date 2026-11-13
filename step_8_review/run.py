@@ -43,7 +43,6 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from collections.abc import Collection, Mapping, Sequence
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -58,12 +57,9 @@ from utils.llm_client.ask import ask_json
 from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import STEP_8, SUGGESTIONS, WIKI_PAGES, Artifact
 from utils.reconcile import load_previous, write_reconciled
+from utils.timestamps import utc_now_z
 
 REFRESH_KEYS = ("page_marks",)
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def decided(suggestion: Mapping[str, Any]) -> bool:
@@ -178,7 +174,7 @@ class ReviewRun:
             "prompt_version": REVIEW_CONFIG["prompt_version"],
             "config": REVIEW_CONFIG,
             "git_commit": git_commit(),
-            "generated_at": _now(),
+            "generated_at": utc_now_z(),
             "input_tokens": input_tokens,
             "run": dict(run),
         }
@@ -246,7 +242,7 @@ def run(
                         "no call, nothing written")
             return {**result, "written": False}
         if job.unchanged:
-            meta = {**job.previous["metadata"], "generated_at": _now()}
+            meta = {**job.previous["metadata"], "generated_at": utc_now_z()}
             logger.info("Wiki unchanged but an input file is newer; refreshing the file (no call)")
         else:
             meta = job.metadata(0, (), run_info)
@@ -278,7 +274,7 @@ def run(
 
     new: list[dict[str, Any]] = []
     answered: list[str] = []
-    raised_at = _now()
+    raised_at = utc_now_z()
     for review_pass in job.due:
         row = rows[review_pass.id]
         if row["failed"]:

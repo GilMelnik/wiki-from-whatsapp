@@ -32,7 +32,6 @@ import logging
 import shutil
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -58,6 +57,7 @@ from utils.json_io import read_json_if_present
 from utils.llm_client import LLMClient
 from utils.paths import AUDIT_PATH, PLAN, WIKI_PAGES, Artifact, resolve
 from utils.reconcile import backup_file, guarded_write
+from utils.timestamps import utc_now_z
 
 APPLY_CONFIG = REVIEW_CONFIG["apply"]
 MESSAGES = REVIEW_CONFIG["messages"]
@@ -99,10 +99,6 @@ class ApplyResult:
 
     message: str
     details: dict[str, Any] = field(default_factory=dict)
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def kept_share(before: str, after: str, touched: Collection[str], quoted: str = "") -> float:
@@ -207,7 +203,7 @@ class Applier:
                                exc.errors) from exc
         plan = edit.plan
         plan["metadata"] = {**plan["metadata"], "edited_by": REVIEW_CONFIG["edited_by"],
-                            "edited_at": _now()}
+                            "edited_at": utc_now_z()}
         backup = guarded_write(self.plan_artifact.edited, plan, backup=True)
         self.logger.info(f"Applied {kind}: {op.describe(review.plan)}; saved "
                          f"{self.plan_artifact.edited} (backup {backup})")
@@ -264,7 +260,7 @@ class Applier:
             front_matter = page_front_matter(
                 correction.context, corpus.plan, body=body, summary=text.summary,
                 questions=text.questions, related=text.related, labels=labels(page_id),
-                model=model, generated_at=_now())
+                model=model, generated_at=utc_now_z())
             item = {"front_matter": front_matter, "body_md": body, "points": text.points,
                     "left_out": corpus.accounted_left_out(page_id, text.left_out)}
             if outcome is not None:
@@ -347,4 +343,3 @@ class Applier:
             "links": [list(pair) for pair in pairs],
             "pages": {pid: {"kept_sentence_share": round(share, 3), "changed": pid in items}
                       for pid, (_, share) in corrected.items()}})
-

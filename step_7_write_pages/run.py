@@ -60,7 +60,6 @@ from collections import Counter
 from collections.abc import Collection, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -95,15 +94,12 @@ from utils.llm_client import LLMClient, _flatten
 from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import STEP_7, WIKI_PAGES, Artifact
 from utils.reconcile import diff_inputs, load_previous, write_reconciled
+from utils.timestamps import utc_now_z
 
 WRITE_CONFIG = PAGES_CONFIG["write"]
 UPDATE_CONFIG = PAGES_CONFIG["update"]
 REFRESH_KEYS = ("front_matter", "input_fingerprint")
 COMPARED_METADATA = ("inputs", "pages", "withheld")
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 @dataclass
@@ -297,7 +293,7 @@ class PagesRun:
             source["front_matter"].get(key, default) == value for key, value, default in (
                 ("summary", text.summary, ""), ("questions", text.questions, []),
                 ("related", text.related, [])))
-        generated_at = source["front_matter"]["generated"]["at"] if same else _now()
+        generated_at = source["front_matter"]["generated"]["at"] if same else utc_now_z()
         proofread = self.proofread_pages.get(job.page_id)
         if proofread is not None:
             language_edits = proofread.language_edits
@@ -359,7 +355,7 @@ class PagesRun:
                 "models": dict(models),
                 "config": PAGES_CONFIG,
                 "git_commit": git_commit(),
-                "generated_at": _now(),
+                "generated_at": utc_now_z(),
                 "run": {**self.stats, "failed": self.failed,
                         "proofread_failed": {pid: p.language_edits["failed"]
                                              for pid, p in self.proofread_pages.items() if p.failed},

@@ -19,13 +19,13 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
 from step_1_threads_split.reviewer.operations import EditRefused, UnknownItem
 from utils.json_io import write_json_file
 from utils.reconcile import backup_file
+from utils.timestamps import local_now
 
 KnowledgeFilter = Literal["all", "yes", "no", "manual"]
 EDITED_BY = "threads_reviewer"
@@ -125,5 +125,5 @@ class KnowledgeLabels:
             self._backed_up = True
         metadata = self._payload.setdefault("metadata", {})
         metadata["edited_by"] = EDITED_BY
-        metadata["edited_at"] = datetime.now().isoformat(timespec="seconds")
+        metadata["edited_at"] = local_now()
         write_json_file(self._payload, self.edited)

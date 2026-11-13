@@ -25,22 +25,18 @@ import logging
 import threading
 from collections import deque
 from collections.abc import Callable, Iterable
-from datetime import datetime, timezone
 from typing import Any
 
 from step_8_review.apply import ApplyRefused
 from step_8_review.inputs import REVIEW_CONFIG
 from step_8_review.proposals import ACCEPTED, STRUCTURAL
 from step_8_review.store import SuggestionConflict, SuggestionNotFound, SuggestionsStore
+from utils.timestamps import utc_now_z
 
 logger = logging.getLogger(__name__)
 UI_CONFIG = REVIEW_CONFIG["ui"]
 APPLY_EVENT = "suggestions_apply"
 APPLIED, REFUSED, FAILED = "applied", "refused", "failed"
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def is_paid(kind: str) -> bool:
@@ -98,7 +94,7 @@ class ApplyRunner:
                 else:
                     self._queue.append({"id": sid, "kind": suggestion["kind"],
                                         "title": suggestion.get("title", ""),
-                                        "paid": is_paid(suggestion["kind"]), "queued_at": _now()})
+                                        "paid": is_paid(suggestion["kind"]), "queued_at": utc_now_z()})
                     queued.append(sid)
             if queued and not self._working:
                 self._working = True
@@ -141,7 +137,7 @@ class ApplyRunner:
                     self._running = None
                     self._working = False
                     break
-                self._running = {**self._queue.popleft(), "started_at": _now()}
+                self._running = {**self._queue.popleft(), "started_at": utc_now_z()}
                 entry = dict(self._running)
             self._announce()
             outcome = self._apply(entry)
@@ -158,15 +154,15 @@ class ApplyRunner:
         except (ApplyRefused, SuggestionConflict) as exc:
             logger.warning(f"Suggestion {entry['id']} not applied: {exc} {exc.details}")
             return {**base, "status": REFUSED, "message": str(exc), "details": exc.details,
-                    "ended_at": _now()}
+                    "ended_at": utc_now_z()}
         except SuggestionNotFound as exc:
             return {**base, "status": REFUSED, "message": str(exc), "details": [],
-                    "ended_at": _now()}
+                    "ended_at": utc_now_z()}
         except Exception as exc:  # noqa: BLE001 - the worker reports every failure to the owner
             logger.exception(f"Applying suggestion {entry['id']} failed")
             return {**base, "status": FAILED,
                     "message": UI_CONFIG["messages"]["apply_failed"].format(error=exc),
-                    "details": [repr(exc)], "ended_at": _now()}
+                    "details": [repr(exc)], "ended_at": utc_now_z()}
         logger.info(f"Suggestion {entry['id']} applied: {result['message']}")
         return {**base, "status": APPLIED, "message": result["message"], "details": [],
-                "result": result, "ended_at": _now()}
+                "result": result, "ended_at": utc_now_z()}
