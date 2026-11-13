@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +28,7 @@ from step_1_threads_split.reviewer.views import ThreadViews
 from utils.config import section
 from utils.json_io import write_json_file
 from utils.reconcile import backup_file
+from utils.timestamps import local_now
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +39,6 @@ EDITED_BY = "threads_reviewer"
 
 class OldFormat(RuntimeError):
     """The threads file is not step 1's current format; the message says what to do."""
-
-
-def _now() -> str:
-    return datetime.now().isoformat(timespec="seconds")
 
 
 def format_problem(path: Path, payload: Any) -> str | None:
@@ -118,7 +114,7 @@ class ThreadsStore:
         """Save the edit's threads and remember how to take it back."""
         self._save(edit.threads)
         self.history.record(
-            UndoEntry(edit.label, edit.focus, _now(), edit.before, edit.after_ids, self._stamp())
+            UndoEntry(edit.label, edit.focus, local_now(), edit.before, edit.after_ids, self._stamp())
         )
         logger.info(f"Conversations tool: {edit.label}; saved {self.edited}")
         return {
@@ -159,7 +155,7 @@ class ThreadsStore:
         metadata = {
             **self.payload.get("metadata", {}),
             "edited_by": EDITED_BY,
-            "edited_at": _now(),
+            "edited_at": local_now(),
             "thread_count": len(threads),
         }
         payload = {**self.payload, "threads": threads, "metadata": metadata}

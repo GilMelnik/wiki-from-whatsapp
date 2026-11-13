@@ -35,8 +35,7 @@ from step_5_aggregate.groups import group_from_scratch
 from step_5_aggregate.inputs import StepInputs, load_inputs
 from step_5_aggregate.similarity import AGGREGATE_CONFIG, ClaimScorer
 from utils.config import DATA_DIR
-from utils.embedding_ab import _git_commit
-from utils.logging_setup import setup_step_logging
+from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import STEP_5
 
 EVAL_CONFIG = AGGREGATE_CONFIG["eval"]
@@ -200,7 +199,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     setup_step_logging(STEP_5)
     logger.info(
-        f"evaluate | git commit {_git_commit()} | args {vars(args)} | config {AGGREGATE_CONFIG}"
+        f"evaluate | git commit {git_commit()} | args {vars(args)} | config {AGGREGATE_CONFIG}"
     )
     if args.incremental:
         logger.info(f"incremental experiment: {incremental_experiment()}")

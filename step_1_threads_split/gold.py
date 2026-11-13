@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from utils.json_io import write_json_file
+from utils.timestamps import local_now
 
 logger = logging.getLogger(__name__)
 
@@ -212,7 +213,7 @@ def freeze_gold(
         logger.info(f"{gold_path}: every configured window is already frozen; nothing to add")
         return existing
 
-    frozen_at = datetime.now().isoformat(timespec="seconds")
+    frozen_at = local_now()
     fresh, labels = label_windows(threads, fresh_spans, frozen_at)
     if existing:
         clash = existing["messages"].keys() & labels.keys()

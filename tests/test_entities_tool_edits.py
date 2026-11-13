@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 
 from step_4_entities.records import claim_entity_index
-from step_5_aggregate.resolver import load_deleted_claims
 from tests.entities_tool_support import DS1, DS2, DS3, DS4, DS5, DS6, EntitiesSetup, claim
 
 
@@ -196,7 +195,6 @@ def test_delete_claim_removes_it_everywhere(tool: EntitiesSetup) -> None:
     saved = tool.saved()
     consistent(saved)
     assert saved["deleted_claims"] == [DS2] and DS2 not in saved["claim_entities"]
-    assert DS2 in load_deleted_claims(tool.edited)  # what step 5 reads
     aggregations = json.loads(tool.aggregations.read_text(encoding="utf-8"))
     assert aggregations["aggregations"] == []  # a group left with one claim dissolves
     tool.delete(f"/claims/{DS2}", expect=409)

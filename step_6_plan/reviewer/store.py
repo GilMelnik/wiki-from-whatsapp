@@ -19,9 +19,7 @@ Undo: ``history.PlanHistory`` (owned by the tool, so it survives reloads) covers
 
 from __future__ import annotations
 
-import json
 import logging
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -56,8 +54,9 @@ from step_6_plan.reviewer.views import (
     group_summary,
     labels_by_kind,
 )
-from utils.json_io import write_json_file
+from utils.json_io import read_json_file, write_json_file
 from utils.reconcile import backup_file
+from utils.timestamps import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -79,14 +78,6 @@ class ItemNotFound(Exception):
 
 def _conflict(lead: str, error: PlanError) -> PlanConflict:
     return PlanConflict("\n".join([lead, *(f"• {line}" for line in error.errors)]))
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-
-def _read(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def _edit_fields(edit: PlanEdit) -> dict[str, Any]:
@@ -117,14 +108,14 @@ class PlanStore:
             raise FileNotFoundError(
                 f"{plan_original} (no wiki plan yet: run step 6, python -m step_6_plan.run)"
             )
-        self.plan: dict[str, Any] = _read(self.source)
-        self.proposal = _read(plan_original) if plan_original.is_file() else None
+        self.plan: dict[str, Any] = read_json_file(self.source)
+        self.proposal = read_json_file(plan_original) if plan_original.is_file() else None
         groups_path = groups_edited if groups_edited.is_file() else groups_original
         self.groups: dict[str, dict[str, Any]] | None = (
-            {group["group_id"]: group for group in _read(groups_path)["groups"]}
+            {group["group_id"]: group for group in read_json_file(groups_path)["groups"]}
             if groups_path.is_file() else None
         )
-        self.coverage_report = _read(coverage_path) if coverage_path.is_file() else None
+        self.coverage_report = read_json_file(coverage_path) if coverage_path.is_file() else None
         self.assignments = AssignmentsFile(assignments_original, assignments_edited)
         self.history = history
         self._view: AssignmentView | None = None
@@ -311,7 +302,7 @@ class PlanStore:
         focus = self._focus(op, edit)
         before = self.plan
         after = self._save(edit.plan)
-        self.history.record(UndoEntry(label, focus, _now(), after, self.assignments.fingerprint,
+        self.history.record(UndoEntry(label, focus, utc_now(), after, self.assignments.fingerprint,
                                       plan_before=before))
         logger.info(f"Plan tool: {label} ({op.op}) {_edit_fields(edit)}; saved {self.plan_edited}")
         return {"overview": self.overview(), "label": label, "edit": _edit_fields(edit),
@@ -333,7 +324,7 @@ class PlanStore:
 
     def _save(self, plan: dict[str, Any], *, stamp: bool = True) -> dict[str, Any]:
         if stamp:
-            plan["metadata"] = {**plan["metadata"], "edited_by": EDITED_BY, "edited_at": _now()}
+            plan["metadata"] = {**plan["metadata"], "edited_by": EDITED_BY, "edited_at": utc_now()}
         backup_file(self.plan_edited)
         write_json_file(plan, self.plan_edited)
         self.plan = plan
@@ -349,7 +340,7 @@ class PlanStore:
                           focus: str | None = None) -> None:
         before = self.assignments.save(records, proposals)
         self._view = None
-        self.history.record(UndoEntry(label, focus, _now(), self.plan, self.assignments.fingerprint,
+        self.history.record(UndoEntry(label, focus, utc_now(), self.plan, self.assignments.fingerprint,
                                       plan_before=plan_before, assignments_before=before))
         logger.info(f"Plan tool: {label}; saved {self.assignments.edited}")
 

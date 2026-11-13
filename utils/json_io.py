@@ -7,6 +7,24 @@ from pathlib import Path
 from typing import Any
 
 
+def read_json_file(path: Path) -> Any:
+    """The JSON value stored at ``path`` (``FileNotFoundError`` / ``JSONDecodeError`` as they
+    come)."""
+    with path.open(encoding="utf-8") as f:
+        return json.load(f)
+
+
+def read_json_if_present(path: Path) -> Any | None:
+    """The JSON value stored at ``path``; ``None`` when there is no file, ``ValueError`` naming
+    the file when it is not valid JSON."""
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path} is not valid JSON: {exc}") from exc
+
+
 def write_json_file(payload: dict[str, Any], output_path: Path) -> None:
     """Write ``payload`` to ``output_path`` atomically (temp file + replace).
 

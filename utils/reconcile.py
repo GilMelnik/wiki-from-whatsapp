@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 IsSame = Callable[[Any, Any], bool]
 
 # Same naming as the reviewer stores' ``_ensure_backup``: ``<stem>_<stamp><suffix>``.
-_BACKUP_STAMP = "%Y%m%d_%H%M%S"
+BACKUP_STAMP = "%Y%m%d_%H%M%S"
 _ABSENT = object()
 
 
@@ -306,7 +306,7 @@ def backup_file(path: Path) -> Path | None:
     if not path.is_file():
         return None
     BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime(_BACKUP_STAMP)
+    stamp = datetime.now().strftime(BACKUP_STAMP)
     target = BACKUPS_DIR / f"{path.stem}_{stamp}{path.suffix}"
     attempt = 1
     while target.exists():

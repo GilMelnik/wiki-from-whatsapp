@@ -12,8 +12,8 @@ accepted.
 
 Applying (``step_8_review.apply``) changes the artifact the suggestion is about, then marks it
 ``applied``; a refused apply raises ``ApplyRefused`` and writes nothing. ``list`` adds live page
-marks to open suggestions (a page changed or gone since the suggestion was raised) and Hebrew names for kinds,
-statuses and marks (``wiki_review`` in config.json).
+marks to open suggestions (a page changed or gone since the suggestion was raised) and display names
+for kinds, statuses and marks (``wiki_review`` in config.json).
 """
 
 from __future__ import annotations
@@ -22,15 +22,13 @@ import copy
 import logging
 from collections import Counter
 from collections.abc import Mapping
-from datetime import datetime, timezone
 from typing import Any
 
-from step_8_review.apply import Applier, ApplyRefused
+from step_8_review.apply import Applier
 from step_8_review.inputs import (
     REVIEW_CONFIG,
     page_fingerprint,
     page_marks,
-    read_json,
 )
 from step_8_review.proposals import (
     ACCEPTED,
@@ -41,9 +39,10 @@ from step_8_review.proposals import (
     problems,
 )
 from utils.file_lock import file_lock
-from utils.json_io import write_json_file
+from utils.json_io import read_json_if_present, write_json_file
 from utils.paths import PLAN, SUGGESTIONS, WIKI_PAGES, Artifact, resolve
 from utils.reconcile import backup_file
+from utils.timestamps import utc_now_z
 
 logger = logging.getLogger(__name__)
 MESSAGES = REVIEW_CONFIG["messages"]
@@ -70,15 +69,11 @@ class SuggestionConflict(Exception):
         self.details = details or []
 
 
-def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
 def current_fingerprints(pages_artifact: Artifact = WIKI_PAGES,
                          plan_artifact: Artifact = PLAN) -> dict[str, str]:
     """The fingerprint of every effective page that is still in the plan."""
-    payload = read_json(pages_artifact.edited) or read_json(pages_artifact.original) or {}
-    plan = read_json(resolve(plan_artifact)) or {"pages": {}}
+    payload = read_json_if_present(pages_artifact.edited) or read_json_if_present(pages_artifact.original) or {}
+    plan = read_json_if_present(resolve(plan_artifact)) or {"pages": {}}
     return {pid: page_fingerprint(page) for pid, page in (payload.get("pages") or {}).items()
             if pid in plan["pages"]}
 
@@ -96,7 +91,7 @@ class SuggestionsStore:
     # ------------------------------------------------------------------ reads
 
     def _payload(self) -> dict[str, Any]:
-        payload = read_json(self.artifact.edited) or read_json(self.artifact.original)
+        payload = read_json_if_present(self.artifact.edited) or read_json_if_present(self.artifact.original)
         if payload is None:
             raise FileNotFoundError(f"no review suggestions yet at {self.artifact.original}; "
                                     "run step 8 (python -m step_8_review.run)")
@@ -196,19 +191,6 @@ class SuggestionsStore:
         result = self.applier.apply(suggestion)
         logger.info(f"Applied {suggestion_id} ({suggestion['kind']}): {result.message}")
         applied = self._change(suggestion_id, "apply", (ACCEPTED,), status=APPLIED,
-                               applied_at=_now(),
+                               applied_at=utc_now_z(),
                                apply_result={"message": result.message, **result.details})
         return {"suggestion": applied, "result": {"message": result.message, **result.details}}
-
-    def apply_accepted(self) -> dict[str, Any]:
-        """Apply every accepted suggestion in file order; a refused one stays accepted and
-        is reported with its reason."""
-        accepted = [s["id"] for s in self._payload()["suggestions"] if s["status"] == ACCEPTED]
-        applied, refused = [], {}
-        for suggestion_id in accepted:
-            try:
-                applied.append(self.apply(suggestion_id)["suggestion"]["id"])
-            except ApplyRefused as exc:
-                refused[suggestion_id] = str(exc)
-                logger.warning(f"Suggestion {suggestion_id} not applied: {exc}")
-        return {"applied": applied, "refused": refused}

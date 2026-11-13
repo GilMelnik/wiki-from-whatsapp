@@ -13,12 +13,12 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Callable
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from step_4_entities.reviewer.store.helpers import EntityNotFound, ReviewConflict
 from utils.json_io import write_json_file
+from utils.timestamps import local_now
 
 _ID_RE = re.compile(r"agg(\d+)")
 EDITOR = "entity_reviewer"
@@ -138,7 +138,7 @@ class ClaimAggregations:
             "aggregations": self.groups,
             "metadata": {
                 "edited_by": EDITOR,
-                "edited_at": datetime.now().isoformat(timespec="seconds"),
+                "edited_at": local_now(),
                 "count": len(self.groups),
             },
         }

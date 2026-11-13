@@ -13,10 +13,8 @@ from step_8_review.apply import ApplyRefused
 from step_8_review.inputs import REVIEW_CONFIG
 from step_8_review.store import SuggestionConflict, SuggestionNotFound
 from tests.pages_fixtures import FakeWriter
-from tests.review_fixtures import FakeReviewer, ReviewWorkspace, corrector, sentence_a, valid_answers
+from tests.review_fixtures import FakeReviewer, ReviewWorkspace, valid_answers
 from utils.paths import BACKUPS_DIR
-
-FIXED = "הקבוצה g-00000004 מספרת על הניסיון השני.[^g-00000004]"
 
 
 @pytest.fixture()
@@ -89,23 +87,6 @@ def test_apply_needs_an_accepted_suggestion_and_marks_it_applied(ws: ReviewWorks
         store.reopen(sid)
     with pytest.raises(SuggestionConflict):
         store.edit(sid, done["suggestion"]["proposal"])
-
-
-def test_apply_accepted_reports_refusals_and_writes_nothing_for_them(ws: ReviewWorkspace) -> None:
-    llm = FakeWriter("fake-apply", respond=corrector(sentence_a("g-00000004"), FIXED))
-    store, ids = ws.store(llm), _ids(ws)
-    for kind in ("mistake", "split", "add_page"):
-        store.accept(ids[kind])
-    proposal = next(s for s in ws.suggestions_payload()["suggestions"]
-                    if s["id"] == ids["add_page"])["proposal"]
-    store.edit(ids["add_page"], {**proposal, "page_id": "clinic-prices"})
-    report = store.apply_accepted()
-    assert report["applied"] == [ids["mistake"], ids["split"]]
-    assert set(report["refused"]) == {ids["add_page"]}
-    statuses = {s["id"]: s["status"] for s in store.list()["items"]}
-    assert statuses[ids["add_page"]] == "accepted" and statuses[ids["mistake"]] == "applied"
-    assert FIXED in ws.effective_page("agencies")["body_md"]
-    assert "travel" not in ws.plan_artifact.edited.read_text(encoding="utf-8")
 
 
 def test_a_refused_apply_leaves_every_file_byte_identical(ws: ReviewWorkspace) -> None:

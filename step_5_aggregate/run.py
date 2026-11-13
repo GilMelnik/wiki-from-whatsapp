@@ -44,7 +44,6 @@ from __future__ import annotations
 
 import argparse
 import copy
-import json
 import logging
 from collections.abc import Collection, Sequence
 from pathlib import Path
@@ -55,8 +54,8 @@ from step_5_aggregate.groups import GroupBook
 from step_5_aggregate.inputs import MustLink, StepInputs, load_inputs, load_must_links
 from step_5_aggregate.similarity import AGGREGATE_CONFIG, ClaimScorer
 from utils.config import section
-from utils.embedding_ab import _git_commit
-from utils.logging_setup import setup_step_logging
+from utils.json_io import read_json_if_present
+from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import AGGREGATED, AUDIT_PATH, MANUAL_AGGREGATIONS_PATH, STEP_5, Artifact
 from utils.reconcile import InputDiff, diff_inputs, guarded_write, load_previous
 
@@ -113,10 +112,6 @@ def assign_new_claims(
     }
 
 
-def _read(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
-
-
 def _counts(groups: list[dict[str, Any]]) -> dict[str, int]:
     return {
         "group_count": len(groups),
@@ -148,7 +143,7 @@ def run(
     logger = setup_step_logging(STEP_5)
     inputs = load_inputs(claims_path, entities_path, audit_path)
     previous = {} if rebuild else load_previous(artifact)
-    state = {"groups": []} if rebuild else copy.deepcopy(_read(artifact.edited) or previous)
+    state = {"groups": []} if rebuild else copy.deepcopy(read_json_if_present(artifact.edited) or previous)
     before = copy.deepcopy(state)
     scope = None if only is None else set(only)
     current = {
@@ -182,7 +177,7 @@ def run(
         "must_links": state["metadata"]["must_links"],
         "params": {key: AGGREGATE_CONFIG[key] for key in PARAM_KEYS},
         "embedding_model": f"{embedding['model']}-{embedding['output_dimensionality']}",
-        "git_commit": _git_commit(),
+        "git_commit": git_commit(),
         "run": stats,
         **counts,
     }

@@ -71,16 +71,6 @@ def find_node(plan: dict[str, Any], node_id: str) -> tuple[dict[str, Any], list[
     raise PlanError([f"no tree node {node_id!r}"])
 
 
-def page_paths(tree: list[dict[str, Any]], page_ids: set[str]) -> dict[str, list[str]]:
-    """``{page_id: [ancestor node ids]}`` for the page nodes of ``tree``."""
-
-    return {
-        node["id"]: list(ancestors)
-        for node, ancestors in iter_nodes(tree)
-        if node["id"] in page_ids
-    }
-
-
 def sync_pages(plan: dict[str, Any]) -> dict[str, Any]:
     """Copy each page's title and description onto its tree node and recompute its ``path``
     from the tree (in place; returns ``plan``)."""

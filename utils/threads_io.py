@@ -39,11 +39,6 @@ def messages_period(threads: dict[str, Any]) -> tuple[str, str]:
     return min(moments), max(moments)
 
 
-def thread_text(thread: dict[str, Any]) -> str:
-    """All message contents concatenated (used for heuristic keyword matching)."""
-    return "\n".join(m.get("content", "") or "" for m in thread.get("messages", []))
-
-
 def _normalize_quote(quote: Any) -> dict[str, str] | None:
     if not isinstance(quote, dict):
         return None

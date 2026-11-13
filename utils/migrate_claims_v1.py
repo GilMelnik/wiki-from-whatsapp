@@ -24,7 +24,6 @@ step 3 computes them: the distinct people who wrote in it.
 from __future__ import annotations
 
 import argparse
-import json
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -38,7 +37,7 @@ from step_3_extract.claims import (
 from step_3_extract.prompt import STANCES
 from step_3_extract.run import write_audit
 from utils.config import DATA_DIR
-from utils.json_io import write_json_file
+from utils.json_io import read_json_file, write_json_file
 from utils.logging_setup import setup_step_logging
 from utils.paths import AUDIT_PATH, CHAT_ANDROID_PATH, CLAIMS, STEP_3, THREADS, Artifact
 from utils.threads_io import load_export_index, load_threads, with_export
@@ -47,11 +46,6 @@ from utils.threads_io import load_export_index, load_threads, with_export
 def _under(root: Path, path: Path) -> Path:
     """``path`` (a location in this project's data dir) re-rooted at ``root``."""
     return root / path.relative_to(DATA_DIR)
-
-
-def _read_json(path: Path) -> Any:
-    with path.open(encoding="utf-8") as f:
-        return json.load(f)
 
 
 def _reviewed(root: Path, artifact: Artifact) -> Path:
@@ -100,8 +94,8 @@ def migrate(backup_dir: Path, out_dir: Path) -> dict[str, Any]:
     """Write the C3 claims + audit for the v1 corpus in ``backup_dir`` under ``out_dir``."""
 
     logger = setup_step_logging(STEP_3)
-    old = _read_json(_reviewed(backup_dir, CLAIMS))["claims"]
-    audit = {r["claim_id"]: r for r in _read_json(_under(backup_dir, AUDIT_PATH))["audit"]}
+    old = read_json_file(_reviewed(backup_dir, CLAIMS))["claims"]
+    audit = {r["claim_id"]: r for r in read_json_file(_under(backup_dir, AUDIT_PATH))["audit"]}
     threads = {
         t["thread_id"]: t for t in load_threads(_reviewed(backup_dir, THREADS))["threads"]
     }

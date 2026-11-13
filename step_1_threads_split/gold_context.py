@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable, Sequence
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +34,7 @@ from step_1_threads_split.gold import Window, load_gold, message_moment
 from utils.json_io import write_json_file
 from utils.reconcile import backup_file
 from utils.threads_io import load_threads
+from utils.timestamps import local_now
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ def add_context(
     metadata = {
         **gold["metadata"],
         "context": {
-            "added_at": datetime.now().isoformat(timespec="seconds"),
+            "added_at": local_now(),
             "tagged_source": tagged_source,
             "shown_sources": list(shown_sources),
             "message_count": len(context),

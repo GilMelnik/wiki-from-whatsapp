@@ -43,27 +43,23 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from collections.abc import Collection, Mapping, Sequence
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from step_6_plan.run import AnthropicTokenCounter, TokenCounter
-from step_8_review.inputs import REVIEW_CONFIG, ReviewInput, page_marks, read_json
+from step_8_review.inputs import REVIEW_CONFIG, ReviewInput, page_marks
 from step_8_review.parts import ReviewPass, ReviewPasses, batch_available, stored_passes
 from step_8_review.proposals import OPEN, PENDING, answer_schema, from_answer
 from utils.config import LLM_CONFIG
-from utils.embedding_ab import _git_commit
+from utils.json_io import read_json_if_present
 from utils.llm_client import BatchRequest, LLMClient, _flatten
 from utils.llm_client.ask import ask_json
-from utils.logging_setup import setup_step_logging
+from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import STEP_8, SUGGESTIONS, WIKI_PAGES, Artifact
 from utils.reconcile import load_previous, write_reconciled
+from utils.timestamps import utc_now_z
 
 REFRESH_KEYS = ("page_marks",)
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def decided(suggestion: Mapping[str, Any]) -> bool:
@@ -113,10 +109,10 @@ class ReviewRun:
         self.model = model
         self.passes = ReviewPasses(review, model)
         self.previous = {} if rebuild else load_previous(artifact)
-        original = read_json(artifact.original) or {}
+        original = read_json_if_present(artifact.original) or {}
         self.stored = stored_passes(original.get("metadata"))
         self.due = self.passes.due(self.stored, only, rebuild)
-        effective = read_json(artifact.edited) or original
+        effective = read_json_if_present(artifact.edited) or original
         self.current: list[dict[str, Any]] = list(effective.get("suggestions") or [])
         self.statuses = {s["id"]: s["status"] for s in self.current}
 
@@ -177,8 +173,8 @@ class ReviewRun:
             "effort": LLM_CONFIG["stages"][REVIEW_CONFIG["stage"]].get("thinking_param"),
             "prompt_version": REVIEW_CONFIG["prompt_version"],
             "config": REVIEW_CONFIG,
-            "git_commit": _git_commit(),
-            "generated_at": _now(),
+            "git_commit": git_commit(),
+            "generated_at": utc_now_z(),
             "input_tokens": input_tokens,
             "run": dict(run),
         }
@@ -246,7 +242,7 @@ def run(
                         "no call, nothing written")
             return {**result, "written": False}
         if job.unchanged:
-            meta = {**job.previous["metadata"], "generated_at": _now()}
+            meta = {**job.previous["metadata"], "generated_at": utc_now_z()}
             logger.info("Wiki unchanged but an input file is newer; refreshing the file (no call)")
         else:
             meta = job.metadata(0, (), run_info)
@@ -278,7 +274,7 @@ def run(
 
     new: list[dict[str, Any]] = []
     answered: list[str] = []
-    raised_at = _now()
+    raised_at = utc_now_z()
     for review_pass in job.due:
         row = rows[review_pass.id]
         if row["failed"]:

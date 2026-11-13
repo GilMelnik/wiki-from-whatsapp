@@ -132,7 +132,7 @@ def test_a_cross_pass_never_keeps_a_mistake_and_no_pass_names_what_it_did_not_se
 
 
 def test_batch_and_sync_write_the_same_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("step_8_review.run._now", lambda: "2026-01-01T00:00:00Z")
+    monkeypatch.setattr("step_8_review.run.utc_now_z", lambda: "2026-01-01T00:00:00Z")
     payloads = []
     for name, batch in (("batch", True), ("sync", False)):
         root = tmp_path / name

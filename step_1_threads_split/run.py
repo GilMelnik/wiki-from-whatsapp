@@ -33,7 +33,6 @@ import json
 import random
 import time
 from collections.abc import Sequence
-from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -44,10 +43,10 @@ from step_1_threads_split.message import message_record
 from step_1_threads_split.splitter import EmbedFn, SplitParams, ThreadSplitter, thread_record
 from utils.config import section
 from utils.embedder import embed_texts
-from utils.embedding_ab import _git_commit
-from utils.logging_setup import setup_step_logging
+from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import CHAT_ANDROID_PATH, STEP_1, THREADS, Artifact
 from utils.reconcile import diff_inputs, fingerprint, guarded_write
+from utils.timestamps import local_now
 
 THREADS_CONFIG = section("threads")
 EMBEDDING_CONFIG = section("embedding")
@@ -162,8 +161,8 @@ def run(
                 "kind": THREADS_CONFIG["embedding_kind"],
                 "max_chars": THREADS_CONFIG["embed_max_chars"],
             },
-            "git_commit": _git_commit(),
-            "generated_at": datetime.now().isoformat(timespec="seconds"),
+            "git_commit": git_commit(),
+            "generated_at": local_now(),
             "run": stats,
             "message_count": sum(len(t["messages"]) for t in threads),
             "thread_count": len(threads),

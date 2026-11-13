@@ -7,13 +7,7 @@ from collections.abc import Collection, Iterable
 from pathlib import Path
 from typing import Any
 
-from step_4_entities.mentions import (
-    Analyzer,
-    MentionIndex,
-    SimpleAnalyzer,
-    Word,
-    analyze_claims,
-)
+from step_4_entities.mentions import MentionIndex, Word
 from step_4_entities.records import member_record
 from utils.paths import ORIGINAL_CLAIMS_PATH, resolve_claims_path
 
@@ -68,11 +62,6 @@ class ClaimCorpus:
             for name in tagged_names(claim):
                 self._tagged.setdefault(name, set()).add(claim_id)
 
-    def names(self) -> list[str]:
-        """Every tagged name, most-tagged first (ties by name, for a stable order)."""
-
-        return sorted(self._tagged, key=lambda n: (-len(self._tagged[n]), n))
-
     def tagged_claims(self, name: str) -> set[str]:
         """Only the claims whose ``entities`` list this name (no text mentions)."""
 
@@ -97,23 +86,3 @@ class ClaimCorpus:
             excluded_claim_ids=excluded_claim_ids,
         )
 
-
-def collect_entities(
-    claims: list[dict[str, Any]],
-    *,
-    original_by_id: dict[str, dict[str, Any]] | None = None,
-    analysis: dict[str, list[Word]] | None = None,
-    analyzer: Analyzer | None = None,
-) -> list[dict[str, Any]]:
-    """One member record per distinct entity string, most claims first.
-
-    ``analysis`` is a precomputed ``{claim_id: words}`` morphology map; when absent it is
-    built with ``analyzer`` (default: the model-free ``SimpleAnalyzer``).
-    """
-
-    if analysis is None:
-        analysis = analyze_claims(claims, analyzer or SimpleAnalyzer())
-    corpus = ClaimCorpus(claims, analysis, original_by_id)
-    members = [corpus.member(name, corpus.claims_for(name)) for name in corpus.names()]
-    members.sort(key=lambda m: m["count"], reverse=True)
-    return members

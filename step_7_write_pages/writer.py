@@ -113,7 +113,7 @@ class PageWriter:
         when the model answers "no change needed" the current text with ``changed=False`` and
         the points as the model returned them (a new group that joined a point). Checks: those
         of a write over the whole page, except that sentences of the current body are not held
-        to the mark cap or the "told once" rule. ``request``: a free-text correction to carry
+        to the "told once" rule. ``request``: a free-text correction to carry
         out (step 8 applies an accepted review suggestion with an empty ``delta`` and a
         request); the checks are the same.
         """

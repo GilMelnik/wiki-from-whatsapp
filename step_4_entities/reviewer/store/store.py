@@ -16,7 +16,6 @@ listed on load, so every edit works on explicit claim lists.
 from __future__ import annotations
 
 import json
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -34,6 +33,7 @@ from step_4_entities.reviewer.store.highlights import ClaimAnnotator
 from step_4_entities.reviewer.store.members import MembersMixin
 from step_4_entities.reviewer.store.views import ViewsMixin
 from utils.json_io import write_json_file
+from utils.timestamps import local_now
 
 
 class EntityStore(ViewsMixin, ContextMixin, EditsMixin, MembersMixin):
@@ -112,7 +112,7 @@ class EntityStore(ViewsMixin, ContextMixin, EditsMixin, MembersMixin):
         meta.update(
             entity_counts(payload),
             edited_by=EDITOR,
-            edited_at=datetime.now().isoformat(timespec="seconds"),
+            edited_at=local_now(),
         )
         write_json_file(payload, self.edited_path)
         self.source = self.edited_path
