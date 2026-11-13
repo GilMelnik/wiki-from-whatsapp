@@ -42,10 +42,6 @@ def _count(system: str, user: str) -> int:
     return (len(system) + len(user)) // 4
 
 
-def _bodies(ws: PagesWorkspace, edited: bool = False) -> dict[str, str]:
-    return {pid: page["body_md"] for pid, page in ws.pages(edited)["pages"].items()}
-
-
 def test_written_pages_are_proofread_in_one_batch_and_a_rerun_makes_no_call(
         tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     ws = PagesWorkspace(tmp_path / "on")

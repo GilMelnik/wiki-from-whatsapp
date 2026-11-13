@@ -88,16 +88,7 @@ SUGGESTIONS = Artifact(
 # ponytail: named aliases for call-site readability
 ORIGINAL_THREADS_PATH = THREADS.original
 EDITED_THREADS_PATH = THREADS.edited
-ORIGINAL_CLASSIFIED_PATH = CLASSIFIED.original
-EDITED_CLASSIFIED_PATH = CLASSIFIED.edited
 ORIGINAL_CLAIMS_PATH = CLAIMS.original
-EDITED_CLAIMS_PATH = CLAIMS.edited
-ORIGINAL_ENTITIES_PATH = ENTITIES.original
-EDITED_ENTITIES_PATH = ENTITIES.edited
-ORIGINAL_AGGREGATED_PATH = AGGREGATED.original
-EDITED_AGGREGATED_PATH = AGGREGATED.edited
-ORIGINAL_PLAN_PATH = PLAN.original
-EDITED_PLAN_PATH = PLAN.edited
 
 # --------------------------------------------------------------- step 3 extract
 AUDIT_DIR = step_path(STEP_3, "audit")

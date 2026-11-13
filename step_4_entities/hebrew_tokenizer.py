@@ -27,10 +27,6 @@ def _is_valid_token(token: str) -> bool:
     return _KEEP_TOKEN_RE.search(token) is not None
 
 
-def _flatten_segments(segments: Sequence[str]) -> list[str]:
-    return [segment for segment in segments if _is_valid_token(segment)]
-
-
 def _cuda_device_is_supported() -> bool:
     import torch
 
@@ -65,17 +61,15 @@ def _resolve_device(device_arg: str | None, min_free_gpu_mb: int) -> "torch.devi
 class HebrewTokenizer:
     def __init__(
         self,
-        model_name: str = "dicta-il/dictabert-joint",
-        batch_size: int = 32,
-        device: str | None = None,
-        model_kwargs: dict[str, Any] | None = None,
-        min_free_gpu_mb: int = 0,
+        model_name: str,
+        batch_size: int,
+        device: str | None,
+        min_free_gpu_mb: int,
     ) -> None:
         self.model_name = model_name
         self.batch_size = batch_size
         self._device_arg = device
         self._min_free_gpu_mb = min_free_gpu_mb
-        self._model_kwargs = model_kwargs or {}
         self._tokenizer = None
         self._model = None
         self._device = None
@@ -99,41 +93,10 @@ class HebrewTokenizer:
         if self._model is None:
             from transformers import AutoModel
 
-            self._model = AutoModel.from_pretrained(
-                self.model_name,
-                trust_remote_code=True,
-                **self._model_kwargs,
-            )
+            self._model = AutoModel.from_pretrained(self.model_name, trust_remote_code=True)
             self._model.eval()
             self._model.to(self.device)
         return self._model
-
-    def tokenize(self, text: str) -> list[str]:
-        if not text or not text.strip():
-            return []
-        return self.tokenize_batch([text.strip()])[0]
-
-    def tokenize_batch(self, texts: Sequence[str]) -> list[list[str]]:
-        if not texts:
-            return []
-
-        results: list[list[str]] = [[] for _ in texts]
-        non_empty_indices: list[int] = []
-        non_empty_texts: list[str] = []
-
-        for idx, text in enumerate(texts):
-            if text and text.strip():
-                non_empty_indices.append(idx)
-                non_empty_texts.append(text.strip())
-
-        if not non_empty_texts:
-            return results
-
-        predictions = self._predict(non_empty_texts)
-        for global_idx, prediction in zip(non_empty_indices, predictions):
-            results[global_idx] = self._tokens_from_prediction(prediction)
-
-        return results
 
     def _predict(self, texts: Sequence[str]) -> list[Any]:
         """Model predictions in batches, backing off on CUDA out-of-memory errors."""
@@ -162,35 +125,12 @@ class HebrewTokenizer:
             start += len(chunk)
         return out
 
-    def _tokens_from_prediction(self, prediction: Any) -> list[str]:
-        if isinstance(prediction, dict) and "tokens" in prediction:
-            words = prediction["tokens"]
-        else:
-            words = prediction
-
-        tokens: list[str] = []
-        for word in words:
-            segments = word.get("seg")
-            if segments:
-                tokens.extend(_flatten_segments(segments))
-                continue
-
-            token = word.get("token", "")
-            if _is_valid_token(token):
-                tokens.append(token)
-        return tokens
-
-    def analyze(self, text: str) -> list[dict[str, Any]]:
-        if not text or not text.strip():
-            return []
-        return self.analyze_batch([text.strip()])[0]
-
     def analyze_batch(self, texts: Sequence[str]) -> list[list[dict[str, Any]]]:
-        """Per-word morphology: ``{token, core, prefixes, pos, lemma}`` per word.
+        """Per-word morphology: ``{token, core, prefixes, pos, lemma, ner}`` per word.
 
         ``core`` is the prefix-stripped surface (``seg[-1]``); ``prefixes`` are the
-        proclitic segments (``seg[:-1]``). Mirrors ``tokenize_batch`` batching but
-        keeps the structured fields instead of flattening to a token list.
+        proclitic segments (``seg[:-1]``); ``ner`` is the label of the NER span that covers
+        the word, if any. An empty text gives no words.
         """
 
         if not texts:

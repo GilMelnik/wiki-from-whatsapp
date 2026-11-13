@@ -12,7 +12,7 @@ read as statements (``Statement``: a sentence that carries at least one ``[^g-â€
 lead is the first paragraph, before any heading): every point must be carried by a statement that
 cites one of its groups (``citing``), and ``point_report`` measures what the owner cares
 about: how many points of which kind, what was left out and why, how many statements and
-marks, statements over the mark cap, points told more than once.
+marks, points told more than once and points no statement carries.
 """
 
 from __future__ import annotations

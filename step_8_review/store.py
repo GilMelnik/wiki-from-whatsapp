@@ -12,8 +12,8 @@ accepted.
 
 Applying (``step_8_review.apply``) changes the artifact the suggestion is about, then marks it
 ``applied``; a refused apply raises ``ApplyRefused`` and writes nothing. ``list`` adds live page
-marks to open suggestions (a page changed or gone since the suggestion was raised) and Hebrew names for kinds,
-statuses and marks (``wiki_review`` in config.json).
+marks to open suggestions (a page changed or gone since the suggestion was raised) and display names
+for kinds, statuses and marks (``wiki_review`` in config.json).
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Any
 
-from step_8_review.apply import Applier, ApplyRefused
+from step_8_review.apply import Applier
 from step_8_review.inputs import (
     REVIEW_CONFIG,
     page_fingerprint,
@@ -199,16 +199,3 @@ class SuggestionsStore:
                                applied_at=_now(),
                                apply_result={"message": result.message, **result.details})
         return {"suggestion": applied, "result": {"message": result.message, **result.details}}
-
-    def apply_accepted(self) -> dict[str, Any]:
-        """Apply every accepted suggestion in file order; a refused one stays accepted and
-        is reported with its reason."""
-        accepted = [s["id"] for s in self._payload()["suggestions"] if s["status"] == ACCEPTED]
-        applied, refused = [], {}
-        for suggestion_id in accepted:
-            try:
-                applied.append(self.apply(suggestion_id)["suggestion"]["id"])
-            except ApplyRefused as exc:
-                refused[suggestion_id] = str(exc)
-                logger.warning(f"Suggestion {suggestion_id} not applied: {exc}")
-        return {"applied": applied, "refused": refused}

@@ -8,7 +8,7 @@ from itertools import count
 from pathlib import Path
 
 from step_4_entities.cluster import EntityClusterer
-from step_4_entities.collect import ClaimCorpus, collect_entities
+from step_4_entities.collect import ClaimCorpus, tagged_names
 from step_4_entities.mentions import (
     Analyzer,
     MentionIndex,
@@ -20,6 +20,27 @@ from step_4_entities.mentions import (
 )
 from step_4_entities.normalize import normalize_name, transliteration_skeleton
 from step_4_entities.records import claim_contacts
+
+
+def collect_entities(
+    claims: list[dict],
+    *,
+    original_by_id: dict | None = None,
+    analysis: dict[str, list[Word]] | None = None,
+    analyzer: Analyzer | None = None,
+) -> list[dict]:
+    """One member record per distinct entity string, most claims first (``analysis`` is built
+    with ``analyzer``, default the model-free ``SimpleAnalyzer``, when not given). Names are
+    taken most-tagged first, ties by name, so the order is stable."""
+
+    if analysis is None:
+        analysis = analyze_claims(claims, analyzer or SimpleAnalyzer())
+    corpus = ClaimCorpus(claims, analysis, original_by_id)
+    tagged = {name for claim in corpus.claims_by_id.values() for name in tagged_names(claim)}
+    names = sorted(tagged, key=lambda n: (-len(corpus.tagged_claims(n)), n))
+    members = [corpus.member(name, corpus.claims_for(name)) for name in names]
+    members.sort(key=lambda m: m["count"], reverse=True)
+    return members
 
 
 class FakeAnalyzer:
@@ -480,13 +501,13 @@ def test_mention_index_matches_a_full_scan() -> None:
         assert index.claims_mentioning(name) == scan
 
 
-def test_claim_corpus_names_and_claims() -> None:
+def test_claim_corpus_claims() -> None:
     claims = [
         _claim("t1-c0", ["Alpha", "Beta"], "Alpha and Beta"),
         _claim("t2-c0", ["Alpha"], "Alpha again"),
         _claim("t3-c0", [], "Beta only in the text"),
     ]
     corpus = ClaimCorpus(claims, analyze_claims(claims, SimpleAnalyzer()))
-    assert corpus.names() == ["Alpha", "Beta"]
+    assert corpus.tagged_claims("Alpha") == {"t1-c0", "t2-c0"}
     assert corpus.claims_for("Beta") == {"t1-c0", "t3-c0"}
     assert corpus.claims_for("Beta", within={"t3-c0"}) == {"t3-c0"}
