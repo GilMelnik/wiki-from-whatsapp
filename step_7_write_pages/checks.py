@@ -77,10 +77,22 @@ def strip_definitions(body: str) -> str:
     return _DEFINITION.sub("", body).rstrip() + "\n"
 
 
+def sentence_spans(body: str) -> list[tuple[int, int]]:
+    """Where each sentence of ``body`` starts and ends, surrounding white space left out
+    (``body`` as it is: footnote definitions count as text)."""
+    spans = []
+    for match in _SENTENCE.finditer(body):
+        text = match.group(0)
+        start = match.start() + len(text) - len(text.lstrip())
+        if text.strip():
+            spans.append((start, start + len(text.strip())))
+    return spans
+
+
 def sentences(body: str) -> list[str]:
     """The body's sentences (footnote definitions left out), stripped."""
-    found = (part.strip() for part in _SENTENCE.findall(strip_definitions(body)))
-    return [part for part in found if part]
+    body = strip_definitions(body)
+    return [body[start:end] for start, end in sentence_spans(body)]
 
 
 def statements(body: str) -> list[Statement]:

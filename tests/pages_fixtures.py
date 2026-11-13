@@ -5,7 +5,8 @@ usa / georgia). Group ``i`` goes to page ``PAGE_IDS[i % 4]``; group 4 also has `
 its second page; group 11 is unplaced. Groups carry private-looking fields (claim ids,
 identities, a reaction summary) that no prompt may show. ``FakeWriter`` answers like the
 model: one point per ``main`` group of the prompt's ``<groups>`` block, then an article with
-one sentence per group (each citing it) and links to one other page and a label. Nothing
+one sentence per group (each citing it) and links to one other page and a label.
+``FakeProofreader`` stands in for the Hebrew language edit (no edits unless told). Nothing
 here comes from real data.
 """
 
@@ -14,14 +15,14 @@ from __future__ import annotations
 import copy
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
 from typing import Any
 
 from step_7_write_pages.run import run
 from tests.plan_fixtures import PAGE_IDS, make_groups, make_plan
 from utils.json_io import write_json_file
-from utils.llm_client import _flatten
+from utils.llm_client import BatchRequest, _flatten
 from utils.paths import Artifact
 
 SECRET = "PRIVATE-IDENTITY"
@@ -117,6 +118,51 @@ class FakeWriter:
         return [call["task"] for call in self.calls]
 
 
+Edits = Callable[[str, str], list[dict[str, str]]]
+
+
+def article_body(user: Any) -> str:
+    """The page body of a proofreading prompt."""
+    return _flatten(user).removeprefix("<article>\n").removesuffix("\n</article>")
+
+
+class FakeProofreader:
+    """A fake ``LLMClient`` for the proofread stage: ``edits(page_id, body)`` is a page's
+    answer (none by default); the pages in ``fail`` get no answer. Records every batch (page
+    ids) and every sync call."""
+
+    def __init__(self, edits: Edits | None = None, *, fail: Collection[str] = (),
+                 batch: bool = True) -> None:
+        self.model = "fake-proofread"
+        self.edits = edits or (lambda page_id, body: [])
+        self.fail = set(fail)
+        self.batch = batch
+        self.batches: list[list[str]] = []
+        self.calls: list[str] = []
+
+    def supports_batch(self) -> bool:
+        return self.batch
+
+    def _answer(self, request: BatchRequest) -> dict[str, Any]:
+        return {"edits": copy.deepcopy(self.edits(request.request_id, article_body(request.user)))}
+
+    def complete_batch_json(self, requests: Sequence[BatchRequest]) -> dict[str, Any]:
+        self.batches.append([request.request_id for request in requests])
+        return {request.request_id: self._answer(request) for request in requests
+                if request.request_id not in self.fail}
+
+    def complete_json(self, system: Any, user: Any, task: str = "",
+                      response_schema: dict | None = None) -> dict[str, Any]:
+        page_id = task.removeprefix("proofread:")
+        self.calls.append(page_id)
+        if page_id in self.fail:
+            raise RuntimeError("fake refusal")
+        return self._answer(BatchRequest(page_id, system, user))
+
+    def pages(self) -> list[str]:
+        return [page_id for batch in self.batches for page_id in batch] + self.calls
+
+
 class PagesWorkspace:
     """Groups, plan, assignments and the pages artifact in a temp folder."""
 
@@ -156,8 +202,8 @@ class PagesWorkspace:
         write_json_file(payload, self.artifact.edited)
 
     def run(self, llm: FakeWriter | None = None, update_llm: FakeWriter | None = None,
-            **kwargs: Any) -> dict[str, Any]:
+            proofread_llm: FakeProofreader | None = None, **kwargs: Any) -> dict[str, Any]:
         return run(aggregated_path=self.groups_path, plan_path=self.plan_path,
                    assignments_path=self.assignments_path, artifact=self.artifact,
                    llm=llm or FakeWriter(), update_llm=update_llm or FakeWriter("fake-update"),
-                   **kwargs)
+                   proofread_llm=proofread_llm or FakeProofreader(), **kwargs)

@@ -29,6 +29,13 @@ Re-runs (C14) work per page. ``metadata.pages[page_id]`` keeps a fingerprint of 
   change needed" keeps the text and ``generated.at`` (the points may still change: a new group
   joined one); above ``pages.update.rewrite_changed_share`` a full rewrite;
 - a page that left the plan, or has no groups any more, is dropped.
+Every body the writer wrote or changed in this run then gets the Hebrew language edit (stage
+``proofread``, all such pages in ONE batch, ``step_7_write_pages.proofread``; off with
+``proofread.enabled: false``): code applies only the safe replacements, never inside a sentence
+the update kept, and keeps the writer's body when the edits break a check. A page whose
+proofreading call failed keeps the writer's body and is sent again by the next run (unless the
+owner edited it since). Proofreading changes no fingerprint: a run with nothing new makes no
+call.
 Pages are written through ``utils.reconcile`` once per run (front matter and fingerprint are
 refresh keys, so a kept manual edit gets current front matter). A crash costs nothing on the
 re-run: prompts are deterministic and answers are in the LLM disk cache. Nothing is written
@@ -38,10 +45,11 @@ notice then clears).
     python -m step_7_write_pages.run [--rebuild] [--only PAGE_ID ...] [--estimate]
 
 Output: ``wiki_pages.json`` (C9) ``{pages: {page_id: {front_matter, body_md, points,
-left_out, input_fingerprint}}, metadata: {sources, inputs, pages, as_of, models, config,
-git_commit, generated_at, run, summary, withheld}}``; ``points`` = ``[{kind, statement,
-groups}]``, ``left_out`` = ``[{group, reason}]``; ``withheld`` = ``[{group_id, page_id,
-entity_ids, supporter_count}]`` (ids and numbers only).
+left_out, language_edits?, input_fingerprint}}, metadata: {sources, inputs, pages, as_of,
+models, config, git_commit, generated_at, run, summary, withheld}}``; ``points`` = ``[{kind,
+statement, groups}]``, ``left_out`` = ``[{group, reason}]``; ``language_edits`` = the
+proofreading of the body (``proofread``); ``withheld`` = ``[{group_id, page_id, entity_ids,
+supporter_count}]`` (ids and numbers only).
 """
 
 from __future__ import annotations
@@ -52,7 +60,7 @@ import logging
 from collections import Counter
 from collections.abc import Collection, Mapping
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -60,7 +68,7 @@ from typing import Any
 import anthropic
 
 from step_6_plan.run import AnthropicTokenCounter, TokenCounter
-from step_7_write_pages.checks import strip_definitions
+from step_7_write_pages.checks import sentences, strip_definitions
 from step_7_write_pages.front_matter import LabelRule, page_front_matter
 from step_7_write_pages.inputs import (
     PAGES_CONFIG,
@@ -72,6 +80,15 @@ from step_7_write_pages.inputs import (
 )
 from step_7_write_pages.points import LeftOut, Point
 from step_7_write_pages.prompts import update_prompt, write_prompt
+from step_7_write_pages.proofread import (
+    PROOFREAD_CONFIG,
+    Proofread,
+    Proofreader,
+    ProofreadJob,
+    owed_frozen,
+    prompt_chars,
+    proofread_job,
+)
 from step_7_write_pages.withhold import WITHHOLD_CONFIG
 from step_7_write_pages.writer import GroupDelta, PageText, PageWriter, changed_share, current_text
 from utils.embedding_ab import _git_commit
@@ -133,6 +150,7 @@ class PagesRun:
         self.carried: dict[str, Any] = {}
         self.jobs: list[Job] = []
         self.failed: dict[str, str] = {}
+        self.proofread_pages: dict[str, Proofread] = {}
 
     def plan(self) -> list[Job]:
         """Decide what happens to every planned page (see the module docstring)."""
@@ -196,6 +214,37 @@ class PagesRun:
                     self.logger.error(f"{page_id}: writing failed, old text kept: {exc!r}")
         return texts
 
+    def _proofread_job(self, job: Job, text: PageText | None) -> ProofreadJob | None:
+        """The proofreading a page is due in this run: its body is new, or the last call
+        failed on the body it keeps (and the owner has not edited the page since)."""
+        source = None if job.source is None else strip_definitions(job.source["body_md"])
+        if job.mode != "keep" and text is not None and text.body != source:
+            frozen = sentences(source) if job.mode == "update" else []
+            answer = {"body": text.body, "points": text.points, "left_out": text.left_out}
+            return proofread_job(job.context, self.corpus.plan, answer, frozen)
+        old_page = self.old_pages.get(job.page_id)
+        if (job.mode != "keep" and text is None) or old_page is None or job.source != old_page:
+            return None
+        owed = owed_frozen(old_page.get("language_edits"), source)
+        if owed is None:
+            return None
+        points, left_out = ((text.points, text.left_out) if text is not None else
+                            (old_page.get("points", []), old_page.get("left_out", [])))
+        answer = {"body": source, "points": points, "left_out": left_out}
+        return proofread_job(job.context, self.corpus.plan, answer, owed)
+
+    def proofread(self, texts: dict[str, PageText], proofreader: Proofreader) -> dict[str, PageText]:
+        """The Hebrew language edit of every due page in one batch; returns ``texts`` with the
+        edited bodies (a kept page's outcome is used by ``payload``)."""
+        jobs = [due for due in (self._proofread_job(job, texts.get(job.page_id))
+                                for job in self.jobs) if due is not None]
+        self.proofread_pages = proofreader.run(jobs)
+        self.stats["proofread"] = len(jobs)
+        self.stats["language_edits"] = sum(len(p.language_edits.get("applied", []))
+                                           for p in self.proofread_pages.values())
+        return {pid: replace(text, body=self.proofread_pages[pid].body)
+                if pid in self.proofread_pages else text for pid, text in texts.items()}
+
     def estimate(self, count_tokens: TokenCounter) -> dict[str, Any]:
         """Input tokens of every call this run would make (no writing call)."""
         rows = []
@@ -218,20 +267,39 @@ class PagesRun:
         self.logger.info(f"estimate: {len(rows)} calls (+ retries), {total} input tokens; "
                          f"{sum(1 for job in self.jobs if job.mode == 'keep')} pages untouched")
         return {"estimate": rows, "input_tokens": total, "written": False,
-                "modes": dict(Counter(job.mode for job in self.jobs))}
+                "modes": dict(Counter(job.mode for job in self.jobs)),
+                "proofread": self._proofread_estimate()}
+
+    def _proofread_estimate(self) -> list[dict[str, Any]]:
+        """The proofreading calls of the run: every page to write (its current body's length,
+        a new page the stored pages' mean) and every kept page that is owed one."""
+        if not PROOFREAD_CONFIG["enabled"]:
+            return []
+        bodies = {pid: len(strip_definitions(page["body_md"])) for pid, page in self.old_pages.items()}
+        typical = sum(bodies.values()) // max(len(bodies), 1)
+        rows = []
+        for job in self.jobs:
+            page = job.source or self.old_pages.get(job.page_id)
+            if job.mode == "keep" and self._proofread_job(job, None) is None:
+                continue
+            chars = len(strip_definitions(page["body_md"])) if page else typical
+            rows.append({"page": job.page_id, "chars": prompt_chars(chars)})
+        return rows
 
     # ----------------------------------------------------------------- payload
 
     def _item(self, job: Job, *, body: str, summary: str, questions: list[str],
               related: list[dict[str, str]], points: list[Point], left_out: list[LeftOut],
-              generated_at: str) -> dict[str, Any]:
+              generated_at: str, language_edits: dict[str, Any] | None) -> dict[str, Any]:
         front_matter = page_front_matter(
             job.context, self.corpus.plan, body=body, summary=summary, questions=questions,
             related=related, labels=self.labels(job.page_id), model=self.model,
             generated_at=generated_at)
-        return {"front_matter": front_matter, "body_md": body, "points": points,
-                "left_out": self.corpus.accounted_left_out(job.page_id, left_out),
-                "input_fingerprint": input_fingerprint(job.state)}
+        item = {"front_matter": front_matter, "body_md": body, "points": points,
+                "left_out": self.corpus.accounted_left_out(job.page_id, left_out)}
+        if language_edits is not None:
+            item["language_edits"] = language_edits
+        return {**item, "input_fingerprint": input_fingerprint(job.state)}
 
     def _from_text(self, job: Job, text: PageText) -> dict[str, Any]:
         source = job.source
@@ -240,22 +308,32 @@ class PagesRun:
                 ("summary", text.summary, ""), ("questions", text.questions, []),
                 ("related", text.related, [])))
         generated_at = source["front_matter"]["generated"]["at"] if same else _now()
+        proofread = self.proofread_pages.get(job.page_id)
+        if proofread is not None:
+            language_edits = proofread.language_edits
+        elif source is not None and text.body == strip_definitions(source["body_md"]):
+            language_edits = source.get("language_edits")  # the body it describes is kept
+        else:
+            language_edits = None
         return self._item(job, body=text.body, summary=text.summary, questions=text.questions,
                           related=text.related, points=text.points, left_out=text.left_out,
-                          generated_at=generated_at)
+                          generated_at=generated_at, language_edits=language_edits)
 
     def _kept(self, job: Job) -> dict[str, Any]:
         """An unchanged page: the step's own body and points, front matter rebuilt from the
         effective page (its citations and model-owned fields), ``generated.at`` unchanged."""
         source = current_text(job.source)
-        own = current_text(self.old_pages[job.page_id])
+        old_page = self.old_pages[job.page_id]
+        own = current_text(old_page)
+        proofread = self.proofread_pages.get(job.page_id)
         item = self._item(
             job, body=job.source["body_md"], summary=source["summary"],
             questions=source["questions"],
             related=[{"slug": r["page_id"], "relation": r["relation"]} for r in source["related"]],
             points=own["points"], left_out=own["left_out"],
-            generated_at=job.source["front_matter"]["generated"]["at"])
-        return {**item, "body_md": self.old_pages[job.page_id]["body_md"]}
+            generated_at=job.source["front_matter"]["generated"]["at"],
+            language_edits=proofread.language_edits if proofread else old_page.get("language_edits"))
+        return {**item, "body_md": proofread.body if proofread else old_page["body_md"]}
 
     def payload(self, texts: Mapping[str, PageText], sources: tuple[Path, ...],
                 models: Mapping[str, str]) -> dict[str, Any]:
@@ -293,6 +371,8 @@ class PagesRun:
                 "git_commit": _git_commit(),
                 "generated_at": _now(),
                 "run": {**self.stats, "failed": self.failed,
+                        "proofread_failed": {pid: p.language_edits["failed"]
+                                             for pid, p in self.proofread_pages.items() if p.failed},
                         "skipped_groups": len(self.corpus.skipped)},
                 "summary": {
                     "pages": len(pages),
@@ -330,6 +410,7 @@ def run(
     estimate: bool = False,
     llm: LLMClient | None = None,
     update_llm: LLMClient | None = None,
+    proofread_llm: LLMClient | None = None,
     count_tokens: TokenCounter | None = None,
 ) -> dict[str, Any]:
     """Write, update or keep every planned page; see the module docstring.
@@ -338,9 +419,11 @@ def run(
     these page ids only (every other page stays as it is). ``rebuild``: write every page (in
     ``only``) in full; without ``only`` the edited file is backed up and replaced.
     ``estimate``: no writing call; returns the input tokens of every call the run would make.
-    ``llm`` / ``update_llm`` default to the ``pages.write`` / ``pages.update`` stages.
-    Returns the run counters (``write``, ``update``, ``no_change``, ``kept``, ``dropped``,
-    ``no_groups``, ``failed``, ``skipped_groups``), ``summary``, ``written`` and ``backup``.
+    ``llm`` / ``update_llm`` / ``proofread_llm`` default to the ``pages.write`` /
+    ``pages.update`` / ``proofread`` stages. Returns the run counters (``write``, ``update``,
+    ``no_change``, ``kept``, ``dropped``, ``no_groups``, ``failed``, ``proofread``,
+    ``language_edits``, ``proofread_failed``, ``skipped_groups``), ``summary``, ``written``
+    and ``backup``.
     """
     logger = setup_step_logging(STEP_7)
     corpus = Corpus.load(aggregated_path, plan_path, assignments_path)
@@ -366,7 +449,13 @@ def run(
     if estimate:
         return job.estimate(count_tokens or AnthropicTokenCounter(llm.model))
     texts = job.write(PageWriter(llm, update_llm, corpus.plan, logger))
-    payload = job.payload(texts, corpus.sources, {"write": llm.model, "update": update_llm.model})
+    models = {"write": llm.model, "update": update_llm.model}
+    if PROOFREAD_CONFIG["enabled"]:
+        proofread_llm = proofread_llm or LLMClient.for_stage(
+            PROOFREAD_CONFIG["stage"], logger=logger, max_tokens=PROOFREAD_CONFIG["max_output_tokens"])
+        texts = job.proofread(texts, Proofreader(proofread_llm, logger))
+        models["proofread"] = proofread_llm.model
+    payload = job.payload(texts, corpus.sources, models)
     result = {**payload["metadata"]["run"], "summary": payload["metadata"]["summary"], "backup": None}
     if not full_rebuild and _unchanged(payload, previous, artifact.original, corpus.sources):
         logger.info(f"Pages unchanged ({len(payload['pages'])} pages); nothing written")

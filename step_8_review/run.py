@@ -41,7 +41,6 @@ config, git_commit, generated_at, input_tokens, run{..., passes[], without_point
 from __future__ import annotations
 
 import argparse
-import logging
 from collections import Counter
 from collections.abc import Collection, Mapping, Sequence
 from datetime import datetime, timezone
@@ -55,6 +54,7 @@ from step_8_review.proposals import OPEN, PENDING, answer_schema, from_answer
 from utils.config import LLM_CONFIG
 from utils.embedding_ab import _git_commit
 from utils.llm_client import BatchRequest, LLMClient, _flatten
+from utils.llm_client.ask import ask_json
 from utils.logging_setup import setup_step_logging
 from utils.paths import STEP_8, SUGGESTIONS, WIKI_PAGES, Artifact
 from utils.reconcile import load_previous, write_reconciled
@@ -189,24 +189,6 @@ class ReviewRun:
         return {"written": True, "backup": str(report.backup) if report.backup else None}
 
 
-def ask(llm: LLMClient, requests: Sequence[BatchRequest], *, batch: bool,
-        logger: logging.Logger) -> dict[str, Any]:
-    """``{pass id: parsed answer}``; a pass without a usable answer is left out (and logged)."""
-    if batch:
-        logger.info(f"Review: {len(requests)} passes via the batch API")
-        return llm.complete_batch_json(requests)
-    answers: dict[str, Any] = {}
-    for request in requests:
-        try:
-            answers[request.request_id] = llm.complete_json(
-                request.system, request.user, task=request.task,
-                response_schema=request.response_schema)
-        # Provider errors have no common base class; one pass must not stop the others.
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(f"Review: the call of pass {request.request_id} failed: {exc!r}")
-    return answers
-
-
 def run(
     *,
     artifact: Artifact = SUGGESTIONS,
@@ -290,7 +272,7 @@ def run(
     if requests:
         llm = llm or LLMClient.for_stage(stage, logger=logger,
                                          max_tokens=REVIEW_CONFIG["max_output_tokens"])
-        answers = ask(llm, requests, batch=batch, logger=logger)
+        answers = ask_json(llm, requests, batch=batch, logger=logger)
     else:
         answers = {}
 
