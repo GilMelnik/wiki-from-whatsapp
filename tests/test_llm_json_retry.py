@@ -9,13 +9,15 @@ cache and never kept in the good cache.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
+from pathlib import Path
 
 import pytest
 
 from utils.llm_client import MAX_TOKENS_CEILING, BatchRequest, LLMClient
 
 
-def _client(tmp_path, responses):
+def _client(tmp_path: Path, responses: Sequence[tuple[str, bool]]) -> LLMClient:
     """A client whose _dispatch yields queued ``(text, truncated)`` in order."""
 
     llm = LLMClient(
@@ -30,7 +32,7 @@ def _client(tmp_path, responses):
     return llm
 
 
-def test_truncated_then_good_bumps_and_caches_only_good(tmp_path):
+def test_truncated_then_good_bumps_and_caches_only_good(tmp_path: Path) -> None:
     # First attempt truncated at max_tokens, second is valid.
     llm = _client(tmp_path, [('{"a": 1', True), ('{"a": 1}', False)])
     assert llm.complete_json("sys", "usr") == {"a": 1}
@@ -41,7 +43,7 @@ def test_truncated_then_good_bumps_and_caches_only_good(tmp_path):
     assert llm.complete_json("sys", "usr") == {"a": 1}
 
 
-def test_non_truncation_parse_failure_is_not_retried(tmp_path):
+def test_non_truncation_parse_failure_is_not_retried(tmp_path: Path) -> None:
     """Prose (not a truncation) must not grow the window or retry — just log."""
 
     llm = _client(tmp_path, [("sorry, here are the claims...", False)] * 5)
@@ -57,7 +59,7 @@ def test_non_truncation_parse_failure_is_not_retried(tmp_path):
     assert (llm.cache.bad_cache_dir / f"{key}.json").exists()
 
 
-def test_stale_bad_cache_is_dropped_and_rerequested(tmp_path):
+def test_stale_bad_cache_is_dropped_and_rerequested(tmp_path: Path) -> None:
     llm = LLMClient(
         provider="anthropic",
         model="claude-sonnet-5",
@@ -75,7 +77,7 @@ def test_stale_bad_cache_is_dropped_and_rerequested(tmp_path):
     assert llm.cache._read_cache(key) is not None  # replaced with the good response
 
 
-def test_gives_up_at_ceiling_and_logs_failure(tmp_path):
+def test_gives_up_at_ceiling_and_logs_failure(tmp_path: Path) -> None:
     llm = _client(tmp_path, [('{"bad"', True)] * 20)  # truncated, at the ceiling
     llm.max_tokens = MAX_TOKENS_CEILING  # already maxed out
     with pytest.raises(ValueError):
@@ -89,7 +91,7 @@ def test_gives_up_at_ceiling_and_logs_failure(tmp_path):
     assert entry["response"] == '{"bad"'  # raw output kept for inspection
 
 
-def test_complete_batch_json_resubmits_only_truncated_as_batch(tmp_path):
+def test_complete_batch_json_resubmits_only_truncated_as_batch(tmp_path: Path) -> None:
     """Good items are used as-is; only the truncated one is re-submitted — as
     another batch — with a doubled max_tokens window until it parses.
     """
@@ -107,7 +109,7 @@ def test_complete_batch_json_resubmits_only_truncated_as_batch(tmp_path):
     ]
     batches: list[list[str]] = []
 
-    def _batch(requests):
+    def _batch(requests: Sequence[BatchRequest]) -> dict[str, tuple[str, bool]]:
         ids = [r.request_id for r in requests]
         batches.append(ids)
         # First round: "ok" valid, "bad" truncated. Retry round: "bad" ok.
@@ -130,7 +132,7 @@ def test_complete_batch_json_resubmits_only_truncated_as_batch(tmp_path):
     assert not (tmp_path / "failures.jsonl").exists()  # healed -> no failure logged
 
 
-def test_complete_batch_json_drops_non_truncation_without_retry(tmp_path):
+def test_complete_batch_json_drops_non_truncation_without_retry(tmp_path: Path) -> None:
     """A batch item that is prose (not truncated) is logged and dropped, never
     re-submitted, and max_tokens is left alone.
     """
@@ -145,7 +147,7 @@ def test_complete_batch_json_drops_non_truncation_without_retry(tmp_path):
     req = BatchRequest(request_id="bad", system="s", user="u", task="extract")
     batches: list[list[str]] = []
 
-    def _batch(requests):
+    def _batch(requests: Sequence[BatchRequest]) -> dict[str, tuple[str, bool]]:
         batches.append([r.request_id for r in requests])
         return {"bad": ("here are the claims i found", False)}
 
@@ -162,7 +164,7 @@ def test_complete_batch_json_drops_non_truncation_without_retry(tmp_path):
     assert (llm.cache.bad_cache_dir / f"{key}.json").exists()
 
 
-def test_complete_batch_json_records_when_ceiling_reached(tmp_path):
+def test_complete_batch_json_records_when_ceiling_reached(tmp_path: Path) -> None:
     llm = LLMClient(
         provider="anthropic",
         model="claude-sonnet-5",

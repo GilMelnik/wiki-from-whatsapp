@@ -5,10 +5,13 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import pytest
+
 from utils import logging_setup
 
 
-def test_setup_step_logging_writes_to_step_folder(tmp_path: Path, monkeypatch):
+def test_setup_step_logging_writes_to_step_folder(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(logging_setup, "DATA_DIR", tmp_path)
     monkeypatch.setattr(logging_setup, "_current_step", None)
     monkeypatch.setattr(logging_setup, "_file_handler", None)
