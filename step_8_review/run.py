@@ -52,10 +52,9 @@ from step_8_review.inputs import REVIEW_CONFIG, ReviewInput, page_marks, read_js
 from step_8_review.parts import ReviewPass, ReviewPasses, batch_available, stored_passes
 from step_8_review.proposals import OPEN, PENDING, answer_schema, from_answer
 from utils.config import LLM_CONFIG
-from utils.embedding_ab import _git_commit
 from utils.llm_client import BatchRequest, LLMClient, _flatten
 from utils.llm_client.ask import ask_json
-from utils.logging_setup import setup_step_logging
+from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import STEP_8, SUGGESTIONS, WIKI_PAGES, Artifact
 from utils.reconcile import load_previous, write_reconciled
 
@@ -177,7 +176,7 @@ class ReviewRun:
             "effort": LLM_CONFIG["stages"][REVIEW_CONFIG["stage"]].get("thinking_param"),
             "prompt_version": REVIEW_CONFIG["prompt_version"],
             "config": REVIEW_CONFIG,
-            "git_commit": _git_commit(),
+            "git_commit": git_commit(),
             "generated_at": _now(),
             "input_tokens": input_tokens,
             "run": dict(run),

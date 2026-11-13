@@ -64,9 +64,8 @@ from step_6_plan.assign_rules import (
 )
 from step_6_plan.coverage import group_state, page_question
 from step_6_plan.model import PlanError, validation_errors
-from utils.embedding_ab import _git_commit
 from utils.llm_client import Classifier, LLMClient, Question
-from utils.logging_setup import setup_step_logging
+from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import ASSIGNMENTS, PLAN, STEP_6, Artifact, resolve, resolve_aggregated_path
 from utils.reconcile import diff_inputs, fingerprint, guarded_write
 
@@ -330,7 +329,7 @@ class AssignmentRun:
                 "considered": {gid: fp for gid, fp in self.considered.items() if gid in self.groups},
                 "params": ASSIGN_CONFIG,
                 "classifier": f"{classifier.provider}/{classifier.model}",
-                "git_commit": _git_commit(),
+                "git_commit": git_commit(),
                 "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "run": self.stats,
                 "summary": summary(self.records, self.plan),

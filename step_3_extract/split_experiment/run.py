@@ -56,10 +56,9 @@ from step_3_extract.split_experiment.units import (
 from step_3_extract.split_experiment.usage import UsageLedger, estimate, summed
 from step_10_update.estimate import ESTIMATE_CONFIG
 from utils.config import section
-from utils.embedding_ab import _git_commit
 from utils.json_io import write_json_file
 from utils.llm_client import BatchRequest, LLMClient
-from utils.logging_setup import setup_step_logging
+from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import CHAT_ANDROID_PATH, GOLD_THREADS_PATH, STEP_1, STEP_3, THREADS, step_path
 from utils.threads_io import load_threads
 
@@ -291,7 +290,7 @@ def main(argv: list[str] | None = None) -> None:
         experiment.estimate()
         return
     metadata = {"generated_at": datetime.now().isoformat(timespec="seconds"),
-                "git_commit": _git_commit(), "provider": llm.provider, "model": llm.model,
+                "git_commit": git_commit(), "provider": llm.provider, "model": llm.model,
                 "batch": experiment.use_batch, "dry_run": args.dry_run,
                 "windows": [w + 1 for w in messages.windows], "variants": list(units),
                 "inputs": {name: str(getattr(args, name))

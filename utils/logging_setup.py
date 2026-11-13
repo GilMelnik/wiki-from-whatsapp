@@ -1,4 +1,4 @@
-"""Console + per-step rotating-file logging (per ``.cursor/rules/python-rules.mdc``).
+"""Console + per-step rotating-file logging, and the git commit a run logs with its outputs.
 
 ``setup_step_logging(step_folder)`` attaches a single console handler once and
 points a shared rotating file handler at ``<data_dir>/<step_folder>/<step_folder>.log``.
@@ -6,14 +6,17 @@ Because the handlers live on the root logger, any logger (including the shared
 ``utils.llm_client`` logger, when its client is given the returned step logger)
 lands in the active step's file. Sequential pipeline steps each get their own
 log file: calling this again for a new step swaps the file handler.
+
+``git_commit()`` is the commit hash every run records with its config, for traceability.
 """
 
 from __future__ import annotations
 
 import logging
+import subprocess
 from logging.handlers import RotatingFileHandler
 
-from utils.config import DATA_DIR, LOGGING_CONFIG
+from utils.config import DATA_DIR, LOGGING_CONFIG, PROJECT_ROOT
 
 LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 _FORMATTER = logging.Formatter(LOG_FORMAT)
@@ -62,3 +65,20 @@ def setup_step_logging(step_folder: str) -> logging.Logger:
         root.addHandler(_file_handler)
         _current_step = step_folder
     return logging.getLogger(step_folder)
+
+
+def git_commit() -> str:
+    """The project's current git commit hash, or ``"unknown"`` (with a warning) without one."""
+
+    try:
+        completed = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=PROJECT_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as exc:
+        logging.getLogger(__name__).warning(f"git commit hash unavailable: {exc}")
+        return "unknown"
+    return completed.stdout.strip()

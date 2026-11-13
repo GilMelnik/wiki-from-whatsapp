@@ -91,9 +91,8 @@ from step_7_write_pages.proofread import (
 )
 from step_7_write_pages.withhold import WITHHOLD_CONFIG
 from step_7_write_pages.writer import GroupDelta, PageText, PageWriter, changed_share, current_text
-from utils.embedding_ab import _git_commit
 from utils.llm_client import LLMClient, _flatten
-from utils.logging_setup import setup_step_logging
+from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import STEP_7, WIKI_PAGES, Artifact
 from utils.reconcile import diff_inputs, load_previous, write_reconciled
 
@@ -368,7 +367,7 @@ class PagesRun:
                 "as_of": self.corpus.as_of,
                 "models": dict(models),
                 "config": PAGES_CONFIG,
-                "git_commit": _git_commit(),
+                "git_commit": git_commit(),
                 "generated_at": _now(),
                 "run": {**self.stats, "failed": self.failed,
                         "proofread_failed": {pid: p.language_edits["failed"]

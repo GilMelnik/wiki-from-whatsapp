@@ -49,10 +49,9 @@ from step_6_plan.prompt import (
     revision_request,
 )
 from utils.config import LLM_CONFIG
-from utils.embedding_ab import _git_commit
 from utils.json_io import write_json_file
 from utils.llm_client import Classifier, LLMClient
-from utils.logging_setup import setup_step_logging
+from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import PLAN, PLAN_COVERAGE_PATH, STEP_6, Artifact, resolve, resolve_aggregated_path
 from utils.reconcile import guarded_write
 
@@ -244,7 +243,7 @@ def run(
         "model": llm.model,
         "effort": LLM_CONFIG["stages"][PLAN_CONFIG["stage"]].get("thinking_param"),
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "git_commit": _git_commit(),
+        "git_commit": git_commit(),
         "config": PLAN_CONFIG,
         "group_count": len(groups),
         "shown_group_count": planner.shown_count,

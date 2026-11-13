@@ -43,8 +43,7 @@ from step_4_entities.mentions import Analyzer, DictaAnalyzer, build_or_load_anal
 from step_4_entities.records import drop_retired_fields, entity_counts, member_names
 from step_4_entities.update import EntityUpdate
 from utils.config import ENTITIES_CONFIG
-from utils.embedding_ab import _git_commit
-from utils.logging_setup import setup_step_logging
+from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import (
     ENTITIES,
     ENTITIES_SEED_PATH,
@@ -86,7 +85,7 @@ def _metadata(
         "run": stats,
         "params": {key: ENTITIES_CONFIG[key] for key in PARAM_KEYS},
         "analyzer_model": ENTITIES_CONFIG["analyzer"]["model"],
-        "git_commit": _git_commit(),
+        "git_commit": git_commit(),
         "last_entity_number": state.get("metadata", {}).get("last_entity_number", -1),
         **entity_counts(state),
     }

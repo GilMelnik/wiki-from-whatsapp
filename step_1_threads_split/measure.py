@@ -42,8 +42,7 @@ from step_1_threads_split.run import load_export_messages
 from step_1_threads_split.splitter import EmbedFn, SplitParams, ThreadSplitter, embedding_text
 from utils.config import section
 from utils.embedder import embed_texts
-from utils.embedding_ab import _git_commit
-from utils.logging_setup import setup_step_logging
+from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import CHAT_ANDROID_PATH, GOLD_THREADS_PATH, MEASURE_REPORT_PATH, STEP_1, step_path
 from utils.threads_io import load_threads
 
@@ -361,7 +360,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     np.random.seed(0)
     params = SplitParams.from_config()
     logger.info(
-        f"measure | git commit {_git_commit()} | args {vars(args)} | "
+        f"measure | git commit {git_commit()} | args {vars(args)} | "
         f"config.threads.split {json.dumps(params.to_dict())} | "
         f"grid {json.dumps(MEASURE_CONFIG['grid'])}"
     )

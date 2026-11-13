@@ -55,8 +55,7 @@ from step_5_aggregate.groups import GroupBook
 from step_5_aggregate.inputs import MustLink, StepInputs, load_inputs, load_must_links
 from step_5_aggregate.similarity import AGGREGATE_CONFIG, ClaimScorer
 from utils.config import section
-from utils.embedding_ab import _git_commit
-from utils.logging_setup import setup_step_logging
+from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import AGGREGATED, AUDIT_PATH, MANUAL_AGGREGATIONS_PATH, STEP_5, Artifact
 from utils.reconcile import InputDiff, diff_inputs, guarded_write, load_previous
 
@@ -182,7 +181,7 @@ def run(
         "must_links": state["metadata"]["must_links"],
         "params": {key: AGGREGATE_CONFIG[key] for key in PARAM_KEYS},
         "embedding_model": f"{embedding['model']}-{embedding['output_dimensionality']}",
-        "git_commit": _git_commit(),
+        "git_commit": git_commit(),
         "run": stats,
         **counts,
     }

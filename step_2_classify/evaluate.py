@@ -34,11 +34,11 @@ from typing import Any
 import numpy as np
 from sklearn.metrics import average_precision_score, roc_auc_score
 
-from step_1_threads_split.evaluate import _git_commit, _markdown_table
+from step_1_threads_split.evaluate import _markdown_table
 from step_2_classify.run import CLASSIFY_CONFIG, ThreadClassifier
 from utils.config import DATA_DIR, section
 from utils.llm_client import Classifier
-from utils.logging_setup import setup_step_logging
+from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import CLASSIFIED, STEP_2, THREADS
 from utils.threads_io import load_threads
 
@@ -419,7 +419,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     random.seed(seed)
     np.random.seed(seed)
     logger.info(
-        f"evaluate | git commit {_git_commit()} | args {vars(args)} | "
+        f"evaluate | git commit {git_commit()} | args {vars(args)} | "
         f"config.classify {json.dumps(CLASSIFY_CONFIG, ensure_ascii=False)} | "
         f"config.classifier.stages {json.dumps(CLASSIFIER_CONFIG['stages'])}"
     )

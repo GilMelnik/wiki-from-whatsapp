@@ -25,7 +25,6 @@ import argparse
 import json
 import logging
 import random
-import subprocess
 from collections import Counter
 from collections.abc import Hashable, Iterable, Sequence
 from dataclasses import dataclass, fields
@@ -42,8 +41,8 @@ from step_1_threads_split.gold import (
 )
 from step_1_threads_split.gold_context import add_context_to_file, all_labels, scored_ids
 from step_1_threads_split.reviewer.gold_windows import GoldProgress
-from utils.config import PROJECT_ROOT, section
-from utils.logging_setup import setup_step_logging
+from utils.config import section
+from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import (
     BACKUPS_DIR,
     EDITED_THREADS_PATH,
@@ -260,21 +259,6 @@ def format_gold(gold: dict[str, Any]) -> str:
 
 
 # ------------------------------------------------------------------------ CLI
-def _git_commit() -> str:
-    try:
-        completed = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=PROJECT_ROOT,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-    except (OSError, subprocess.CalledProcessError) as exc:
-        logger.warning(f"git commit hash unavailable: {exc}")
-        return "unknown"
-    return completed.stdout.strip()
-
-
 def _configured_windows() -> list[Window]:
     return [Window.from_dict(raw) for raw in THREADS_CONFIG["gold_windows"]]
 
@@ -467,7 +451,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     setup_step_logging(STEP_1)
     random.seed(args.seed)
     logger.info(
-        f"evaluate | git commit {_git_commit()} | args {vars(args)} | "
+        f"evaluate | git commit {git_commit()} | args {vars(args)} | "
         f"config.threads {json.dumps(THREADS_CONFIG)}"
     )
     if args.freeze_gold:

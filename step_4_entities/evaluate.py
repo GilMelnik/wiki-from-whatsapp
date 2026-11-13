@@ -31,8 +31,7 @@ from step_4_entities.records import explicit_member_claims, member_names
 from step_4_entities.reviewer.store import EntityStore, EntityView
 from step_4_entities.run import run
 from utils.config import ENTITIES_CONFIG
-from utils.embedding_ab import _git_commit
-from utils.logging_setup import setup_step_logging
+from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import ENTITIES, ENTITY_ANALYSIS_PATH, STEP_4, Artifact, resolve, step_path
 
 EVAL_CONFIG = ENTITIES_CONFIG["eval"]
@@ -276,7 +275,7 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     setup_step_logging(STEP_4)
     reviewed = name_labels(_load(Path(EVAL_CONFIG["reviewed"])))
-    logger.info(f"evaluate | git commit {_git_commit()} | args {vars(args)} | config {ENTITIES_CONFIG}")
+    logger.info(f"evaluate | git commit {git_commit()} | args {vars(args)} | config {ENTITIES_CONFIG}")
     logger.info(f"current entities vs reviewed: {compare(name_labels(_load(resolve(ENTITIES))), reviewed)}")
     if args.incremental:
         claims = load_claims_for_entities()[0]
