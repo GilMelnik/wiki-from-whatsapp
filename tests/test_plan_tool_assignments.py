@@ -18,7 +18,7 @@ import pytest
 
 from step_6_plan.assign import run
 from step_6_plan.coverage import NONE
-from step_6_plan.reviewer.requests import quote
+from step_6_plan.operation_requests import quote
 from tests.assign_fixtures import FakeClassifier, topic
 from tests.plan_fixtures import FakeLLM
 from tests.review_tool_support import locked_elsewhere

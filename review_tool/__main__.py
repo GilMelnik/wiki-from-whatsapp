@@ -24,7 +24,7 @@ from review_tool.registry import ToolRegistry
 from review_tool.server import ReviewServer
 from review_tool.settings import SETTINGS
 from review_tool.steps import SERVED_STEPS
-from review_tool.tools import TOOL_SPECS
+from review_tool.toolset import TOOL_SPECS
 from utils.config import DATA_DIR, PROJECT_ROOT
 from utils.logging_setup import setup_step_logging
 

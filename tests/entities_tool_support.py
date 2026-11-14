@@ -12,7 +12,7 @@ from review_tool.artifacts import ArtifactGraph, ArtifactNode
 from step_4_entities.collect import ClaimCorpus
 from step_4_entities.mentions import SimpleAnalyzer, analyze_claims, build_or_load_analysis
 from step_4_entities.records import claim_entity_index, new_entity
-from step_4_entities.reviewer.tool import EntitiesTool
+from review_tool.tools.entities.tool import EntitiesTool
 from tests.review_tool_support import BASE_URL, build_app
 from utils.json_io import write_json_file
 

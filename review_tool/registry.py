@@ -4,7 +4,7 @@ A tool is a ``ToolSpec``: a name (also its ``?tool=`` value and its ``/api/<name
 a title, a FastAPI router with paths relative to that prefix, and the artifact keys it reads
 and writes (keys of ``review_tool.artifacts.GRAPH``). Registering a tool never touches its
 files, so a tool whose artifacts do not exist yet still registers; ``GET /api/tools`` reports
-what is missing. The tools the server hosts are listed in ``review_tool.tools.TOOL_SPECS``.
+what is missing. The tools the server hosts are listed in ``review_tool.toolset.TOOL_SPECS``.
 """
 
 from __future__ import annotations

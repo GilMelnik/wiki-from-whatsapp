@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from step_6_plan.reviewer.sizes import FOLD, GUIDE, LARGE, SMALL, SPLIT, page_sizes, size_flag
+from review_tool.tools.plan.sizes import FOLD, GUIDE, LARGE, SMALL, SPLIT, page_sizes, size_flag
 from tests.test_plan_tool_assignments import AssignSetup
 
 PLAN = {"pages": {"a": {}, "b": {}}}

@@ -9,8 +9,8 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from review_tool.status_tool import StatusTool
-from review_tool.update_status import UpdateStatus
+from review_tool.tools.status.tool import StatusTool
+from review_tool.tools.status.update_status import UpdateStatus
 from step_10_update.driver import StepFailed
 from tests.review_tool_support import BASE_URL, build_app
 from tests.update_support import PAID_STEPS, World, newer_chat

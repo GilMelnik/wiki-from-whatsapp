@@ -11,8 +11,8 @@ from fastapi.testclient import TestClient
 from review_tool.locks import ArtifactLockTimeout
 from review_tool.registry import ToolRegistry, ToolSpec
 from review_tool.settings import SETTINGS
-from review_tool.status_tool import StatusTool
-from review_tool.update_status import UpdateStatus
+from review_tool.tools.status.tool import StatusTool
+from review_tool.tools.status.update_status import UpdateStatus
 from tests.review_tool_support import BASE_URL, build_app, build_graph, write_file
 from utils.json_io import write_json_file
 

@@ -13,8 +13,8 @@ from fastapi.testclient import TestClient
 
 from review_tool.artifacts import ArtifactGraph, ArtifactNode
 from review_tool.jobs import JobRunner
-from step_8_review.reviewer.applies import APPLY_EVENT
-from step_8_review.reviewer.tool import SuggestionsTool
+from review_tool.tools.suggestions.apply_runner import APPLY_EVENT
+from review_tool.tools.suggestions.tool import SuggestionsTool
 from tests.pages_fixtures import FakeWriter
 from tests.review_fixtures import FakeReviewer, ReviewWorkspace, corrector, sentence_a, valid_answers
 from tests.review_tool_support import BASE_URL, build_app

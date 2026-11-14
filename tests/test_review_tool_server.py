@@ -17,7 +17,7 @@ import pytest
 from review_tool import __main__ as cli
 from review_tool.artifacts import GRAPH
 from review_tool.port import PortFinder
-from review_tool.tools import TOOL_SPECS
+from review_tool.toolset import TOOL_SPECS
 from tests.review_tool_support import (
     GRACEFUL_SHUTDOWN_SECONDS,
     HOST,
