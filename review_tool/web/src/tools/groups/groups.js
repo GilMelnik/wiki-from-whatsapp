@@ -91,7 +91,7 @@ export function followSuggestion(items, selectedKey, lastIndex) {
   return items[Math.min(Math.max(lastIndex, 0), items.length - 1)].key;
 }
 
-// Where a contradiction link between two groups comes from (server: reviewer/disputes.py).
+// Where a contradiction link between two groups comes from (server: review_tool/tools/groups/disputes.py).
 export const ORIGIN_LABELS = {
   conversation: "A member answered another in a conversation and disputed it",
   wording: "Similar wording with opposite stances about the same entity",

@@ -91,7 +91,7 @@ class Launcher:
         if not (SETTINGS.web_dist / "index.html").is_file():
             self._logger.warning(
                 f"The web app is not built ({SETTINGS.web_dist} has no index.html): "
-                "run `npm install && npm run build` in web/review"
+                f"run `npm install && npm run build` in {SETTINGS.web_folder}"
             )
         if self._args.host in WILDCARD_HOSTS:
             self._logger.warning(

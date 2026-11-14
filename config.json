@@ -432,7 +432,7 @@
     "sse_queue_size": 256,
     "shutdown_timeout_seconds": 3,
     "dev_origins": ["http://localhost:5173", "http://127.0.0.1:5173"],
-    "web_dist": "web/review/dist",
+    "web_dist": "review_tool/web/dist",
     "log_folder": "review_tool",
     "jobs": {
       "log_lines": 500,
