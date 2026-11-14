@@ -33,6 +33,8 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from step_1_threads_split.gold import load_gold
+from step_1_threads_split.run import load_export_messages
 from step_3_extract.claims import OutputError
 from step_3_extract.prompt import EXTRACT_CONFIG, EXTRACT_SYSTEM, FRESH_SCHEMA, STANCES
 from step_3_extract.split_experiment.compare import (
@@ -52,8 +54,6 @@ from step_3_extract.split_experiment.units import (
 )
 from step_3_extract.split_experiment.usage import UsageLedger, estimate, summed
 from utils.config import section
-from utils.export_messages import load_export_messages
-from utils.gold_threads import load_gold
 from utils.json_io import write_json_file
 from utils.llm_client import BatchRequest, LLMClient
 from utils.logging_setup import git_commit, setup_step_logging

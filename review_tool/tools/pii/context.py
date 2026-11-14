@@ -19,8 +19,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from step_1_threads_split.run import load_export_messages
 from utils.config import section
-from utils.export_messages import load_export_messages
 
 PRIVACY_CONFIG = section("extract")["privacy_review"]
 PHONE_MIN_DIGITS = PRIVACY_CONFIG["phone_min_digits"]

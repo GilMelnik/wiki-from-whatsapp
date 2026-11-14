@@ -30,8 +30,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
-from step_1_threads_split.gold import message_moment
-from utils.gold_threads import Window, all_labels, load_gold
+from step_1_threads_split.gold import Window, load_gold, message_moment
 from utils.json_io import write_json_file
 from utils.reconcile import backup_file
 from utils.threads_io import load_threads
@@ -151,6 +150,19 @@ def edge_cut_labels(gold: dict[str, Any], chat_order: Sequence[str]) -> list[set
 
 def _unshown(chat_order: Sequence[str], index: int, shown: set[str]) -> bool:
     return 0 <= index < len(chat_order) and chat_order[index] not in shown
+
+
+def scored_ids(gold: dict[str, Any], window: dict[str, Any], with_context: bool) -> list[str]:
+    """The ids a window scores: its own messages, plus its context when asked."""
+    if not with_context:
+        return list(window["message_ids"])
+    if "context_message_ids" not in window:
+        raise ValueError("the gold file has no context part; run --add-context first")
+    return [*window["message_ids"], *window["context_message_ids"]]
+
+
+def all_labels(gold: dict[str, Any]) -> dict[str, str]:
+    return {**gold["messages"], **gold.get("context_messages", {})}
 
 
 def without_labels(gold: dict[str, Any], dropped: Iterable[set[str]]) -> dict[str, Any]:

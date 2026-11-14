@@ -26,18 +26,23 @@ import json
 import logging
 import random
 from collections import Counter
-from collections.abc import Hashable, Sequence
+from collections.abc import Hashable, Iterable, Sequence
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any
 
-from step_1_threads_split.gold import WindowSuggester, freeze_gold, message_moment
-from step_1_threads_split.gold_context import add_context_to_file
+from step_1_threads_split.gold import (
+    Window,
+    WindowSet,
+    WindowSuggester,
+    freeze_gold,
+    load_gold,
+    message_moment,
+)
+from step_1_threads_split.gold_context import add_context_to_file, all_labels, scored_ids
 from step_1_threads_split.gold_progress import GoldProgress
 from utils.config import section
-from utils.gold_threads import Window, WindowSet, all_labels, load_gold, scored_ids
 from utils.logging_setup import git_commit, setup_step_logging
-from utils.markdown_table import markdown_table
 from utils.paths import (
     BACKUPS_DIR,
     EDITED_THREADS_PATH,
@@ -172,6 +177,12 @@ def evaluate(
 
 
 # -------------------------------------------------------------------- reports
+def markdown_table(headers: Sequence[str], rows: Iterable[Sequence[object]]) -> str:
+    lines = [" | ".join(headers), " | ".join("---" for _ in headers)]
+    lines.extend(" | ".join(str(cell) for cell in row) for row in rows)
+    return "\n".join(f"| {line} |" for line in lines)
+
+
 def _span(window: dict[str, Any]) -> str:
     return f"{window['start']} → {window['end']}"
 

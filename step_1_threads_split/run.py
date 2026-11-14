@@ -1,7 +1,7 @@
 """Step 1: split the chat export into conversation threads (contract C1).
 
 ``python -m step_1_threads_split.run [--rebuild]`` reads the export (``CHAT_ANDROID_PATH``),
-keeps every message with content (``utils.export_messages``) and splits them with
+keeps every message with content (``step_1_threads_split.message``) and splits them with
 ``step_1_threads_split.splitter``. Output ``threads.json`` (and ``threads_edited.json`` when
 the owner has edited the threads)::
 
@@ -39,10 +39,10 @@ from typing import Any
 
 import numpy as np
 
+from step_1_threads_split.message import message_record
 from step_1_threads_split.splitter import EmbedFn, SplitParams, ThreadSplitter, thread_record
 from utils.config import section
 from utils.embedder import embed_texts
-from utils.export_messages import load_export_messages
 from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import CHAT_ANDROID_PATH, STEP_1, THREADS, Artifact
 from utils.reconcile import diff_inputs, fingerprint, guarded_write
@@ -50,6 +50,15 @@ from utils.timestamps import local_now
 
 THREADS_CONFIG = section("threads")
 EMBEDDING_CONFIG = section("embedding")
+
+
+def load_export_messages(export_path: Path) -> list[dict[str, Any]]:
+    """The C1 records of every export message with content, in export (time) order."""
+    if not export_path.is_file():
+        raise FileNotFoundError(f"chat export not found: {export_path}")
+    entries = json.loads(export_path.read_text(encoding="utf-8"))
+    records = [record for record in map(message_record, entries) if record is not None]
+    return sorted(records, key=lambda record: record["datetime"])
 
 
 def _read_threads(path: Path) -> dict[str, Any]:

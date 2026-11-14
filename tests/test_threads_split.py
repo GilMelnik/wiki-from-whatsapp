@@ -18,10 +18,10 @@ from review_tool.tools.threads.gold_windows import GoldWindows
 from review_tool.tools.threads.history import EditHistory
 from review_tool.tools.threads.store import ThreadsStore
 from step_1_threads_split.gold_progress import GoldProgress
-from step_1_threads_split.run import run
+from step_1_threads_split.message import message_record
+from step_1_threads_split.run import load_export_messages, run
 from step_1_threads_split.splitter import SplitParams, ThreadSplitter
 from step_2_classify.run import thread_state
-from utils.export_messages import load_export_messages, message_record
 from utils.paths import Artifact
 from utils.threads_io import render_thread_for_llm, with_export
 

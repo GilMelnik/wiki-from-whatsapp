@@ -15,11 +15,10 @@ from typing import Any
 import pytest
 
 from step_1_threads_split.evaluate import evaluate, main
-from step_1_threads_split.gold import freeze_gold
+from step_1_threads_split.gold import Window, freeze_gold, load_gold
 from step_1_threads_split.gold_context import add_context, edge_cut_labels, without_labels
 from step_1_threads_split.measure import disagreements, pooled_f1
 from utils import logging_setup
-from utils.gold_threads import Window, load_gold
 
 WINDOW = {"start": "2025-01-01T10:00", "end": "2025-01-01T12:00"}
 MOMENTS = {

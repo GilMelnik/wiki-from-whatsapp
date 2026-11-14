@@ -12,10 +12,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from step_1_threads_split.gold import message_moment
+from step_1_threads_split.gold import Window, WindowSet, message_moment
 from step_1_threads_split.gold_progress import GoldProgress
 from utils.config import section
-from utils.gold_threads import Window, WindowSet
 from utils.paths import GOLD_PROGRESS_PATH
 
 THREADS_CONFIG = section("threads")

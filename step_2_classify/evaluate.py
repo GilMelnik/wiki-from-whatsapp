@@ -34,11 +34,11 @@ from typing import Any
 import numpy as np
 from sklearn.metrics import average_precision_score, roc_auc_score
 
+from step_1_threads_split.evaluate import markdown_table
 from step_2_classify.run import CLASSIFY_CONFIG, ThreadClassifier
 from utils.config import DATA_DIR, section
 from utils.llm_client import Classifier
 from utils.logging_setup import git_commit, setup_step_logging
-from utils.markdown_table import markdown_table
 from utils.paths import CLASSIFIED, STEP_2, THREADS
 from utils.threads_io import load_threads
 

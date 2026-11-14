@@ -13,10 +13,9 @@ import pytest
 
 from step_1_threads_split import evaluate as evaluate_module
 from step_1_threads_split.evaluate import evaluate, main
-from step_1_threads_split.gold import WindowSuggester, freeze_gold
+from step_1_threads_split.gold import Window, WindowSet, WindowSuggester, freeze_gold, load_gold
 from utils import logging_setup
 from utils.config import section
-from utils.gold_threads import Window, WindowSet, load_gold
 
 W1 = {"start": "2025-01-01T10:00", "end": "2025-01-01T12:00"}
 W2 = {"start": "2025-01-02T10:00", "end": "2025-01-02T12:00"}

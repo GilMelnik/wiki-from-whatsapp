@@ -1,7 +1,7 @@
 """What a newer chat export adds to the pipeline input, and whether it continues it.
 
 An export is the scraper's JSON list of messages ``{id, date, time, sender, text, quote,
-reactions, ...}`` (``utils.export_messages``). Compared with the current pipeline input:
+reactions, ...}`` (``step_1_threads_split.message``). Compared with the current pipeline input:
 
 - new: an id the input does not have;
 - changed: same id, other text or reactions (step 1 refreshes those in place);
@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from utils.config import section
-from utils.export_messages import parse_android_datetime
+from utils.export_dates import parse_android_datetime
 
 UPDATE_CONFIG = section("update")
 Message = dict[str, Any]

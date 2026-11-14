@@ -38,8 +38,8 @@ from typing import Any
 
 import numpy as np
 
+from step_1_threads_split.message import normalize_content, quote_key
 from utils.config import section
-from utils.export_messages import normalize_content
 
 THREADS_CONFIG = section("threads")
 EmbedFn = Callable[[Sequence[str]], np.ndarray]
@@ -57,11 +57,6 @@ class SplitParams:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
-
-
-def quote_key(sender: str, text: str) -> tuple[str, str]:
-    """What a reply's quote and the quoted message have in common: sender and squashed text."""
-    return sender, " ".join(normalize_content(text).split())
 
 
 def embedding_text(message: dict[str, Any]) -> str:

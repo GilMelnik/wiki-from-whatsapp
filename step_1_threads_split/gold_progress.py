@@ -15,7 +15,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
-from utils.gold_threads import Window
+from step_1_threads_split.gold import Window
 from utils.json_io import write_json_file
 from utils.timestamps import local_now
 
