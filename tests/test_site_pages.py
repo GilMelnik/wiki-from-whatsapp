@@ -80,7 +80,7 @@ def test_config_text_is_the_approved_banner() -> None:
     assert disclaimer["text"] == APPROVED_BANNER
     assert disclaimer["label"] == "לתשומת לבך"  # the box's title: no colon
     assert disclaimer["terms_link_text"] == "תנאי השימוש המלאים ובקשות לתיקון או להסרה"
-    assert SITE["contact_email"] == "4qu2ptpf9@mozmail.com"
+    assert SITE["contact_email"] == "comments@gaysurrogacy.co.il"
 
 
 def test_generated_config_turns_the_generator_notice_off_and_carries_the_page_settings() -> (
