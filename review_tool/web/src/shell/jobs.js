@@ -75,7 +75,7 @@ const store = new JobStore();
 /**
  * `{steps, jobs, stepsByKey, stepsByArtifact, latestByStep, runningByArtifact, loading, error,
  * refresh}`. Jobs are newest first; a step: {key, title, produces, incremental_safe, paid,
- * command}; a job: {id, step, title, produces, rebuild, state, exit_code, started_at,
+ * review_tool, command, rebuild_command}; a job: {id, step, title, produces, rebuild, state, exit_code, started_at,
  * ended_at, line_count, highlights, cancel_requested}.
  */
 export function useJobs() {

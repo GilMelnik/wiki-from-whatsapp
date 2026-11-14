@@ -192,7 +192,7 @@ def test_second_invocation_opens_a_tab_on_the_running_server(
         assert cli.main(["--port", str(port), "--tool", "status"]) == 0
         assert cli.main(["--port", str(port)]) == 0
         assert cli.main(["--port", str(port), "--tool", "status", "--no-browser"]) == 0
-    assert launched["opened"] == [f"http://{HOST}:{port}/?tool=status", f"http://{HOST}:{port}/"]
+    assert launched["opened"] == [f"http://{HOST}:{port}/status", f"http://{HOST}:{port}/"]
     assert launched["served_on"] == []  # no second server was started
 
 
@@ -212,7 +212,7 @@ def test_first_invocation_starts_a_server_on_the_port(launched: dict[str, list[A
     port = free_port()
     assert cli.main(["--port", str(port), "--tool", "status"]) == 0
     assert launched["served_on"] == [port]
-    assert launched["opened"] == [f"http://{HOST}:{port}/?tool=status"]
+    assert launched["opened"] == [f"http://{HOST}:{port}/status"]
 
 
 def test_taken_port_moves_the_new_server_to_the_next_one(

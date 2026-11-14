@@ -30,18 +30,26 @@ function Chips({ keys, byKey, changed = [], onSelect, emptyText }) {
   );
 }
 
-function ReviewTools({ artifactKey }) {
+/** The tools that read or write the file; the step's own review tool first, as the primary button. */
+function ReviewTools({ artifactKey, ownToolId }) {
   const { tools } = useTools();
   const related = tools.filter((tool) => tool.reads.includes(artifactKey) || tool.writes.includes(artifactKey));
   if (related.length === 0) return <p className="text-slate-500">No review tool works on this file.</p>;
+  const ordered = [
+    ...related.filter((tool) => tool.name === ownToolId),
+    ...related.filter((tool) => tool.name !== ownToolId),
+  ];
   return (
     <div className="flex flex-wrap gap-2">
-      {related.map((tool) => (
-        <ToolLink key={tool.name} toolId={tool.name} className="btn btn-sm" title="Ctrl+click opens it in a new tab">
-          {tool.title}
-          <span className="text-slate-500">{tool.writes.includes(artifactKey) ? "edits it" : "shows it"}</span>
-        </ToolLink>
-      ))}
+      {ordered.map((tool) => {
+        const own = tool.name === ownToolId;
+        return (
+          <ToolLink key={tool.name} toolId={tool.name} className={`btn btn-sm ${own ? "btn-primary" : ""}`} title="Ctrl+click opens it in a new tab">
+            {tool.title}
+            <span className={own ? "opacity-80" : "text-slate-500"}>{tool.writes.includes(artifactKey) ? "edits it" : "shows it"}</span>
+          </ToolLink>
+        );
+      })}
     </div>
   );
 }
@@ -69,7 +77,7 @@ export function ArtifactDetail({ artifact, state, step, running, latest, detail,
         <NextAction artifact={artifact} state={state} step={step} running={running} latest={latest} byKey={byKey} />
         <Withheld artifactKey={artifact.key} metadata={detail.data?.metadata} />
         <Section title="Review it in">
-          <ReviewTools artifactKey={artifact.key} />
+          <ReviewTools artifactKey={artifact.key} ownToolId={step?.review_tool} />
         </Section>
         <div className="grid gap-6 md:grid-cols-2">
           <Section title="Made from">

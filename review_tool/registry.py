@@ -1,6 +1,6 @@
 """Tool registry: what a review tool declares so the one server can host it.
 
-A tool is a ``ToolSpec``: a name (also its ``?tool=`` value and its ``/api/<name>/`` prefix),
+A tool is a ``ToolSpec``: a name (also its page ``/<name>`` and its ``/api/<name>/`` prefix),
 a title, a FastAPI router with paths relative to that prefix, and the artifact keys it reads
 and writes (keys of ``review_tool.artifacts.GRAPH``). Registering a tool never touches its
 files, so a tool whose artifacts do not exist yet still registers; ``GET /api/tools`` reports
@@ -16,7 +16,8 @@ from dataclasses import dataclass
 from fastapi import APIRouter
 
 _NAME_PATTERN = re.compile(r"[a-z][a-z0-9_-]*")
-RESERVED_NAMES = frozenset({"health", "tools", "artifacts", "events", "steps", "jobs"})
+# The API's own prefix (a tool's page /<name> must not be /api) and its common endpoints.
+RESERVED_NAMES = frozenset({"api", "health", "tools", "artifacts", "events", "steps", "jobs"})
 
 
 @dataclass(frozen=True)
@@ -43,7 +44,7 @@ class ToolRegistry:
             )
         if spec.name in RESERVED_NAMES:
             raise ValueError(
-                f"tool name {spec.name!r} is reserved for the server's own /api/{spec.name}"
+                f"tool name {spec.name!r} is reserved: the server uses /api and /api/{spec.name} itself"
             )
         if spec.name in self._specs:
             raise ValueError(f"tool {spec.name!r} is already registered")

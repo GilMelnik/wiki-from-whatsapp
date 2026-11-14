@@ -1,18 +1,17 @@
 import { useSyncExternalStore } from "react";
 
-// Which tool the page shows is the `?tool=<id>` URL parameter. Switching tools inside a tab
-// rewrites the URL without reloading the page; every link is also a real URL, so it can be
-// opened in a new tab (several tools side by side, one server).
+// Every tool is a page of the site at `/<id>` (tool ids are `[a-z][a-z0-9_-]*`). Switching
+// tools inside a tab rewrites the URL without reloading the page; every link is also a real
+// URL, so it can be opened in a new tab (several tools side by side, one server).
 
-const TOOL_PARAM = "tool";
 const listeners = new Set();
 
 export function toolUrl(toolId) {
-  return `${window.location.pathname}?${new URLSearchParams({ [TOOL_PARAM]: toolId })}`;
+  return `/${toolId}`;
 }
 
 function currentToolId() {
-  return new URLSearchParams(window.location.search).get(TOOL_PARAM);
+  return window.location.pathname.replaceAll("/", "") || null;
 }
 
 function subscribe(listener) {
@@ -31,7 +30,7 @@ export function navigateToTool(toolId, { replace = false } = {}) {
   for (const listener of [...listeners]) listener();
 }
 
-/** The `?tool=` value of the current URL, or null. */
+/** The tool id of the current page (its path), or null on `/`. */
 export function useToolId() {
   return useSyncExternalStore(subscribe, currentToolId);
 }

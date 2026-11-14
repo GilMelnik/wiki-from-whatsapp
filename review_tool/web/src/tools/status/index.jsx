@@ -112,4 +112,4 @@ function StatusTool({ tool }) {
   return <Layout toolId={tool.id} list={list} main={main} listWidth={{ initial: 300 }} />;
 }
 
-export default { id: ID, title: "Status", Component: StatusTool };
+export default { id: ID, title: "Pipeline", Component: StatusTool };

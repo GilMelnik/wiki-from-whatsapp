@@ -13,7 +13,7 @@ import { StaleBanners } from "./StaleBanners.jsx";
 import { ToastProvider } from "./Toast.jsx";
 import { useShortcuts } from "./useShortcuts.js";
 
-// The page: header, banner slot, and the tool named by `?tool=` filling the rest.
+// The page: header, banner slot, and the tool named by the page's path (`/<id>`) filling the rest.
 //
 // A tool's Component receives `tool = { id, title, reads, writes, missing, quietStale }`:
 // `reads` and `writes` are the artifact keys of its Python ToolSpec, `missing` the ones that
