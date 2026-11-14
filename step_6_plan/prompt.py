@@ -15,8 +15,8 @@ import json
 from collections.abc import Sequence
 from typing import Any
 
+from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION
 from step_6_plan.model import PLAN_CONFIG, iter_nodes, sync_pages, validation_errors
-from utils.forbidden_term import FORBIDDEN_TERM_INSTRUCTION
 
 _EXAMPLES = PLAN_CONFIG["example_group_ids"]
 _GUIDE = PLAN_CONFIG["page_groups"]

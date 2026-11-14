@@ -21,13 +21,13 @@ import json
 from collections.abc import Collection, Mapping, Sequence
 from typing import Any
 
+from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION
 from step_6_plan.model import PLAN_CONFIG
 from step_7_write_pages.inputs import MAIN, Record
 from step_7_write_pages.points import KINDS as POINT_KINDS
 from step_7_write_pages.prompts import group_line, point_line
 from step_8_review.inputs import REVIEW_CONFIG, ReviewInput
 from step_8_review.proposals import effective_proposal
-from utils.forbidden_term import FORBIDDEN_TERM_INSTRUCTION
 from utils.llm_client import CacheSegment
 
 PART_CAP = REVIEW_CONFIG["part"]["max_suggestions"]

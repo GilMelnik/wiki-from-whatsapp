@@ -28,8 +28,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION
 from utils.config import section
-from utils.forbidden_term import FORBIDDEN_TERM_INSTRUCTION
 from utils.threads_io import RENDER_CONFIG
 
 EXTRACT_CONFIG = section("extract")

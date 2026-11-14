@@ -28,9 +28,8 @@ from typing import Any
 
 from review_tool.tools.entities.store import EntityStore, EntityView
 from step_4_entities.collect import load_claims_for_entities, tagged_names
-from step_4_entities.records import member_names
+from step_4_entities.records import explicit_member_claims, member_names
 from step_4_entities.run import run
-from utils.claim_entities import explicit_member_claims
 from utils.config import ENTITIES_CONFIG
 from utils.json_io import read_json_file
 from utils.logging_setup import git_commit, setup_step_logging

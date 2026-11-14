@@ -28,10 +28,10 @@ from review_tool.tools.entities.store.highlights import ClaimAnnotator
 from review_tool.tools.entities.store.members import MembersMixin
 from review_tool.tools.entities.store.views import ViewsMixin
 from step_4_entities.records import (
+    claim_entity_index,
     entity_counts,
     highest_entity_number,
 )
-from utils.claim_entities import claim_entity_index
 from utils.json_io import write_json_file
 from utils.timestamps import local_now
 

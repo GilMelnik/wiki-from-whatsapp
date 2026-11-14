@@ -85,7 +85,7 @@ def test_multi_word_match_is_not_gated_by_name_likeness() -> None:
 
 
 def test_short_hotline_phones_detected() -> None:
-    from utils.contact_patterns import find_phones
+    from step_3_extract.scrub import find_phones
 
     text = 'מוקד משרד הבריאות (5400*), גם *5400'
     assert "(5400*)" in find_phones(text)
