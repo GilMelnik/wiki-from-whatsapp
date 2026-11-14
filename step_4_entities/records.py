@@ -10,7 +10,7 @@ import re
 from collections.abc import Callable, Collection, Iterable, Mapping
 from typing import Any
 
-from step_3_extract.scrub import find_emails, find_phones
+from step_3_extract.scrub import EMAIL_RE, PHONE_RE, SHORT_PHONE_RE
 from utils.config import ENTITIES_CONFIG
 
 CONTACT_KINDS = ("email", "phone", "website")
@@ -26,6 +26,22 @@ _URL_RE = re.compile(
 
 Contacts = dict[str, list[str]]
 MemberClaims = Callable[[dict[str, Any]], Iterable[str]]
+
+
+def find_emails(text: str) -> list[str]:
+    return EMAIL_RE.findall(text or "")
+
+
+def find_phones(text: str) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for pattern in (PHONE_RE, SHORT_PHONE_RE):
+        for match in pattern.finditer(text or ""):
+            value = match.group(0)
+            if value not in seen:
+                seen.add(value)
+                out.append(value)
+    return out
 
 
 def empty_contacts() -> Contacts:
