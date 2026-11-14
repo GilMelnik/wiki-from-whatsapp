@@ -10,15 +10,15 @@ from __future__ import annotations
 
 from review_tool.artifacts import GRAPH
 from review_tool.registry import ToolSpec
-from review_tool.tools.status.tool import StatusTool
 from review_tool.steps import SERVED_STEPS
-from review_tool.tools.status.update_status import UpdateStatus
-from review_tool.tools.threads.tool import ThreadsTool
-from review_tool.tools.pii.tool import PiiTool
 from review_tool.tools.entities.tool import EntitiesTool
 from review_tool.tools.groups.tool import GroupsTool
+from review_tool.tools.pii.tool import PiiTool
 from review_tool.tools.plan.tool import PlanTool
+from review_tool.tools.status.tool import StatusTool
+from review_tool.tools.status.update_status import UpdateStatus
 from review_tool.tools.suggestions.tool import SuggestionsTool
+from review_tool.tools.threads.tool import ThreadsTool
 from utils.config import DATA_DIR
 from utils.paths import UPDATE_LEASE_PATH, UPDATE_STATE_PATH
 

@@ -14,9 +14,9 @@ from typing import Any
 import pytest
 
 import step_5_aggregate.similarity as similarity
+from review_tool.tools.groups.suggestions import CandidatePairs
 from step_5_aggregate.derive import counter_links
 from step_5_aggregate.inputs import load_inputs
-from review_tool.tools.groups.suggestions import CandidatePairs
 from step_5_aggregate.run import run
 from tests.aggregate_fixtures import Corpus, angle_for
 

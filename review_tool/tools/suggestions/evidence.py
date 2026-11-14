@@ -18,9 +18,9 @@ import re
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from review_tool.tools.suggestions.apply import sentences
 from step_6_plan.model import iter_nodes
 from step_6_plan.operation_requests import title_of
-from review_tool.tools.suggestions.apply import sentences
 from step_8_review.inputs import ReviewInput
 from step_8_review.proposals import CONTRADICTION, MISTAKE, effective_proposal, plain_text
 

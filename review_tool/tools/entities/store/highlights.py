@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from step_4_entities.mentions import name_words
 from review_tool.tools.entities.store.claims import ClaimLookup
 from review_tool.tools.entities.store.helpers import merge_highlights
+from step_4_entities.mentions import name_words
 
 
 class ClaimAnnotator:

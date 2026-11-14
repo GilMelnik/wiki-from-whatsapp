@@ -10,8 +10,8 @@ from typing import Any
 
 import pytest
 
-from step_6_plan.model import validation_errors
 from review_tool.tools.suggestions.apply import ApplyRefused, kept_share, sentences
+from step_6_plan.model import validation_errors
 from step_8_review.inputs import REVIEW_CONFIG
 from tests.pages_fixtures import FakeWriter, Responder
 from tests.review_fixtures import (

@@ -21,8 +21,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from step_6_plan.assign_rules import PlanChanges, follow, redecide, redirects
 from review_tool.tools.plan.history import AssignmentsBefore, Record
+from step_6_plan.assign_rules import PlanChanges, follow, redecide, redirects
 from step_6_plan.operation_requests import quote
 from utils.json_io import write_json_file
 from utils.reconcile import backup_file, fingerprint

@@ -10,8 +10,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from review_tool.artifacts import GRAPH
-from review_tool.toolset import TOOL_SPECS
 from review_tool.tools.pii.tool import PiiTool
+from review_tool.toolset import TOOL_SPECS
 from step_3_extract.scrub import REDACTION_MARK, scrub_claims
 from tests.review_tool_support import BASE_URL, build_app, build_graph, locked_elsewhere
 from utils.json_io import write_json_file

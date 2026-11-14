@@ -17,9 +17,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
+from review_tool.tools.groups.suggestions import REVIEW_CONFIG, Suggestion
 from step_5_aggregate.derive import GroupDeriver
 from step_5_aggregate.groups import Group
-from review_tool.tools.groups.suggestions import REVIEW_CONFIG, Suggestion
 from step_7_write_pages.withhold import WITHHOLD_CONFIG, withholds
 
 if TYPE_CHECKING:

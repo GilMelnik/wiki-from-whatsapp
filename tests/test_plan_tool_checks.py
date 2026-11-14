@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+from review_tool.tools.plan.checks import plan_warnings
 from step_6_plan import operations as ops
 from step_6_plan.model import PLAN_CONFIG
-from review_tool.tools.plan.checks import plan_warnings
 from tests.plan_fixtures import make_groups, make_plan
 
 GROUP_IDS = {group["group_id"] for group in make_groups()}

@@ -12,9 +12,9 @@ from collections import defaultdict
 from collections.abc import Mapping
 from typing import Any
 
+from review_tool.tools.plan.sizes import FOLD, GUIDE, LARGE, SMALL, SPLIT
 from step_6_plan.model import PLAN_CONFIG, iter_nodes
 from step_6_plan.operation_requests import quote
-from review_tool.tools.plan.sizes import FOLD, GUIDE, LARGE, SMALL, SPLIT
 
 _PARENTHESIZED = re.compile(r"\([^)]*\)")
 _NOT_A_LETTER = re.compile(r"[^\w\s]")

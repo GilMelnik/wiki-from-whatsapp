@@ -12,9 +12,9 @@ from fastapi.testclient import TestClient
 from review_tool.events import EventBus
 from review_tool.jobs import JOB_SETTINGS, JobRunner
 from review_tool.steps import StepRegistry, StepSpec
-from step_1_threads_split.gold import Window
 from review_tool.tools.threads.gold_windows import GoldProgress, GoldWindows
 from review_tool.tools.threads.tool import ThreadsTool
+from step_1_threads_split.gold import Window
 from step_1_threads_split.splitter import thread_record
 from tests.review_tool_support import BASE_URL, build_app, build_graph
 from utils.json_io import write_json_file

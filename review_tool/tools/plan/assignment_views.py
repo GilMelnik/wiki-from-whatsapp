@@ -19,14 +19,14 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from step_6_plan.assign_rules import ASSIGN_CONFIG, apply_plan_edit
-from step_6_plan.model import PLAN_CONFIG, iter_nodes
-from step_6_plan.operations import PlanEdit
 from review_tool.tools.plan.assignments import MANUAL, followed
 from review_tool.tools.plan.history import Record
 from review_tool.tools.plan.proposals import ACCEPTED, PENDING, REJECTED, status_of
 from review_tool.tools.plan.sizes import page_sizes
 from review_tool.tools.plan.views import group_summary, redirect_map
+from step_6_plan.assign_rules import ASSIGN_CONFIG, apply_plan_edit
+from step_6_plan.model import PLAN_CONFIG, iter_nodes
+from step_6_plan.operations import PlanEdit
 from step_7_write_pages.withhold import withheld_ids
 
 REVIEW_CONFIG = PLAN_CONFIG["review"]

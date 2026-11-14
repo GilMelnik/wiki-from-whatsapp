@@ -10,8 +10,8 @@ from __future__ import annotations
 from collections.abc import Collection, Iterable
 from typing import Any
 
-from step_4_entities.records import allocate_entity_id, new_entity, refresh_entity
 from review_tool.tools.entities.store.helpers import EntityNotFound, ReviewConflict
+from step_4_entities.records import allocate_entity_id, new_entity, refresh_entity
 
 # Member fields that are the owner's or step 4's knowledge, not derived from the claims.
 _KEPT_FIELDS = ("attached_by",)

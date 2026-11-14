@@ -14,9 +14,9 @@ from review_tool.artifacts import ArtifactGraph
 from review_tool.events import EventBus
 from review_tool.jobs import JOB_SETTINGS, JobRunner
 from review_tool.steps import StepRegistry, StepSpec
+from review_tool.tools.suggestions.changes import sentence_changes, snapshot_after
 from step_6_plan.operations import delete
 from step_8_review.inputs import REVIEW_CONFIG
-from review_tool.tools.suggestions.changes import sentence_changes, snapshot_after
 from tests.review_fixtures import corrector, sentence_a
 from tests.suggestions_tool_support import FIXED, Gate, ToolSetup, failing_provider
 from utils.config import PROJECT_ROOT

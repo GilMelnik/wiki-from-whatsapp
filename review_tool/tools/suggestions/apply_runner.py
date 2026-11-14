@@ -28,13 +28,13 @@ from collections.abc import Callable, Iterable
 from typing import Any
 
 from review_tool.tools.suggestions.apply import ApplyRefused
-from step_8_review.inputs import REVIEW_CONFIG
-from step_8_review.proposals import ACCEPTED, STRUCTURAL
 from review_tool.tools.suggestions.store import (
     SuggestionConflict,
     SuggestionNotFound,
     SuggestionsStore,
 )
+from step_8_review.inputs import REVIEW_CONFIG
+from step_8_review.proposals import ACCEPTED, STRUCTURAL
 from utils.timestamps import utc_now_z
 
 logger = logging.getLogger(__name__)

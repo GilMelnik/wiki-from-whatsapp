@@ -19,11 +19,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-from step_4_entities.records import (
-    claim_entity_index,
-    entity_counts,
-    highest_entity_number,
-)
 from review_tool.tools.entities.store.aggregations import EDITOR, ClaimAggregations
 from review_tool.tools.entities.store.claims import ClaimLookup
 from review_tool.tools.entities.store.context import ContextMixin
@@ -32,6 +27,11 @@ from review_tool.tools.entities.store.helpers import EntityNotFound
 from review_tool.tools.entities.store.highlights import ClaimAnnotator
 from review_tool.tools.entities.store.members import MembersMixin
 from review_tool.tools.entities.store.views import ViewsMixin
+from step_4_entities.records import (
+    claim_entity_index,
+    entity_counts,
+    highest_entity_number,
+)
 from utils.json_io import write_json_file
 from utils.timestamps import local_now
 

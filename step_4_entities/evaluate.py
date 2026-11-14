@@ -26,9 +26,9 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+from review_tool.tools.entities.store import EntityStore, EntityView
 from step_4_entities.collect import load_claims_for_entities, tagged_names
 from step_4_entities.records import explicit_member_claims, member_names
-from review_tool.tools.entities.store import EntityStore, EntityView
 from step_4_entities.run import run
 from utils.config import ENTITIES_CONFIG
 from utils.json_io import read_json_file

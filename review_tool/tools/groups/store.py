@@ -27,9 +27,6 @@ from pathlib import Path
 from typing import Any
 
 from review_tool.artifacts import ArtifactNode
-from step_5_aggregate.derive import GroupDeriver, link_contradictions
-from step_5_aggregate.groups import Group, allocate_group_id, claim_order, used_group_ids
-from step_5_aggregate.inputs import load_inputs
 from review_tool.tools.groups.disputes import Disputes
 from review_tool.tools.groups.placement import Placement
 from review_tool.tools.groups.suggestions import (
@@ -41,6 +38,9 @@ from review_tool.tools.groups.suggestions import (
     rejected_pairs,
 )
 from review_tool.tools.groups.views import GroupViews
+from step_5_aggregate.derive import GroupDeriver, link_contradictions
+from step_5_aggregate.groups import Group, allocate_group_id, claim_order, used_group_ids
+from step_5_aggregate.inputs import load_inputs
 from step_5_aggregate.similarity import ClaimScorer
 from step_7_write_pages.withhold import withheld_ids
 from utils.json_io import read_json_file, write_json_file

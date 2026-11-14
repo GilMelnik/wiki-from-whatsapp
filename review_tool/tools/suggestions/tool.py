@@ -49,11 +49,6 @@ from review_tool import events
 from review_tool.artifacts import ArtifactGraph
 from review_tool.registry import ToolSpec
 from review_tool.stores import StoreHandle
-from step_10_update.estimate import CharTokenCounter, review_usd
-from step_6_plan.model import PlanError
-from step_8_review.inputs import REVIEW_CONFIG
-from step_8_review.parts import ReviewPasses, batch_available, stored_passes
-from step_8_review.proposals import ACCEPTED
 from review_tool.tools.suggestions.apply_runner import APPLY_EVENT, ApplyRunner, is_paid
 from review_tool.tools.suggestions.changes import AppliedChanges
 from review_tool.tools.suggestions.evidence import WikiView
@@ -62,6 +57,11 @@ from review_tool.tools.suggestions.store import (
     SuggestionNotFound,
     SuggestionsStore,
 )
+from step_6_plan.model import PlanError
+from step_8_review.inputs import REVIEW_CONFIG
+from step_8_review.parts import ReviewPasses, batch_available, stored_passes
+from step_8_review.proposals import ACCEPTED
+from step_10_update.estimate import CharTokenCounter, review_usd
 from utils.config import LLM_CONFIG
 from utils.json_io import read_json_if_present
 from utils.paths import BACKUPS_DIR

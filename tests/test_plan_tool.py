@@ -10,11 +10,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from review_tool.artifacts import ArtifactGraph, ArtifactNode
+from review_tool.tools.plan.tool import PlanTool
 from review_tool.toolset import TOOL_SPECS
 from step_6_plan import operations as ops
 from step_6_plan.model import PLAN_CONFIG
 from step_6_plan.operation_requests import quote
-from review_tool.tools.plan.tool import PlanTool
 from tests.plan_fixtures import make_groups, make_plan
 from tests.review_tool_support import BASE_URL, build_app, locked_elsewhere
 from utils.json_io import write_json_file

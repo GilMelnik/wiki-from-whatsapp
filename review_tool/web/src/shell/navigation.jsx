@@ -11,7 +11,7 @@ export function toolUrl(toolId) {
 }
 
 function currentToolId() {
-  return window.location.pathname.replaceAll("/", "") || null;
+  return window.location.pathname.replace(/^\/+|\/+$/g, "") || null;
 }
 
 function subscribe(listener) {

@@ -8,13 +8,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from step_4_entities.records import (
-    CONTACT_KINDS,
-    allocate_entity_id,
-    empty_contacts,
-    new_entity,
-    refresh_entity,
-)
 from review_tool.tools.entities.store.helpers import (
     ContactAction,
     ContactKind,
@@ -22,6 +15,13 @@ from review_tool.tools.entities.store.helpers import (
     ReviewConflict,
     Status,
     normalize_contacts,
+)
+from step_4_entities.records import (
+    CONTACT_KINDS,
+    allocate_entity_id,
+    empty_contacts,
+    new_entity,
+    refresh_entity,
 )
 
 

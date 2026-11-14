@@ -18,9 +18,9 @@ from pathlib import Path
 from typing import Any
 
 from review_tool.tools.suggestions.apply import Applier, GroupLinker
+from review_tool.tools.suggestions.store import SuggestionsStore
 from step_8_review.proposals import ANSWER_FIELDS
 from step_8_review.run import run
-from review_tool.tools.suggestions.store import SuggestionsStore
 from tests.pages_fixtures import (
     FakeWriter,
     PagesWorkspace,

@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from step_4_entities.mentions import SimpleAnalyzer
 from review_tool.tools.entities.store import EntityStore, EntityView
+from step_4_entities.mentions import SimpleAnalyzer
 from step_4_entities.run import run
 from utils.paths import Artifact
 

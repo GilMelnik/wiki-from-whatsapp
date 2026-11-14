@@ -51,8 +51,8 @@ from review_tool.tools.plan.assignment_views import REVIEW_CONFIG, ROLES, SCOPES
 from review_tool.tools.plan.assignments import AssignmentsConflict, GroupEdit
 from review_tool.tools.plan.history import PlanHistory
 from review_tool.tools.plan.proposals import PENDING, REJECTED
-from step_6_plan.operation_requests import Operation
 from review_tool.tools.plan.store import ItemNotFound, PlanConflict, PlanStore
+from step_6_plan.operation_requests import Operation
 from utils.paths import PLAN_COVERAGE_PATH
 
 PLAN_KEY = "plan"

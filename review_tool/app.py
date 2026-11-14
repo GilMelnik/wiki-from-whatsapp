@@ -41,6 +41,7 @@ from review_tool.watcher import ArtifactWatcher
 
 logger = logging.getLogger(__name__)
 
+
 class ReviewApp:
     """Builds the application for one registry, artifact graph and event bus."""
 

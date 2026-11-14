@@ -23,15 +23,6 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from step_6_plan.model import (
-    PLAN_CONFIG,
-    PlanError,
-    live_ids,
-    retired_ids,
-    slug_error,
-    validation_errors,
-)
-from step_6_plan.operations import PlanEdit, kind_of
 from review_tool.tools.plan import proposals as decisions
 from review_tool.tools.plan.assignment_views import REVIEW_CONFIG, AssignmentView
 from review_tool.tools.plan.assignments import (
@@ -44,7 +35,6 @@ from review_tool.tools.plan.assignments import (
 )
 from review_tool.tools.plan.checks import plan_warnings
 from review_tool.tools.plan.history import PlanHistory, UndoEntry
-from step_6_plan.operation_requests import Delete, Merge, Operation, quote, title_of
 from review_tool.tools.plan.views import (
     branches,
     budget,
@@ -54,6 +44,16 @@ from review_tool.tools.plan.views import (
     group_summary,
     labels_by_kind,
 )
+from step_6_plan.model import (
+    PLAN_CONFIG,
+    PlanError,
+    live_ids,
+    retired_ids,
+    slug_error,
+    validation_errors,
+)
+from step_6_plan.operation_requests import Delete, Merge, Operation, quote, title_of
+from step_6_plan.operations import PlanEdit, kind_of
 from utils.json_io import read_json_file, write_json_file
 from utils.reconcile import backup_file
 from utils.timestamps import utc_now

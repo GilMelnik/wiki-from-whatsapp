@@ -15,8 +15,8 @@ from collections.abc import Mapping
 from typing import Any
 
 from review_tool.tools.plan.assignments import AssignmentsConflict
-from step_6_plan.operation_requests import Operation, quote
 from review_tool.tools.plan.views import redirect_map
+from step_6_plan.operation_requests import Operation, quote
 
 PENDING, ACCEPTED, REJECTED = "pending", "accepted", "rejected"
 KIND_NAMES = {"page": "a new page", "label": "a new label", "scope": "a wider scope for a page"}

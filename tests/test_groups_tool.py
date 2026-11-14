@@ -9,8 +9,8 @@ import numpy as np
 import pytest
 
 from review_tool.artifacts import GRAPH
-from review_tool.toolset import TOOL_SPECS
 from review_tool.tools.groups.suggestions import CachedEmbedder, EmbeddingsMissing
+from review_tool.toolset import TOOL_SPECS
 from tests.groups_tool_support import GroupsSetup
 from utils.embedder import Embedder
 

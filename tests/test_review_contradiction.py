@@ -9,8 +9,8 @@ from typing import Any
 import pytest
 
 from review_tool.tools.groups.store import GroupsStore
-from step_7_write_pages.run import run as write_pages
 from review_tool.tools.suggestions.apply import Applier
+from step_7_write_pages.run import run as write_pages
 from tests.groups_tool_support import GroupsSetup
 from tests.pages_fixtures import FakeWriter
 from tests.plan_fixtures import PAGE_IDS, make_plan

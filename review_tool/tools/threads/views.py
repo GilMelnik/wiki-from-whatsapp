@@ -20,10 +20,10 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from typing import Any, Literal
 
-from step_1_threads_split.gold import message_moment
 from review_tool.tools.threads.chat import ChatIndex
 from review_tool.tools.threads.gold_windows import GoldWindows
 from review_tool.tools.threads.operations import UnknownItem, family_base
+from step_1_threads_split.gold import message_moment
 from utils.config import section
 
 REVIEW_CONFIG = section("threads")["review"]

@@ -22,8 +22,8 @@ from pathlib import Path
 from typing import Any
 
 from review_tool.tools.suggestions.apply import sentences
-from step_8_review.proposals import APPLIED, CONTRADICTION, STRUCTURAL, plain_text
 from review_tool.tools.suggestions.evidence import WikiView
+from step_8_review.proposals import APPLIED, CONTRADICTION, STRUCTURAL, plain_text
 from utils.json_io import read_json_if_present
 from utils.paths import Artifact
 from utils.reconcile import BACKUP_STAMP
