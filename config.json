@@ -539,7 +539,7 @@
             "models": [
               "classifier.stages.knowledge.model"
             ],
-            "reviewed": false
+            "reviewed": true
           },
           {
             "title": "חילוץ טענות",
