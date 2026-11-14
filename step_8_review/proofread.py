@@ -7,11 +7,11 @@ text, and step 9 publishes it. How it works, in plain words:
 - Every planned page with text is read from the EFFECTIVE pages (the edited file when it
   exists, else step 7's file: ``inputs.effective_pages``). Its ``language_edits`` record holds
   the fingerprints of the sentences that have been through the editor; every other sentence
-  was never proofread (``step_7_write_pages.proofread.sentence_split``): text step 7 wrote or
+  was never proofread (``step_8_review.proofreader.sentence_split``): text step 7 wrote or
   an update added, a correction an apply wrote, a sentence the owner typed by hand. A page with
   no such sentence is not sent.
 - Every page that has one is sent, all in ONE batch (half price; ``--sync``: one call per
-  page), to the editor (stage ``proofread``, ``step_7_write_pages.proofread``) with its
+  page), to the editor (stage ``proofread``, ``step_8_review.proofreader``) with its
   proofread sentences frozen: an edit that touches one is dropped. So an update that added three
   sentences to a page pays for one call that may change only those three.
 - A page whose edits break a check keeps its body and is recorded as proofread with no edit
@@ -48,7 +48,9 @@ from typing import Any
 
 from step_7_write_pages.checks import strip_definitions
 from step_7_write_pages.inputs import Corpus, PageContext
-from step_7_write_pages.proofread import (
+from step_8_review.inputs import REVIEW_FINGERPRINT, effective_pages, page_fingerprint
+from step_8_review.parts import batch_available
+from step_8_review.proofreader import (
     PROOFREAD_CONFIG,
     Proofread,
     Proofreader,
@@ -57,8 +59,6 @@ from step_7_write_pages.proofread import (
     proofread_job,
     sentence_split,
 )
-from step_8_review.inputs import REVIEW_FINGERPRINT, effective_pages, page_fingerprint
-from step_8_review.parts import batch_available
 from utils.config import LLM_CONFIG
 from utils.file_lock import file_lock
 from utils.json_io import read_json_if_present, write_json_file

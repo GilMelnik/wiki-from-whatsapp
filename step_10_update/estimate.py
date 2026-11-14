@@ -36,11 +36,11 @@ from step_3_extract.price import extract_price
 from step_3_extract.prompt import EXTRACT_SYSTEM
 from step_6_plan.assign_proposals import PROPOSALS_CONFIG
 from step_6_plan.assign_rules import ASSIGN_CONFIG
-from step_7_write_pages.proofread import PROOFREAD_CONFIG
 from step_7_write_pages.run import UPDATE_CONFIG as PAGE_UPDATE_CONFIG
 from step_7_write_pages.run import WRITE_CONFIG
 from step_8_review.inputs import REVIEW_CONFIG
 from step_8_review.parts import review_usd
+from step_8_review.proofreader import PROOFREAD_CONFIG
 from utils.config import section
 from utils.llm_client.settings import CLASSIFIER_CONFIG
 from utils.model_prices import ESTIMATE_CONFIG, stage_model, usd

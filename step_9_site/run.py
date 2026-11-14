@@ -42,8 +42,8 @@ from typing import Any
 
 import yaml
 
-from step_7_write_pages.proofread import PROOFREAD_CONFIG, sentence_split
 from step_7_write_pages.withhold import withheld_ids
+from step_8_review.proofreader import PROOFREAD_CONFIG, sentence_split
 from step_9_site import agent_hook, hebrew_search
 from step_9_site.agent_pages import AgentPages
 from step_9_site.content import INFO_FILES, WITHHELD_REFERENCE, NavEntry, Site
