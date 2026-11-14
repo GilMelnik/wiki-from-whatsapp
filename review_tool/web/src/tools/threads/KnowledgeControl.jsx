@@ -1,12 +1,11 @@
 import { Kbd } from "@shell";
-import { automaticText, knowledgeText } from "./threads.js";
+import { automaticText, labelActions, labelStateText, NEXT_RUN_TEXT, needsLabel } from "./threads.js";
 
-// Step 2's answer for the opened conversation: does it carry knowledge worth extracting (only
-// those go to step 3). The owner sets it by hand or goes back to step 2's answer; only the
-// buttons that change something are shown. Before step 2 ran, or for a conversation newer
-// than its last run, one line says why there is nothing to set.
-
-const NOT_CLASSIFIED = "Step 2 has not classified this conversation yet (it is newer than step 2's last run).";
+// The knowledge label of the opened conversation: does it carry knowledge worth extracting
+// (only those go to step 3). One line says the state in plain words (the label and who decided
+// it, or that it needs one); the owner labels any conversation by hand, or takes their label
+// away. A conversation that needs a label and gets none here is classified by step 2's next
+// run; nothing here starts it.
 
 function LabelButton({ label, keyName, disabled, onClick }) {
   return (
@@ -21,17 +20,19 @@ export function KnowledgeControl({ knowledge, label, disabled, onSet }) {
   if (!knowledge) return null;
   if (!knowledge.ready) return <p className="text-xs text-slate-500">{knowledge.reason}</p>;
   if (label === undefined) return null;
-  if (label === null) return <p className="text-xs text-slate-500">{NOT_CLASSIFIED}</p>;
+  const needs = needsLabel(label);
+  const automatic = automaticText(label);
   return (
     <div className="space-y-2">
       <p className="flex flex-wrap items-baseline gap-x-2">
-        <span className={`font-medium ${label.value ? "text-slate-800" : "text-amber-800"}`}>{knowledgeText(label)}</span>
-        {label.manual && <span className="badge badge-sky">Set by hand</span>}
+        <span className={`font-medium ${needs || !label.value ? "text-amber-800" : "text-slate-800"}`}>{labelStateText(label)}</span>
+        {label?.manual && label.current && <span className="badge badge-sky">Set by hand</span>}
       </p>
-      <p className="text-xs text-slate-500">{automaticText(label)}</p>
-      {!label.value && <LabelButton label="It carries knowledge" keyName="y" disabled={disabled} onClick={() => onSet(true)} />}
-      {label.value && <LabelButton label="It carries no knowledge" keyName="x" disabled={disabled} onClick={() => onSet(false)} />}
-      {label.manual && <LabelButton label="Back to step 2's answer" keyName="o" disabled={disabled} onClick={() => onSet(null)} />}
+      {needs && <p className="text-xs text-slate-500">{NEXT_RUN_TEXT}</p>}
+      {automatic && <p className="text-xs text-slate-500">{automatic}</p>}
+      {labelActions(label).map((action) => (
+        <LabelButton key={action.key} label={action.text} keyName={action.key} disabled={disabled} onClick={() => onSet(action.value)} />
+      ))}
     </div>
   );
 }

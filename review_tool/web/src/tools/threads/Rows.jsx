@@ -1,22 +1,24 @@
 import { Bidi, countText, formatCount, formatSpan, ThreadTag } from "@shell";
-import { automaticText, knowledgeText } from "./threads.js";
+import { automaticText, needsLabel, rowKnowledgeText } from "./threads.js";
 
-// The rows of the list column: a conversation of the whole chat, or of a gold window. Of step
-// 2's knowledge label a row shows only what stands out (most conversations carry knowledge):
-// "No knowledge", and a label set by hand; the opened conversation shows the full answer.
+// The rows of the list column: a conversation of the whole chat, or of a gold window. Of the
+// knowledge label a row shows only what stands out (most conversations carry knowledge by
+// step 2's answer): that it needs a label, "No knowledge", and a label set by hand; the opened
+// conversation shows the full state. Before step 2 ever ran (`labelled` false) rows say nothing.
 
 function Knowledge({ label }) {
-  if (!label || (label.value && !label.manual)) return null;
+  const text = rowKnowledgeText(label);
+  if (!text) return null;
+  const tone = needsLabel(label) || !label.value ? "text-amber-800" : "text-sky-800";
   return (
-    <span className={label.value ? "text-sky-800" : "text-amber-800"} title={automaticText(label)}>
+    <span className={tone} title={automaticText(label) ?? undefined}>
       {" · "}
-      {knowledgeText(label)}
-      {label.manual && ", set by hand"}
+      {text}
     </span>
   );
 }
 
-export function ThreadRow({ row, query }) {
+export function ThreadRow({ row, query, labelled }) {
   return (
     <div className="space-y-0.5">
       <div className="text-xs text-slate-500">{formatSpan(row.start_time, row.last_time)}</div>
@@ -26,7 +28,7 @@ export function ThreadRow({ row, query }) {
       <div className="text-xs text-slate-500">
         {countText(row.size, "message")} · {countText(row.people, "person", formatCount, "people")}
         {row.matches > 0 && ` · ${countText(row.matches, "match", formatCount, "matches")}`}
-        <Knowledge label={row.knowledge} />
+        {labelled && <Knowledge label={row.knowledge} />}
       </div>
     </div>
   );

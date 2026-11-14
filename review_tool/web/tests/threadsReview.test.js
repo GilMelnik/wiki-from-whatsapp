@@ -7,12 +7,17 @@ import {
   automaticText,
   emptyListText,
   extraParams,
+  knowledgeFilterOptions,
   knowledgeText,
+  labelActions,
+  labelDoneText,
+  labelStateText,
   listParams,
   mergeCandidates,
   moveTargets,
   progressText,
   restOfThread,
+  rowKnowledgeText,
   windowRows,
 } from "../src/tools/threads/threads.js";
 
@@ -77,19 +82,74 @@ test("progress counts the done windows", () => {
 });
 
 test("step 2's knowledge label reads as yes / no, with its probability as a detail", () => {
-  const label = { value: false, auto: true, p_knowledge: 0.623, passed_heuristic: true, manual: true };
+  const label = { value: false, current: true, auto: true, p_knowledge: 0.623, passed_heuristic: true, manual: true };
   assert.equal(knowledgeText(label), "No knowledge");
   assert.equal(knowledgeText({ ...label, value: true }), "Carries knowledge");
   assert.equal(knowledgeText(null), null);
   assert.equal(automaticText(label), "Step 2: yes (probability 0.62)");
   assert.equal(automaticText({ ...label, auto: false, p_knowledge: null }), "Step 2: no (too few messages or people to ask)");
+  assert.equal(automaticText({ ...label, auto: null, p_knowledge: null, passed_heuristic: null }), null);
+  assert.equal(automaticText(null), null);
+});
+
+const STEP_2_YES = { value: true, manual: false, current: true, auto: true, p_knowledge: 0.6, passed_heuristic: true };
+const MINE_NO = { value: false, manual: true, current: true, auto: null, p_knowledge: null, passed_heuristic: null };
+
+test("the opened conversation's label says what it is and who decided it", () => {
+  assert.equal(labelStateText(null), "Not labelled yet");
+  assert.equal(labelStateText(STEP_2_YES), "Carries knowledge · step 2's answer");
+  assert.equal(labelStateText(MINE_NO), "No knowledge · your label");
+  assert.equal(labelStateText({ ...MINE_NO, current: false }), "Needs a new label: the conversation changed after this label was given");
+});
+
+test("both answers are offered, except the owner's own current label; o takes the owner's label away", () => {
+  const keys = (label) => labelActions(label).map((action) => [action.key, action.text]);
+  assert.deepEqual(keys(null), [["y", "It carries knowledge"], ["x", "It carries no knowledge"]]);
+  assert.deepEqual(keys(STEP_2_YES), [["y", "It carries knowledge"], ["x", "It carries no knowledge"]]);
+  assert.deepEqual(keys(MINE_NO), [["y", "It carries knowledge"], ["o", "Remove my label"]]);
+  assert.deepEqual(keys({ ...MINE_NO, current: false }), [
+    ["y", "It carries knowledge"], ["x", "It carries no knowledge"], ["o", "Remove my label"],
+  ]);
+  assert.deepEqual(keys({ ...STEP_2_YES, manual: true }).map(([key, text]) => key + text), [
+    "xIt carries no knowledge", "oBack to step 2's answer",
+  ]);
+  assert.equal(labelDoneText(null, MINE_NO), "Your label is removed");
+  assert.equal(labelDoneText(null, { ...STEP_2_YES, manual: true }), "Back to step 2's answer");
+  assert.equal(labelDoneText(true, null), "Your label: carries knowledge");
+  assert.equal(labelDoneText(false, STEP_2_YES), "Your label: carries no knowledge");
+});
+
+test("a row shows only what stands out: a label needed, no knowledge, a label set by hand", () => {
+  assert.equal(rowKnowledgeText(null), "Needs a label");
+  assert.equal(rowKnowledgeText({ ...STEP_2_YES, current: false }), "Needs a new label");
+  assert.equal(rowKnowledgeText(STEP_2_YES), null);
+  assert.equal(rowKnowledgeText({ ...STEP_2_YES, value: false }), "No knowledge");
+  assert.equal(rowKnowledgeText(MINE_NO), "No knowledge, set by hand");
+  assert.equal(rowKnowledgeText({ ...STEP_2_YES, manual: true }), "Carries knowledge, set by hand");
 });
 
 test("the list asks for the knowledge filter, also from an older stored search", () => {
-  assert.deepEqual(listParams({ q: "x", sort: "size" }), { q: "x", sort: "size", knowledge: "all" });
-  assert.deepEqual(listParams({ q: "", sort: "time", knowledge: "manual" }), { q: "", sort: "time", knowledge: "manual" });
+  assert.deepEqual(listParams({ q: "x", sort: "size" }), { q: "x", sort: "size", knowledge: "all", keep: [] });
+  assert.deepEqual(listParams({ q: "", sort: "time", knowledge: "needs_label" }, ["t-a"]), {
+    q: "", sort: "time", knowledge: "needs_label", keep: ["t-a"],
+  });
+  assert.equal(emptyListText({ q: "", knowledge: "needs_label" }), "No conversation needs a label.");
+  assert.equal(emptyListText({ q: "", knowledge: "changed" }), "No conversation was made or changed by your edits.");
   assert.equal(emptyListText({ q: "cats", knowledge: "all" }), "No message or sender contains “cats”.");
   assert.equal(emptyListText({ q: "cats", knowledge: "yes" }), "No message or sender contains “cats” among “Carries knowledge”.");
   assert.equal(emptyListText({ q: "", knowledge: "manual" }), "No conversation has a label set by hand.");
   assert.equal(emptyListText({ q: "", knowledge: "no" }), "No conversation is marked “No knowledge”.");
+});
+
+test("the filter offers the conversations needing a label and those changed by the owner, with counts", () => {
+  const options = knowledgeFilterOptions({ ready: true, manual_count: 2, needs_label_count: 1234, changed_count: 0 });
+  assert.deepEqual(options.map((option) => [option.value, option.label]), [
+    ["all", "All"],
+    ["needs_label", "Needs a label (1,234)"],
+    ["changed", "Changed by my edits (0)"],
+    ["yes", "Carries knowledge"],
+    ["no", "No knowledge"],
+    ["manual", "Set by hand (2)"],
+  ]);
+  assert.equal(knowledgeFilterOptions(undefined)[1].label, "Needs a label");
 });

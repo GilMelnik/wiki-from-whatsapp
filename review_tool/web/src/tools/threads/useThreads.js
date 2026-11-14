@@ -6,8 +6,9 @@ import { addRange, CLASSIFIED_KEY, DEFAULT_SEARCH, extraParams, listParams, MODE
 // conversations / gold windows), the window, the view, the search (and the knowledge filter)
 // and the opened conversation; and per subject (a conversation, or a window) the extras
 // loaded on request: whole conversations to keep in view and stretches of the chat shown as
-// context. Step 2's knowledge labels come with the list rows and, for the opened
-// conversation, on their own.
+// context. The knowledge labels come with the list rows and, for the opened conversation, on
+// their own; a conversation labelled while a filter is on stays in the list until the search
+// or the filter changes (`keepInList`), so labelling never moves the owner's place.
 
 export const api = createApi(TOOL_ID);
 const NO_EXTRA = { include: [], context: [] };
@@ -38,8 +39,10 @@ export function useThreads(tool) {
   const paramsKey = JSON.stringify(extraQuery);
 
   const labelled = [...watch, CLASSIFIED_KEY];
-  const params = listParams(search);
-  const list = useResource(() => (ready && !gold ? api.get("/threads", params) : null), [ready, gold, ...Object.values(params)], {
+  const searchKey = JSON.stringify(listParams(search));
+  const [kept, setKept] = useState({ searchKey, ids: [] });
+  const params = listParams(search, kept.searchKey === searchKey ? kept.ids : []);
+  const list = useResource(() => (ready && !gold ? api.get("/threads", params) : null), [ready, gold, JSON.stringify(params)], {
     watch: labelled,
     keepPrevious: true,
   });
@@ -98,6 +101,10 @@ export function useThreads(tool) {
     windows, gold, windowIndex, subject,
     selectWindow: (index) => windows[index] && setWindowStart(windows[index].start),
     loadContext: (range) => range && changeExtra((base) => ({ context: addRange(base.context, range) })),
+    keepInList: (threadId) => setKept((previous) => {
+      const ids = previous.searchKey === searchKey ? previous.ids : [];
+      return { searchKey, ids: ids.includes(threadId) ? ids : [...ids, threadId] };
+    }),
     keepInView: (threadId) => changeExtra((base) => ({ include: base.include.includes(threadId) ? base.include : [...base.include, threadId] })),
     saving: async (send) => {
       editing.current = true;
@@ -108,7 +115,9 @@ export function useThreads(tool) {
       }
     },
     // After an edit; the thread view only when the same conversation stays open (a new one loads by itself).
-    reloadAll: (sameThread) => Promise.all([summary.reload(), list.reload(), windowView.reload(), sameThread && threadView.reload()]),
+    reloadAll: (sameThread) => Promise.all([
+      summary.reload(), list.reload(), knowledge.reload(), label.reload(), windowView.reload(), sameThread && threadView.reload(),
+    ]),
     reloadLabels: () => Promise.all([list.reload(), knowledge.reload(), label.reload()]),
   };
 }

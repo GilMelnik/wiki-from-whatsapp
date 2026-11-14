@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { Kbd, Select } from "@shell";
-import { KNOWLEDGE_FILTERS, MODES, progressText, SORTS, windowLabel } from "./threads.js";
+import { knowledgeFilterOptions, MODES, progressText, SORTS, windowLabel } from "./threads.js";
 
 // The strip above the columns: what is listed (every conversation, searchable and filtered by
-// step 2's knowledge label once step 2 has run; or the gold windows, one at a time, with their
-// done marks).
+// the knowledge label once step 2 has run — also to the conversations that need a label and to
+// those the owner's edits made or changed; or the gold windows, one at a time, with their done
+// marks).
 
 const SEARCH_DELAY_MS = 300;
 
@@ -78,7 +79,7 @@ export function Toolbar({ data, locked, onToggleDone }) {
             <Select
               label="Knowledge"
               value={data.search.knowledge ?? "all"}
-              options={KNOWLEDGE_FILTERS}
+              options={knowledgeFilterOptions(data.knowledge.data)}
               onChange={(knowledge) => data.setSearch((previous) => ({ ...previous, knowledge }))}
             />
           )}
