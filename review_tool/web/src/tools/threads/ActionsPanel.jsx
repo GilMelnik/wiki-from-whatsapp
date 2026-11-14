@@ -3,7 +3,7 @@ import { KnowledgeControl } from "./KnowledgeControl.jsx";
 
 // The side column: what can be done with the selected messages (move them to a conversation
 // in view, make them a new conversation, split the conversation at one message) and with the
-// opened conversation (merge it with another; does it carry knowledge, step 2's label), plus
+// opened conversation (merge it with another; does it carry knowledge, the owner's label), plus
 // undo. Only what fits the selection is shown, each with its key. While step 1 or step 2 runs
 // every button is off and the panel says why.
 

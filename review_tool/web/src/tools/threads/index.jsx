@@ -24,6 +24,8 @@ import { ThreadRow, WindowThreadRow } from "./Rows.jsx";
 import {
   CLASSIFIED_KEY,
   emptyListText,
+  labelActions,
+  labelDoneText,
   mergeCandidates,
   monthOf,
   moveTargets,
@@ -43,8 +45,10 @@ import { api, useThreads } from "./useThreads.js";
 // conversations right before and after, and, in the timeline, where chat messages are not
 // shown, with buttons to load them. The side column moves the selected messages, makes them
 // a conversation of their own, merges, undoes, and sets step 2's knowledge label of the
-// opened conversation (the list can be filtered by it). Every change is saved at once by the
-// server: to step 1's edited file, a label to step 2's.
+// opened conversation: the owner's own label, on any conversation (the list can be filtered by
+// it, also to the conversations that need a label and those the owner's edits made or
+// changed). Every change is saved at once by the server: to step 1's edited file, a label to
+// step 2's. Nothing here runs a step.
 
 const CONVERSATION = MESSAGE_VIEWS.conversation;
 const TIMELINE = MESSAGE_VIEWS.timeline;
@@ -61,6 +65,7 @@ function OldFormat({ summary }) {
 }
 
 function ListColumn({ data, colors, rows }) {
+  const labelled = Boolean(data.knowledge.data?.ready);
   if (data.gold) {
     const { windowView, windowData } = data;
     return (
@@ -78,7 +83,7 @@ function ListColumn({ data, colors, rows }) {
       {list.data && (
         <ItemList items={list.data.items} total={list.data.total} getKey={(row) => row.thread_id} selectedKey={data.selectedId}
           onSelect={data.setSelectedId} sectionOf={search.sort === "time" ? monthOf : undefined}
-          renderItem={(row) => <ThreadRow row={row} query={list.data.query} />} />
+          renderItem={(row) => <ThreadRow row={row} query={list.data.query} labelled={labelled} />} />
       )}
     </PanelState>
   );
@@ -134,15 +139,18 @@ function ThreadsTool({ tool }) {
     openMerge: () => data.selectedId && !locked && setMergeOpen(true),
     undo: () => summary?.undo && edit("/undo", undefined, !data.gold),
     setLabel: async (value) => {
-      const label = data.label.data?.label;
-      if (locked || busy || !label || !data.selectedId) return;
-      if ((value === null && !label.manual) || value === label.value) return;
+      const threadId = data.selectedId;
+      const shown = data.label.data;
+      if (locked || busy || !data.knowledge.data?.ready || !threadId || shown?.thread_id !== threadId) return;
+      const action = labelActions(shown.label).find((candidate) => candidate.value === value);
+      if (!action) return;
       setBusy(true);
+      data.keepInList(threadId); // first, so no list answer without it can arrive after the label
       try {
-        const answer = await api.post(`/knowledge/${encodeURIComponent(data.selectedId)}`, { value });
+        const answer = await api.post(`/knowledge/${encodeURIComponent(threadId)}`, { value });
         data.label.setData(answer);
         await data.reloadLabels();
-        toast.success(value === null ? "Back to step 2's answer" : value ? "Marked: carries knowledge" : "Marked: carries no knowledge");
+        toast.success(labelDoneText(value, shown.label));
       } catch (error) {
         toast.error(error);
       } finally {
@@ -178,9 +186,9 @@ function ThreadsTool({ tool }) {
     { keys: "[", label: "Previous gold window", run: () => data.gold && data.selectWindow(data.windowIndex - 1) },
     { keys: "]", label: "Next gold window", run: () => data.gold && data.selectWindow(data.windowIndex + 1) },
     { keys: "/", label: "Search the messages", run: () => document.getElementById("threads-search")?.focus() },
-    { keys: "y", label: "The opened conversation carries knowledge (step 2's label)", run: () => act.setLabel(true) },
-    { keys: "x", label: "The opened conversation carries no knowledge", run: () => act.setLabel(false) },
-    { keys: "o", label: "Back to step 2's answer for the opened conversation", run: () => act.setLabel(null) },
+    { keys: "y", label: "Label the opened conversation: it carries knowledge", run: () => act.setLabel(true) },
+    { keys: "x", label: "Label the opened conversation: it carries no knowledge", run: () => act.setLabel(false) },
+    { keys: "o", label: "Take your label away from the opened conversation", run: () => act.setLabel(null) },
   ]);
 
   const ready = summary?.state === "ready";
