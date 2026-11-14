@@ -19,7 +19,7 @@ from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
-from step_1_threads_split.message import quote_key
+from step_1_threads_split.splitter import quote_key
 
 Message = dict[str, Any]
 

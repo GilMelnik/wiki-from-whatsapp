@@ -35,14 +35,15 @@ from typing import Any
 
 import numpy as np
 
-from step_1_threads_split.evaluate import ClusterCounts, _f1, _markdown_table, evaluate
-from step_1_threads_split.gold import load_gold
-from step_1_threads_split.gold_context import all_labels, edge_cut_labels, scored_ids, without_labels
-from step_1_threads_split.run import load_export_messages
+from step_1_threads_split.evaluate import ClusterCounts, _f1, evaluate
+from step_1_threads_split.gold_context import edge_cut_labels, without_labels
 from step_1_threads_split.splitter import EmbedFn, SplitParams, ThreadSplitter, embedding_text
 from utils.config import section
 from utils.embedder import embed_texts
+from utils.export_messages import load_export_messages
+from utils.gold_threads import all_labels, load_gold, scored_ids
 from utils.logging_setup import git_commit, setup_step_logging
+from utils.markdown_table import markdown_table
 from utils.paths import CHAT_ANDROID_PATH, GOLD_THREADS_PATH, MEASURE_REPORT_PATH, STEP_1, step_path
 from utils.threads_io import load_threads
 
@@ -250,7 +251,7 @@ def _disagreement_table(found: Sequence[dict[str, Any]]) -> str:
         for kind in ("merge", "split")
         for edge in (False, True)
     ]
-    return _markdown_table(["kind", "gold thread", "cases", "messages"], rows)
+    return markdown_table(["kind", "gold thread", "cases", "messages"], rows)
 
 
 def _gold_threads(gold: dict[str, Any]) -> list[int]:
@@ -292,7 +293,7 @@ def report(measurement: Measurement, params: SplitParams) -> tuple[str, dict[str
         f"configured parameters: {json.dumps(data['params'])}; best on all windows: "
         f"{json.dumps(data['best_on_all_windows'])} ({data['near_best']} of {len(grid)} grid "
         "rows within 0.005 of the best)",
-        _markdown_table(header, [
+        markdown_table(header, [
             _metric_row("old, window", old_scores["window"]["micro"]),
             _metric_row("new, window", new_scores["window"]["micro"]),
             _metric_row("old, window + context", old_scores["context"]["micro"]),
@@ -304,7 +305,7 @@ def report(measurement: Measurement, params: SplitParams) -> tuple[str, dict[str
             _metric_row("new, + context, no edge threads",
                         data["edges"]["new"]["without_edge_threads_context"]),
         ]),  # fmt: skip
-        _markdown_table(
+        markdown_table(
             ["window", "old F1", "new F1", "old F1 +ctx", "new F1 +ctx", "held-out F1",
              "held-out params"],  # fmt: skip
             [
@@ -330,14 +331,14 @@ def report(measurement: Measurement, params: SplitParams) -> tuple[str, dict[str
             parts.append(f"disagreements, {side} splitter, {scope}:")
             parts.append(_disagreement_table(data["edges"][side][scope]))
     parts.append("disagreements of the new splitter inside the windows (message ids):")
-    parts.append(_markdown_table(["window", "kind", "edge", "message ids"], [
+    parts.append(markdown_table(["window", "kind", "edge", "message ids"], [
         [item["window"], item["kind"], item["edge"], " ".join(item["message_ids"])]
         for item in data["edges"]["new"]["window"]
     ]))  # fmt: skip
-    parts.append(_markdown_table(list(data["sizes"]["new"]), [
+    parts.append(markdown_table(list(data["sizes"]["new"]), [
         list(data["sizes"]["old"].values()), list(data["sizes"]["new"].values())
     ]))  # fmt: skip
-    parts.append(_markdown_table(list(data["incremental"][0]), [
+    parts.append(markdown_table(list(data["incremental"][0]), [
         [f"{v:.3f}" if isinstance(v, float) else v for v in row.values()]
         for row in data["incremental"]
     ]))  # fmt: skip

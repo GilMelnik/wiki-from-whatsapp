@@ -34,11 +34,11 @@ from typing import Any
 import numpy as np
 from sklearn.metrics import average_precision_score, roc_auc_score
 
-from step_1_threads_split.evaluate import _markdown_table
 from step_2_classify.run import CLASSIFY_CONFIG, ThreadClassifier
 from utils.config import DATA_DIR, section
 from utils.llm_client import Classifier
 from utils.logging_setup import git_commit, setup_step_logging
+from utils.markdown_table import markdown_table
 from utils.paths import CLASSIFIED, STEP_2, THREADS
 from utils.threads_io import load_threads
 
@@ -211,7 +211,7 @@ class CallStats(logging.Handler):
         rows = [[provider, status, count] for (provider, status), count in sorted(self.statuses.items())]
         return "\n".join(
             [
-                _markdown_table(["provider", "HTTP status", "responses"], rows or [["-", "-", 0]]),
+                markdown_table(["provider", "HTTP status", "responses"], rows or [["-", "-", 0]]),
                 "",
                 f"TypeSafe retries: {self.retries}; connection errors: "
                 f"{dict(self.connection_errors) or 'none'}; latency per request: median "
@@ -252,7 +252,7 @@ def _sweep(scored: Scored, thresholds: Sequence[float]) -> str:
              _fmt(at["f1"]), _fmt(at["balanced_accuracy"]), at["tp"] + at["fp"]]
         )
     headers = ["threshold", "recall", "neg recall", "precision", "F1", "balanced acc", "predicted pos"]
-    return _markdown_table(headers, rows)
+    return markdown_table(headers, rows)
 
 
 def _size_bucket(size: int) -> str:
@@ -284,7 +284,7 @@ def _errors(data: EvalSet, scores: np.ndarray, mask: np.ndarray, threshold: floa
             rows.append([dimension, value, int(sel.sum()), int(pos.sum()), fn, int(neg.sum()), fp])
     errors = mask & (predicted != data.labels)
     sizes = {name: data.sizes[errors & want] for name, want in (("FN", data.labels), ("FP", ~data.labels))}
-    lines = [_markdown_table(["by", "group", "n", "pos", "FN", "neg", "FP"], rows), ""]
+    lines = [markdown_table(["by", "group", "n", "pos", "FN", "neg", "FP"], rows), ""]
     for name, values in sizes.items():
         if len(values):
             lines.append(
@@ -331,7 +331,7 @@ def build_report(
                 Scored(data.labels[credible], gated[credible]), threshold, rounds, seed,
             )
         )
-    lines.append(_markdown_table(SUMMARY_HEADERS, rows))
+    lines.append(markdown_table(SUMMARY_HEADERS, rows))
     for name, scores in jev.items():
         scored = Scored(data.labels[credible], scores[credible])
         best = scored.best_f1_threshold()
@@ -389,7 +389,7 @@ def _fallback_section(
         f"## Fallback comparison on the fixed sample ({len(sample)} threads: every negative + random "
         f"positives), credible part",
         "",
-        _markdown_table(SUMMARY_HEADERS, rows),
+        markdown_table(SUMMARY_HEADERS, rows),
         "",
         "; ".join(agreement),
         "; ".join(pairs),

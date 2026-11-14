@@ -6,13 +6,17 @@ in chronological order. ``message_record`` turns one entry into the C1 message
 ``{id, datetime, sender, content, quote?, reactions?}`` (senders are ``user_name`` strings,
 as the old threads carried them). A message whose content is empty once WhatsApp's markers
 are removed (a photo without a caption, a deleted message) carries nothing for the wiki and
-is not part of any thread.
+is not part of any thread. ``load_export_messages`` reads a whole export that way (step 1,
+step 3's split experiment, the privacy tool); ``utils.split_chat_export`` and the update read
+the export's dates with ``parse_android_datetime``.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 UNICODE_MARKS = re.compile(r"[‎‏‪-‮⁦-⁩]")
@@ -31,11 +35,6 @@ def normalize_content(content: str) -> str:
     content = EDITED_MARKER.sub("", content)
     content = OMITTED_MARKERS.sub("", content)
     return content.strip()
-
-
-def quote_key(sender: str, text: str) -> tuple[str, str]:
-    """What a reply's quote and the quoted message have in common: sender and squashed text."""
-    return sender, " ".join(normalize_content(text).split())
 
 
 def parse_android_datetime(date_str: str, time_str: str) -> datetime:
@@ -69,3 +68,12 @@ def message_record(entry: dict[str, Any]) -> dict[str, Any] | None:
     if reactions:
         record["reactions"] = reactions
     return record
+
+
+def load_export_messages(export_path: Path) -> list[dict[str, Any]]:
+    """The C1 records of every export message with content, in export (time) order."""
+    if not export_path.is_file():
+        raise FileNotFoundError(f"chat export not found: {export_path}")
+    entries = json.loads(export_path.read_text(encoding="utf-8"))
+    records = [record for record in map(message_record, entries) if record is not None]
+    return sorted(records, key=lambda record: record["datetime"])

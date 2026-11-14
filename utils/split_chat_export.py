@@ -16,7 +16,7 @@ from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
 
-from step_1_threads_split.message import parse_android_datetime
+from utils.export_messages import parse_android_datetime
 from utils.json_io import write_json_file
 from utils.logging_setup import setup_step_logging
 from utils.paths import CHAT_ANDROID_PATH, INPUT_CONFIG, SHARED, UPDATES_DIR

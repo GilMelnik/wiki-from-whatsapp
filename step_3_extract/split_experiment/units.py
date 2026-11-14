@@ -35,8 +35,8 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from step_1_threads_split.gold_context import all_labels, scored_ids
 from step_3_extract.prompt import EXTRACT_CONFIG
+from utils.gold_threads import all_labels, scored_ids
 from utils.threads_io import render_thread_for_llm, with_export
 
 EXPERIMENT_CONFIG = EXTRACT_CONFIG["split_experiment"]
@@ -70,7 +70,7 @@ class MessageSet:
     """The chat in order, the set's message ids per window (chat order), the owner's labels.
 
     ``chat`` is every chat message with content as a C1 record, in chat order
-    (``step_1_threads_split.run.load_export_messages``); ``windows`` limits the set to these
+    (``utils.export_messages.load_export_messages``); ``windows`` limits the set to these
     window indices (0-based).
     """
 
