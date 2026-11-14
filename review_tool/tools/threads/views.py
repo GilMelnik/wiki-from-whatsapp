@@ -95,7 +95,7 @@ class ThreadViews:
         self, thread_id: str, include: Sequence[str], context: Sequence[Range], window: int | None
     ) -> dict[str, Any]:
         """The thread, the other parts of its split, and the conversations right around it."""
-        thread = self._thread(thread_id)
+        thread = self.thread(thread_id)
         base = family_base(thread_id)
         family = [t for t in self.threads if family_base(t["thread_id"]) == base]
         ids = sorted((m["id"] for t in family for m in t["messages"]), key=self.chat.seq.__getitem__)
@@ -158,7 +158,7 @@ class ThreadViews:
         return blocks, len(wanted) > cap
 
     # ---------------------------------------------------------------- helpers
-    def _thread(self, thread_id: str) -> dict[str, Any]:
+    def thread(self, thread_id: str) -> dict[str, Any]:
         try:
             return self.by_id[thread_id]
         except KeyError:

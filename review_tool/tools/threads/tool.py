@@ -18,18 +18,23 @@ screens serve the hand-tagging of the gold windows. Endpoints, under ``/api/thre
 - ``POST /merge``  ``{thread_ids}`` (the earliest keeps its id)
 - ``POST /undo``   takes back the newest edit of this session
   Edits answer ``{label, focus, created?, removed?, summary}``.
-- ``GET  /knowledge``              step 2's labels: ``{ready, reason, threshold, manual_count}``
-- ``GET  /knowledge/{thread_id}``  ``{thread_id, label}``: step 2's answer for the conversation
-  and the label in force (``label`` null when step 2 has none for it)
-- ``POST /knowledge/{thread_id}``  ``{value: true | false | null}``: set by hand, or (null) back
-  to step 2's answer; saved in step 2's edited file (``review_tool.tools.threads.knowledge``)
+- ``GET  /knowledge``              the labels: ``{ready, reason, threshold, manual_count,
+  needs_label_count, changed_count}``
+- ``GET  /knowledge/{thread_id}``  ``{thread_id, label}``: the label in force, with step 2's own
+  answer (``label`` null when the conversation has none)
+- ``POST /knowledge/{thread_id}``  ``{value: true | false | null}``: the owner's label for the
+  conversation as it is now, or (null) take it away; saved in step 2's edited file
+  (``review_tool.tools.threads.knowledge``). Nothing here runs step 2.
 
-``GET /threads`` also takes ``knowledge`` = all | yes | no | manual (set by hand), and every row
-carries its ``knowledge`` label.
+``GET /threads`` also takes ``knowledge`` = all | yes | no | manual (set by hand) |
+needs_label | changed (made or changed by the owner's edits), and ``keep`` = thread ids listed
+whatever the filter (the ones labelled since the filter was chosen, so the list does not jump);
+every row carries its ``knowledge`` label.
 
 Errors: unknown thread, message or window → 404; an edit that does not fit, nothing to undo,
-an old-format file, a label before step 2 ran → 409; a bad ``context`` range → 422; the file
-locked by a step → 423 (the frame's write guard also answers 423 while step 1 or step 2 runs).
+an old-format file, a label before step 2 ever ran → 409; a bad ``context`` range → 422; the
+file locked by a step → 423 (the frame's write guard also answers 423 while step 1 or step 2
+runs).
 """
 
 from __future__ import annotations
@@ -47,7 +52,7 @@ from review_tool.registry import ToolSpec
 from review_tool.stores import StoreHandle
 from review_tool.tools.threads.gold_windows import GoldWindows
 from review_tool.tools.threads.history import EditHistory
-from review_tool.tools.threads.knowledge import KnowledgeFilter, KnowledgeLabels
+from review_tool.tools.threads.knowledge import KnowledgeFilter, KnowledgeLabels, passes
 from review_tool.tools.threads.operations import EditRefused, UnknownItem
 from review_tool.tools.threads.store import OldFormat, ThreadsStore
 from review_tool.tools.threads.views import REVIEW_CONFIG, SortKind, parse_ranges
@@ -124,16 +129,24 @@ class ThreadsTool:
         return self._handle.get().summary()
 
     def rows(
-        self, q: str = "", sort: SortKind = "time", knowledge: KnowledgeFilter = "all"
+        self,
+        q: str = "",
+        sort: SortKind = "time",
+        knowledge: KnowledgeFilter = "all",
+        keep: list[str] = Query([]),
     ) -> dict[str, Any]:
+        store = self._handle.get()
         with _as_http_errors():
-            answer = self._handle.get().views.rows(q, sort)
+            views = store.views
+            answer = views.rows(q, sort)
         labels = self._labels.get()
-        items = [
-            {**row, "knowledge": labels.label(row["thread_id"])}
-            for row in answer["items"]
-            if labels.shown(row["thread_id"], knowledge)
-        ]
+        changed = store.changed_ids if knowledge == "changed" else set()
+        kept = set(keep)
+        items = []
+        for row in answer["items"]:
+            label = labels.label(views.by_id[row["thread_id"]])
+            if row["thread_id"] in kept or passes(label, knowledge, row["thread_id"] in changed):
+                items.append({**row, "knowledge": label})
         return {**answer, "items": items, "knowledge": knowledge}
 
     def view(
@@ -173,14 +186,19 @@ class ThreadsTool:
             return store.undo()
 
     def knowledge(self) -> dict[str, Any]:
-        return self._labels.get().state()
+        store = self._handle.get()
+        return self._labels.get().state(store.threads, store.changed_ids)
 
     def label(self, thread_id: str) -> dict[str, Any]:
-        return {"thread_id": thread_id, "label": self._labels.get().label(thread_id)}
+        with _as_http_errors():
+            thread = self._handle.get().views.thread(thread_id)
+        return {"thread_id": thread_id, "label": self._labels.get().label(thread)}
 
     def set_label(self, thread_id: str, body: LabelRequest) -> dict[str, Any]:
-        with _as_http_errors(), self._labels.mutate() as labels:
-            return {"thread_id": thread_id, "label": labels.set(thread_id, body.value)}
+        with _as_http_errors():
+            thread = self._handle.get().views.thread(thread_id)
+            with self._labels.mutate() as labels:
+                return {"thread_id": thread_id, "label": labels.set(thread, body.value)}
 
 
 @contextmanager

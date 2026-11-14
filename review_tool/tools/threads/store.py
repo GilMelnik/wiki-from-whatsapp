@@ -26,7 +26,7 @@ from review_tool.tools.threads.history import EditHistory, UndoEntry
 from review_tool.tools.threads.operations import Edit, EditRefused, ThreadEditor
 from review_tool.tools.threads.views import ThreadViews
 from utils.config import section
-from utils.json_io import write_json_file
+from utils.json_io import read_json_if_present, write_json_file
 from utils.reconcile import backup_file
 from utils.timestamps import local_now
 
@@ -72,6 +72,8 @@ class ThreadsStore:
         self.payload: dict[str, Any] = payload if self.problem is None else {"threads": []}
         self.chat = ChatIndex(self.threads, export_rank(export) if self.problem is None else {})
         self._views: ThreadViews | None = None
+        self._changed: set[str] | None = None
+        self._step_split: dict[str, list[str]] | None = None
         self._backed_up = False
 
     @property
@@ -84,6 +86,26 @@ class ThreadsStore:
         if self._views is None:
             self._views = ThreadViews(self.threads, self.chat, self.gold)
         return self._views
+
+    @property
+    def changed_ids(self) -> set[str]:
+        """The conversations the owner's edits made or changed: not in step 1's own file, or
+        with other messages than there."""
+        if self._changed is None and self.source != self.edited:
+            self._changed = set()  # no edit yet: these are step 1's own conversations
+        if self._changed is None:
+            if self._step_split is None:  # step 1's own file does not change while this store lives
+                own = read_json_if_present(self.original) or {}
+                self._step_split = {
+                    thread["thread_id"]: [message.get("id") for message in thread.get("messages", [])]
+                    for thread in own.get("threads", [])
+                }
+            self._changed = {
+                thread["thread_id"]
+                for thread in self.threads
+                if self._step_split.get(thread["thread_id"]) != [m["id"] for m in thread["messages"]]
+            }
+        return self._changed
 
     def summary(self) -> dict[str, Any]:
         """What the page needs before anything else: the file's state and the gold windows."""
@@ -164,3 +186,4 @@ class ThreadsStore:
         self.source = self.edited
         self.chat.locate(threads)
         self._views = None
+        self._changed = None
