@@ -6,11 +6,13 @@ Per thread (fingerprint = message ids + contents + reactions, ``metadata.inputs`
   ``extract.long_messages`` messages, or an update with more new ones, is sent under a note
   that asks for every claim: ``step_3_extract.prompt``);
 - unchanged thread -> no call; its claims are carried;
-- only reactions changed, or messages left the thread -> no call; counts, dates and evidence
-  ids are recomputed;
-- messages were added -> one call with the new messages marked and the thread's existing
-  claims listed: existing claims keep id and text and may gain evidence, new claims are
-  appended (a thread that had no claims is simply extracted again);
+- only reactions changed -> no call; counts, dates and evidence ids are recomputed;
+- messages new to the chat were added (an update) -> one call with the new messages marked
+  and the thread's existing claims listed: existing claims keep id and text and may gain
+  evidence, new claims are appended (a thread that had no claims is simply extracted again);
+- the thread was cut anew (the owner corrected the split: it lost a message it had, or holds
+  one that another thread had) -> the conversation its claims were written from no longer
+  exists: they are all dropped and the thread is read like a new one (``Extractor.drop_recut``);
 - thread gone or no longer knowledge-bearing -> its claims are dropped.
 
 Disagreements: a dissent of substance is a claim of its own, linked to the claim it disputes
@@ -110,6 +112,25 @@ class Extractor:
         self.failed: list[str] = []
         self.ungrounded = 0
         self.invalid_counters = 0
+
+    def drop_recut(self, threads: dict[str, dict[str, Any]], changed: Collection[str]) -> list[str]:
+        """Forget the claims of every changed thread that was cut anew since they were written,
+        so that ``plan`` reads it like a new thread; returns those thread ids.
+
+        Cut anew = it lost a message it had, or holds a message that another thread had: an
+        edit of the split. Messages nobody had before (an update of the chat, or messages
+        from a thread that was never read) do not count: they are an update of the thread.
+        """
+
+        seen = {message_id for known in self.prev_messages.values() for message_id in known}
+        recut = []
+        for thread_id in changed:
+            before = self.prev_messages.get(thread_id, {}).keys()
+            now = {str(message["id"]) for message in threads[thread_id]["messages"]}
+            if thread_id in self.prev_claims and (before - now or (now - before) & seen):
+                del self.prev_claims[thread_id]
+                recut.append(thread_id)
+        return recut
 
     def plan(self, thread: dict[str, Any], *, changed: bool) -> ThreadClaims | None:
         """The thread's model job, or ``None`` when its claims only need recomputing."""
@@ -276,6 +297,7 @@ def run(
     }
     carried_threads = [tid for tid in extractor.prev_claims if out_of_scope(tid)]
 
+    recut = extractor.drop_recut(current, diff.changed)
     jobs: dict[str, ThreadClaims] = {}
     for tid, thread in current.items():
         job = extractor.plan(thread, changed=tid in diff.new or tid in diff.changed)
@@ -329,6 +351,7 @@ def run(
         "model_calls": len(jobs),
         "new_threads": len(diff.new),
         "changed_threads": len(diff.changed),
+        "recut_threads": len(recut),
         "removed_threads": len(diff.removed),
         "failed_threads": extractor.failed,
         "new_claims": len(fresh),
@@ -360,8 +383,9 @@ def run(
     )
     write_audit(audit_path, audit)
     logger.info(
-        f"Extract: {len(claims)} claims; {len(jobs)} model calls, {len(fresh)} new claims, "
-        f"{len(extractor.failed)} failed threads; {report.changes.summary()}"
+        f"Extract: {len(claims)} claims; {len(jobs)} model calls ({len(recut)} threads cut anew "
+        f"and read afresh), {len(fresh)} new claims, {len(extractor.failed)} failed threads; "
+        f"{report.changes.summary()}"
     )
     return {
         **stats,

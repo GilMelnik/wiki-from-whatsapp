@@ -218,6 +218,78 @@ def test_changed_thread_keeps_existing_claims_and_appends_new_ones(corpus: Corpu
     assert claims[FAST]["supporting_message_ids"] == ["W9"]
     assert claims[BETA] == first[BETA]
     assert summary["new_claims"] == 1 and set(corpus.audit_records()) == set(claims)
+    assert summary["recut_threads"] == 0  # a message new to the chat is an update, not a new cut
+
+
+def _mixed_first(user: str, schema: dict) -> dict:
+    """Like ``answer_by_text``, but a thread showing both alpha messages gets ONE claim that
+    rests on both of them."""
+    if _shown_messages(user) == 2 and "alpha was bad" in user:
+        assert schema == FRESH_SCHEMA
+        return {"claims": [_claim("Alpha is debated", [1, 2])]}
+    return answer_by_text(user, schema)
+
+
+def _shown_messages(user: str) -> int:
+    """How many messages the prompt shows (a quoted message is not a line of its own)."""
+    return sum(1 for line in user.splitlines() if re.match(r"^\[\d+\]", line))
+
+
+def test_thread_that_lost_messages_is_read_like_a_new_one(corpus: Corpus) -> None:
+    """The owner splits a conversation: the part that keeps the id loses a message. Its old
+    claims are all dropped, also one whose other message is still there."""
+    corpus.run(FakeLLM(_mixed_first))
+    debated = claim_id_for("t-1", "Alpha is debated")
+    assert set(corpus.claims()) == {debated, BETA}
+
+    corpus.threads["t-1-split-1"] = [corpus.threads["t-1"].pop()]  # W2 leaves t-1
+    corpus.knowledge["t-1-split-1"] = True
+    llm = FakeLLM(_mixed_first)
+    summary = corpus.run(llm)
+
+    assert len(llm.prompts) == 2 and not any("C1:" in prompt for prompt in llm.prompts)
+    claims = corpus.claims()
+    assert set(claims) == {ALPHA, BETA} and set(corpus.audit_records()) == set(claims)
+    assert claims[ALPHA]["supporting_message_ids"] == ["W1"]
+    assert claims[ALPHA]["opposing_message_ids"] == []
+    assert summary["recut_threads"] == 1 and summary["new_threads"] == 1
+    assert list(summary["changes"]["removed"]) == [debated]
+
+    again = FakeLLM(_mixed_first)
+    assert corpus.run(again)["recut_threads"] == 0 and again.prompts == []
+
+
+def test_merged_threads_are_read_like_a_new_one(corpus: Corpus) -> None:
+    """The owner merges two conversations: the one that keeps the id holds messages another
+    thread had. Both sets of old claims go; the merged conversation is read as a whole."""
+    corpus.run(FakeLLM(answer_by_text))
+    corpus.threads["t-1"] += corpus.threads.pop("t-2")
+    del corpus.knowledge["t-2"]
+    llm = FakeLLM(answer_by_text)
+    summary = corpus.run(llm)
+
+    assert len(llm.prompts) == 1 and "C1:" not in llm.prompts[0]
+    assert set(corpus.claims()) == {ALPHA, claim_id_for("t-1", "Beta costs 5")}
+    assert summary["recut_threads"] == 1 and summary["removed_threads"] == 1
+
+
+def test_a_failed_call_on_a_recut_thread_is_retried_as_a_new_thread(corpus: Corpus) -> None:
+    corpus.run(FakeLLM(_mixed_first))
+    corpus.threads["t-1-split-1"] = [corpus.threads["t-1"].pop()]
+    corpus.knowledge["t-1-split-1"] = True
+
+    def failing(user: str, schema: dict) -> dict:
+        if "alpha was bad" not in user and "alpha is good" in user:  # t-1 after the split
+            raise RuntimeError("no answer")
+        return answer_by_text(user, schema)
+
+    summary = corpus.run(FakeLLM(failing))
+    assert summary["failed_threads"] == ["t-1"] and set(corpus.claims()) == {BETA}
+
+    llm = FakeLLM(answer_by_text)
+    corpus.run(llm)
+    assert len(llm.prompts) == 1 and "C1:" not in llm.prompts[0]
+    assert set(corpus.claims()) == {ALPHA, BETA}
 
 
 def test_manual_edits_survive_evidence_changes(corpus: Corpus) -> None:
