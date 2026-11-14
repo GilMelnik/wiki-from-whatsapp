@@ -17,6 +17,9 @@ thread id format changes and when ``threads_edited.json`` no longer exists. A cl
 label is the WhatsApp id of the cluster's first message inside its window, so a cluster
 never spans two windows.
 
+The file has two additive parts: the context part (``gold_context``) and the owner's
+corrected conversations (``gold_conversations``); ``freeze_gold --add`` keeps the latter.
+
 ``WindowSuggester`` proposes which windows to tag.
 """
 
@@ -169,6 +172,12 @@ def load_gold(gold_path: Path) -> dict[str, Any]:
                 f"{len(context)} context ids ({len(set(context))} distinct) but "
                 f"{len(gold['context_messages'])} context messages are labelled"
             )
+    conversation_ids = [wa_id for c in gold.get("conversations", []) for wa_id in c["message_ids"]]
+    if len(conversation_ids) != len(set(conversation_ids)):
+        raise ValueError(
+            f"{gold_path} has an inconsistent conversations part: a message is in two of its "
+            "conversations"
+        )
     return gold
 
 
@@ -235,6 +244,10 @@ def freeze_gold(
             "cluster_count": len(set(messages.values())),
         },
     }
+    if existing and "conversations" in existing:
+        # The owner's conversations (gold_conversations) do not depend on the windows.
+        gold["conversations"] = existing["conversations"]
+        gold["metadata"]["conversations"] = existing["metadata"]["conversations"]
     if gold_path.exists():
         backup_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")

@@ -1,8 +1,9 @@
 """Measure the splitter against the gold windows and the old splitter.
 
-``python -m step_1_threads_split.measure [--baseline PATH] [--gold PATH]`` splits the whole
-chat export for every parameter combination of ``config.json`` ``threads.measure.grid`` and
-writes one markdown report (logged, and saved to ``MEASURE_REPORT_PATH``) with:
+``python -m step_1_threads_split.measure [--baseline PATH] [--gold PATH] [--reference PATH]
+[--reviewed PATH [--edited PATH]] [--times PATH] [--kind KIND]`` splits the whole chat export
+for every parameter combination of ``config.json`` ``threads.measure.grid`` and writes one
+markdown report (logged, and saved to ``MEASURE_REPORT_PATH``) with:
 
 - the gold table (window, and window + context) of the old splitter and of the configured
   parameters;
@@ -13,7 +14,14 @@ writes one markdown report (logged, and saved to ``MEASURE_REPORT_PATH``) with:
   by an edge, and every remaining disagreement as counts and message ids;
 - thread sizes against the old splitter;
 - the incremental check: the first part of the chat split, the rest added with
-  ``assign_new_messages``, compared with the full split (``threads.measure.incremental_cuts``).
+  ``assign_new_messages``, compared with the full split (``threads.measure.incremental_cuts``);
+- when the gold file has the owner's conversations (``gold_conversations``) or ``--reviewed``
+  is given: the scores on them, held out by time folds, and how many conversations of the
+  ``--reference`` split outside the tagged data each split changes (``measure_owner``);
+- with ``--times`` (the phone database's order, a research input): the configured parameters
+  with the export's order inside a minute against the true one, on the messages it covers.
+
+``--kind`` measures with another embedding kind than ``threads.embedding_kind``.
 
 Only message ids and times are reported, never text or names. Embeddings come from the cache
 of ``utils.embedder`` (paid only for texts never embedded before).
@@ -38,12 +46,29 @@ import numpy as np
 from step_1_threads_split.evaluate import ClusterCounts, _f1, evaluate, markdown_table
 from step_1_threads_split.gold import load_gold
 from step_1_threads_split.gold_context import all_labels, edge_cut_labels, scored_ids, without_labels
+from step_1_threads_split.measure_owner import (
+    SUMMARY_HEADER,
+    OwnerConversations,
+    changed_outside,
+    owner_section,
+    reviewed_unchanged,
+    summary_row,
+    true_order,
+)
 from step_1_threads_split.run import load_export_messages
 from step_1_threads_split.splitter import EmbedFn, SplitParams, ThreadSplitter, embedding_text
 from utils.config import section
 from utils.embedder import embed_texts
 from utils.logging_setup import git_commit, setup_step_logging
-from utils.paths import CHAT_ANDROID_PATH, GOLD_THREADS_PATH, MEASURE_REPORT_PATH, STEP_1, step_path
+from utils.paths import (
+    CHAT_ANDROID_PATH,
+    EDITED_THREADS_PATH,
+    GOLD_THREADS_PATH,
+    MEASURE_REPORT_PATH,
+    ORIGINAL_THREADS_PATH,
+    STEP_1,
+    step_path,
+)
 from utils.threads_io import load_threads
 
 THREADS_CONFIG = section("threads")
@@ -51,15 +76,15 @@ MEASURE_CONFIG = THREADS_CONFIG["measure"]
 logger = logging.getLogger(STEP_1)
 
 
-def memo_embed(messages: Sequence[dict[str, Any]]) -> EmbedFn:
+def memo_embed(messages: Sequence[dict[str, Any]], kind: str = THREADS_CONFIG["embedding_kind"]) -> EmbedFn:
     """An embed function that serves the chat's texts from memory (one cache read)."""
     texts = list(dict.fromkeys(embedding_text(m) for m in messages))
-    vectors = dict(zip(texts, embed_texts(texts, THREADS_CONFIG["embedding_kind"])))
+    vectors = dict(zip(texts, embed_texts(texts, kind)))
 
     def embed(batch: Sequence[str]) -> np.ndarray:
         missing = [t for t in dict.fromkeys(batch) if t not in vectors]
         if missing:
-            vectors.update(zip(missing, embed_texts(missing, THREADS_CONFIG["embedding_kind"])))
+            vectors.update(zip(missing, embed_texts(missing, kind)))
         return np.stack([vectors[t] for t in batch]) if batch else np.zeros((0, 0))
 
     return embed
@@ -144,25 +169,46 @@ def agreement(reference: Sequence[dict[str, Any]], other: Sequence[dict[str, Any
 
 
 class Measurement:
-    """One chat, one gold file, one old split: every number of the report."""
+    """One chat, one gold file, one old split: every number of the report.
+
+    ``owner`` (the owner's conversations) and ``reference`` (the split whose conversations
+    outside the tagged data are counted when changed) go together; ``ordered`` is the chat in
+    the true order inside each minute with the ids that order covers.
+    """
 
     def __init__(
-        self, messages: list[dict[str, Any]], gold: dict[str, Any], baseline: list[dict[str, Any]]
+        self,
+        messages: list[dict[str, Any]],
+        gold: dict[str, Any],
+        baseline: list[dict[str, Any]],
+        *,
+        kind: str = THREADS_CONFIG["embedding_kind"],
+        owner: OwnerConversations | None = None,
+        reference: Sequence[dict[str, Any]] = (),
+        ordered: tuple[list[dict[str, Any]], set[str]] | None = None,
     ) -> None:
         self.messages = messages
         self.gold = gold
         self.baseline = baseline
-        self.embed = memo_embed(messages)
+        self.embed = memo_embed(messages, kind)
         self.cut = edge_cut_labels(gold, [m["id"] for m in messages])
+        self.owner = owner
+        self.reference = reference
+        self.ordered = ordered
+        self.tagged = set(all_labels(gold)) | (owner.ids() if owner else set())
 
-    def split(self, params: SplitParams) -> list[dict[str, Any]]:
-        return ThreadSplitter(params, self.embed).split(self.messages)
+    def split(self, params: SplitParams, messages: Sequence[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+        return ThreadSplitter(params, self.embed).split(self.messages if messages is None else messages)
 
     def scores(self, threads: Sequence[dict[str, Any]]) -> dict[str, Any]:
-        return {
+        found = {
             "window": evaluate(list(threads), self.gold),
             "context": evaluate(list(threads), self.gold, with_context=True),
         }
+        if self.owner is not None:
+            found["owner"] = self.owner.counts(threads)
+            found["changed_outside"] = changed_outside(self.reference, threads, self.tagged)
+        return found
 
     def grid(self) -> list[tuple[SplitParams, dict[str, Any]]]:
         axes = MEASURE_CONFIG["grid"]
@@ -271,8 +317,8 @@ def report(measurement: Measurement, params: SplitParams) -> tuple[str, dict[str
     data = {
         "params": params.to_dict(),
         "best_on_all_windows": grid[best_row][0].to_dict(),
-        "old": old_scores,
-        "new": new_scores,
+        "old": {k: v for k, v in old_scores.items() if k != "owner"},
+        "new": {k: v for k, v in new_scores.items() if k != "owner"},
         "held_out": held,
         "held_out_micro": pooled_f1([row["held_out"] for row in held]),
         "edges": {"old": measurement.edges(measurement.baseline), "new": measurement.edges(new)},
@@ -285,7 +331,6 @@ def report(measurement: Measurement, params: SplitParams) -> tuple[str, dict[str
             if scores["window"]["micro"]["bcubed_f1"]
             >= grid[best_row][1]["window"]["micro"]["bcubed_f1"] - 0.005
         ),
-        "seconds": round(time.monotonic() - started, 1),
     }
     header = ["split", "B3 P", "B3 R", "B3 F1", "pair F1", "pred threads", "gold threads", "missing"]
     parts = [
@@ -341,7 +386,41 @@ def report(measurement: Measurement, params: SplitParams) -> tuple[str, dict[str
         [f"{v:.3f}" if isinstance(v, float) else v for v in row.values()]
         for row in data["incremental"]
     ]))  # fmt: skip
+    if measurement.owner is not None:
+        owner_parts, data["owner"] = owner_section(
+            measurement.owner,
+            [(p.to_dict(), scores) for p, scores in grid],
+            [("old splitter", old_scores), ("configured", new_scores)],
+        )
+        parts.extend(owner_parts)
+    if measurement.ordered is not None:
+        order_parts, data["true_order"] = order_section(measurement, params)
+        parts.extend(order_parts)
+    data["seconds"] = round(time.monotonic() - started, 1)
     return "\n\n".join(parts), data
+
+
+def order_section(measurement: Measurement, params: SplitParams) -> tuple[list[str], list[dict[str, str]]]:
+    """The configured parameters in the export's order and in the true order inside a minute.
+
+    The owner's conversations are scored only where the times file covers all their messages.
+    """
+    ordered, covered_ids = measurement.ordered
+    owner = (measurement.owner or OwnerConversations([], [])).covered(covered_ids)
+    rows = []
+    for name, messages in (("export order", measurement.messages), ("true order", ordered)):
+        threads = measurement.split(params, messages)
+        scores = measurement.scores(threads)
+        scores["owner"] = owner.counts(threads)
+        scores.setdefault("changed_outside", changed_outside(measurement.reference, threads, measurement.tagged))
+        rows.append(summary_row(owner, name, scores))
+    parts = [
+        f"true order inside a minute ({len(covered_ids)} of {len(measurement.messages)} messages "
+        f"covered; {len(owner.corrected)} corrected and {len(owner.weaker)} weaker conversations "
+        "fully covered), configured parameters:",
+        markdown_table(SUMMARY_HEADER, rows),
+    ]
+    return parts, [dict(zip(SUMMARY_HEADER, row)) for row in rows]
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -354,6 +433,18 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument(
         "--baseline", type=Path, default=step_path(STEP_1, MEASURE_CONFIG["baseline_file"])
     )
+    parser.add_argument(
+        "--reference", type=Path, default=ORIGINAL_THREADS_PATH,
+        help="split whose conversations outside the tagged data are counted when changed",
+    )  # fmt: skip
+    parser.add_argument(
+        "--reviewed", type=Path,
+        help="step 2's classified file of the reference split: its not knowledge-bearing "
+        "conversations left unchanged in --edited are the weaker set",
+    )  # fmt: skip
+    parser.add_argument("--edited", type=Path, default=EDITED_THREADS_PATH)
+    parser.add_argument("--times", type=Path, help="message_times.json: the true order")
+    parser.add_argument("--kind", default=THREADS_CONFIG["embedding_kind"], help="embedding kind")
     args = parser.parse_args(argv)
     setup_step_logging(STEP_1)
     random.seed(0)
@@ -364,8 +455,24 @@ def main(argv: Sequence[str] | None = None) -> None:
         f"config.threads.split {json.dumps(params.to_dict())} | "
         f"grid {json.dumps(MEASURE_CONFIG['grid'])}"
     )
+    messages = load_export_messages(args.export)
+    gold = load_gold(args.gold)
+    reference = load_threads(args.reference)["threads"]
+    weaker = []
+    if args.reviewed is not None:
+        classified = json.loads(args.reviewed.read_text(encoding="utf-8"))["threads"]
+        weaker = reviewed_unchanged(reference, load_threads(args.edited)["threads"], classified)
+    owner = None
+    if gold.get("conversations") or weaker:
+        owner = OwnerConversations(gold.get("conversations", []), weaker)
     measurement = Measurement(
-        load_export_messages(args.export), load_gold(args.gold), load_threads(args.baseline)["threads"]
+        messages,
+        gold,
+        load_threads(args.baseline)["threads"],
+        kind=args.kind,
+        owner=owner,
+        reference=reference,
+        ordered=true_order(messages, args.times) if args.times else None,
     )
     text, data = report(measurement, params)
     MEASURE_REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
