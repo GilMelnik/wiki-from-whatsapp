@@ -50,7 +50,6 @@ from step_3_extract.claims import (
 )
 from step_3_extract.prompt import EXTRACT_CONFIG, EXTRACT_SYSTEM, FRESH_SCHEMA, UPDATE_SCHEMA
 from step_3_extract.scrub import scrub_claims
-from step_6_plan.run import AnthropicTokenCounter, TokenCounter
 from utils.json_io import write_json_file
 from utils.llm_client import BatchRequest, LLMClient
 from utils.logging_setup import setup_step_logging
@@ -65,6 +64,7 @@ from utils.paths import (
 )
 from utils.reconcile import diff_inputs, load_previous, write_reconciled
 from utils.threads_io import load_export_index, load_threads, with_export
+from utils.token_counters import AnthropicTokenCounter, TokenCounter
 
 AUDIT_WARNING = "PRIVATE - links claims to the people behind them. Do not publish."
 

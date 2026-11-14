@@ -59,12 +59,12 @@ from review_tool.tools.suggestions.store import (
 )
 from step_6_plan.model import PlanError
 from step_8_review.inputs import REVIEW_CONFIG
-from step_8_review.parts import ReviewPasses, batch_available, stored_passes
+from step_8_review.parts import ReviewPasses, batch_available, review_usd, stored_passes
 from step_8_review.proposals import ACCEPTED
-from step_10_update.estimate import CharTokenCounter, review_usd
 from utils.config import LLM_CONFIG
 from utils.json_io import read_json_if_present
 from utils.paths import BACKUPS_DIR
+from utils.token_counters import CharTokenCounter
 
 logger = logging.getLogger(__name__)
 UI_CONFIG = REVIEW_CONFIG["ui"]

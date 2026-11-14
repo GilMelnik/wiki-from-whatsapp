@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from review_tool.tools.threads.gold_windows import GoldProgress
 from step_1_threads_split import evaluate as evaluate_module
 from step_1_threads_split.gold import Window, load_gold
+from step_1_threads_split.gold_progress import GoldProgress
 from tests.threads_tool_support import LATER_WINDOW, WINDOW, ThreadsSetup, c1_payload
 from utils import logging_setup
 

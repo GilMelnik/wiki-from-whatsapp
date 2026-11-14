@@ -5,7 +5,7 @@ optionally ``quote`` / ``reactions``. ``load_export_index`` + ``with_export`` fi
 missing quote and reactions from the chat export, joined by WhatsApp message id, so every
 consumer sees one normalized message shape:
 ``quote = {sender, text} | None`` and ``reactions = [{emoji, senders}]`` (senders are the
-private identity strings of ``utils.support.person_key``).
+private identity strings of ``person_key``).
 
 ``render_thread_for_llm`` shows a thread to a model without identities: messages are numbered
 ``[1]``, ``[2]``, ... and speakers are per-thread aliases. The labels come from
@@ -20,10 +20,22 @@ from typing import Any
 
 from utils.config import section
 from utils.paths import resolve_threads_path
-from utils.support import person_key, summarize_reactions
+from utils.reactions import summarize_reactions
 
 DEFAULT_THREADS_PATH = resolve_threads_path()
 RENDER_CONFIG = section("extract")["render"]
+
+
+def person_key(person: Any) -> str:
+    """One stable identity string for a sender, from a plain id or an export
+    ``{user_name, phone}`` dict (``user_name`` first: it is what thread messages carry).
+
+    Identities are private: they go to the audit file, never to the LLM or the public claims.
+    """
+
+    if isinstance(person, dict):
+        return str(person.get("user_name") or person.get("phone") or "")
+    return str(person or "")
 
 
 def load_threads(path: Path | str = DEFAULT_THREADS_PATH) -> dict[str, Any]:

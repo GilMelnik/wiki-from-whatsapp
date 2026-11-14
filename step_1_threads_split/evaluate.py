@@ -31,7 +31,6 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any
 
-from review_tool.tools.threads.gold_windows import GoldProgress
 from step_1_threads_split.gold import (
     Window,
     WindowSet,
@@ -41,6 +40,7 @@ from step_1_threads_split.gold import (
     message_moment,
 )
 from step_1_threads_split.gold_context import add_context_to_file, all_labels, scored_ids
+from step_1_threads_split.gold_progress import GoldProgress
 from utils.config import section
 from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import (
@@ -177,7 +177,7 @@ def evaluate(
 
 
 # -------------------------------------------------------------------- reports
-def _markdown_table(headers: Sequence[str], rows: Iterable[Sequence[object]]) -> str:
+def markdown_table(headers: Sequence[str], rows: Iterable[Sequence[object]]) -> str:
     lines = [" | ".join(headers), " | ".join("---" for _ in headers)]
     lines.extend(" | ".join(str(cell) for cell in row) for row in rows)
     return "\n".join(f"| {line} |" for line in lines)
@@ -209,7 +209,7 @@ def format_evaluation(result: dict[str, Any]) -> str:
 
     rows = [row(_span(window), window) for window in result["windows"]]
     rows.append(row("**micro**", result["micro"]))
-    return _markdown_table(["window", *columns.values()], rows)
+    return markdown_table(["window", *columns.values()], rows)
 
 
 def format_suggestions(suggestions: list[dict[str, Any]]) -> str:
@@ -222,7 +222,7 @@ def format_suggestions(suggestions: list[dict[str, Any]]) -> str:
             f"{suggestion['message_count']}, predicted threads: {suggestion['thread_count']})"
         )
         parts.append(
-            _markdown_table(
+            markdown_table(
                 ["thread id", "thread starts", "messages in window", "messages in thread"],
                 (
                     [
@@ -255,7 +255,7 @@ def format_gold(gold: dict[str, Any]) -> str:
     ]
     metadata = gold["metadata"]
     rows.append(["**total**", "", metadata["message_count"], metadata["cluster_count"]])
-    return _markdown_table(["window", "frozen at", "messages", "gold threads"], rows)
+    return markdown_table(["window", "frozen at", "messages", "gold threads"], rows)
 
 
 # ------------------------------------------------------------------------ CLI
@@ -355,7 +355,7 @@ def _context_report(args: argparse.Namespace) -> str:
         [_span(window), len(window["message_ids"]), len(window["context_message_ids"])]
         for window in updated["windows"]
     ]
-    return _markdown_table(["window", "messages", "context messages"], rows)
+    return markdown_table(["window", "messages", "context messages"], rows)
 
 
 def main(argv: Sequence[str] | None = None) -> None:

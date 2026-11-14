@@ -12,11 +12,10 @@ import pytest
 
 from review_tool.steps import SERVED_STEPS
 from step_7_write_pages.checks import sentences
-from step_7_write_pages.proofread import PROOFREAD_CONFIG, prompt_chars
 from step_8_review.proofread import MOVED, run
+from step_8_review.proofreader import PROOFREAD_CONFIG, prompt_chars
 from step_10_update.estimate import Estimator
 from tests.pages_fixtures import FakeProofreader, FakeWriter, main_ids_in, points_of
-from tests.site_fixtures import make_page, make_site_plan, run_site
 from tests.review_fixtures import (
     FakeReviewer,
     ReviewWorkspace,
@@ -26,6 +25,7 @@ from tests.review_fixtures import (
     sentence_a,
     valid_answers,
 )
+from tests.site_fixtures import make_page, make_site_plan, run_site
 from utils.json_io import write_json_file
 from utils.paths import STEP_8_PROOFREAD, resolve
 from utils.reconcile import fingerprint

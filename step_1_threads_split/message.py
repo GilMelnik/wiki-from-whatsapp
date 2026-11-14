@@ -12,8 +12,9 @@ is not part of any thread.
 from __future__ import annotations
 
 import re
-from datetime import datetime
 from typing import Any
+
+from utils.export_dates import parse_android_datetime
 
 UNICODE_MARKS = re.compile(r"[‎‏‪-‮⁦-⁩]")
 OMITTED_MARKERS = re.compile(
@@ -36,13 +37,6 @@ def normalize_content(content: str) -> str:
 def quote_key(sender: str, text: str) -> tuple[str, str]:
     """What a reply's quote and the quoted message have in common: sender and squashed text."""
     return sender, " ".join(normalize_content(text).split())
-
-
-def parse_android_datetime(date_str: str, time_str: str) -> datetime:
-    """Parse DD/MM/YYYY date and HH:MM time from the Android crypt15 export."""
-    day, month, year = date_str.split("/")
-    hour, minute = time_str.split(":")
-    return datetime(int(year), int(month), int(day), int(hour), int(minute))
 
 
 def _user_name(sender: dict[str, Any] | str) -> str:

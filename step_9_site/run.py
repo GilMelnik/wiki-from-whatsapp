@@ -42,12 +42,13 @@ from typing import Any
 
 import yaml
 
+from step_7_write_pages.withhold import withheld_ids
+from step_8_review.proofreader import PROOFREAD_CONFIG, sentence_split
 from step_9_site import agent_hook, hebrew_search
 from step_9_site.agent_pages import AgentPages
-from step_7_write_pages.proofread import PROOFREAD_CONFIG, sentence_split
-from step_7_write_pages.withhold import withheld_ids
 from step_9_site.content import INFO_FILES, WITHHELD_REFERENCE, NavEntry, Site
 from step_9_site.index import index_text
+from step_9_site.rtl import HEBREW_CSS
 from utils.config import PROJECT_ROOT, section
 from utils.logging_setup import setup_step_logging
 from utils.paths import (
@@ -60,7 +61,6 @@ from utils.paths import (
     resolve_threads_path,
     resolve_wiki_pages_path,
 )
-from utils.rtl import HEBREW_CSS
 from utils.threads_io import messages_period
 
 logger = logging.getLogger(__name__)

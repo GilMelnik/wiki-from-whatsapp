@@ -46,7 +46,6 @@ from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from step_6_plan.run import AnthropicTokenCounter, TokenCounter
 from step_8_review.inputs import REVIEW_CONFIG, ReviewInput, page_marks
 from step_8_review.parts import ReviewPass, ReviewPasses, batch_available, stored_passes
 from step_8_review.proposals import OPEN, PENDING, answer_schema, from_answer
@@ -58,6 +57,7 @@ from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import STEP_8, SUGGESTIONS, WIKI_PAGES, Artifact
 from utils.reconcile import load_previous, write_reconciled
 from utils.timestamps import utc_now_z
+from utils.token_counters import AnthropicTokenCounter, TokenCounter
 
 REFRESH_KEYS = ("page_marks",)
 

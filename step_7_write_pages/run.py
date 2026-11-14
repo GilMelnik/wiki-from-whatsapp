@@ -46,7 +46,7 @@ Output: ``wiki_pages.json`` (C9) ``{pages: {page_id: {front_matter, body_md, poi
 left_out, language_edits?, input_fingerprint}}, metadata: {sources, inputs, pages, as_of,
 models, config, git_commit, generated_at, run, summary, withheld}}``; ``points`` = ``[{kind,
 statement, groups}]``, ``left_out`` = ``[{group, reason}]``; ``language_edits`` = the last
-proofreading of the text (``step_7_write_pages.proofread``), carried over by an update;
+proofreading of the text (``step_8_review.proofreader``), carried over by an update;
 ``withheld`` = ``[{group_id, page_id, entity_ids, supporter_count}]`` (ids and numbers only).
 """
 
@@ -63,7 +63,6 @@ from typing import Any
 
 import anthropic
 
-from step_6_plan.run import AnthropicTokenCounter, TokenCounter
 from step_7_write_pages.checks import strip_definitions
 from step_7_write_pages.front_matter import LabelRule, page_front_matter
 from step_7_write_pages.inputs import (
@@ -84,6 +83,7 @@ from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import STEP_7, WIKI_PAGES, Artifact
 from utils.reconcile import diff_inputs, load_previous, write_reconciled
 from utils.timestamps import utc_now_z
+from utils.token_counters import AnthropicTokenCounter, TokenCounter
 
 WRITE_CONFIG = PAGES_CONFIG["write"]
 UPDATE_CONFIG = PAGES_CONFIG["update"]

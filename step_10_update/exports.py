@@ -24,8 +24,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from step_1_threads_split.message import parse_android_datetime
 from utils.config import section
+from utils.export_dates import parse_android_datetime
 
 UPDATE_CONFIG = section("update")
 Message = dict[str, Any]

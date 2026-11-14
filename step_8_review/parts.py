@@ -18,7 +18,8 @@ Fingerprints: a part's covers the reviewer (model, prompt version, the pass kind
 its pages (title and effective body, ``inputs.page_fingerprint``) and the plan fields of its
 pages and of the nodes above them; the cross pass's covers the reviewer and its whole input
 (plan block and every page's title, labels and points). A run asks only the passes whose
-fingerprint differs from the one stored in ``metadata.inputs.passes``.
+fingerprint differs from the one stored in ``metadata.inputs.passes``. ``review_usd`` prices
+the passes an estimate counted as due (the update's estimate, the Suggestions tool).
 """
 
 from __future__ import annotations
@@ -27,16 +28,16 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from step_10_update.estimate import CharTokenCounter
 from step_6_plan.model import iter_nodes
-from step_6_plan.run import TokenCounter
 from step_8_review.inputs import REVIEW_CONFIG, ReviewInput, page_fingerprint
 from step_8_review.prompts import PART_SYSTEM, cross_prompt, page_block, part_prompt
 from step_8_review.proposals import KINDS, MISTAKE, Scope
 from utils.config import LLM_CONFIG
 from utils.llm_client import CacheSegment, _flatten
 from utils.llm_client.providers import PROVIDERS
+from utils.model_prices import ESTIMATE_CONFIG, stage_model, usd
 from utils.reconcile import fingerprint
+from utils.token_counters import CharTokenCounter, TokenCounter
 
 PART, CROSS = "part", "cross"
 CROSS_ID = REVIEW_CONFIG["cross"]["id"]
@@ -180,3 +181,11 @@ class ReviewPasses:
                          "due": review_pass.id in due})
         return {"passes": rows, "calls": len(due), "batch": batch,
                 "input_tokens": sum(row["input_tokens"] for row in rows if row["due"])}
+
+
+def review_usd(estimate: Mapping[str, Any]) -> float:
+    """The price of the review passes a step-8 estimate counted as due (``calls``,
+    ``input_tokens``, ``batch``): output at a typical figure per pass."""
+    output = estimate["calls"] * ESTIMATE_CONFIG["output_tokens_per_call"][REVIEW_CONFIG["stage"]]
+    cost = usd(stage_model(REVIEW_CONFIG["stage"]), estimate["input_tokens"], output)
+    return cost * ESTIMATE_CONFIG["batch_discount"] if estimate["batch"] else cost

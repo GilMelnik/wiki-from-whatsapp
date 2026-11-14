@@ -1,6 +1,7 @@
 """Support counts: emoji sentiment is independent of claim stance; evidence per claim."""
 
-from utils.support import collect_evidence, person_key
+from step_3_extract.support import collect_evidence
+from utils.threads_io import person_key
 
 
 def _messages() -> dict[str, dict]:

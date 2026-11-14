@@ -13,12 +13,12 @@ from typing import Any
 import pytest
 
 from step_7_write_pages.checks import AnswerRules, problems, sentences
-from step_7_write_pages.proofread import (
+from step_8_review.proofreader import (
     PROOFREAD_CONFIG,
     SCHEMA,
     SYSTEM,
-    ProofreadJob,
     Proofreader,
+    ProofreadJob,
     apply_edits,
     sentence_split,
     user_message,

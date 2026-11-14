@@ -57,8 +57,8 @@ class PlanPrompt:
             shown_many = sum(1 for group in self.shown if backed_by_many(group))
             note = sample_note(shown_many, many, len(self.shown) - shown_many, self.total - many)
             self.groups_text = f"{note}\n\n{self.groups_text}"
-        # The formula of step_10_update.estimate.CharTokenCounter, which step 6 cannot import
-        # (that module imports step 7, which imports step_6_plan.run).
+        # The formula of utils.token_counters.CharTokenCounter (written out here while that
+        # class lived in step 10, which step 6 could not import).
         user = self.user(initial_request(len(self.shown), self.total))
         self.estimated_tokens = math.ceil(
             (len(self.system) + len(user)) / PLAN_CONFIG["chars_per_token"]

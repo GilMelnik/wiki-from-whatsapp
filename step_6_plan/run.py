@@ -31,11 +31,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
-
-import anthropic
 
 from step_6_plan.coverage import COVERAGE_CONFIG, coverage_check, findings, named_group_ids
 from step_6_plan.fit import fitted_prompt
@@ -54,23 +52,7 @@ from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import PLAN, PLAN_COVERAGE_PATH, STEP_6, Artifact, resolve, resolve_aggregated_path
 from utils.reconcile import guarded_write
 from utils.timestamps import utc_now
-
-TokenCounter = Callable[[str, str], int]
-
-
-class AnthropicTokenCounter:
-    """Counts a request's input tokens with the Messages API ``count_tokens`` endpoint (free)."""
-
-    def __init__(self, model: str) -> None:
-        self.model = model
-        self.client = anthropic.Anthropic()
-
-    def __call__(self, system: str, user: str) -> int:
-        return self.client.messages.count_tokens(
-            model=self.model,
-            system=system,
-            messages=[{"role": "user", "content": user}],
-        ).input_tokens
+from utils.token_counters import AnthropicTokenCounter, TokenCounter
 
 
 class Planner:
