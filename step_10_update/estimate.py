@@ -4,7 +4,7 @@ Each paid step has an estimate mode that plans its run and makes no model call (
 8: ``run(estimate=True, count_tokens=...)``; steps 6b and 8b: ``run(estimate=True)``). The Anthropic
 token counter needs credits, so the prompts are counted here by characters
 (``update.estimate.chars_per_token``). Output tokens are a typical figure per call
-(``output_tokens_per_call``), except for step 3 (``extract_price``, calibrated on the API's
+(``output_tokens_per_call``), except for step 3 (``step_3_extract.price``, calibrated on the API's
 reported usage, task 55): its Hebrew conversations are counted at their own
 ``extract_chars_per_token``, the instructions every call repeats
 (``extract_instruction_tokens``) are read from the prompt cache at
@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from review_tool.steps import Step
+from step_3_extract.price import extract_price
 from step_3_extract.prompt import EXTRACT_SYSTEM
 from step_6_plan.assign_proposals import PROPOSALS_CONFIG
 from step_6_plan.assign_rules import ASSIGN_CONFIG
@@ -39,11 +40,13 @@ from step_7_write_pages.proofread import PROOFREAD_CONFIG
 from step_7_write_pages.run import UPDATE_CONFIG as PAGE_UPDATE_CONFIG
 from step_7_write_pages.run import WRITE_CONFIG
 from step_8_review.inputs import REVIEW_CONFIG
-from utils.config import LLM_CONFIG, section
+from step_8_review.parts import review_usd
+from utils.config import section
 from utils.llm_client.settings import CLASSIFIER_CONFIG
+from utils.model_prices import ESTIMATE_CONFIG, stage_model, usd
 from utils.paths import STEP_3, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_8_PROOFREAD
+from utils.token_counters import CharTokenCounter
 
-ESTIMATE_CONFIG = section("update")["estimate"]
 EMBEDDING_MODEL = section("embedding")["model"]
 RunFunction = Callable[..., dict[str, Any]]
 
@@ -62,65 +65,6 @@ class Estimate:
     def to_json(self) -> dict[str, Any]:
         return {"step": self.step, "paid_calls": self.paid_calls, "usd": round(self.usd, 4),
                 "what": self.what, "counted": self.counted}
-
-
-class CharTokenCounter:
-    """A ``TokenCounter`` that needs no endpoint: characters / ``chars_per_token``."""
-
-    def __init__(self, chars_per_token: float = ESTIMATE_CONFIG["chars_per_token"]) -> None:
-        self.chars_per_token = chars_per_token
-
-    def __call__(self, system: str, user: str) -> int:
-        return math.ceil((len(system) + len(user)) / self.chars_per_token)
-
-
-def usd(model: str, input_tokens: float, output_tokens: float = 0.0) -> float:
-    prices = ESTIMATE_CONFIG["usd_per_million_tokens"]
-    if model not in prices:
-        raise KeyError(
-            f"update.estimate.usd_per_million_tokens has no price for {model!r}; add it "
-            f"(known: {sorted(prices)})"
-        )
-    price = prices[model]
-    return (input_tokens * price["input"] + output_tokens * price["output"]) / 1_000_000
-
-
-@dataclass(frozen=True)
-class ExtractPrice:
-    """A step-3 run's tokens and dollars (``extract_price``)."""
-
-    prompt_tokens: int  # the user prompts: conversations (+ notes, existing claims)
-    cached_tokens: int  # the instructions, read from the prompt cache once per call
-    output_tokens: int
-    usd: float
-
-
-def extract_price(
-    model: str, calls: int, prompt_tokens: int, conversation_tokens: int, batch: bool
-) -> ExtractPrice:
-    """Price ``calls`` step-3 calls: ``prompt_tokens`` at the input price, every call's
-    instructions at ``cache_read_price_factor`` of it, output = ``extract_output_ratio`` times
-    the tokens of the messages claims are extracted from (``conversation_tokens``), all at the
-    batch discount when ``batch``."""
-
-    cached = calls * int(ESTIMATE_CONFIG["extract_instruction_tokens"])
-    output = math.ceil(conversation_tokens * ESTIMATE_CONFIG["extract_output_ratio"])
-    cost = usd(model, prompt_tokens + cached * ESTIMATE_CONFIG["cache_read_price_factor"], output)
-    if batch:
-        cost *= ESTIMATE_CONFIG["batch_discount"]
-    return ExtractPrice(prompt_tokens, cached, output, cost)
-
-
-def stage_model(stage: str) -> str:
-    return LLM_CONFIG["stages"][stage]["model"]
-
-
-def review_usd(estimate: Mapping[str, Any]) -> float:
-    """The price of the review passes a step-8 estimate counted as due (``calls``,
-    ``input_tokens``, ``batch``): output at a typical figure per pass."""
-    output = estimate["calls"] * ESTIMATE_CONFIG["output_tokens_per_call"][REVIEW_CONFIG["stage"]]
-    cost = usd(stage_model(REVIEW_CONFIG["stage"]), estimate["input_tokens"], output)
-    return cost * ESTIMATE_CONFIG["batch_discount"] if estimate["batch"] else cost
 
 
 def embedding_usd(texts: Sequence[str]) -> float:

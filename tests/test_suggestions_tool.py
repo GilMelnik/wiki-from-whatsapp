@@ -13,10 +13,10 @@ import pytest
 from review_tool.toolset import TOOL_SPECS
 from step_8_review.inputs import REVIEW_CONFIG
 from step_8_review.proposals import plain_text
-from step_10_update.estimate import ESTIMATE_CONFIG
 from tests.review_fixtures import FakeReviewer, flat, sentence_a
 from tests.suggestions_tool_support import ToolSetup
 from utils.config import LLM_CONFIG
+from utils.model_prices import ESTIMATE_CONFIG
 
 
 @pytest.fixture()

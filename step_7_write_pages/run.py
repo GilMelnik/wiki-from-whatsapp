@@ -63,7 +63,6 @@ from typing import Any
 
 import anthropic
 
-from step_6_plan.run import AnthropicTokenCounter, TokenCounter
 from step_7_write_pages.checks import strip_definitions
 from step_7_write_pages.front_matter import LabelRule, page_front_matter
 from step_7_write_pages.inputs import (
@@ -84,6 +83,7 @@ from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import STEP_7, WIKI_PAGES, Artifact
 from utils.reconcile import diff_inputs, load_previous, write_reconciled
 from utils.timestamps import utc_now_z
+from utils.token_counters import AnthropicTokenCounter, TokenCounter
 
 WRITE_CONFIG = PAGES_CONFIG["write"]
 UPDATE_CONFIG = PAGES_CONFIG["update"]

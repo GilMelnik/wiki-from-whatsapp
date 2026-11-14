@@ -51,13 +51,13 @@ from step_3_extract.split_experiment.units import (
     build_units,
 )
 from step_3_extract.split_experiment.usage import UsageLedger, estimate, summed
-from step_10_update.estimate import ESTIMATE_CONFIG
 from utils.config import section
 from utils.export_messages import load_export_messages
 from utils.gold_threads import load_gold
 from utils.json_io import write_json_file
 from utils.llm_client import BatchRequest, LLMClient
 from utils.logging_setup import git_commit, setup_step_logging
+from utils.model_prices import ESTIMATE_CONFIG
 from utils.paths import CHAT_ANDROID_PATH, GOLD_THREADS_PATH, STEP_1, STEP_3, THREADS, step_path
 from utils.threads_io import load_threads
 from utils.timestamps import local_now

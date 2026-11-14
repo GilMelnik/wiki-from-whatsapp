@@ -10,11 +10,12 @@ from typing import Any
 import pytest
 
 from review_tool.steps import SERVED_STEPS
+from step_3_extract.price import extract_price
 from step_3_extract.prompt import EXTRACT_SYSTEM
 from step_3_extract.split_experiment.prompts import UnitJob
 from step_3_extract.split_experiment.units import build_units
 from step_3_extract.split_experiment.usage import estimate as experiment_estimate
-from step_10_update.estimate import CharTokenCounter, Estimator, embedding_usd, extract_price
+from step_10_update.estimate import Estimator, embedding_usd
 from tests.assign_fixtures import FakeClassifier, Workspace
 from tests.plan_fixtures import make_groups
 from tests.review_fixtures import FakeReviewer, ReviewWorkspace, valid_answers
@@ -24,6 +25,7 @@ from utils.config import section
 from utils.embedder import embed_texts
 from utils.llm_client import Classifier, LLMClient, Question
 from utils.paths import STEP_3, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_8_PROOFREAD
+from utils.token_counters import CharTokenCounter
 
 STEPS = {step.key: step for step in SERVED_STEPS.steps}
 
