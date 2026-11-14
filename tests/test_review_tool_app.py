@@ -11,8 +11,8 @@ from fastapi.testclient import TestClient
 from review_tool.locks import ArtifactLockTimeout
 from review_tool.registry import ToolRegistry, ToolSpec
 from review_tool.settings import SETTINGS
-from review_tool.status_tool import StatusTool
-from review_tool.update_status import UpdateStatus
+from review_tool.tools.status.tool import StatusTool
+from review_tool.tools.status.update_status import UpdateStatus
 from tests.review_tool_support import BASE_URL, build_app, build_graph, write_file
 from utils.json_io import write_json_file
 
@@ -113,7 +113,7 @@ def test_tool_with_unknown_artifact_key_is_rejected_at_startup(tmp_path: Path) -
         build_app(tmp_path, specs=(spec,))
 
 
-@pytest.mark.parametrize("name", ["Demo", "1tool", "has space", "health", "events", "jobs"])
+@pytest.mark.parametrize("name", ["Demo", "1tool", "has space", "api", "health", "events", "jobs"])
 def test_registry_rejects_invalid_and_reserved_names(name: str) -> None:
     with pytest.raises(ValueError):
         ToolRegistry([ToolSpec(name, "Title", APIRouter())])
@@ -184,7 +184,7 @@ def test_host_check_is_off_when_listening_on_every_interface(tmp_path: Path) -> 
 def test_built_app_is_served_at_root_and_for_tool_urls(tmp_path: Path) -> None:
     build_dist(tmp_path)
     client = client_for(tmp_path)
-    for url in ("/", "/?tool=status", "/some/app/route"):
+    for url in ("/", "/plan", "/some/app/route"):
         response = client.get(url)
         assert (response.status_code, response.text) == (200, "<html>review shell</html>")
         assert response.headers["cache-control"] == "no-cache"
@@ -212,7 +212,7 @@ def test_files_outside_the_build_folder_are_never_served(tmp_path: Path) -> None
 
 def test_without_a_build_the_page_explains_how_to_build(tmp_path: Path) -> None:
     client = client_for(tmp_path)
-    response = client.get("/?tool=status")
+    response = client.get("/status")
     assert response.status_code == 503 and "npm run build" in response.text
     assert client.get("/api/health").status_code == 200
 

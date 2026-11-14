@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from review_tool.tools import TOOL_SPECS
+from review_tool.toolset import TOOL_SPECS
 from tests.review_tool_support import locked_elsewhere
 from tests.threads_tool_support import ThreadsSetup, c1_payload
 from utils.json_io import write_json_file

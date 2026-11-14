@@ -17,10 +17,10 @@ from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
 from typing import Any
 
-from step_8_review.apply import Applier, GroupLinker
+from review_tool.tools.suggestions.apply import Applier, GroupLinker
 from step_8_review.proposals import ANSWER_FIELDS
 from step_8_review.run import run
-from step_8_review.store import SuggestionsStore
+from review_tool.tools.suggestions.store import SuggestionsStore
 from tests.pages_fixtures import (
     FakeWriter,
     PagesWorkspace,

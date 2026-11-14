@@ -11,7 +11,7 @@ import pytest
 
 import pipeline
 from review_tool.steps import SERVED_STEPS, Step
-from review_tool.tools import TOOL_SPECS
+from review_tool.toolset import TOOL_SPECS
 from step_10_update.driver import (
     COMPLETED,
     NOTHING,

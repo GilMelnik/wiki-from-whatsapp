@@ -3,7 +3,7 @@
 Routes (mounted under ``/api`` by ``review_tool.app``):
 
 - ``GET  /steps``             the step registry: ``[{key, title, produces, incremental_safe,
-                              paid, command}]``
+                              paid, review_tool, command, rebuild_command}]``
 - ``GET  /jobs``              every kept job, newest first (``Job.summary``)
 - ``POST /jobs``              ``{step, rebuild: false}`` -> 202 with the new job's summary;
                               404 unknown step, 409 not incremental-safe or already running

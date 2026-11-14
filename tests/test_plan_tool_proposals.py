@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from step_6_plan.reviewer.requests import quote
+from step_6_plan.operation_requests import quote
 from tests.plan_fixtures import FakeLLM
 from tests.test_plan_tool_assignments import (
     NEW_PAGE,

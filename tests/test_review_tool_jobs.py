@@ -71,7 +71,10 @@ def fake_registry(graph: ArtifactGraph) -> StepRegistry:
     return StepRegistry(
         (
             StepSpec("threads", "Threads step", FAKE_STEP),
-            StepSpec("claims", "Claims step", FAKE_STEP, incremental_safe=True, paid=True),
+            StepSpec(
+                "claims", "Claims step", FAKE_STEP, incremental_safe=True, paid=True,
+                review_tool="writer",
+            ),
         ),
         graph,
     )
@@ -344,6 +347,7 @@ def test_http_api_and_write_guard(
         "produces": "claims",
         "incremental_safe": True,
         "paid": True,
+        "review_tool": "writer",
         "command": f"python -m {FAKE_STEP}",
         "rebuild_command": f"python -m {FAKE_STEP} --rebuild",
     }

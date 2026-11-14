@@ -14,7 +14,7 @@ A stored suggestion::
 ``proposal`` per kind (what code carries out; ``edited_proposal`` has the same shape):
 
 - ``split`` / ``merge`` / ``add_page`` / ``add_label``: one plan operation in the request shape
-  the plan tool validates (``step_6_plan.reviewer.requests``): ``{"op": "split", page_id,
+  the plan tool validates (``step_6_plan.operation_requests``): ``{"op": "split", page_id,
   new_page_id, title_he, description, scope, original_scope?}``, ``{"op": "merge",
   survivor_id, merged_ids}``, ``{"op": "add_page", page_id, parent_id, title_he, description,
   scope}``, ``{"op": "add_label", label_id, title_he, description, kind}``. New ids are the
@@ -39,7 +39,7 @@ from typing import Any
 from pydantic import TypeAdapter, ValidationError
 
 from step_6_plan.model import PlanError
-from step_6_plan.reviewer.requests import Operation
+from step_6_plan.operation_requests import Operation
 from step_8_review.inputs import REVIEW_CONFIG, ReviewInput
 from utils.wiki_links import replace_wiki_links
 

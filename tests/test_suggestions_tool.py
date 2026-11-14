@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from review_tool.tools import TOOL_SPECS
+from review_tool.toolset import TOOL_SPECS
 from step_10_update.estimate import ESTIMATE_CONFIG
 from step_8_review.inputs import REVIEW_CONFIG
 from step_8_review.proposals import plain_text

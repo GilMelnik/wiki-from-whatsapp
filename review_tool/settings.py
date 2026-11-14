@@ -30,6 +30,13 @@ class ReviewSettings:
     web_dist: Path
     log_folder: str
 
+    @property
+    def web_folder(self) -> Path:
+        """The web app's folder (the parent of ``web_dist``), relative to the project root when
+        it is inside it."""
+        folder = self.web_dist.parent
+        return folder.relative_to(PROJECT_ROOT) if folder.is_relative_to(PROJECT_ROOT) else folder
+
     @classmethod
     def from_config(cls, raw: dict[str, Any]) -> ReviewSettings:
         """Build the settings from the raw ``review`` section; name any missing key."""

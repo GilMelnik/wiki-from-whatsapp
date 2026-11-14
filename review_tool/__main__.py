@@ -1,8 +1,10 @@
-"""Run the review tools: ``python -m review_tool [--tool NAME] [--host H] [--port N] [--no-browser]``.
+"""Run the review site: ``python -m review_tool [--tool NAME] [--host H] [--port N] [--no-browser]``.
 
-One server hosts every tool. If it is already running for this data directory, this command
-only opens ``/?tool=NAME`` in the browser and exits; that is how several tools run at once
-(one server, many tabs). A port taken by another program is skipped, never freed by force.
+One server, one site with a page per tool (``/NAME``; ``/`` opens the first, the pipeline
+page). ``--tool`` picks the page the browser opens. If the server is already running for this
+data directory, this command only opens that page and exits; that is how several tools run at
+once (one server, many tabs). A port taken by another program is skipped, never freed by
+force.
 """
 
 from __future__ import annotations
@@ -12,7 +14,6 @@ import logging
 import sys
 import webbrowser
 from collections.abc import Sequence
-from urllib.parse import urlencode
 
 from review_tool.app import ReviewApp
 from review_tool.artifacts import GRAPH
@@ -24,7 +25,7 @@ from review_tool.registry import ToolRegistry
 from review_tool.server import ReviewServer
 from review_tool.settings import SETTINGS
 from review_tool.steps import SERVED_STEPS
-from review_tool.tools import TOOL_SPECS
+from review_tool.toolset import TOOL_SPECS
 from utils.config import DATA_DIR, PROJECT_ROOT
 from utils.logging_setup import setup_step_logging
 
@@ -47,8 +48,7 @@ class Launcher:
 
     def run(self) -> int:
         decision = self._finder.find(self._args.port)
-        query = f"?{urlencode({'tool': self._args.tool})}" if self._args.tool else ""
-        url = f"{self._finder.base_url(decision.port)}/{query}"
+        url = f"{self._finder.base_url(decision.port)}/{self._args.tool or ''}"
         if decision.already_running:
             return self._reuse(decision.port, url)
         self._warn_about_setup()
@@ -91,7 +91,7 @@ class Launcher:
         if not (SETTINGS.web_dist / "index.html").is_file():
             self._logger.warning(
                 f"The web app is not built ({SETTINGS.web_dist} has no index.html): "
-                "run `npm install && npm run build` in web/review"
+                f"run `npm install && npm run build` in {SETTINGS.web_folder}"
             )
         if self._args.host in WILDCARD_HOSTS:
             self._logger.warning(
@@ -108,9 +108,10 @@ class Launcher:
 def main(argv: Sequence[str] | None = None) -> int:
     registry = ToolRegistry(TOOL_SPECS)
     parser = argparse.ArgumentParser(
-        prog="python -m review_tool", description="Review and tagging tools (one server)"
+        prog="python -m review_tool",
+        description="The review site: one server, one page per review tool",
     )
-    parser.add_argument("--tool", choices=registry.names, help="tool to open in the browser")
+    parser.add_argument("--tool", choices=registry.names, help="the tool page to open in the browser")
     parser.add_argument("--host", default=SETTINGS.host)
     parser.add_argument("--port", type=int, default=SETTINGS.port)
     parser.add_argument("--no-browser", action="store_true", help="do not open a browser tab")

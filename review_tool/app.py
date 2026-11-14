@@ -7,7 +7,7 @@ Routes:
 - ``GET /api/events``     Server-Sent Events (``review_tool.events``)
 - ``/api/steps``, ``/api/jobs``  the step runner (``review_tool.jobs_api``)
 - ``/api/<tool>/...``     each registered tool's router
-- everything else         the built web app (``web/review/dist``) with SPA fallback
+- everything else         the built web app (``review_tool/web/dist``) with SPA fallback
 
 Errors are always ``{"detail": ...}``. A tool endpoint may let ``FileNotFoundError`` (its
 artifact is not there yet) and ``ArtifactLockTimeout`` escape; they become 409 and 423.
@@ -40,15 +40,6 @@ from review_tool.settings import API_PREFIX, APP_ID, ReviewSettings
 from review_tool.watcher import ArtifactWatcher
 
 logger = logging.getLogger(__name__)
-
-NOT_BUILT_PAGE = (
-    "<!doctype html><meta charset='utf-8'><title>review_tool</title>"
-    "<body style='font-family: sans-serif; margin: 3rem'>"
-    "<h1>The web app is not built yet</h1>"
-    "<p>Run <code>cd web/review &amp;&amp; npm install &amp;&amp; npm run build</code>, "
-    "then reload this page. The API is already running under <code>/api</code>.</p>"
-)
-
 
 class ReviewApp:
     """Builds the application for one registry, artifact graph and event bus."""
@@ -156,13 +147,23 @@ class ReviewApp:
         dist = self._settings.web_dist.resolve()
         index = dist / "index.html"
         if not index.is_file():
-            return HTMLResponse(NOT_BUILT_PAGE, status_code=503)
+            return HTMLResponse(self._not_built_page(), status_code=503)
         requested = (dist / path).resolve()
         if path and requested.is_file() and requested.is_relative_to(dist):
             return FileResponse(requested)
         if Path(path).suffix:  # a missing asset must not come back as HTML
             raise HTTPException(status_code=404, detail=f"no such file: {url_path}")
         return FileResponse(index, headers={"Cache-Control": "no-cache"})
+
+    def _not_built_page(self) -> str:
+        return (
+            "<!doctype html><meta charset='utf-8'><title>review_tool</title>"
+            "<body style='font-family: sans-serif; margin: 3rem'>"
+            "<h1>The web app is not built yet</h1>"
+            f"<p>Run <code>cd {self._settings.web_folder} &amp;&amp; npm install &amp;&amp; "
+            "npm run build</code>, then reload this page. The API is already running under "
+            "<code>/api</code>.</p>"
+        )
 
     @staticmethod
     def _missing_file(request: Request, exc: FileNotFoundError) -> JSONResponse:

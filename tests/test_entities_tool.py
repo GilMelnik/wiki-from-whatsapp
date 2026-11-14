@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from review_tool.artifacts import GRAPH
-from review_tool.tools import TOOL_SPECS
+from review_tool.toolset import TOOL_SPECS
 from step_4_entities.mentions import SimpleAnalyzer
 from step_4_entities.run import run
 from tests.entities_tool_support import (

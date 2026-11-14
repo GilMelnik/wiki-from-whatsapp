@@ -15,9 +15,9 @@ import numpy as np
 import pytest
 
 from step_1_threads_split.message import message_record
-from step_1_threads_split.reviewer.gold_windows import GoldProgress, GoldWindows
-from step_1_threads_split.reviewer.history import EditHistory
-from step_1_threads_split.reviewer.store import ThreadsStore
+from review_tool.tools.threads.gold_windows import GoldProgress, GoldWindows
+from review_tool.tools.threads.history import EditHistory
+from review_tool.tools.threads.store import ThreadsStore
 from step_1_threads_split.run import load_export_messages, run
 from step_1_threads_split.splitter import SplitParams, ThreadSplitter
 from step_2_classify.run import thread_state

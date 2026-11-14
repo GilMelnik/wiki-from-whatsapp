@@ -20,11 +20,11 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 
-import step_5_aggregate.reviewer.store as store_module
+import review_tool.tools.groups.store as store_module
 import step_5_aggregate.similarity as similarity
 from review_tool.artifacts import ArtifactGraph, ArtifactNode
-from step_5_aggregate.reviewer.suggestions import EmbeddingsMissing
-from step_5_aggregate.reviewer.tool import GroupsTool
+from review_tool.tools.groups.suggestions import EmbeddingsMissing
+from review_tool.tools.groups.tool import GroupsTool
 from step_5_aggregate.run import run
 from tests.aggregate_fixtures import Corpus, angle_for
 from tests.review_tool_support import BASE_URL, build_app

@@ -107,6 +107,7 @@ class Step:
             "produces": spec.produces,
             "incremental_safe": spec.incremental_safe,
             "paid": spec.paid,
+            "review_tool": spec.review_tool,
             "command": self._shown(rebuild=False),
             "rebuild_command": self._shown(rebuild=True),
         }

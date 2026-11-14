@@ -40,7 +40,7 @@ from step_1_threads_split.gold import (
     message_moment,
 )
 from step_1_threads_split.gold_context import add_context_to_file, all_labels, scored_ids
-from step_1_threads_split.reviewer.gold_windows import GoldProgress
+from review_tool.tools.threads.gold_windows import GoldProgress
 from utils.config import section
 from utils.logging_setup import git_commit, setup_step_logging
 from utils.paths import (

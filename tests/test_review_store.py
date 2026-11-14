@@ -9,9 +9,9 @@ import pytest
 
 from step_6_plan.operations import delete
 
-from step_8_review.apply import ApplyRefused
+from review_tool.tools.suggestions.apply import ApplyRefused
 from step_8_review.inputs import REVIEW_CONFIG
-from step_8_review.store import SuggestionConflict, SuggestionNotFound
+from review_tool.tools.suggestions.store import SuggestionConflict, SuggestionNotFound
 from tests.pages_fixtures import FakeWriter
 from tests.review_fixtures import FakeReviewer, ReviewWorkspace, valid_answers
 from utils.paths import BACKUPS_DIR
