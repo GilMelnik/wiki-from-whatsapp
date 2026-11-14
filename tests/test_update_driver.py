@@ -252,7 +252,9 @@ def test_the_pipeline_walks_the_same_registry(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(Step, "run_function", fake_run_function)
     pipeline.run(use_batch=True)
-    assert [key for key, _ in called] == [step.key for step in SERVED_STEPS.steps]
+    # every step but the proofreading, which waits for the owner's decisions on the suggestions
+    assert [key for key, _ in called] == [step.key for step in SERVED_STEPS.steps
+                                          if step.key != STEP_8_PROOFREAD]
     assert dict(called)[STEP_3] == {"use_batch": True} and dict(called)[STEP_4] == {}
 
 

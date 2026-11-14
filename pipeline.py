@@ -22,9 +22,9 @@ step registry, ``review_tool.steps.STEP_SPECS`` (the review tool and the update 
                       llms.txt) + mkdocs.yml
 
 A review is ``python -m review_tool --tool <name>``. This function runs every step once, in
-order, without stopping (so a first build proofreads before any suggestion is applied; the
-text an apply writes then waits for the next ``python -m step_8_review.proofread``); a later
-chat export goes through ``python -m step_10_update.run``, which stops at the reviews and
+order, without stopping, EXCEPT 8b: proofreading waits for the owner's decisions, so this
+function never runs it (run ``python -m step_8_review.proofread`` once the suggestions are
+decided and applied, then step 9 again); a later chat export goes through ``python -m step_10_update.run``, which stops at the reviews and
 before paid steps.
 """
 
@@ -37,7 +37,7 @@ from step_10_update.record import scalar_summary
 from utils.config import LLM_CONFIG
 from utils.llm_client import LLMClient
 from utils.logging_setup import setup_step_logging
-from utils.paths import SHARED, STEP_3
+from utils.paths import SHARED, STEP_3, STEP_8_PROOFREAD
 
 
 def _log_llm_configuration(logger: logging.Logger, use_batch: bool) -> None:
@@ -52,6 +52,10 @@ def run(*, use_batch: bool = False) -> None:
     logger = setup_step_logging(SHARED)
     _log_llm_configuration(logger, use_batch)
     for step in SERVED_STEPS.steps:
+        if step.key == STEP_8_PROOFREAD:
+            logger.info(f"[{step.spec.title}] not run here: decide and apply the suggestions, "
+                        f"then run python -m {step.spec.module} and step 9 again")
+            continue
         logger.info(f"[{step.spec.title}] {step.spec.module}")
         options = {"use_batch": use_batch} if step.key == STEP_3 else {}
         result = step.run_function()(**options)
