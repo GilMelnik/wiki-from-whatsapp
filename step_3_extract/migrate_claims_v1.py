@@ -1,6 +1,6 @@
 """Convert v1 step-3 claims (backup) into C3 claims + the private audit, without any LLM call.
 
-    python -m utils.migrate_claims_v1 --backup-dir <v1 data dir> --out <new data dir>
+    python -m step_3_extract.migrate_claims_v1 --backup-dir <v1 data dir> --out <new data dir>
 
 Reads, under ``--backup-dir`` (a v1 data dir, laid out like ``utils.paths``): the claims
 (``claims_edited.json`` if present, else ``claims.json``), the private audit, the threads

@@ -8,74 +8,20 @@ toward neither side. Emoji sentiment is independent of claim stance — a 👎 n
 a supporter. A user is never double-counted within the same side.
 
 ``collect_evidence`` derives a claim's supporters / opposers / dates from its evidence
-message ids (step 3); ``summarize_reactions`` and ``person_key`` serve the thread reader.
+message ids (step 3). Emoji sentiment is ``utils.reactions``; ``person_key`` is the thread
+reader's (``utils.threads_io``).
 """
 
 from __future__ import annotations
 
-import json
 from collections import Counter
 from dataclasses import dataclass
-from functools import lru_cache
-from pathlib import Path
 from typing import Any, Literal
 
-ReactionSentiment = Literal["positive", "neutral", "negative"]
-_SENTIMENT_PATH = Path(__file__).with_name("reaction_sentiment.json")
-
-
-@lru_cache(maxsize=1)
-def _load_reaction_sentiment() -> dict[str, str]:
-    with _SENTIMENT_PATH.open(encoding="utf-8") as f:
-        return json.load(f)
-
-
-def reaction_sentiment(emoji: str) -> ReactionSentiment:
-    """Map a reaction emoji to positive, neutral, or negative."""
-
-    if not emoji:
-        return "neutral"
-    category = _load_reaction_sentiment().get(emoji)
-    # ponytail: unmapped emojis default neutral — won't inflate either side
-    if category in ("positive", "neutral", "negative"):
-        return category
-    return "neutral"
-
-
-def summarize_reactions(reactions: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
-    """Per-emoji reaction counts for audit / display (no sender ids)."""
-
-    out: list[dict[str, Any]] = []
-    for reaction in reactions or []:
-        senders = [s for s in (reaction.get("senders") or []) if s]
-        if not senders:
-            continue
-        emoji = reaction.get("emoji", "")
-        out.append(
-            {
-                "emoji": emoji,
-                "count": len(senders),
-                "sentiment": reaction_sentiment(emoji),
-            }
-        )
-    return out
-
+from utils.reactions import ReactionSentiment, reaction_sentiment
+from utils.threads_io import person_key
 
 EngagementSide = Literal["supporter", "opposer"]
-
-
-def person_key(person: Any) -> str:
-    """One stable identity string for a sender, from a plain id or an export
-    ``{user_name, phone}`` dict (``user_name`` first: it is what thread messages carry).
-
-    Identities are private: they go to the audit file, never to the LLM or the public claims.
-    """
-
-    if isinstance(person, dict):
-        return str(person.get("user_name") or person.get("phone") or "")
-    return str(person or "")
-
-
 EvidenceSide = Literal["supporting", "opposing"]
 # Who a reaction counts for, by the side of the message it is on and its sentiment. A
 # positive reaction agrees with the message it is on, so on an OPPOSING message it backs the

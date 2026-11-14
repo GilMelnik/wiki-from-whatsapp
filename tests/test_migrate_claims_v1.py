@@ -1,4 +1,4 @@
-"""``utils.migrate_claims_v1`` on a synthetic v1 corpus; the result feeds a no-call re-run.
+"""``step_3_extract.migrate_claims_v1`` on a synthetic v1 corpus; the result feeds a no-call re-run.
 
 Synthetic data only.
 """
@@ -12,9 +12,9 @@ from typing import Any
 import pytest
 
 from step_3_extract.claims import claim_id_for
+from step_3_extract.migrate_claims_v1 import main, migrate
 from step_3_extract.run import run
 from utils.config import DATA_DIR
-from utils.migrate_claims_v1 import main, migrate
 from utils.paths import AUDIT_PATH, CHAT_ANDROID_PATH, CLAIMS, THREADS, Artifact
 
 C3_KEYS = {

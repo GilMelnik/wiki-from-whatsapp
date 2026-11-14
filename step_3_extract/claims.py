@@ -34,9 +34,9 @@ from step_3_extract.prompt import (
     build_fresh_prompt,
     build_update_prompt,
 )
+from step_3_extract.support import collect_evidence
 from utils.reconcile import fingerprint
-from utils.support import collect_evidence, person_key
-from utils.threads_io import render_thread_for_llm
+from utils.threads_io import person_key, render_thread_for_llm
 
 # The fields the step always owns and recomputes; a manual edit of a claim keeps its text
 # but these follow the thread (``utils.reconcile`` ``refresh_keys``).
