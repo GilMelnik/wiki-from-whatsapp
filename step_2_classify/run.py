@@ -10,11 +10,15 @@ Output ``threads_classified.json`` (and its edited copy, if the user has one)::
     {"threads": [{"thread_id", "passed_heuristic", "p_knowledge", "is_knowledge_bearing"}],
      "metadata": {"inputs": {thread_id: fingerprint}, "classifier", "question", ...}}
 
-The step is incremental (contract C14): a thread is sent to the classifier only when it is new
-or its messages changed since the last run (or the classifier, question, threshold or heuristic
-changed); removed threads are dropped, and a manual label in the edited file survives for every
-thread whose output did not change. Only ``thread_id`` and ``messages[].{id, datetime, sender,
-content}`` are read, so the old threads file and the C1 format both work.
+The step is incremental (contract C14) and follows the label rule of
+``step_2_classify.labels``: a thread is sent to the classifier only when it *needs a label* (it
+is new, its messages changed since its label was decided, or the classifier, question,
+threshold or heuristic changed since step 2 answered it) and the owner has not labelled it as
+it is now. A thread the owner labelled by hand keeps that label (the edited copy keeps the
+owner's record, the step's own record stays as it was); a thread the step asks again takes the
+fresh record in both files, replacing a hand label given to older messages. Removed threads are
+dropped from both files. Only ``thread_id`` and ``messages[].{id, datetime, sender, content}``
+are read, so the old threads file and the C1 format both work.
 
 ``python -m step_2_classify.run [--rebuild] [--only THREAD_ID ...]``
 """
@@ -26,15 +30,23 @@ import logging
 from collections.abc import Iterable, Sequence
 from typing import Any
 
+from step_2_classify.labels import (
+    MANUAL_FINGERPRINT,
+    MESSAGE_FIELDS,
+    LabelRule,
+    content_fingerprint,
+    input_fingerprint,
+)
 from utils.config import section
+from utils.file_lock import file_lock
+from utils.json_io import read_json_if_present, write_json_file
 from utils.llm_client import Classifier, Question
 from utils.logging_setup import setup_step_logging
 from utils.paths import CLASSIFIED, STEP_2, THREADS, resolve
-from utils.reconcile import diff_inputs, fingerprint, load_previous, write_reconciled
+from utils.reconcile import diff_inputs, load_previous, write_reconciled
 from utils.threads_io import load_threads, render_thread_for_llm
 
 CLASSIFY_CONFIG = section("classify")
-MESSAGE_FIELDS = ("id", "datetime", "sender", "content")
 
 
 def thread_state(thread: dict[str, Any]) -> str:
@@ -105,8 +117,7 @@ class ThreadClassifier:
 
     def fingerprint(self, thread: dict[str, Any]) -> str:
         """Input fingerprint of one thread: its messages plus the decision settings."""
-        messages = [[message.get(key) for key in MESSAGE_FIELDS] for message in thread["messages"]]
-        return fingerprint({"messages": messages, **self.settings()})
+        return input_fingerprint(thread, self.settings())
 
     def passes_heuristic(self, thread: dict[str, Any]) -> bool:
         messages = thread["messages"]
@@ -148,13 +159,16 @@ def _threads_by_id(threads: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 
 
 def run(*, rebuild: bool = False, only: Iterable[str] | None = None) -> dict[str, Any]:
-    """Classify new and changed threads and reconcile ``threads_classified.json``.
+    """Classify the threads that need a label and reconcile ``threads_classified.json``.
 
-    ``rebuild=True`` re-asks every thread (answers still come from the classifier cache) and
-    replaces the edited copy after backing it up. ``only`` limits the classifier to those
-    thread ids; other threads keep their previous record (or stay absent) and their previous
-    fingerprint, so a later full run still picks them up. Returns the written metadata.
-    Raises ``ClassifierError`` (nothing written; answers so far stay cached) if a request fails.
+    A thread is asked when it needs a label under the current settings
+    (``LabelRule.needs_label``) and the owner has not labelled it as it is now; every other
+    thread keeps its records. ``rebuild=True`` re-asks every thread (answers still come from the
+    classifier cache) and replaces the edited copy, hand labels included, after backing it up.
+    ``only`` limits the classifier to those thread ids; other threads keep their previous record
+    (or stay absent) and their previous fingerprint, so a later full run still picks them up.
+    Returns the written metadata. Raises ``ClassifierError`` (nothing written; answers so far
+    stay cached) if a request fails.
     """
     if rebuild and only is not None:
         raise ValueError("run(rebuild=True) regenerates every thread; it cannot take only=")
@@ -168,16 +182,22 @@ def run(*, rebuild: bool = False, only: Iterable[str] | None = None) -> dict[str
 
     decider = ThreadClassifier.from_config(logger)
     previous = {} if rebuild else load_previous(CLASSIFIED)
-    previous_inputs: dict[str, str] = previous.get("metadata", {}).get("inputs", {})
-    carried = {record["thread_id"]: record for record in previous.get("threads", [])}
+    rule = LabelRule(
+        previous, None if rebuild else read_json_if_present(CLASSIFIED.edited), decider.settings()
+    )
     current = {thread_id: decider.fingerprint(thread) for thread_id, thread in threads.items()}
-    diff = diff_inputs(previous_inputs, current)
-    stale = set(diff.new) | set(diff.changed) | (set(threads) - set(carried))
-    todo = [thread_id for thread_id in threads if thread_id in selected and thread_id in stale]
+    diff = diff_inputs(rule.inputs, current)
+    by_owner = [thread_id for thread_id, thread in threads.items() if rule.hand_holds(thread)]
+    todo = [
+        thread_id
+        for thread_id, thread in threads.items()
+        if thread_id in selected and rule.needs_label(thread)
+    ]
     logger.info(
         f"Classify {threads_path.name}: {len(threads)} threads; new={len(diff.new)}, "
         f"changed={len(diff.changed)}, removed={len(diff.removed)}, "
-        f"unchanged={len(diff.unchanged)}; asking about {len(todo)}"
+        f"unchanged={len(diff.unchanged)}; left to the owner's labels: {len(by_owner)}; "
+        f"asking about {len(todo)}"
     )
 
     fresh = {record["thread_id"]: record for record in decider.classify([threads[t] for t in todo])}
@@ -187,10 +207,10 @@ def run(*, rebuild: bool = False, only: Iterable[str] | None = None) -> dict[str
         if thread_id in fresh:
             records.append(fresh[thread_id])
             inputs[thread_id] = current[thread_id]
-        elif thread_id in carried:
-            records.append(carried[thread_id])
-            if thread_id in previous_inputs:
-                inputs[thread_id] = previous_inputs[thread_id]
+        elif thread_id in rule.own:
+            records.append(rule.own[thread_id])
+            if thread_id in rule.inputs:
+                inputs[thread_id] = rule.inputs[thread_id]
 
     metadata = {
         "inputs": inputs,
@@ -201,18 +221,60 @@ def run(*, rebuild: bool = False, only: Iterable[str] | None = None) -> dict[str
         "knowledge_bearing_count": sum(record["is_knowledge_bearing"] for record in records),
         "classified_count": len(todo),
     }
+    # A thread asked again takes the fresh record in the edited copy too, also when the answer
+    # is what step 2 said before: the owner's label (or deletion) there was for older messages.
+    overruled = {t for t in fresh if rule.by_hand(t) or t not in rule.in_force}
+
+    def is_same(base: dict[str, Any], new: dict[str, Any]) -> bool:
+        return base == new and new["thread_id"] not in overruled
+
     report = write_reconciled(
         CLASSIFIED,
         {"threads": records, "metadata": metadata},
         items_key="threads",
         id_key="thread_id",
+        is_same=is_same,
         rebuild=rebuild,
     )
+    if not rebuild:
+        older = {
+            thread_id: content_fingerprint(threads[thread_id])
+            for thread_id in by_owner
+            if MANUAL_FINGERPRINT not in rule.in_force[thread_id]
+        }
+        _tidy_edited(set(threads), older, logger)
     logger.info(
         f"Classify: {metadata['knowledge_bearing_count']} of {len(records)} threads "
         f"knowledge-bearing; {report.changes.summary()}"
     )
     return metadata
+
+
+def _tidy_edited(thread_ids: set[str], stamps: dict[str, str], logger: logging.Logger) -> None:
+    """After the reconcile: drop the edited copy's records of threads that no longer exist (a
+    conversation the owner split off, labelled and merged back), and give older hand labels
+    that still hold their ``manual_fingerprint`` (``stamps``), so a later change of the
+    settings does not undo them."""
+    path = CLASSIFIED.edited
+    with file_lock(path):
+        payload = read_json_if_present(path)
+        if payload is None:
+            return
+        kept = [
+            {**record, MANUAL_FINGERPRINT: stamps[record["thread_id"]]}
+            if record["thread_id"] in stamps
+            else record
+            for record in payload["threads"]
+            if record["thread_id"] in thread_ids
+        ]
+        if kept == payload["threads"]:
+            return
+        write_json_file({**payload, "threads": kept}, path)
+    logger.info(
+        f"Classify: {path.name}: dropped {len(payload['threads']) - len(kept)} record(s) of "
+        f"conversations that no longer exist; {len(stamps)} older hand label(s) now carry "
+        f"{MANUAL_FINGERPRINT}"
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> None:

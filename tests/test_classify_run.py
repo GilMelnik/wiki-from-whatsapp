@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from step_2_classify import run as step
+from step_2_classify.labels import MANUAL_FINGERPRINT, content_fingerprint, hand_record
 from utils import reconcile
 from utils.json_io import write_json_file
 from utils.llm_client import Answer, Classifier, Question
@@ -108,6 +109,15 @@ def _label(thread_id: str, value: bool) -> None:
     write_json_file(payload, path)
 
 
+def _hand_label(thread: dict[str, Any], value: bool) -> None:
+    """What the conversations page does: the owner's label for the thread as it is now."""
+    path = step.CLASSIFIED.edited
+    payload = _read(step.CLASSIFIED.original if not path.exists() else path)
+    own = _records(step.CLASSIFIED.original).get(thread["thread_id"])
+    others = [r for r in payload["threads"] if r["thread_id"] != thread["thread_id"]]
+    write_json_file({**payload, "threads": [*others, hand_record(thread, value, own)]}, path)
+
+
 def test_output_follows_c2(provider: _FakeProvider) -> None:
     _write_threads(KNOWLEDGE, CHATTER)
     metadata = step.run()
@@ -153,19 +163,61 @@ def test_threshold_is_applied(provider: _FakeProvider, monkeypatch: pytest.Monke
     assert records["t-1"]["is_knowledge_bearing"] is False
 
 
-def test_new_threshold_keeps_labels_whose_decision_holds(
+def test_new_threshold_keeps_older_hand_labels_and_gives_them_their_fingerprint(
     provider: _FakeProvider, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _write_threads(KNOWLEDGE, CHATTER)
     step.run()
-    _label("t-2", True)
+    _label("t-2", True)  # an older hand label: no manual_fingerprint
+    provider.calls.clear()
 
     monkeypatch.setitem(step.CLASSIFY_CONFIG, "threshold", 0.85)
     step.run()
+    assert len(provider.calls) == 1  # t-1 only: t-2 is left to the owner's label
     edited = _records(step.CLASSIFIED.edited)
     assert edited["t-2"]["is_knowledge_bearing"] is True
+    assert edited["t-2"][MANUAL_FINGERPRINT] == content_fingerprint(CHATTER)
     assert edited["t-1"]["is_knowledge_bearing"] is False
     assert _read(step.CLASSIFIED.edited)["metadata"]["threshold"] == 0.85
+
+    monkeypatch.setitem(step.CLASSIFY_CONFIG, "threshold", 0.5)
+    step.run()
+    assert _records(step.CLASSIFIED.edited)["t-2"]["is_knowledge_bearing"] is True
+
+
+def test_a_hand_label_is_not_asked_and_the_log_says_so(
+    provider: _FakeProvider, caplog: pytest.LogCaptureFixture
+) -> None:
+    _write_threads(KNOWLEDGE, CHATTER)
+    step.run()
+    _hand_label(CHATTER, True)
+    changed = _thread("t-2", "good morning", "morning!", "coffee? lawyer?")
+    _write_threads(KNOWLEDGE, changed, _thread("t-5", "new", "chat", "here"))
+    _hand_label(changed, False)
+    _hand_label(_thread("t-5", "new", "chat", "here"), True)
+    provider.calls.clear()
+
+    with caplog.at_level(logging.INFO, logger=step.STEP_2):
+        step.run()
+    assert provider.calls == []
+    assert "left to the owner's labels: 2; asking about 0" in caplog.text
+    edited = _records(step.CLASSIFIED.edited)
+    assert edited["t-2"]["is_knowledge_bearing"] is False and edited["t-5"]["is_knowledge_bearing"] is True
+    original = _records(step.CLASSIFIED.original)
+    assert "t-5" not in original and original["t-2"]["is_knowledge_bearing"] is False
+    assert all(MANUAL_FINGERPRINT not in record for record in original.values())
+
+
+def test_a_hand_label_of_a_removed_thread_is_dropped(provider: _FakeProvider) -> None:
+    extra = _thread("t-5", "new", "chat", "here")
+    _write_threads(KNOWLEDGE, extra)
+    step.run(only=["t-1"])
+    _hand_label(extra, True)  # step 2 never answered t-5
+
+    _write_threads(KNOWLEDGE)
+    step.run()
+    for path in (step.CLASSIFIED.original, step.CLASSIFIED.edited):
+        assert list(_records(path)) == ["t-1"]
 
 
 def test_unchanged_threads_are_not_asked_again(provider: _FakeProvider) -> None:
