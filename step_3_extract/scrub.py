@@ -1,8 +1,10 @@
 """Deterministic PII scrub safety net.
 
 Auto-redacts only high-confidence contact PII that should never appear in wiki
-content: phone numbers and email addresses. Member and provider names are left
-intact; anonymity is enforced by the extraction prompt and human draft review.
+content: phone numbers and email addresses (the patterns of ``utils.contact_patterns``).
+Member and provider names are left intact; anonymity is enforced by the extraction prompt
+and human draft review. The prompt directive against the forbidden term is
+``utils.forbidden_term``; ``correct_surrogate_terminology`` is its safety net here.
 """
 
 from __future__ import annotations
@@ -12,25 +14,14 @@ from collections.abc import Collection
 from dataclasses import dataclass, field
 from typing import Any
 
+from utils.contact_patterns import EMAIL_RE, PHONE_RE, SHORT_PHONE_RE
+
 REDACTION_MARK = "[הוסר]"
 # While scrubbing, each match is replaced by one supplementary private-use character (never
 # a word character, digit or separator, so later patterns see it like the mark) numbered
 # from here; chat text does not contain these code points.
 _PLACEHOLDER_BASE = 0xF0000
 _PLACEHOLDER_RE = re.compile("[\U000F0000-\U000FFFFD]")
-
-_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}")
-# A run that contains 9-15 digits once separators are stripped (phone-like).
-_PHONE_RE = re.compile(r"(?<![\w])\+?[\d][\d\s().\-]{7,}\d(?![\w])")
-# Short service hotlines: *5400, 5400*, (5400*).
-_SHORT_PHONE_RE = re.compile(
-    r"(?<![\w])"
-    r"(?:"
-    r"\*\d{3,5}\b"
-    r"|\(\d{3,5}\*\)"
-    r"|\b\d{3,5}\*(?![\w])"
-    r")"
-)
 
 # Forbidden, offensive framing of the surrogate as the child's "mother". The
 # surrogate is never the mother of the child; collapse the phrase to the correct
@@ -51,14 +42,6 @@ _MOTHER_NOUN_RE = re.compile(
 )
 _MOTHER_EM_RE = re.compile(
     r"(?P<pre>[למכ])אם[\s\u05be\-]+(?P<sur>ה?פונדקאי(?:ות|ת))"
-)
-
-# Shared prompt directive so every LLM stage avoids producing the term at all.
-FORBIDDEN_TERM_INSTRUCTION = (
-    'אסור בתכלית האיסור להשתמש בצירוף "אמא פונדקאית" / "אם פונדקאית" / '
-    '"האמא הפונדקאית" / "אמהות פונדקאיות" או כל הטיה אחרת המתארת את הפונדקאית '
-    'כ"אם" או כ"אמא" — זהו מונח שגוי ופוגעני. השתמש אך ורק ב"פונדקאית" '
-    '(או "נושאת").'
 )
 
 
@@ -103,22 +86,6 @@ class ScrubResult:
         return bool(self.redactions)
 
 
-def find_emails(text: str) -> list[str]:
-    return _EMAIL_RE.findall(text or "")
-
-
-def find_phones(text: str) -> list[str]:
-    seen: set[str] = set()
-    out: list[str] = []
-    for pattern in (_PHONE_RE, _SHORT_PHONE_RE):
-        for match in pattern.finditer(text or ""):
-            value = match.group(0)
-            if value not in seen:
-                seen.add(value)
-                out.append(value)
-    return out
-
-
 def _placeholder(index: int) -> str:
     return chr(_PLACEHOLDER_BASE + index)
 
@@ -146,9 +113,9 @@ def scrub_text(text: str) -> ScrubResult:
 
         result = pattern.sub(repl, result)
 
-    _redact(_EMAIL_RE, "email")
-    _redact(_PHONE_RE, "phone")
-    _redact(_SHORT_PHONE_RE, "phone")
+    _redact(EMAIL_RE, "email")
+    _redact(PHONE_RE, "phone")
+    _redact(SHORT_PHONE_RE, "phone")
 
     in_text_order = [
         found[ord(match.group(0)) - _PLACEHOLDER_BASE]

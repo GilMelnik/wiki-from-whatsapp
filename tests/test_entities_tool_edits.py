@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from step_4_entities.records import claim_entity_index
 from tests.entities_tool_support import DS1, DS2, DS3, DS4, DS5, DS6, EntitiesSetup, claim
+from utils.claim_entities import claim_entity_index
 
 
 @pytest.fixture

@@ -28,10 +28,10 @@ import logging
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION
 from step_6_plan.assign_rules import ASSIGN_CONFIG
 from step_6_plan.model import PLAN_CONFIG, iter_nodes, live_ids, retired_ids, slug_error
 from step_6_plan.prompt import groups_block, proposal_from_plan
+from utils.forbidden_term import FORBIDDEN_TERM_INSTRUCTION
 from utils.llm_client import LLMClient
 
 PROPOSALS_CONFIG = ASSIGN_CONFIG["proposals"]

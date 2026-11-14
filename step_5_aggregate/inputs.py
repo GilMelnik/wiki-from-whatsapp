@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from step_4_entities.records import claim_entity_index
+from utils.claim_entities import claim_entity_index
 from utils.json_io import read_json_file
 from utils.paths import (
     AUDIT_PATH,

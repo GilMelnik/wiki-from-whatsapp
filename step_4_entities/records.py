@@ -7,11 +7,11 @@ group of members. Both shapes are what ``entities.json`` stores and the reviewer
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Collection, Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from typing import Any
 
-from step_3_extract.scrub import find_emails, find_phones
 from utils.config import ENTITIES_CONFIG
+from utils.contact_patterns import find_emails, find_phones
 
 CONTACT_KINDS = ("email", "phone", "website")
 # Fields an earlier step 4 stored on entities and nothing reads any more; a run drops them.
@@ -25,7 +25,6 @@ _URL_RE = re.compile(
 )
 
 Contacts = dict[str, list[str]]
-MemberClaims = Callable[[dict[str, Any]], Iterable[str]]
 
 
 def empty_contacts() -> Contacts:
@@ -192,32 +191,3 @@ def entity_counts(payload: Mapping[str, Any]) -> dict[str, int]:
         "multi_member_count": sum(1 for e in entities if len(e.get("members") or []) > 1),
         "ambiguous_count": sum(1 for e in entities if e.get("status") == "ambiguous"),
     }
-
-
-def explicit_member_claims(member: Mapping[str, Any]) -> list[str]:
-    """A member's active claims: its ``claim_ids`` minus its excluded ones."""
-
-    excluded = set(member.get("excluded_claim_ids") or [])
-    return [c for c in member.get("claim_ids") or [] if c not in excluded]
-
-
-def claim_entity_index(
-    entities: Iterable[Mapping[str, Any]],
-    *,
-    deleted_claims: Collection[str] = (),
-    member_claims: MemberClaims = explicit_member_claims,
-) -> dict[str, list[str]]:
-    """``claim_id -> [entity_id]``: the canonical entities each claim mentions (step 5)."""
-
-    deleted = set(deleted_claims)
-    index: dict[str, list[str]] = {}
-    for entity in entities:
-        entity_id = entity["entity_id"]
-        for member in entity.get("members") or []:
-            for claim_id in member_claims(member):
-                if claim_id in deleted:
-                    continue
-                ids = index.setdefault(claim_id, [])
-                if entity_id not in ids:
-                    ids.append(entity_id)
-    return {claim_id: sorted(ids) for claim_id, ids in sorted(index.items())}

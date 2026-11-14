@@ -15,7 +15,7 @@ from typing import Any
 
 import numpy as np
 
-from step_4_entities.records import claim_entity_index
+from utils.claim_entities import claim_entity_index
 from utils.json_io import write_json_file
 from utils.paths import Artifact
 

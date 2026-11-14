@@ -32,11 +32,10 @@ from step_4_entities.collect import ClaimCorpus, tagged_names
 from step_4_entities.records import (
     CONTACT_KINDS,
     allocate_entity_id,
-    claim_entity_index,
     member_names,
     refresh_entity,
 )
-
+from utils.claim_entities import claim_entity_index
 
 # (similarity, signals, matched member name) of a new string against one existing member.
 Score = tuple[float, set[str], str]
