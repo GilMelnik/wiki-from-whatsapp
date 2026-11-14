@@ -1,5 +1,6 @@
 """The Hebrew language edit's own rules: which replacements code applies, the check that
-sends a body back, a failed call, the tested prompt and the stage's model (synthetic text)."""
+sends a body back, a failed call, what a record says was proofread, the tested prompt and the
+stage's model (synthetic text)."""
 
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from step_7_write_pages.checks import AnswerRules, problems
+from step_7_write_pages.checks import AnswerRules, problems, sentences
 from step_7_write_pages.proofread import (
     PROOFREAD_CONFIG,
     SCHEMA,
@@ -19,7 +20,7 @@ from step_7_write_pages.proofread import (
     ProofreadJob,
     Proofreader,
     apply_edits,
-    owed_frozen,
+    sentence_split,
     user_message,
 )
 from tests.pages_fixtures import FakeProofreader
@@ -115,27 +116,39 @@ def test_edits_that_break_a_check_send_the_body_back() -> None:
     assert outcome.language_edits["applied"] == [] and outcome.language_edits["dropped"] == {
         "reverted": 2}
     assert "told in more than 2 statements" in outcome.language_edits["reverted"][0]
+    # recorded as proofread with nothing applied: none of its sentences is sent again
+    assert sentence_split({"body_md": told["body"], "language_edits": outcome.language_edits}) == (
+        sentences(told["body"]), [])
 
 
-def test_a_failed_call_keeps_the_body_and_records_what_was_kept() -> None:
-    kept = ["אחד.[^g-00000001][^g-00000002]"]
-    jobs = [ProofreadJob("p", ANSWER, _rules(frozen=frozenset(kept))),
-            ProofreadJob("q", ANSWER, _rules())]
+def test_a_failed_call_keeps_the_body_and_records_no_sentence() -> None:
+    jobs = [ProofreadJob("p", ANSWER, _rules()), ProofreadJob("q", ANSWER, _rules())]
     fake = FakeProofreader(lambda page_id, body: [edit("שניים", "שתיים")], fail={"p"})
     outcomes = Proofreader(fake, LOGGER).run(jobs)
     assert fake.batches == [["p", "q"]]
     failed = outcomes["p"]
     assert failed.failed and failed.body == ANSWER["body"]
-    assert failed.language_edits["model"] == "fake-proofread"
-    assert failed.language_edits["frozen"] == [fingerprint(kept[0])]
-    assert owed_frozen(failed.language_edits, failed.body) == kept
-    assert owed_frozen(outcomes["q"].language_edits, outcomes["q"].body) is None
-    assert "שתיים" in outcomes["q"].body
+    assert failed.language_edits == {"model": "fake-proofread", "failed": failed.language_edits[
+        "failed"]}
+    done = outcomes["q"]
+    assert "שתיים" in done.body and not done.failed
+    assert done.language_edits["sentences"] == sorted({fingerprint(s) for s in sentences(done.body)})
 
 
-def test_without_a_batch_api_each_page_is_one_call() -> None:
-    fake = FakeProofreader(fail={"q"}, batch=False)
-    outcomes = Proofreader(fake, LOGGER).run([ProofreadJob(pid, ANSWER, _rules()) for pid in "pq"])
+def test_a_record_splits_a_body_into_proofread_and_new_sentences() -> None:
+    record = {"sentences": [fingerprint(LEAD), fingerprint("משפט אחרון כאן.")]}
+    done, new = sentence_split({"body_md": BODY, "language_edits": record})
+    assert done == [LEAD, "משפט אחרון כאן."] and new and LEAD not in new
+    assert sentence_split({"body_md": BODY}) == ([], sentences(BODY))
+    assert sentence_split({"body_md": BODY, "language_edits": {"model": "m", "failed": "x"}})[0] == []
+
+
+@pytest.mark.parametrize("provider_batch,asked", [(False, True), (True, False)])
+def test_without_a_batch_api_or_when_asked_each_page_is_one_call(provider_batch: bool,
+                                                                  asked: bool) -> None:
+    fake = FakeProofreader(fail={"q"}, batch=provider_batch)
+    proofreader = Proofreader(fake, LOGGER, batch=asked)
+    outcomes = proofreader.run([ProofreadJob(pid, ANSWER, _rules()) for pid in "pq"])
     assert fake.calls == ["p", "q"] and fake.batches == []
     assert not outcomes["p"].failed and outcomes["q"].failed
 

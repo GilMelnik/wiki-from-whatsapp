@@ -23,7 +23,7 @@ from tests.test_extract_run import Corpus, FakeLLM, _message, answer_by_text
 from utils.config import section
 from utils.embedder import embed_texts
 from utils.llm_client import Classifier, LLMClient, Question
-from utils.paths import STEP_3, STEP_6_ASSIGN, STEP_7, STEP_8
+from utils.paths import STEP_3, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_8_PROOFREAD
 
 STEPS = {step.key: step for step in SERVED_STEPS.steps}
 
@@ -82,21 +82,23 @@ def _results() -> dict[str, dict[str, Any]]:
                         "proposal_calls_max": 1},
         STEP_7: {"estimate": [{"page": "a", "mode": "write", "input_tokens": 500_000},
                               {"page": "b", "mode": "update", "input_tokens": 500_000}],
-                 "input_tokens": 1_000_000, "modes": {"write": 1, "update": 1, "keep": 4},
-                 "proofread": [{"page": "a", "chars": 15_600}, {"page": "b", "chars": 15_601}]},
+                 "input_tokens": 1_000_000, "modes": {"write": 1, "update": 1, "keep": 4}},
         STEP_8: {"calls": 2, "input_tokens": 200_000, "batch": True,
                  "passes": [{"id": "a"}, {"id": "b"}, {"id": "cross"}]},
+        STEP_8_PROOFREAD: {"calls": 2, "batch": True, "estimate": [
+            {"page": "a", "chars": 15_600, "new_sentences": 3},
+            {"page": "b", "chars": 15_601, "new_sentences": 1}]},
     }
 
 
 @pytest.mark.parametrize(("key", "calls", "usd"), [
     (STEP_3, 2, ((EXTRACT_CONVERSATIONS + 2 * 2170 * 0.1) * 2 + EXTRACT_OUTPUT * 10) / 1e6 * 0.5),
     (STEP_6_ASSIGN, 1, 10 * 12200 * 0.042 / 1e6 + (30000 * 2 + 4000 * 10) / 1e6),
-    # two writer calls (Sonnet) + two proofreading calls (Fable, batch): 10,000 and 10,001
-    # input tokens at the review's 1.56 characters per token, 23,000 output tokens each
-    (STEP_7, 4, (500_000 * 2 + 13000 * 10 + 500_000 * 2 + 6000 * 10) / 1e6
-     + ((10_000 + 10_001) * 8 + 2 * 23000 * 40) / 1e6 * 0.5),
+    (STEP_7, 2, (500_000 * 2 + 13000 * 10 + 500_000 * 2 + 6000 * 10) / 1e6),
     (STEP_8, 2, (200_000 * 4 + 6000 * 2 * 20) / 1e6 * 0.5),
+    # two proofreading calls (Fable, batch): 10,000 and 10,001 input tokens at the review's
+    # 1.56 characters per token, 23,000 output tokens each
+    (STEP_8_PROOFREAD, 2, ((10_000 + 10_001) * 8 + 2 * 23000 * 40) / 1e6 * 0.5),
 ])
 def test_estimates_are_priced_from_config(key: str, calls: int, usd: float) -> None:
     seen: dict[str, Any] = {}
@@ -108,7 +110,7 @@ def test_estimates_are_priced_from_config(key: str, calls: int, usd: float) -> N
     estimate = Estimator(lambda step: fake_run)(STEPS[key])
     assert estimate.paid_calls == calls and estimate.usd == pytest.approx(usd)
     assert seen["estimate"] is True and estimate.line().startswith(estimate.what)
-    if key != STEP_6_ASSIGN:
+    if key not in (STEP_6_ASSIGN, STEP_8_PROOFREAD):
         assert isinstance(seen["count_tokens"], CharTokenCounter)
     if key == STEP_3:
         assert seen["count_tokens"].chars_per_token == 1.39

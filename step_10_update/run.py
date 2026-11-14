@@ -11,8 +11,10 @@ on from there (``step_10_update.driver`` explains the whole flow).
 
 - ``--plan``: say what the update would do and estimate the next step; change nothing.
 - ``--pay STEP ...``: allow these paid steps (``step_3_extract``, ``step_6_assign``,
-  ``step_7_write_pages``, ``step_8_review``) to make their model calls. Without it a paid
-  step stops the update with its estimate (unless it would make no paid call).
+  ``step_7_write_pages``, ``step_8_review``, ``step_8_proofread``) to make their model calls.
+  Without it a paid step stops the update with its estimate (unless it would make no paid
+  call). Proofreading comes after the review's stop: it reads the text once the owner's
+  decisions on the suggestions are applied.
 - ``--through STEP``: run up to STEP without stopping for reviews, then stop.
 - ``--no-stops``: never stop for a review (paid steps still need ``--pay``).
 - ``--drop-missing``: messages of the current input that the export lacks are removed

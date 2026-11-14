@@ -17,9 +17,9 @@ from review_tool.steps import STEP_SPECS, Step, StepRegistry
 from step_10_update.driver import Options, Outcome, UpdateDriver, UpdatePaths
 from step_10_update.estimate import Estimate
 from utils.config import DATA_DIR, PROJECT_ROOT
-from utils.paths import STEP_3, STEP_6_ASSIGN, STEP_7, STEP_8
+from utils.paths import STEP_3, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_8_PROOFREAD
 
-PAID_STEPS = frozenset({STEP_3, STEP_6_ASSIGN, STEP_7, STEP_8})
+PAID_STEPS = frozenset({STEP_3, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_8_PROOFREAD})
 
 
 def message(msg_id: str, minute: int, day: int = 1) -> dict[str, Any]:

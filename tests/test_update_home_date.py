@@ -19,10 +19,21 @@ from step_9_site.run import run as build_site
 from tests.site_fixtures import make_page, make_site_plan, make_threads
 from tests.update_support import PAID_STEPS, World, message, old_chat
 from utils.config import section
-from utils.paths import STEP_1, STEP_2, STEP_3, STEP_4, STEP_5, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_9
+from utils.paths import (
+    STEP_1,
+    STEP_2,
+    STEP_3,
+    STEP_4,
+    STEP_5,
+    STEP_6_ASSIGN,
+    STEP_7,
+    STEP_8,
+    STEP_8_PROOFREAD,
+    STEP_9,
+)
 
 SITE = section("site")
-UNCHANGED = (STEP_2, STEP_3, STEP_4, STEP_5, STEP_6_ASSIGN, STEP_7, STEP_8)
+UNCHANGED = (STEP_2, STEP_3, STEP_4, STEP_5, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_8_PROOFREAD)
 
 
 class SiteWorld(World):

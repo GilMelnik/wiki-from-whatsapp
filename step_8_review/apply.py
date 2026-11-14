@@ -9,11 +9,10 @@ incremental steps do the rest.
   the correction as its free-text ``request``, from the page's current EFFECTIVE text. Step 7's
   checks hold (only the page's groups cited, valid links, disputed and contradicted groups
   cited; one retry, then refusal); on top, at least ``wiki_review.apply.min_kept_sentence_share``
-  of the page's sentences must stay word for word. The corrected body then gets step 7's
-  Hebrew language edit (``step_7_write_pages.proofread``; the corrected pages of one apply in
-  one batch), which never touches a sentence the correction kept; a failed call keeps the
-  corrected body (its ``language_edits`` say so; step 7 does not send an edited page again).
-  The corrected page goes to the pages' EDITED file, the starting text of every later update.
+  of the page's sentences must stay word for word. The corrected page goes to the pages'
+  EDITED file, the starting text of every later update. It keeps the page's ``language_edits``
+  record: the sentences the correction wrote were never proofread, and the proofreading pass
+  that follows the owner's decisions (``step_8_review.proofread``) edits only those.
 - ``contradiction``: the pairs become manual contradiction links in the claim groups through
   the groups tool's own store (``GroupsStore.set_contradiction``: step 5's ``contradicts_manual``
   rules, ``contradicts`` re-derived at once), so they survive every re-run and rewrite; and
@@ -41,7 +40,6 @@ from step_6_plan.model import PlanError
 from step_7_write_pages.checks import sentences, strip_definitions
 from step_7_write_pages.front_matter import LabelRule, page_front_matter
 from step_7_write_pages.inputs import PAGES_CONFIG, Corpus, PageContext
-from step_7_write_pages.proofread import PROOFREAD_CONFIG, Proofreader, proofread_job
 from step_7_write_pages.writer import GroupDelta, PageText, PageWriter, current_text
 from step_8_review.inputs import REVIEW_CONFIG, ReviewInput
 from step_8_review.proposals import (
@@ -84,12 +82,12 @@ class GroupLinker(Protocol):
 
 @dataclass(frozen=True)
 class Correction:
-    """A page as step 7's writer corrected it, before the language edit; ``kept``: the
-    sentences of the page before the correction (never edited by the language edit)."""
+    """A page as step 7's writer corrected it; ``language_edits``: the page's record of what
+    was proofread (kept: the sentences the correction kept are still proofread text)."""
 
     context: PageContext
     text: PageText
-    kept: list[str]
+    language_edits: dict[str, Any] | None
     input_fingerprint: str | None
 
 
@@ -142,7 +140,7 @@ class Applier:
 
     def __init__(self, *, pages_artifact: Artifact = WIKI_PAGES, plan_artifact: Artifact = PLAN,
                  aggregated_path: Path | None = None, assignments_path: Path | None = None,
-                 llm: LLMClient | None = None, proofread_llm: LLMClient | None = None,
+                 llm: LLMClient | None = None,
                  linker: Callable[[], GroupLinker] = default_linker,
                  logger: logging.Logger | None = None) -> None:
         self.pages_artifact = pages_artifact
@@ -150,7 +148,6 @@ class Applier:
         self.aggregated_path = aggregated_path
         self.assignments_path = assignments_path
         self._llm = llm
-        self._proofread_llm = proofread_llm
         self.linker = linker
         self.logger = logger or logging.getLogger(__name__)
 
@@ -160,17 +157,6 @@ class Applier:
             self._llm = LLMClient.for_stage(APPLY_CONFIG["stage"], logger=self.logger,
                                             max_tokens=APPLY_CONFIG["max_output_tokens"])
         return self._llm
-
-    @property
-    def proofreader(self) -> Proofreader | None:
-        """The language edit of corrected pages; None when ``proofread.enabled`` is off."""
-        if not PROOFREAD_CONFIG["enabled"]:
-            return None
-        if self._proofread_llm is None:
-            self._proofread_llm = LLMClient.for_stage(
-                PROOFREAD_CONFIG["stage"], logger=self.logger,
-                max_tokens=PROOFREAD_CONFIG["max_output_tokens"])
-        return Proofreader(self._proofread_llm, self.logger)
 
     def review(self) -> ReviewInput:
         """The wiki as it is now (effective pages, groups, plan, assignments)."""
@@ -241,30 +227,24 @@ class Applier:
                 required=_pct(APPLY_CONFIG["min_kept_sentence_share"])))
         self.logger.info(f"Corrected {page_id}: {_pct(share)} of its sentences kept; report "
                          f"{text.report}")
-        return Correction(context, text, sentences(page["body_md"]),
+        return Correction(context, text, page.get("language_edits"),
                           page.get("input_fingerprint")), share
 
     def _items(self, corpus: Corpus, corrections: Mapping[str, Correction]) -> dict[str, Any]:
-        """The corrected pages as C9 items, after the language edit (one batch)."""
-        proofreader = self.proofreader
-        jobs = [proofread_job(c.context, corpus.plan, {"body": c.text.body, "points": c.text.points,
-                                                       "left_out": c.text.left_out}, c.kept)
-                for c in corrections.values()]
-        proofread = proofreader.run(jobs) if proofreader is not None else {}
+        """The corrected pages as C9 items."""
         model = LLM_CONFIG["stages"][PAGES_CONFIG["write"]["stage"]]["model"]
         labels = LabelRule(corpus, list(corpus.plan["pages"]))
         items = {}
         for page_id, correction in corrections.items():
-            text, outcome = correction.text, proofread.get(page_id)
-            body = outcome.body if outcome is not None else text.body
+            text = correction.text
             front_matter = page_front_matter(
-                correction.context, corpus.plan, body=body, summary=text.summary,
+                correction.context, corpus.plan, body=text.body, summary=text.summary,
                 questions=text.questions, related=text.related, labels=labels(page_id),
                 model=model, generated_at=utc_now_z())
-            item = {"front_matter": front_matter, "body_md": body, "points": text.points,
+            item = {"front_matter": front_matter, "body_md": text.body, "points": text.points,
                     "left_out": corpus.accounted_left_out(page_id, text.left_out)}
-            if outcome is not None:
-                item["language_edits"] = outcome.language_edits
+            if correction.language_edits is not None:
+                item["language_edits"] = correction.language_edits
             items[page_id] = {**item, "input_fingerprint": correction.input_fingerprint}
         return items
 

@@ -30,6 +30,7 @@ from utils.paths import (
     GOLD_THREADS_PATH,
     MANUAL_AGGREGATIONS_PATH,
     PLAN,
+    PROOFREAD_RECORD,
     STEP_1,
     STEP_2,
     STEP_3,
@@ -39,6 +40,7 @@ from utils.paths import (
     STEP_6_ASSIGN,
     STEP_7,
     STEP_8,
+    STEP_8_PROOFREAD,
     STEP_9,
     SUGGESTIONS,
     THREADS,
@@ -214,6 +216,12 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
         # The whole-wiki review's suggestions (a human gate: the owner decides on each one).
         ArtifactNode.from_pair(
             "suggestions", "Review suggestions", SUGGESTIONS, STEP_8, ("plan", "pages")
+        ),
+        # The Hebrew language edit after the owner's decisions: it rewrites the pages' edited
+        # file; its record stands for the pass (stale when a page changed since).
+        ArtifactNode(
+            "proofread", "Proofreading", PROOFREAD_RECORD, step=STEP_8_PROOFREAD,
+            upstream=("groups", "plan", "assignments", "pages"),
         ),
         # The published site (docs/ + mkdocs.yml); its index file stands for the whole folder.
         ArtifactNode(

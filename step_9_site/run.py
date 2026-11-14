@@ -25,6 +25,8 @@ The step owns ``docs/``: files it did not write are removed, except the top-leve
 inputs changes nothing. Problems (a planned page nobody wrote, a link to a page that is not
 published, a label nobody carries...) are logged and returned under ``issues``; a page citing a
 withheld group (``withheld_reference``) is logged as an error: re-run step 7 before publishing.
+A published page holding text that was never proofread (``step_8_review.proofread``) is named
+in a warning and in ``unproofread``; the site is built anyway (the owner may publish it).
 """
 
 from __future__ import annotations
@@ -42,6 +44,7 @@ import yaml
 
 from step_9_site import agent_hook, hebrew_search
 from step_9_site.agent_pages import AgentPages
+from step_7_write_pages.proofread import PROOFREAD_CONFIG, sentence_split
 from step_7_write_pages.withhold import withheld_ids
 from step_9_site.content import INFO_FILES, WITHHELD_REFERENCE, NavEntry, Site
 from step_9_site.index import index_text
@@ -174,8 +177,8 @@ def run(
     """Build the site into ``docs_dir`` + ``mkdocs_path``; nothing is written if an input fails.
 
     Returns ``published`` (page count), ``labels`` (label pages), ``redirects``, ``written`` /
-    ``removed`` (docs-relative paths; ``mkdocs.yml`` by its file name), ``issues`` and
-    ``issue_counts``.
+    ``removed`` (docs-relative paths; ``mkdocs.yml`` by its file name), ``issues``,
+    ``issue_counts`` and ``unproofread`` (published pages holding text never proofread).
     """
     plan = _load(plan_path or resolve_plan_path(), "plan (step 6)")
     pages = _load(pages_path or resolve_wiki_pages_path(), "written pages (step 7)")["pages"]
@@ -197,6 +200,11 @@ def run(
     for issue in site.issues:
         level = logging.ERROR if issue["issue"] == WITHHELD_REFERENCE else logging.WARNING
         logger.log(level, f"{issue['issue']}: page {issue['page']!r} target {issue['target']!r}")
+    unproofread = ([pid for pid in site.order if sentence_split(pages[pid])[1]]
+                   if PROOFREAD_CONFIG["enabled"] else [])
+    if unproofread:
+        logger.warning(f"{len(unproofread)} published pages hold text that was never proofread "
+                       f"(python -m step_8_review.proofread): {unproofread}")
     result = {
         "published": len(site.order),
         "labels": len(site.labels),
@@ -205,6 +213,7 @@ def run(
         "removed": removed,
         "issues": site.issues,
         "issue_counts": dict(Counter(issue["issue"] for issue in site.issues)),
+        "unproofread": unproofread,
         "docs_dir": str(docs_dir),
         "mkdocs_path": str(mkdocs_path),
     }

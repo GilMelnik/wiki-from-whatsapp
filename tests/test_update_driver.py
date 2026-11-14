@@ -22,10 +22,22 @@ from step_10_update.driver import (
     StepFailed,
 )
 from tests.update_support import PAID_STEPS, World, message, newer_chat, old_chat
-from utils.paths import STEP_1, STEP_2, STEP_3, STEP_4, STEP_5, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_9
+from utils.paths import (
+    STEP_1,
+    STEP_2,
+    STEP_3,
+    STEP_4,
+    STEP_5,
+    STEP_6_ASSIGN,
+    STEP_7,
+    STEP_8,
+    STEP_8_PROOFREAD,
+    STEP_9,
+)
 from utils.step_lease import StepLease
 
-UPDATE_ORDER = [STEP_1, STEP_2, STEP_3, STEP_4, STEP_5, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_9]
+UPDATE_ORDER = [STEP_1, STEP_2, STEP_3, STEP_4, STEP_5, STEP_6_ASSIGN, STEP_7, STEP_8,
+                STEP_8_PROOFREAD, STEP_9]
 
 
 @pytest.fixture
@@ -190,11 +202,12 @@ def test_the_lease_names_the_running_step(world: World) -> None:
 
 def test_after_applied_suggestions_6b_and_7_run_again_before_the_site(world: World) -> None:
     world.run(world.export(newer_chat()), pay=PAID_STEPS, through=STEP_8)
-    assert world.calls == UPDATE_ORDER[:-1]
+    assert world.calls == UPDATE_ORDER[:-2]
     world.write_json(world.node("plan").edited, {"pages": {"new": {}}, "tree": [], "labels": {}})
     world.calls.clear()
     stops = run_to_the_end(world, pay=PAID_STEPS)
-    assert world.calls == [STEP_6_ASSIGN, STEP_7, STEP_9]  # step 8 is not asked again
+    # step 8 is not asked again; proofreading reads the pages step 7 rewrote
+    assert world.calls == [STEP_6_ASSIGN, STEP_7, STEP_8_PROOFREAD, STEP_9]
     assert stops == [STEP_6_ASSIGN]  # its output changed: proposals to look at
 
 

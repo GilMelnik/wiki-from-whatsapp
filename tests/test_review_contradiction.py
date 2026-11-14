@@ -12,7 +12,7 @@ from step_5_aggregate.reviewer.store import GroupsStore
 from step_7_write_pages.run import run as write_pages
 from step_8_review.apply import Applier
 from tests.groups_tool_support import GroupsSetup
-from tests.pages_fixtures import FakeProofreader, FakeWriter
+from tests.pages_fixtures import FakeWriter
 from tests.plan_fixtures import PAGE_IDS, make_plan
 from tests.review_fixtures import corrector, long_article
 from utils.json_io import write_json_file
@@ -38,8 +38,7 @@ def test_a_manual_contradiction_link_survives_step_5(tmp_path: Path,
     pages = Artifact(tmp_path / "wiki_pages.json", tmp_path / "wiki_pages_edited.json")
     write_pages(aggregated_path=resolve(setup.corpus.artifact), plan_path=plan_path,
                 assignments_path=assignments_path, artifact=pages,
-                llm=FakeWriter(respond=long_article), update_llm=FakeWriter("fake-update"),
-                proofread_llm=FakeProofreader())
+                llm=FakeWriter(respond=long_article), update_llm=FakeWriter("fake-update"))
 
     def linker() -> GroupsStore:
         return GroupsStore(setup.graph.node("groups"), setup.graph.node("claims"),
@@ -50,7 +49,7 @@ def test_a_manual_contradiction_link_survives_step_5(tmp_path: Path,
                       aggregated_path=resolve(setup.corpus.artifact),
                       assignments_path=assignments_path,
                       llm=FakeWriter("fake-apply", respond=corrector("פתיח קצר", "שני צדדים")),
-                      proofread_llm=FakeProofreader(), linker=linker)
+                      linker=linker)
     suggestion = {"kind": "contradiction", "proposal": {
         "groups_a": [d1], "groups_b": [c1], "pages": ["agencies", "clinics"],
         "clash": "סותרות", "correction": "להציג את שני הצדדים"}}

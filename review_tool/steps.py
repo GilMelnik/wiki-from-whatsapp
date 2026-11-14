@@ -71,6 +71,10 @@ STEP_SPECS: tuple[StepSpec, ...] = (
         "suggestions", "Step 8 · Review the whole wiki", "step_8_review.run",
         incremental_safe=True, paid=True, review_tool="suggestions",
     ),
+    StepSpec(
+        "proofread", "Step 8b · Proofread the Hebrew", "step_8_review.proofread",
+        incremental_safe=True, paid=True,
+    ),
     StepSpec("site", "Step 9 · Build the site", "step_9_site.run", incremental_safe=True),
 )
 
