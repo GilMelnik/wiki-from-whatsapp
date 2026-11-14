@@ -27,7 +27,8 @@ BODY = (
     "ו־[[nowhere|עמוד חסר]] [^g-00000002][^g-00000003].\n\n- פריט [^g-00000001]\n\n[^g-00000001]: ישן.\n"
 )
 MARK = re.compile(r"\[\^")
-HTML_TAG = re.compile(r"</?[a-zA-Z][^>\n]*>")
+# A tag name, then attributes or the end: a markdown autolink (<name@host>, <https://…>) is not one.
+HTML_TAG = re.compile(r"</?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>\n]*)?/?>")
 MD_LINK = re.compile(r"\]\(([^)\s]+)\)")
 
 
