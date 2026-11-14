@@ -710,6 +710,7 @@
     "overlap_messages": 20,
     "max_gap_days": 62,
     "review_hints": {
+      "threads": "the new and changed conversations (the split, and whether each carries knowledge)",
       "pii": "the new claims (privacy: names, phone numbers, details about people)",
       "entities": "the new entities (people, providers, places)",
       "groups": "the new claim groups (merges and splits)",

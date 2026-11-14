@@ -95,7 +95,7 @@ def test_an_export_already_in_the_updates_folder_keeps_its_stamp(world: World) -
 
 def test_it_stops_at_every_review_point_and_goes_on_when_run_again(world: World) -> None:
     stops = run_to_the_end(world, world.export(newer_chat()), pay=PAID_STEPS)
-    assert stops == [STEP_3, STEP_4, STEP_5, STEP_6_ASSIGN, STEP_8]
+    assert stops == [STEP_2, STEP_3, STEP_4, STEP_5, STEP_6_ASSIGN, STEP_8]
     assert world.calls == UPDATE_ORDER  # no step was redone after a stop
 
 
@@ -115,7 +115,9 @@ def test_through_runs_without_review_stops_up_to_the_step(world: World) -> None:
 
 
 def test_a_paid_step_stops_with_its_estimate_until_it_is_allowed(world: World) -> None:
-    outcome = world.run(world.export(newer_chat()))
+    assert world.run(world.export(newer_chat())).status == STOPPED  # the review after step 2
+    assert world.state()["update"]["stopped"]["kind"] == "review"
+    outcome = world.run()
     assert outcome.status == STOPPED and world.calls == [STEP_1, STEP_2]
     assert "2 calls; about $0.50" in outcome.message
     assert f"--pay {STEP_3}" in outcome.message
@@ -265,7 +267,7 @@ def test_a_failing_estimate_is_recorded_like_a_failing_step(world: World) -> Non
     driver = world.driver()
     driver.estimator = broken
     with pytest.raises(StepFailed, match="no plan yet"):
-        driver.run(world.export(newer_chat()), Options())
+        driver.run(world.export(newer_chat()), Options(no_stops=True))
     assert world.calls == [STEP_1, STEP_2]
     assert world.state()["update"]["failed"]["step"] == STEP_3
 
@@ -277,5 +279,5 @@ def test_through_the_plan_step_is_refused(world: World) -> None:
 
 def test_every_review_point_names_a_served_tool_with_a_hint() -> None:
     tools = {step.spec.review_tool for step in SERVED_STEPS.steps} - {None}
-    assert tools == {"pii", "entities", "groups", "plan", "suggestions"}
+    assert tools == {"threads", "pii", "entities", "groups", "plan", "suggestions"}
     assert tools <= {spec.name for spec in TOOL_SPECS} and tools <= set(UPDATE_CONFIG["review_hints"])

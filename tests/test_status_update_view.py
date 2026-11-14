@@ -54,8 +54,17 @@ def test_no_update_yet(world: World) -> None:
     assert view(world) == {"state": "none"}
 
 
-def test_stopped_before_a_paid_step_with_its_estimate(world: World) -> None:
+def test_stopped_after_step_2_for_the_conversations_review(world: World) -> None:
     world.run(world.export(newer_chat()))
+    answer = view(world)
+    assert [statuses(answer)[key] for key in UPDATE_ORDER[:4]] == ["done", "review", "next", "waiting"]
+    assert answer["stopped"]["kind"] == "review" and answer["stopped"]["review_tool"] == "threads"
+    assert answer["estimate"] is None and answer["command"] == "python -m step_10_update.run"
+
+
+def test_stopped_before_a_paid_step_with_its_estimate(world: World) -> None:
+    world.run(world.export(newer_chat()))  # stops for the review after step 2
+    world.run()
     answer = view(world)
     assert answer["state"] == "in_progress" and answer["export"].endswith("_chat_android.json")
     assert answer["counts"] == {"new": 2, "changed": 0, "missing": 0}
@@ -75,7 +84,8 @@ def test_stopped_before_a_paid_step_with_its_estimate(world: World) -> None:
 
 
 def test_stopped_for_a_review_with_the_tool_to_open(world: World) -> None:
-    world.run(world.export(newer_chat()), pay=frozenset({STEP_3}))
+    world.run(world.export(newer_chat()), pay=frozenset({STEP_3}))  # the review after step 2
+    world.run(pay=frozenset({STEP_3}))
     answer = view(world)
     assert [statuses(answer)[key] for key in UPDATE_ORDER[:5]] == ["done", "done", "review", "next", "waiting"]
     assert answer["stopped"]["kind"] == "review" and answer["stopped"]["review_tool"] == "pii"
@@ -96,7 +106,8 @@ def test_a_failed_step(world: World) -> None:
 
 
 def test_a_running_step_comes_from_the_lease(world: World) -> None:
-    world.run(world.export(newer_chat()))
+    world.run(world.export(newer_chat()))  # stops for the review after step 2
+    world.run()
     lease = StepLease(world.paths.lease)
     with lease.hold():
         lease.announce(STEP_3, "claims", "Step 3 · Extract claims")

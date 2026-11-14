@@ -5,7 +5,8 @@ step registry, ``review_tool.steps.STEP_SPECS`` (the review tool and the update 
 ``step_10_update`` read the same rows):
 
     1. threads     -> conversations (contract C1; only new export messages are placed)
-    2. classify    -> which conversations carry knowledge (C2)
+    2. classify    -> which conversations carry knowledge (C2)   review: threads (the split
+                      and the labels, corrected by hand)
     3. extract     -> claims (C3) + the private audit             review: pii
     4. entities    -> canonical entities                         review: entities
     5. aggregate   -> claim groups (C6)                          review: groups

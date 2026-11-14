@@ -45,7 +45,10 @@ class StepSpec:
 
 STEP_SPECS: tuple[StepSpec, ...] = (
     StepSpec("threads", "Step 1 · Split into conversations", "step_1_threads_split.run", incremental_safe=True),
-    StepSpec("classified", "Step 2 · Classify conversations", "step_2_classify.run", incremental_safe=True),
+    StepSpec(
+        "classified", "Step 2 · Classify conversations", "step_2_classify.run", incremental_safe=True,
+        review_tool="threads",
+    ),
     StepSpec(
         "claims", "Step 3 · Extract claims", "step_3_extract.run", incremental_safe=True,
         paid=True, review_tool="pii",
