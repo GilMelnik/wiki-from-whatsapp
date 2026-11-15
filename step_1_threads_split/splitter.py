@@ -31,7 +31,7 @@ created and never changes, also when later messages join it (``assign_new_messag
 from __future__ import annotations
 
 import bisect
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any
@@ -101,17 +101,22 @@ class ThreadSplitter:
         return self.assign_new_messages([], messages)
 
     def assign_new_messages(
-        self, prior_threads: Sequence[dict[str, Any]], new_messages: Sequence[dict[str, Any]]
+        self,
+        prior_threads: Sequence[dict[str, Any]],
+        new_messages: Sequence[dict[str, Any]],
+        order: Mapping[str, int] | None = None,
     ) -> list[dict[str, Any]]:
         """Add ``new_messages`` (C1 message records) to ``prior_threads`` (C1 threads).
 
         New messages are taken in time order; each joins a prior thread or a thread opened by
         an earlier new message, or opens a thread of its own. Prior threads keep their ids,
-        their messages and their order of messages; a new message is placed by its time. A
-        message whose id is already in a prior thread is skipped. Returns every thread
-        (sorted by start time, then id) as a new list; the inputs are not modified.
+        their messages and their order of messages; a new message is placed by its time.
+        Messages of the same time keep the chat's order: ``order`` (WhatsApp id -> place in
+        the export), else the order they are given in. A message whose id is already in a
+        prior thread is skipped. Returns every thread (sorted by start time, then by the
+        chat place of its first message) as a new list; the inputs are not modified.
         """
-        state = _Timeline(prior_threads)
+        state = _Timeline(prior_threads, order or {})
         fresh = [m for m in new_messages if m["id"] not in state.thread_of]
         fresh.sort(key=lambda m: m["datetime"])
         texts = [embedding_text(m) for m in state.messages.values()]
@@ -147,19 +152,26 @@ def _minutes(earlier: str, later: str) -> float:
 class _Timeline:
     """Messages placed so far: their threads, their time order and the quote index."""
 
-    def __init__(self, threads: Sequence[dict[str, Any]]) -> None:
+    def __init__(self, threads: Sequence[dict[str, Any]], order: Mapping[str, int]) -> None:
         self.messages: dict[str, dict[str, Any]] = {}
         self.thread_of: dict[str, str] = {}
         self.members: dict[str, list[str]] = {}
         self._order: list[tuple[str, int]] = []  # (datetime, sequence number), sorted
-        self._ids: list[str] = []  # wa id per sequence number
+        self._ids: list[str] = []  # wa id per sequence number, in chat order
+        self.sequence: dict[str, int] = {}  # wa id -> sequence number
         self._quotes: dict[tuple[str, str], list[tuple[str, int]]] = {}
-        self._prior: dict[str, tuple[dict[str, Any], list[str]]] = {}
+        placed = [(m, t["thread_id"]) for t in threads for m in t["messages"]]
+        last = len(order)
+        # Sequence numbers follow the chat: time, then the export's place (stable otherwise).
+        placed.sort(key=lambda pair: (pair[0]["datetime"], order.get(pair[0]["id"], last)))
         for thread in threads:
             self.members[thread["thread_id"]] = []
-            for message in thread["messages"]:
-                self._place(message, thread["thread_id"])
-            self._prior[thread["thread_id"]] = (thread, list(self.members[thread["thread_id"]]))
+        for message, thread_id in placed:
+            self._place(message, thread_id)
+        self._prior: dict[str, tuple[dict[str, Any], list[str]]] = {
+            thread["thread_id"]: (thread, list(self.members[thread["thread_id"]]))
+            for thread in threads
+        }
 
     def _place(self, message: dict[str, Any], thread_id: str) -> None:
         wa_id = message["id"]
@@ -178,6 +190,7 @@ class _Timeline:
             members.append(wa_id)
         entry = (moment, len(self._ids))
         bisect.insort(self._order, entry)
+        self.sequence[wa_id] = len(self._ids)
         self._ids.append(wa_id)
         key = quote_key(message["sender"], message.get("content") or "")
         self._quotes.setdefault(key, []).append(entry)
@@ -221,4 +234,4 @@ class _Timeline:
                 records.append(prior)
             elif members:
                 records.append(thread_record(thread_id, [self.messages[m] for m in members]))
-        return sorted(records, key=lambda t: (t["start_time"], t["thread_id"]))
+        return sorted(records, key=lambda t: (t["start_time"], self.sequence[t["messages"][0]["id"]]))

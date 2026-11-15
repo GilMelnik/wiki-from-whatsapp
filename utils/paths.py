@@ -135,6 +135,8 @@ UPDATE_LOG_SUFFIX = "update.log"
 
 # ------------------------------------------------------------------- shared
 BACKUPS_DIR = step_path(SHARED, "backups")
+# The export tool's members file (``--members``): every member id with its raw WhatsApp ids.
+MEMBERS_PATH = step_path(SHARED, "members.json")
 
 
 def resolve(artifact: Artifact) -> Path:

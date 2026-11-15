@@ -58,11 +58,12 @@ class ChatMessages:
         self.available = export_path.is_file()
         records = load_export_messages(export_path) if self.available else []
         self._by_id = {record["id"]: record for record in records}
+        self._place = {record["id"]: place for place, record in enumerate(records)}
 
     def claim_messages(
         self, claim: dict[str, Any], redactions: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        """The claim's supporting and opposing messages in time order, each with ``side`` and
+        """The claim's supporting and opposing messages in chat order, each with ``side`` and
         ``holds``: the numbers of the removed details whose value it contains."""
         found = []
         for side, ids in (("supporting", claim["supporting_message_ids"]), ("opposing", claim["opposing_message_ids"])):
@@ -73,7 +74,7 @@ class ChatMessages:
                 text = message.get("content") or ""
                 marks = [i for i, item in enumerate(redactions) if holds(text, item["type"], item["value"])]
                 found.append({**message, "side": side, "holds": marks})
-        return sorted(found, key=lambda message: message["datetime"])
+        return sorted(found, key=lambda message: self._place[message["id"]])
 
 
 class KnownContacts:

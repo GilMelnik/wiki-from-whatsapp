@@ -53,7 +53,8 @@ EMBEDDING_CONFIG = section("embedding")
 
 
 def load_export_messages(export_path: Path) -> list[dict[str, Any]]:
-    """The C1 records of every export message with content, in export (time) order."""
+    """The C1 records of every export message with content, in export order (time, then the
+    export's own order for messages of the same time: the sort is stable)."""
     if not export_path.is_file():
         raise FileNotFoundError(f"chat export not found: {export_path}")
     entries = json.loads(export_path.read_text(encoding="utf-8"))
@@ -140,7 +141,8 @@ def run(
     if basis:
         threads, touched = _apply_export_changes(basis["threads"], current, set(diff.changed))
         before = {t["thread_id"] for t in threads}
-        threads = splitter.assign_new_messages(threads, [current[i] for i in diff.new])
+        order = {wa_id: place for place, wa_id in enumerate(current)}
+        threads = splitter.assign_new_messages(threads, [current[i] for i in diff.new], order)
         stats["threads_touched"] = touched
         stats["threads_created"] = len({t["thread_id"] for t in threads} - before)
     else:

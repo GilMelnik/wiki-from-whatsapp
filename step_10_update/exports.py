@@ -12,7 +12,10 @@ reactions, ...}`` (``step_1_threads_split.message``). Compared with the current 
 ``check_continuation`` refuses an export that does not continue the input: it must contain
 the input's last messages (``update.overlap_messages``), or cover a later period that starts
 where the input ends (within ``update.max_gap_days``), and a message id both have must be the
-same message (same date, time and sender).
+same message (same date, time and sender). Both must also be of the same kind: an export with
+seconds and member ids (the current export tool) against an input of an older export (times
+in minutes, raw WhatsApp ids) is refused with what to do (``step_10_update.move``, or export
+again with the current tool).
 """
 
 from __future__ import annotations
@@ -25,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from utils.config import section
-from utils.export_dates import parse_android_datetime
+from utils.export_dates import has_seconds, parse_android_datetime
 
 UPDATE_CONFIG = section("update")
 Message = dict[str, Any]
@@ -85,6 +88,8 @@ class ExportDiff:
     new_first: datetime
     new_last: datetime
     overlap_found: bool
+    old_seconds: bool = True
+    new_seconds: bool = True
 
     @property
     def nothing_new(self) -> bool:
@@ -110,11 +115,31 @@ def compare_exports(old: list[Message], new: list[Message]) -> ExportDiff:
         new_first=min(map(message_time, new)),
         new_last=max(map(message_time, new)),
         overlap_found=all(i in new_by_id for i in last_ids),
+        old_seconds=with_seconds(old),
+        new_seconds=with_seconds(new),
     )
+
+
+def with_seconds(messages: list[Message]) -> bool:
+    """Whether an export was made by the export tool that writes seconds (and member ids)."""
+    return any(has_seconds(m["time"]) for m in messages)
 
 
 def check_continuation(diff: ExportDiff) -> None:
     """Raise ``NotAContinuation`` unless the export continues the input (module docstring)."""
+    if diff.old_seconds and not diff.new_seconds:
+        raise NotAContinuation(
+            "the new export has times in minutes and raw WhatsApp ids (an export tool from before "
+            "2026-11-15), but the pipeline input has exact times and member ids. Export again "
+            "with the current export tool and its --members file. Nothing was changed."
+        )
+    if diff.new_seconds and not diff.old_seconds:
+        raise NotAContinuation(
+            "the new export has exact times and member ids, but the pipeline input is still on an "
+            "older export (times in minutes, raw WhatsApp ids). Move the data to the new export "
+            "first: `python -m step_10_update.move <export> --dry-run`, then without --dry-run. "
+            "Nothing was changed."
+        )
     if diff.conflicting:
         raise NotAContinuation(
             f"{len(diff.conflicting)} message ids of the new export belong to other messages in "

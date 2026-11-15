@@ -1,12 +1,13 @@
 """Chat-export messages as the C1 message records step 1 writes.
 
-The Android crypt15 export is a list of ``{id, date "DD/MM/YYYY", time "HH:MM", sender
-{user_name, phone}, text, quote {sender, text} | null, reactions [{emoji, senders}], ...}``
-in chronological order. ``message_record`` turns one entry into the C1 message
-``{id, datetime, sender, content, quote?, reactions?}`` (senders are ``user_name`` strings,
-as the old threads carried them). A message whose content is empty once WhatsApp's markers
-are removed (a photo without a caption, a deleted message) carries nothing for the wiki and
-is not part of any thread.
+The Android crypt15 export is a list of ``{id, date "DD/MM/YYYY", time "HH:MM:SS", sender
+{user_name, phone}, text, quote {sender, text} | null, reactions [{emoji, senders}],
+mentions, ...}`` in the phone database's order (exports made before the export tool wrote
+seconds have "HH:MM"). ``message_record`` turns one entry into the C1 message
+``{id, datetime, sender, content, quote?, reactions?}`` (senders are ``user_name`` strings:
+member ids). A message whose content is empty once WhatsApp's markers are removed (a photo
+without a caption, a deleted message) carries nothing for the wiki and is not part of any
+thread.
 """
 
 from __future__ import annotations
