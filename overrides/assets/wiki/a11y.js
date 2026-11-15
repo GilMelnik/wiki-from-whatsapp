@@ -12,6 +12,8 @@
 
    Material fixes: its menu button (a label of a hidden checkbox) opens with Enter and Space,
    says whether it is open and moves the focus into the drawer it opens; Esc closes the drawer.
+   While the drawer is open on a narrow screen it is modal: the rest of the page, hidden under
+   it and the overlay, is inert, so Tab never lands on something the reader cannot see.
    Its search dialog gets the name of its search field.
    A table wider than its box scrolls inside it: it takes the focus, so the arrow keys scroll it. */
 (function () {
@@ -203,6 +205,29 @@
 
   drawerMode.addEventListener("change", navLabels);
 
+  // The open drawer is modal: every sibling of the drawer and of each of its ancestors becomes
+  // inert. Not the overlay (a click on it closes the drawer) nor Material's hidden checkboxes.
+  var madeInert = [];
+
+  function drawerModal() {
+    var drawer = document.getElementById("__drawer");
+    var sidebar = document.querySelector(".md-sidebar--primary");
+    madeInert.forEach(function (element) {
+      element.inert = false;
+    });
+    madeInert = [];
+    if (!drawer || !sidebar || !drawer.checked || !drawerMode.matches) return;
+    for (var node = sidebar; node !== document.body; node = node.parentElement) {
+      Array.prototype.forEach.call(node.parentElement.children, function (sibling) {
+        if (sibling === node || sibling.inert || sibling.matches(".md-overlay, input, script, style, link")) return;
+        sibling.inert = true;
+        madeInert.push(sibling);
+      });
+    }
+  }
+
+  drawerMode.addEventListener("change", drawerModal);
+
   // The menu exists once the body is parsed; Material wraps the tables on its document$, which
   // fires after that and again after every page change when instant navigation is on.
   function onPage() {
@@ -230,6 +255,8 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
+    var drawer = document.getElementById("__drawer");
+    if (drawer) drawer.addEventListener("change", drawerModal);
     if (window.document$) window.document$.subscribe(onPage);
     else onPage();
   });
