@@ -12,8 +12,10 @@ one), then writes:
 - ``docs/<labels_dir>/<label_id>.md``: one page per label that a published page carries;
 - ``docs/index.md``: the home page, an intro with the months of the first and the last message,
   then the plan's tree with each page's one-line description;
-- ``docs/about.md`` ("how this wiki was made", linked only from the home page) and
-  ``docs/terms.md`` (the terms, linked from the banner and the footer); neither is in the nav;
+- ``docs/about.md`` ("how this wiki was made", linked only from the home page),
+  ``docs/terms.md`` (the terms, linked from the banner and the footer) and
+  ``docs/accessibility.md`` (the accessibility statement, linked from the header, its menu and
+  the footer); none is in the nav;
 - ``docs/<agent_markdown.dir>/…/index.md`` (a markdown twin of every content page, shipped by the
   hook ``agent_hook.py``) and ``docs/llms.txt``: the site for AI agents (``agent_pages.py``);
 - a redirect stub at the old id of every merged page / label;
@@ -47,6 +49,7 @@ from step_8_review.proofreader import PROOFREAD_CONFIG, sentence_split
 from step_9_site import agent_hook, hebrew_search
 from step_9_site.agent_pages import AgentPages
 from step_9_site.content import INFO_FILES, WITHHELD_REFERENCE, NavEntry, Site
+from step_9_site.info_pages import STATEMENT_CONFIG
 from step_9_site.index import index_text
 from step_9_site.rtl import HEBREW_CSS
 from utils.config import PROJECT_ROOT, section
@@ -103,6 +106,7 @@ def build_config(
             "refs_toggle": SITE_CONFIG["refs_toggle"],
             "terms_path": SITE_CONFIG["terms"]["file"].removesuffix(".md") + "/",
             "terms_footer_text": SITE_CONFIG["terms"]["footer_link_text"],
+            "accessibility": {**STATEMENT_CONFIG, "path": STATEMENT_CONFIG["file"].removesuffix(".md") + "/"},
             "agent_markdown": {key: AGENT_CONFIG[key] for key in ("dir", "twin_file")},
         },
         "extra_css": [HEBREW_CSS],

@@ -1,9 +1,11 @@
-"""The two pages step 9 adds that are not wiki content: the terms page and the about page.
+"""The pages step 9 adds that are not wiki content: the terms page, the accessibility statement and
+the about page.
 
-Both are plain Hebrew markdown. The terms text lives in a source file of the repository
-(``site.terms.source``) that is copied as it is; the about page is generated from ``site.about``,
-and the model of every step is read from ``config.json`` (the dotted paths in each step's
-``models``), so the page stays true when a model changes.
+All are plain Hebrew markdown. The terms text and the statement live in source files of the
+repository (``site.terms.source``, ``site.accessibility.source``) that are copied with their
+placeholders filled (the contact address, the statement's date); the about page is generated
+from ``site.about``, and the model of every step is read from ``config.json`` (the dotted paths
+in each step's ``models``), so the page stays true when a model changes.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from utils.config import PROJECT_ROOT, ROOT_CONFIG, section
 SITE_CONFIG = section("site")
 ABOUT_CONFIG = SITE_CONFIG["about"]
 TERMS_CONFIG = SITE_CONFIG["terms"]
+STATEMENT_CONFIG = SITE_CONFIG["accessibility"]
 
 
 def config_value(path: str) -> Any:
@@ -27,14 +30,24 @@ def config_value(path: str) -> Any:
     return value
 
 
-def terms_body() -> str:
-    """The terms text from its source file, with ``{contact_email}`` filled from
-    ``site.contact_email`` (the address lives in config.json only)."""
-    source = PROJECT_ROOT / TERMS_CONFIG["source"]
+def _source_text(page: dict[str, Any]) -> str:
+    """A page's text from its source file (``page["source"]``), with ``{contact_email}`` filled
+    from ``site.contact_email`` (the address lives in config.json only)."""
+    source = PROJECT_ROOT / page["source"]
     if not source.is_file():
-        raise FileNotFoundError(f"the terms page source is missing: {source}")
+        raise FileNotFoundError(f"the source of the page {page['title']!r} is missing: {source}")
     text = source.read_text(encoding="utf-8")
-    return text.replace(TERMS_CONFIG["contact_placeholder"], SITE_CONFIG["contact_email"])
+    return text.replace(SITE_CONFIG["contact_placeholder"], SITE_CONFIG["contact_email"])
+
+
+def terms_body() -> str:
+    """The terms page."""
+    return _source_text(TERMS_CONFIG)
+
+
+def statement_body() -> str:
+    """The accessibility statement, dated ``site.accessibility.updated``."""
+    return _source_text(STATEMENT_CONFIG).replace(STATEMENT_CONFIG["updated_placeholder"], STATEMENT_CONFIG["updated"])
 
 
 def _step_lines(number: int, step: dict[str, Any]) -> list[str]:

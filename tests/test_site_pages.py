@@ -5,9 +5,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
-import subprocess
-import sys
 from html import unescape
 from pathlib import Path
 
@@ -17,7 +14,7 @@ import yaml
 from step_9_site.info_pages import about_body, config_value
 from step_9_site.run import build_config
 from step_6_plan import operations
-from tests.site_fixtures import make_page, make_site_plan, run_site
+from tests.site_fixtures import build_html, make_page, make_site_plan, run_site
 from utils.config import PROJECT_ROOT, ROOT_CONFIG, section
 
 SITE = section("site")
@@ -40,27 +37,7 @@ def built_site(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "agencies": make_page(plan, "agencies", BODY, labels=("usa",)),
         "clinics": make_page(plan, "clinics", "טקסט.\n"),
     }
-    shutil.copytree(
-        PROJECT_ROOT / "docs" / "stylesheets", tmp_path / "docs" / "stylesheets"
-    )
-    run_site(tmp_path, plan, pages)
-    built = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "mkdocs",
-            "build",
-            "--strict",
-            "-f",
-            str(tmp_path / "mkdocs.yml"),
-            "-d",
-            str(tmp_path / "out"),
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert built.returncode == 0, built.stderr
+    build_html(tmp_path, plan, pages)
     return tmp_path
 
 
@@ -123,14 +100,14 @@ def test_disclaimer_is_in_the_html_of_every_page(built_site: Path) -> None:
         assert APPROVED_BANNER in html, name
         # Material's own info admonition, inside md-typeset (the theme styles it only there)
         box = re.search(
-            r'<div class="wiki-disclaimer md-grid md-typeset">\s*<div class="admonition info" role="note">\s*'
+            r'<aside class="wiki-disclaimer md-grid md-typeset" aria-label="([^"]*)">\s*<div class="admonition info" role="note">\s*'
             r'<p class="admonition-title">([^<]*)</p>\s*<p>(.*?)</p>\s*</div>',
             html,
             re.S,
         )
         assert box, name
-        title, banner = box.groups()
-        assert title == SITE["disclaimer"]["label"] and not title.endswith(":"), name
+        name_of_aside, title, banner = box.groups()
+        assert name_of_aside == title == SITE["disclaimer"]["label"] and not title.endswith(":"), name
         assert APPROVED_BANNER in banner, name
         # the ending: only the terms words link the terms page, then the address as a mail link
         terms_href = (
@@ -165,9 +142,9 @@ def test_terms_page_carries_the_contact_address_and_is_linked_from_banner_and_fo
     assert SITE["terms"]["title"] in html
     # Markdown writes a mail link as character references; the banner no longer carries one
     assert f'href="mailto:{SITE["contact_email"]}"' in unescape(html)
-    assert SITE["terms"]["contact_placeholder"] not in html
+    assert SITE["contact_placeholder"] not in html
     source = (PROJECT_ROOT / SITE["terms"]["source"]).read_text(encoding="utf-8")
-    assert SITE["terms"]["contact_placeholder"] in source and SITE["contact_email"] not in source
+    assert SITE["contact_placeholder"] in source and SITE["contact_email"] not in source
     footer_link = re.compile(
         r'<a href="(?:\.\./|/)*terms/">' + re.escape(SITE["terms"]["footer_link_text"])
     )

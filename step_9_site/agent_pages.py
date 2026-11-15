@@ -1,8 +1,8 @@
 """The site as plain markdown for AI agents that fetch it over HTTP: a twin of every page and ``llms.txt``.
 
 An agent that reads the Material HTML pays for navigation, scripts and markup around the text.
-Step 9 therefore also publishes, for every content page (home, wiki pages, label pages, the about
-and terms pages), a markdown twin at ``<page url>index.md`` (``/georgia/`` -> ``/georgia/index.md``)
+Step 9 therefore also publishes, for every content page (home, wiki pages, label pages, the about,
+terms and accessibility pages), a markdown twin at ``<page url>index.md`` (``/georgia/`` -> ``/georgia/index.md``)
 and an ``/llms.txt`` that lists them (https://llmstxt.org). The twin of a wiki page is built from
 ``Site.bodies``, the very text that ``wiki_index.json`` (and so the MCP ``get_page``) holds as
 ``text``; only two things are done to it: wiki links become absolute links to the twins, and the
@@ -23,8 +23,18 @@ from typing import Any
 from urllib.parse import urljoin
 
 from step_7_write_pages.checks import CITATION
-from step_9_site.content import ABOUT_CONFIG, ABOUT_FILE, HOME_FILE, TERMS_CONFIG, TERMS_FILE, Site, label_file, page_file
-from step_9_site.info_pages import about_body, terms_body
+from step_9_site.content import (
+    ABOUT_CONFIG,
+    ABOUT_FILE,
+    HOME_FILE,
+    STATEMENT_FILE,
+    TERMS_CONFIG,
+    TERMS_FILE,
+    Site,
+    label_file,
+    page_file,
+)
+from step_9_site.info_pages import STATEMENT_CONFIG, about_body, statement_body, terms_body
 from utils.config import section
 
 SITE_CONFIG = section("site")
@@ -114,6 +124,7 @@ class AgentPages:
             HOME_FILE: self._home(),
             ABOUT_FILE: self._plain(ABOUT_CONFIG["title"], ABOUT_FILE, about_body()),
             TERMS_FILE: self._plain(TERMS_CONFIG["title"], TERMS_FILE, terms_body()),
+            STATEMENT_FILE: self._plain(STATEMENT_CONFIG["title"], STATEMENT_FILE, statement_body()),
             **{page_file(page_id): self._wiki_page(page_id) for page_id in site.order},
             **{label_file(label_id): self._label_page(label_id) for label_id in site.labels},
         }
@@ -186,7 +197,11 @@ class AgentPages:
             lines += ["", f"## {LLMS_CONFIG['optional_heading']}"]
             for kind, items in by_kind.items():
                 lines += ["", f"### {kind_titles.get(kind, kind)}", "", *items]
-        about = [(ABOUT_CONFIG["title"], ABOUT_FILE), (TERMS_CONFIG["title"], TERMS_FILE)]
+        about = [
+            (ABOUT_CONFIG["title"], ABOUT_FILE),
+            (TERMS_CONFIG["title"], TERMS_FILE),
+            (STATEMENT_CONFIG["title"], STATEMENT_FILE),
+        ]
         info = [f"- [{title}]({twin_url(docs_file)})" for title, docs_file in about]
         return [*lines, "", f"## {LLMS_CONFIG['about_heading']}", "", *info]
 

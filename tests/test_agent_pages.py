@@ -5,9 +5,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -16,7 +13,7 @@ import yaml
 from step_6_plan import operations
 from step_9_site.agent_pages import disclaimer_line, plain_admonitions, strip_marks, twin_docs_path, twin_url
 from step_9_site.run import build_config
-from tests.site_fixtures import make_page, make_site_plan, run_site
+from tests.site_fixtures import build_html, make_page, make_site_plan
 from utils.config import PROJECT_ROOT, section
 
 SITE = section("site")
@@ -41,11 +38,7 @@ def built(tmp_path_factory: pytest.TempPathFactory) -> Path:
         "agencies": make_page(plan, "agencies", BODY, labels=("usa",)),
         "clinics": make_page(plan, "clinics", "טקסט.\n"),
     }
-    shutil.copytree(PROJECT_ROOT / "docs" / "stylesheets", tmp_path / "docs" / "stylesheets")
-    run_site(tmp_path, plan, pages)
-    command = [sys.executable, "-m", "mkdocs", "build", "--strict", "-f", str(tmp_path / "mkdocs.yml"), "-d"]
-    built_site = subprocess.run([*command, str(tmp_path / "out")], capture_output=True, text=True, check=False)
-    assert built_site.returncode == 0, built_site.stderr
+    build_html(tmp_path, plan, pages)
     return tmp_path
 
 
@@ -90,6 +83,7 @@ def test_twins_exist_for_every_page_and_only_for_pages(built: Path) -> None:
         "index.md",
         "about/index.md",
         "terms/index.md",
+        "accessibility/index.md",
         "agencies/index.md",
         "clinics/index.md",
         "labels/usa/index.md",
@@ -184,7 +178,7 @@ def test_llms_txt_lists_every_page_once_with_a_working_link(built: Path) -> None
     assert f"{BASE}mcp" in text
     urls = [url for line in lines if line.startswith("- [") for url in MD_LINK.findall(line)]
     assert len(urls) == len(set(urls))
-    expected = {twin_url(f"{name}.md") for name in ("agencies", "clinics", "labels/usa", "about", "terms")}
+    expected = {twin_url(f"{name}.md") for name in ("agencies", "clinics", "labels/usa", "about", "terms", "accessibility")}
     assert expected <= set(urls)
     assert twin_url("costs.md") not in urls  # a redirect stub is not a page
     for url in urls:
@@ -192,7 +186,10 @@ def test_llms_txt_lists_every_page_once_with_a_working_link(built: Path) -> None
     index = json.loads((built / "docs" / "wiki_index.json").read_text(encoding="utf-8"))
     for page in index["pages"]:
         assert f"]({BASE}{page['id']}/index.md): {page['description']}" in text
-    assert text.rstrip().splitlines()[-1] == f"- [{SITE['terms']['title']}]({twin_url('terms.md')})"
+    assert text.rstrip().splitlines()[-2:] == [
+        f"- [{SITE['terms']['title']}]({twin_url('terms.md')})",
+        f"- [{SITE['accessibility']['title']}]({twin_url('accessibility.md')})",
+    ]
     assert text.index(f"## {AGENT['llms']['about_heading']}") > text.index(f"({BASE}clinics/index.md)")
 
 

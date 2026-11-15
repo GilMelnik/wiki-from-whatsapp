@@ -1,31 +1,37 @@
 {% extends "base.html" %}
 
 {#- Everything the reader sees on top of Material: the disclaimer, the references toggle, the
-    footer lines (terms link, support line). The wording and the settings come from config.json (`site`). -#}
+    footer lines (terms and accessibility statement links, support line); the accessibility button
+    and its menu are in partials/header.html. The wording and the settings come from config.json
+    (`site`). a11y.js is loaded in the head so that the reader's settings apply before the first
+    paint. -#}
 
 {% block extrahead %}
   <link rel="stylesheet" href="{{ 'assets/wiki/wiki.css' | url }}">
+  <link rel="stylesheet" href="{{ 'assets/wiki/a11y.css' | url }}">
   {% if page and page.meta and page.meta.markdown_twin %}<link rel="alternate" type="text/markdown" href="{{ page.canonical_url }}{{ page.meta.markdown_twin }}">{% endif %}
   <script src="{{ 'assets/wiki/refs-toggle.js' | url }}" data-storage-key="{{ config.extra.refs_toggle.storage_key | e }}"></script>
+  {% set a11y = config.extra.accessibility %}
+  <script src="{{ 'assets/wiki/a11y.js' | url }}" data-storage-key="{{ a11y.storage_key | e }}" data-text-sizes='{{ a11y.text_sizes | tojson }}' data-toggles='{{ a11y.toggles | tojson }}'></script>
 {% endblock %}
 
 {#- The disclaimer in Material's own info admonition (what `!!! info "title"` renders), which the
     theme styles only inside `md-typeset`. After the text: the agreement sentence, where only the
     words that stand for `{terms}` link the terms page, and the contact sentence, where `{email}`
-    is the address as a mail link. -#}
+    is the address as a mail link. An aside, so it is a landmark of its own. -#}
 {% block hero %}
   {% set disclaimer = config.extra.disclaimer %}
   {% set email = config.extra.contact_email %}
   {% set agreement = disclaimer.agreement.split("{terms}") %}
   {% set contact = disclaimer.contact.split("{email}") %}
-  <div class="wiki-disclaimer md-grid md-typeset">
+  <aside class="wiki-disclaimer md-grid md-typeset" aria-label="{{ disclaimer.label | e }}">
     <div class="admonition info" role="note">
       <p class="admonition-title">{{ disclaimer.label | e }}</p>
       <p>{{ disclaimer.text | e }}
         {{ agreement[0] | e }}<a href="{{ config.extra.terms_path | url }}">{{ disclaimer.terms_link_text | e }}</a>{{ agreement[1] | e }}
         {{ contact[0] | e }}<a href="mailto:{{ email | e }}">{{ email | e }}</a>{{ contact[1] | e }}</p>
     </div>
-  </div>
+  </aside>
 {% endblock %}
 
 {#- Only wiki pages carry claims in their front matter: they are the pages with references. -#}
@@ -43,10 +49,17 @@
   {{ super() }}
 {% endblock %}
 
-{#- Two quiet lines above the footer: the terms link, and right under it the support line. -#}
+{#- Material's footer (partials/footer.html without the page links, which the site does not turn
+    on), opened by two quiet lines: the terms and accessibility statement links, and right under
+    them the support line. Inside the footer element, so they are in its landmark. -#}
 {% block footer %}
+  <footer class="md-footer">
   <div class="wiki-footer-lines">
-    <p><a href="{{ config.extra.terms_path | url }}">{{ config.extra.terms_footer_text | e }}</a></p>
+    <p>
+      <a href="{{ config.extra.terms_path | url }}">{{ config.extra.terms_footer_text | e }}</a>
+      <span aria-hidden="true">·</span>
+      <a href="{{ config.extra.accessibility.path | url }}">{{ config.extra.accessibility.title | e }}</a>
+    </p>
     {% if config.extra.coffee_url %}
       <p>
         {{ config.extra.coffee_text | e }}
@@ -54,5 +67,10 @@
       </p>
     {% endif %}
   </div>
-  {{ super() }}
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      {% include "partials/copyright.html" %}
+    </div>
+  </div>
+  </footer>
 {% endblock %}
