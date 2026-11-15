@@ -2,19 +2,27 @@
 
 Thread messages carry ``{id, datetime, sender, content}`` and, once the C1 threads land,
 optionally ``quote`` / ``reactions``. ``load_export_index`` + ``with_export`` fill in the
-missing quote and reactions from the chat export, joined by WhatsApp message id, so every
+missing quote, reactions and tags from the chat export, joined by WhatsApp message id, so every
 consumer sees one normalized message shape:
-``quote = {sender, text} | None`` and ``reactions = [{emoji, senders}]`` (senders are the
-private identity strings of ``person_key``).
+``quote = {sender, text, mentions?} | None``, ``reactions = [{emoji, senders}]`` (senders are
+the private identity strings of ``person_key``) and ``mentions = [{tag, member}]``: the group
+members the message tags. A tag is ``@<tag>`` in the text (the digits WhatsApp writes) and
+``member`` is the tagged member's id, the same string ``person_key`` gives for their messages.
+A quote's ``mentions`` are the tags of the export found in the quoted text (only when there is
+one).
 
 ``render_thread_for_llm`` shows a thread to a model without identities: messages are numbered
-``[1]``, ``[2]``, ... and speakers are per-thread aliases. The labels come from
-``config.json`` ``extract.render``.
+``[1]``, ``[2]``, ... and speakers are per-thread aliases. A tag is shown as ``@<public name>``
+when the member is a provider (``providers``: member id -> public name, the owner's table of
+``step_3_extract.tagged``), else as ``@<the member's alias>``; no raw number reaches the model.
+The labels come from ``config.json`` ``extract.render``.
 """
 
 from __future__ import annotations
 
 import json
+import re
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +32,8 @@ from utils.reactions import summarize_reactions
 
 DEFAULT_THREADS_PATH = resolve_threads_path()
 RENDER_CONFIG = section("extract")["render"]
+# A tag as WhatsApp writes it in a message: "@" and the digits of the tagged member.
+TAG_PATTERN = re.compile(r"@(\d+)")
 
 
 def person_key(person: Any) -> str:
@@ -51,13 +61,33 @@ def messages_period(threads: dict[str, Any]) -> tuple[str, str]:
     return min(moments), max(moments)
 
 
-def _normalize_quote(quote: Any) -> dict[str, str] | None:
+def _normalize_mentions(mentions: Any) -> list[dict[str, str]]:
+    out = []
+    for mention in mentions or []:
+        if isinstance(mention, dict) and mention.get("tag") and mention.get("member"):
+            out.append({"tag": str(mention["tag"]), "member": str(mention["member"])})
+    return out
+
+
+def _normalize_quote(
+    quote: Any, tags: Mapping[str, str] | None = None
+) -> dict[str, Any] | None:
+    """``{sender, text, mentions?}``; ``mentions`` are kept when the quote has them, else found
+    in its text through ``tags`` (tag -> member id of the export)."""
     if not isinstance(quote, dict):
         return None
     text = str(quote.get("text") or "").strip()
     if not text:
         return None
-    return {"sender": person_key(quote.get("sender")), "text": text}
+    normalized: dict[str, Any] = {"sender": person_key(quote.get("sender")), "text": text}
+    mentions = _normalize_mentions(quote.get("mentions")) or [
+        {"tag": tag, "member": tags[tag]}
+        for tag in dict.fromkeys(TAG_PATTERN.findall(text))
+        if tags and tag in tags
+    ]
+    if mentions:
+        normalized["mentions"] = mentions
+    return normalized
 
 
 def _normalize_reactions(reactions: Any) -> list[dict[str, Any]]:
@@ -71,7 +101,7 @@ def _normalize_reactions(reactions: Any) -> list[dict[str, Any]]:
 
 
 def load_export_index(path: Path | str) -> dict[str, dict[str, Any]]:
-    """WhatsApp id -> ``{quote, reactions}`` (normalized) from a chat export list."""
+    """WhatsApp id -> ``{quote, reactions, mentions}`` (normalized) from a chat export list."""
 
     export_path = Path(path)
     if not export_path.is_file():
@@ -84,11 +114,18 @@ def load_export_index(path: Path | str) -> dict[str, dict[str, Any]]:
 
 
 def export_index(messages: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """WhatsApp id -> ``{quote, reactions}`` (normalized) of a chat export's messages."""
+    """WhatsApp id -> ``{quote, reactions, mentions}`` (normalized) of a chat export's
+    messages; a quote's tags are read through every tag the export lists."""
+    tags = {
+        mention["tag"]: mention["member"]
+        for m in messages
+        for mention in _normalize_mentions(m.get("mentions"))
+    }
     return {
         str(m["id"]): {
-            "quote": _normalize_quote(m.get("quote")),
+            "quote": _normalize_quote(m.get("quote"), tags),
             "reactions": _normalize_reactions(m.get("reactions")),
+            "mentions": _normalize_mentions(m.get("mentions")),
         }
         for m in messages
         if m.get("id")
@@ -98,7 +135,8 @@ def export_index(messages: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 def with_export(
     thread: dict[str, Any], export_index: dict[str, dict[str, Any]] | None
 ) -> dict[str, Any]:
-    """A copy of ``thread`` whose messages all carry normalized ``quote`` and ``reactions``.
+    """A copy of ``thread`` whose messages all carry normalized ``quote``, ``reactions`` and
+    ``mentions``.
 
     Values already on a message win; missing ones come from ``export_index`` (``None`` means
     the threads carry them inline and nothing is joined).
@@ -114,8 +152,17 @@ def with_export(
         merged["reactions"] = _normalize_reactions(
             message["reactions"] if "reactions" in message else joined.get("reactions")
         )
+        merged["mentions"] = _normalize_mentions(
+            message["mentions"] if "mentions" in message else joined.get("mentions")
+        )
         messages.append(merged)
     return {**thread, "messages": messages}
+
+
+def message_tags(message: dict[str, Any]) -> list[dict[str, str]]:
+    """Every tag of a (``with_export``) message: its own, then those of its quote."""
+    quote = message.get("quote") or {}
+    return [*(message.get("mentions") or []), *(quote.get("mentions") or [])]
 
 
 def _squash(text: str) -> str:
@@ -132,7 +179,10 @@ def format_reactions_for_llm(reactions: list[dict[str, Any]] | None) -> str:
 
 
 def render_thread_for_llm(
-    thread: dict[str, Any], *, new_ids: frozenset[str] = frozenset()
+    thread: dict[str, Any],
+    *,
+    new_ids: frozenset[str] = frozenset(),
+    providers: Mapping[str, str] | None = None,
 ) -> tuple[str, list[str]]:
     """Render a thread as anonymized numbered text; return it with the number -> id map.
 
@@ -141,15 +191,31 @@ def render_thread_for_llm(
     ``refs[n - 1]`` is the WhatsApp id of message ``[n]``. A reply shows ``↩[k]`` when the
     quoted message is message ``k`` of this thread, else ``↩«<alias>: quoted text»``
     (shortened to ``quote_max_chars``). Messages in ``new_ids`` get the new-message marker.
+    A tag listed in the message's (or its quote's) ``mentions`` is shown as ``@<public name>``
+    when ``providers`` names the member, else as ``@<alias>``: the alias the member has in
+    this thread, or the next one, which they keep if they speak later. Any other ``@<digits>``
+    stays as it is.
     """
 
     aliases: dict[str, str] = {}
+    names = providers or {}
 
     def alias(person: Any) -> str:
         key = person_key(person)
         if key not in aliases:
             aliases[key] = RENDER_CONFIG["alias"].format(n=len(aliases) + 1)
         return aliases[key]
+
+    def shown(text: str, mentions: list[dict[str, str]]) -> str:
+        members = {mention["tag"]: mention["member"] for mention in mentions}
+
+        def label(match: re.Match[str]) -> str:
+            member = members.get(match.group(1))
+            if member is None:
+                return match.group(0)
+            return f"@{names.get(member) or alias(member)}"
+
+        return TAG_PATTERN.sub(label, text) if members else text
 
     lines: list[str] = []
     refs: list[str] = []
@@ -180,9 +246,12 @@ def render_thread_for_llm(
             if target is not None:
                 head += f" {reply}[{target}]"
             else:
-                shown = wanted if len(wanted) <= limit else wanted[:limit].rstrip() + "…"
-                head += f" {reply}«{alias(quote['sender'])}: {shown}»"
-        lines.append(f"{head}: {content}{format_reactions_for_llm(message.get('reactions'))}")
+                quoted = alias(quote["sender"])
+                text = shown(wanted, quote.get("mentions") or [])
+                text = text if len(text) <= limit else text[:limit].rstrip() + "…"
+                head += f" {reply}«{quoted}: {text}»"
+        body = shown(content, message.get("mentions") or [])
+        lines.append(f"{head}: {body}{format_reactions_for_llm(message.get('reactions'))}")
         refs.append(str(message.get("id")))
         earlier.append((number, sender, _squash(content)))
 

@@ -98,6 +98,9 @@ ORIGINAL_CLAIMS_PATH = CLAIMS.original
 # --------------------------------------------------------------- step 3 extract
 AUDIT_DIR = step_path(STEP_3, "audit")
 AUDIT_PATH = AUDIT_DIR / "claims_audit.json"
+# The owner's table of tagged group members: who is a provider, under which public name
+# (private, hand-made in the review site's Tagged members page; ``step_3_extract.tagged``).
+TAGGED_MEMBERS_PATH = step_path(STEP_3, "tagged_members.json")
 
 # -------------------------------------------------------------- step 4 entities
 ENTITIES_SEED_PATH = step_path(STEP_4, "entities_seed.json")

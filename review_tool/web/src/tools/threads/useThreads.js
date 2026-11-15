@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { createApi, MESSAGE_VIEWS, useResource, useStoredState } from "@shell";
+import { createApi, MESSAGE_VIEWS, takeLinkParam, useResource, useStoredState } from "@shell";
 import { addRange, CLASSIFIED_KEY, DEFAULT_SEARCH, extraParams, listParams, MODES, TOOL_ID } from "./threads.js";
 
 // The conversations tool's server data and what the page remembers: the mode (all
@@ -8,9 +8,11 @@ import { addRange, CLASSIFIED_KEY, DEFAULT_SEARCH, extraParams, listParams, MODE
 // loaded on request: whole conversations to keep in view and stretches of the chat shown as
 // context. The knowledge labels come with the list rows and, for the opened conversation, on
 // their own; a conversation labelled while a filter is on stays in the list until the search
-// or the filter changes (`keepInList`), so labelling never moves the owner's place.
+// or the filter changes (`keepInList`), so labelling never moves the owner's place. A link
+// `/threads?thread=<id>` (from another tool) opens that conversation among all of them.
 
 export const api = createApi(TOOL_ID);
+const LINK_PARAM = "thread";
 const NO_EXTRA = { include: [], context: [] };
 
 export function useThreads(tool) {
@@ -20,6 +22,12 @@ export function useThreads(tool) {
   const [view, setView] = useStoredState(TOOL_ID, "view", MESSAGE_VIEWS.conversation);
   const [search, setSearch] = useStoredState(TOOL_ID, "search", DEFAULT_SEARCH);
   const [selectedId, setSelectedId] = useStoredState(TOOL_ID, "selected", null);
+  useEffect(() => {
+    const linked = takeLinkParam(LINK_PARAM);
+    if (!linked) return;
+    setMode(MODES.all);
+    setSelectedId(linked);
+  }, []);
 
   const summary = useResource(() => api.get("/summary"), [], { watch });
   const ready = summary.data?.state === "ready";

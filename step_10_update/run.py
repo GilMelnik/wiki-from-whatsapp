@@ -30,6 +30,7 @@ import argparse
 import random
 import sys
 from collections.abc import Sequence
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -39,8 +40,9 @@ from review_tool.steps import SERVED_STEPS
 from step_10_update.driver import FAILED, Options, Outcome, StepFailed, UpdateDriver
 from step_10_update.estimate import Estimator
 from step_10_update.server import ReviewServerCheck
+from step_3_extract.tagged import waiting_members
 from utils.logging_setup import setup_step_logging
-from utils.paths import STEP_10
+from utils.paths import CHAT_ANDROID_PATH, STEP_3, STEP_10, TAGGED_MEMBERS_PATH
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -63,8 +65,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     logger = setup_step_logging(STEP_10)
     random.seed(0)
     np.random.seed(0)
-    driver = UpdateDriver(SERVED_STEPS.steps, GRAPH, estimator=Estimator(),
-                          server_check=ReviewServerCheck(), logger=logger)
+    driver = UpdateDriver(
+        SERVED_STEPS.steps, GRAPH, estimator=Estimator(), server_check=ReviewServerCheck(),
+        waiting={SERVED_STEPS.step(STEP_3).spec.review_before:
+                 partial(waiting_members, CHAT_ANDROID_PATH, TAGGED_MEMBERS_PATH)},
+        logger=logger,
+    )
     options = Options(pay=frozenset(args.pay), through=args.through, no_stops=args.no_stops,
                       drop_missing=args.drop_missing)
     if args.plan:

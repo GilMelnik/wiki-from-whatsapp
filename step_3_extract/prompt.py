@@ -85,6 +85,7 @@ UPDATE_SCHEMA: dict[str, Any] = {
 }
 
 _ALIAS_EXAMPLE = RENDER_CONFIG["alias"].format(n=1)
+_TAGGED_ALIAS = RENDER_CONFIG["alias"].format(n="N")
 _PREFIX = RENDER_CONFIG["existing_claim_prefix"]
 _REPLY = RENDER_CONFIG["reply_mark"]
 
@@ -119,7 +120,7 @@ return an empty list.
 - Privacy: never write names, nicknames, phone numbers, e-mail addresses or other identifying \
 details of group members, and never mention speaker aliases. Say "חבר בקבוצה" / \
 "חברים" instead. Keep the names of businesses and professionals (agencies, clinics, \
-doctors, lawyers, travel agents, insurers and other providers) and of countries and places.
+doctors, lawyers, travel agents, insurers and other providers) and of countries and places. A name right after "@" is a group member the speaker tagged, confirmed as a business or a professional: treat that name like any named provider (what is said about them is a claim with that name as its entity). "@{_TAGGED_ALIAS}" is a tagged private member: never an entity, never named.
 - {FORBIDDEN_TERM_INSTRUCTION}
 
 Fields of a claim
