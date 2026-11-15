@@ -12,7 +12,8 @@ must stay the same from it:
 - the claims: ids, texts, entities, stance, supporting / opposing / counter message ids (as
   sets), in step 3's own file and in the edited one;
 - step 3's plan: the conversations it would read (new or changed) or drop, and per
-  conversation the messages it would mark as new.
+  conversation the messages it would mark as new;
+- the gold file: its windows, labels and conversations (id lists as sets).
 
 ``Proof.differences`` names what is not the same. The people counts are reported, not
 compared: merging a member's two ids is the point of the move.
@@ -80,6 +81,20 @@ def _claims_view(payload: Payload | None) -> dict[str, tuple[Any, ...]]:
 
 def _without_manual(payload: Payload | None) -> list[dict[str, Any]]:
     return [{k: v for k, v in r.items() if k != MANUAL_FINGERPRINT} for r in (payload or {}).get("threads", [])]
+
+
+def _gold_view(gold: Payload | None) -> tuple[Any, ...]:
+    """The gold file's windows, labels and conversations, id lists as sets."""
+    if gold is None:
+        return ()
+    windows = tuple(
+        (w["start"], w["end"], frozenset(w["message_ids"]), frozenset(w.get("context_message_ids", ())))
+        for w in gold.get("windows", [])
+    )
+    conversations = tuple(
+        (c["thread_id"], frozenset(c["message_ids"])) for c in gold.get("conversations", [])
+    )
+    return windows, gold.get("messages"), gold.get("context_messages"), conversations
 
 
 def step_1_view(data: PipelineData) -> dict[str, tuple[str, ...]]:
@@ -153,6 +168,7 @@ class Proof:
             "claims": _claims_view(data.claims),
             "claims of the edited file": _claims_view(data.claims_edited),
             "step 3's plan": step_3_view(data),
+            "gold file (windows, labels, conversations)": _gold_view(data.gold),
         })
 
     def differences(self, other: Proof) -> list[str]:
@@ -166,6 +182,8 @@ class Proof:
                 size = f"{len(value.get('read', {}))} to read, {len(value.get('removed', ()))} to drop"
             elif isinstance(value, dict) and name == "step 1 sees in its input":
                 size = ", ".join(f"{k} {len(v)}" for k, v in value.items())
+            elif name.startswith("gold file"):
+                size = f"{len(value[0])} windows, {len(value[3])} conversations" if value else "none"
             elif isinstance(value, (dict, frozenset, list, tuple)):
                 size = f"{len(value)} items"
             else:

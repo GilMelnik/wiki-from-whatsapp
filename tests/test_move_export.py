@@ -159,6 +159,20 @@ def test_order_inside_a_second_follows_the_export() -> None:
     assert second["last_sender"] == "q-phone"
 
 
+def test_a_reaction_added_since_the_old_export_waits_for_the_next_update() -> None:
+    later = [dict(m) for m in NEW]
+    later[2] = {**entry("C1", "10:01:10", "q-phone", "an answer", reactors=("p-phone", "x-phone")),
+                "mentions": []}
+    before = _old_data()
+    after, numbers = moved_data(before, later, MEMBERS)
+    assert Proof.of(before).differences(Proof.of(after)) == []
+    assert numbers["messages whose content differs beyond time and ids"] == 1
+    moved_c1 = next(m for m in after.input if m["id"] == "C1")
+    assert [s["user_name"] for s in moved_c1["reactions"][0]["senders"]] == ["p-phone"]
+    assert moved_c1["time"] == "10:01:10"
+    assert compare_exports(after.input, later).changed == ("C1",)
+
+
 def test_refused_when_the_export_lacks_a_message_or_the_text_changed() -> None:
     with pytest.raises(NotTheSameMessages, match="1 missing"):
         moved_data(_old_data(), NEW[1:], MEMBERS)

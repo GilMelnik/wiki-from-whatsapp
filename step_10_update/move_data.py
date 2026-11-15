@@ -86,14 +86,38 @@ class ChatMove:
         self._check_same_messages(old_by_id, by_new)
         self.new_input = [m for m in new_export if str(m["id"]) in old_by_id]
         self.place = {str(m["id"]): index for index, m in enumerate(self.new_input)}
-        self.old_input = list(old_input)
         self.old_records = {i: message_record(m) for i, m in old_by_id.items()}
         self.new_records = {str(m["id"]): message_record(m) for m in self.new_input}
+        # A message whose reactions or quote differ beyond ids (a reaction added since the old
+        # export) keeps the old ones in the input: the move moves, the next update brings them.
         self.content_differs = {
             i
             for i, old in self.old_records.items()
             if old is not None
             and _sorted_reactions(self.moved(old)) != _sorted_reactions(self.new_records[i])
+        }
+        if self.content_differs:
+            self.new_input = [
+                self._with_old_content(m, old_by_id[str(m["id"])])
+                if str(m["id"]) in self.content_differs else m
+                for m in self.new_input
+            ]
+            self.new_records = {str(m["id"]): message_record(m) for m in self.new_input}
+
+    def _with_old_content(self, entry: Message, old: Message) -> Message:
+        """The new export's entry with the old entry's quote and reactions, in member ids."""
+
+        def contact(person: Any) -> dict[str, Any]:
+            if isinstance(person, dict):
+                return {**person, "user_name": self.member(person.get("user_name") or "")}
+            return {"user_name": self.member(person or ""), "phone": None}
+
+        quote = old.get("quote")
+        return {
+            **entry,
+            "quote": {**quote, "sender": contact(quote.get("sender"))} if quote else quote,
+            "reactions": [{**r, "senders": [contact(s) for s in r.get("senders") or []]}
+                          for r in old.get("reactions") or []],
         }
 
     # ------------------------------------------------------------------ the messages
@@ -144,11 +168,10 @@ class ChatMove:
         return out
 
     def thread_message(self, message: Message) -> Message:
-        """A thread's message after the move: step 1's record of the new export when the
-        thread holds step 1's record of the old one and the two differ only in time and ids;
-        otherwise the message itself, moved (step 1 then refreshes it as a changed message)."""
+        """A thread's message after the move: step 1's record of the new input when the
+        thread holds step 1's record of the old one; otherwise the message itself, moved."""
         wa_id = message["id"]
-        if message == self.old_records.get(wa_id) and wa_id not in self.content_differs:
+        if message == self.old_records.get(wa_id):
             return self.new_records[wa_id]
         return self.moved(message)
 
