@@ -80,7 +80,11 @@ def load_export_index(path: Path | str) -> dict[str, dict[str, Any]]:
             "by message id; pass the export path (or None when threads carry them inline)."
         )
     with export_path.open(encoding="utf-8") as f:
-        messages = json.load(f)
+        return export_index(json.load(f))
+
+
+def export_index(messages: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """WhatsApp id -> ``{quote, reactions}`` (normalized) of a chat export's messages."""
     return {
         str(m["id"]): {
             "quote": _normalize_quote(m.get("quote")),
