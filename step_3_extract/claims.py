@@ -19,13 +19,20 @@ when a later dissent adds a link to it.
 people who only reacted); the private audit keeps who they were (``participants``), so step 5
 can count distinct people across a group's threads.
 
-``ThreadClaims`` works on one thread whose messages already carry quotes and reactions
+``ThreadClaims`` works on one thread whose messages already carry quotes, reactions and tags
 (``utils.threads_io.with_export``).
+
+A message's fingerprint covers what the model is shown of it. For a message that tags a member
+(in its text or in its quote) that includes how each tag is shown: the provider's public name
+(``providers``, the owner's table: ``step_3_extract.tagged``) or the member's alias. A message
+without a tag keeps the fingerprint it always had, so a conversation without a tag never looks
+changed when the owner's table changes.
 """
 
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from typing import Any
 
 from step_3_extract.prompt import (
@@ -36,7 +43,7 @@ from step_3_extract.prompt import (
 )
 from step_3_extract.support import collect_evidence
 from utils.reconcile import fingerprint
-from utils.threads_io import person_key, render_thread_for_llm
+from utils.threads_io import message_tags, person_key, render_thread_for_llm
 
 # The fields the step always owns and recomputes; a manual edit of a claim keeps its text
 # but these follow the thread (``utils.reconcile`` ``refresh_keys``).
@@ -62,24 +69,38 @@ def claim_id_for(thread_id: str, text: str) -> str:
     return f"{thread_id}-{digest[: int(EXTRACT_CONFIG['claim_id_hash_chars'])]}"
 
 
-def message_fingerprints(thread: dict[str, Any]) -> dict[str, str]:
-    """WhatsApp id -> short fingerprint of what step 3 reads from that message (no reactions)."""
+def _read_parts(message: dict[str, Any], providers: Mapping[str, str]) -> list[Any]:
+    """What step 3 reads from a message; a tagging message adds how each tag is shown."""
+
+    quote = message.get("quote")
+    if isinstance(quote, dict):
+        quote = {key: value for key, value in quote.items() if key != "mentions"}
+    parts = [message.get("datetime"), message.get("sender"), message.get("content"), quote]
+    tags = message_tags(message)
+    if tags:
+        parts.append([[tag["tag"], tag["member"], providers.get(tag["member"])] for tag in tags])
+    return parts
+
+
+def message_fingerprints(
+    thread: dict[str, Any], providers: Mapping[str, str] | None = None
+) -> dict[str, str]:
+    """WhatsApp id -> short fingerprint of what step 3 reads from that message (no reactions);
+    ``providers``: member id -> public name (see the module docstring)."""
 
     size = int(EXTRACT_CONFIG["message_fingerprint_chars"])
     return {
-        str(m["id"]): fingerprint(
-            [m.get("datetime"), m.get("sender"), m.get("content"), m.get("quote")]
-        )[:size]
+        str(m["id"]): fingerprint(_read_parts(m, providers or {}))[:size]
         for m in thread.get("messages", [])
     }
 
 
-def input_fingerprint(thread: dict[str, Any]) -> str:
-    """C14 input fingerprint of a thread: message ids + contents + reactions."""
+def input_fingerprint(thread: dict[str, Any], providers: Mapping[str, str] | None = None) -> str:
+    """C14 input fingerprint of a thread: message ids + contents (+ tags as shown) + reactions."""
 
     return fingerprint(
         {
-            "messages": message_fingerprints(thread),
+            "messages": message_fingerprints(thread, providers),
             "reactions": {str(m["id"]): m.get("reactions") for m in thread.get("messages", [])},
         }
     )
@@ -139,10 +160,16 @@ class ThreadClaims:
     """Claims of one thread: rendering for the model, number -> id mapping, derived fields.
 
     ``new_ids`` are the messages added since the thread was last processed; they are marked
-    in the rendering and are the only evidence an update may add.
+    in the rendering and are the only evidence an update may add. ``providers`` (member id ->
+    public name) is how a tag of a provider is shown.
     """
 
-    def __init__(self, thread: dict[str, Any], new_ids: frozenset[str] = frozenset()) -> None:
+    def __init__(
+        self,
+        thread: dict[str, Any],
+        new_ids: frozenset[str] = frozenset(),
+        providers: Mapping[str, str] | None = None,
+    ) -> None:
         self.thread_id = str(thread["thread_id"])
         self.new_ids = new_ids
         self.messages_by_id = {str(m["id"]): m for m in thread.get("messages", [])}
@@ -150,7 +177,9 @@ class ThreadClaims:
             {person_key(m.get("sender")) for m in self.messages_by_id.values()} - {""}
         )
         self._position = {message_id: i for i, message_id in enumerate(self.messages_by_id)}
-        self.rendered, self.refs = render_thread_for_llm(thread, new_ids=new_ids)
+        self.rendered, self.refs = render_thread_for_llm(
+            thread, new_ids=new_ids, providers=providers
+        )
         self.ungrounded = 0  # new claims dropped for lacking (new) supporting evidence
         self.invalid_counters: list[str] = []  # dropped ``counters`` references, explained
 

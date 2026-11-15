@@ -184,6 +184,7 @@
     "long_messages": 30,
     "max_output_tokens": 64000,
     "privacy_review": {"phone_min_digits": 7, "country_code": "972"},
+    "tagged_members": {"min_taggers": 3},
     "split_experiment": {
       "variants": {
         "A": "new split",
@@ -759,6 +760,9 @@
       "groups": "the new claim groups (merges and splits)",
       "plan": "the pending proposals for new pages and labels",
       "suggestions": "the review's suggestions (accept or reject, then apply the accepted ones)"
+    },
+    "waiting_hints": {
+      "tagged": "{count} tagged members wait for your decision: Tagged members page (python -m review_tool --tool tagged); until then they are shown to step 3 as anonymous members"
     },
     "estimate": {
       "chars_per_token": 3.0,

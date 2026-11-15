@@ -13,6 +13,10 @@ Per thread (fingerprint = message ids + contents + reactions, ``metadata.inputs`
 - the thread was cut anew (the owner corrected the split: it lost a message it had, or holds
   one that another thread had) -> the conversation its claims were written from no longer
   exists: they are all dropped and the thread is read like a new one (``Extractor.drop_recut``);
+- a tag in a message it had is shown differently (the first run after tags were shown at all,
+  or the owner's table of tagged members gave a member another public name or none; see
+  ``step_3_extract.tagged``) -> its claims are all dropped and it is read afresh
+  (``Extractor.drop_retagged``); a thread without a tag is never touched by the table;
 - thread gone or no longer knowledge-bearing -> its claims are dropped.
 
 Disagreements: a dissent of substance is a claim of its own, linked to the claim it disputes
@@ -52,6 +56,7 @@ from step_3_extract.claims import (
 )
 from step_3_extract.prompt import EXTRACT_CONFIG, EXTRACT_SYSTEM, FRESH_SCHEMA, UPDATE_SCHEMA
 from step_3_extract.scrub import scrub_claims
+from step_3_extract.tagged import load_table, provider_names
 from utils.json_io import write_json_file
 from utils.llm_client import BatchRequest, LLMClient
 from utils.logging_setup import setup_step_logging
@@ -60,12 +65,13 @@ from utils.paths import (
     CHAT_ANDROID_PATH,
     CLAIMS,
     STEP_3,
+    TAGGED_MEMBERS_PATH,
     Artifact,
     resolve_classified_path,
     resolve_threads_path,
 )
 from utils.reconcile import diff_inputs, load_previous, write_reconciled
-from utils.threads_io import load_export_index, load_threads, with_export
+from utils.threads_io import load_export_index, load_threads, message_tags, with_export
 from utils.token_counters import AnthropicTokenCounter, TokenCounter
 
 AUDIT_WARNING = "PRIVATE - links claims to the people behind them. Do not publish."
@@ -98,10 +104,17 @@ class Extractor:
     """One step-3 run: decides per thread what to do, calls the model, assembles the output."""
 
     def __init__(
-        self, llm: LLMClient, logger: logging.Logger, *, use_batch: bool, previous: dict[str, Any]
+        self,
+        llm: LLMClient,
+        logger: logging.Logger,
+        *,
+        use_batch: bool,
+        previous: dict[str, Any],
+        providers: dict[str, str] | None = None,
     ) -> None:
         self.llm = llm
         self.logger = logger
+        self.providers = providers or {}
         self.use_batch = use_batch and llm.supports_batch()
         meta = previous.get("metadata") or {}
         self.prev_inputs: dict[str, str] = meta.get("inputs") or {}
@@ -132,6 +145,28 @@ class Extractor:
                 recut.append(thread_id)
         return recut
 
+    def drop_retagged(
+        self, threads: dict[str, dict[str, Any]], changed: Collection[str]
+    ) -> list[str]:
+        """Forget the claims of every changed thread in which a message it had shows a tag
+        differently now, so that ``plan`` reads it afresh; returns those thread ids."""
+
+        retagged = []
+        for thread_id in changed:
+            if thread_id not in self.prev_claims:
+                continue
+            before = self.prev_messages.get(thread_id, {})
+            now = message_fingerprints(threads[thread_id], self.providers)
+            if any(
+                str(message["id"]) in before
+                and before[str(message["id"])] != now[str(message["id"])]
+                for message in threads[thread_id]["messages"]
+                if message_tags(message)
+            ):
+                del self.prev_claims[thread_id]
+                retagged.append(thread_id)
+        return retagged
+
     def plan(self, thread: dict[str, Any], *, changed: bool) -> ThreadClaims | None:
         """The thread's model job, or ``None`` when its claims only need recomputing."""
 
@@ -140,11 +175,11 @@ class Extractor:
         if not changed:
             return None
         if not old:
-            return ThreadClaims(thread)
+            return ThreadClaims(thread, providers=self.providers)
         before = self.prev_messages.get(thread_id, {})
-        current = message_fingerprints(thread)
+        current = message_fingerprints(thread, self.providers)
         new_ids = frozenset(i for i, fp in current.items() if before.get(i) != fp)
-        return ThreadClaims(thread, new_ids) if new_ids else None
+        return ThreadClaims(thread, new_ids, self.providers) if new_ids else None
 
     def ask(self, jobs: list[ThreadClaims]) -> dict[str, Any]:
         """thread_id -> parsed model answer; failed threads are left out (and logged)."""
@@ -235,6 +270,7 @@ def run(
     threads_path: Path | str | None = None,
     classified_path: Path | str | None = None,
     export_path: Path | str | None = CHAT_ANDROID_PATH,
+    tagged_path: Path | str = TAGGED_MEMBERS_PATH,
     artifact: Artifact = CLAIMS,
     audit_path: Path | str = AUDIT_PATH,
     llm: LLMClient | None = None,
@@ -247,9 +283,11 @@ def run(
     """Extract / update claims; see the module docstring.
 
     ``threads_path`` / ``classified_path`` default to the reviewed (edited) files when they
-    exist. ``export_path`` is the chat export quotes and reactions are joined from (``None``
-    when the threads carry them inline). ``only`` restricts the work to these thread ids
-    (everything else is carried as it is); ``rebuild`` ignores the previous output.
+    exist. ``export_path`` is the chat export quotes, reactions and tags are joined from
+    (``None`` when the threads carry them inline); ``tagged_path`` the owner's table of tagged
+    members (``step_3_extract.tagged``; none = no provider). ``only`` restricts the work to
+    these thread ids (everything else is carried as it is); ``rebuild`` ignores the previous
+    output.
     ``estimate``: no model call, nothing written; returns the calls the run would make.
     """
 
@@ -279,9 +317,12 @@ def run(
         if tid in threads and (scope is None or tid in scope)
     }
 
+    providers = provider_names(load_table(Path(tagged_path)))
+    logger.info(f"Extract: {len(providers)} tagged members are shown by their public name")
     previous = {} if rebuild else load_previous(artifact)
-    extractor = Extractor(llm, logger, use_batch=use_batch, previous=previous)
-    inputs = {tid: input_fingerprint(thread) for tid, thread in current.items()}
+    extractor = Extractor(llm, logger, use_batch=use_batch, previous=previous,
+                          providers=providers)
+    inputs = {tid: input_fingerprint(thread, providers) for tid, thread in current.items()}
     diff = diff_inputs(
         {tid: fp for tid, fp in extractor.prev_inputs.items() if scope is None or tid in scope},
         inputs,
@@ -298,6 +339,7 @@ def run(
     carried_threads = [tid for tid in extractor.prev_claims if out_of_scope(tid)]
 
     recut = extractor.drop_recut(current, diff.changed)
+    retagged = extractor.drop_retagged(current, diff.changed)
     jobs: dict[str, ThreadClaims] = {}
     for tid, thread in current.items():
         job = extractor.plan(thread, changed=tid in diff.new or tid in diff.changed)
@@ -305,6 +347,7 @@ def run(
             jobs[tid] = job
     if estimate:
         return {"new_threads": len(diff.new), "changed_threads": len(diff.changed),
+                "retagged_threads": len(retagged),
                 **extractor.estimate(list(jobs.values()),
                                      count_tokens or AnthropicTokenCounter(llm.model))}
     answers = extractor.ask(list(jobs.values()))
@@ -326,7 +369,7 @@ def run(
             fresh.extend(c for c in absorbed if c["claim_id"] not in known)
             records[tid] = absorbed
         out_inputs[tid] = inputs[tid]
-        out_messages[tid] = message_fingerprints(thread)
+        out_messages[tid] = message_fingerprints(thread, providers)
     scrub_summary = scrub_claims(fresh)
 
     claims: list[dict[str, Any]] = []
@@ -352,6 +395,7 @@ def run(
         "new_threads": len(diff.new),
         "changed_threads": len(diff.changed),
         "recut_threads": len(recut),
+        "retagged_threads": len(retagged),
         "removed_threads": len(diff.removed),
         "failed_threads": extractor.failed,
         "new_claims": len(fresh),
@@ -384,7 +428,8 @@ def run(
     write_audit(audit_path, audit)
     logger.info(
         f"Extract: {len(claims)} claims; {len(jobs)} model calls ({len(recut)} threads cut anew "
-        f"and read afresh), {len(fresh)} new claims, {len(extractor.failed)} failed threads; "
+        f"and {len(retagged)} whose tags show differently, read afresh), {len(fresh)} new "
+        f"claims, {len(extractor.failed)} failed threads; "
         f"{report.changes.summary()}"
     )
     return {
