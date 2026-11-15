@@ -44,3 +44,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4.160.0"
+      # A markdown page served without a character set shows its Hebrew as garbage.
+      - name: Check that the live site serves its text files as UTF-8
+        working-directory: worker
+        run: npm run check-deploy

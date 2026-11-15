@@ -12,6 +12,7 @@
     "dev": "cd .. && CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false wrangler dev --compatibility-date 2026-05-03",
     "dry-run": "cd .. && wrangler deploy --dry-run",
     "e2e": "node scripts/e2e.mjs",
+    "check-deploy": "tsx scripts/check-deploy.ts",
     "build-search": "tsx scripts/build-search.ts ../site"
   },
   "dependencies": {

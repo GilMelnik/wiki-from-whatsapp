@@ -446,6 +446,7 @@
   },
   "site": {
     "url": "https://gaysurrogacy.co.il/",
+    "deploy_check": {"attempts": 6, "wait_seconds": 10},
     "coffee_url": "https://buymeacoffee.com/gilmelnik",
     "coffee_text": "האתר הזה נבנה ומתוחזק בהתנדבות, בזמן שבעלי שומר על הבת שלנו. אם בא לכם, אפשר",
     "coffee_link_text": "להזמין אותי לקפה ☕",
