@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cleanName, decisionToast, nextSelection, showOptions, statsText, tagIn, tagText } from "../src/tools/tagged/tagged.js";
+import { cleanName, decisionToast, firstTagIn, nextSelection, showOptions, statsText, tagIn, tagText } from "../src/tools/tagged/tagged.js";
 
 const rows = (...ids) => ids.map((member) => ({ member }));
 
@@ -22,6 +22,13 @@ test("a row reads as the tag the chat writes and how often it is tagged", () => 
   assert.equal(statsText(row), "1 tag by 2 members · wrote 0 messages");
   assert.equal(tagIn("thanks @222!", row.tags), "222");
   assert.equal(tagIn("no tag", row.tags), "111");
+});
+
+test("a conversation link opens at the member's first tagging message there", () => {
+  const messages = [{ id: "m1", thread_id: "t1" }, { id: "m2", thread_id: "t2" }, { id: "m3", thread_id: "t2" }];
+  assert.equal(firstTagIn(messages, "t2"), "m2");
+  assert.equal(firstTagIn(messages, "t9"), null);
+  assert.equal(firstTagIn(undefined, "t1"), null);
 });
 
 test("a name is saved with its spaces squashed, and the toast says what step 3 will show", () => {

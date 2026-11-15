@@ -3,7 +3,7 @@ import { BetweenMessages } from "./ConversationView.jsx";
 import { formatCount } from "./format.js";
 import { countText } from "./planText.js";
 import { hiddenBetween, rangeNextTo, replyClosures, streamRows, threadEdges, windowEdges } from "./messageStream.js";
-import { Divider, MessageRow, scrollToMessage, ThreadTag, WindowEdge } from "./MessageRow.jsx";
+import { Divider, FOCUS_RING_MS, MessageRow, scrollToMessage, ThreadTag, WindowEdge } from "./MessageRow.jsx";
 
 // The timeline view: the messages of every conversation shown, interleaved in chat order,
 // each in its conversation's colour and letter. It makes the edges of what is shown
@@ -86,7 +86,8 @@ function Legend({ blocks, colors, edges, currentId, onSelectThread, inWindow, on
 }
 
 export function TimelineView({
-  blocks, chatSize, colors, selection, currentId, onSelectThread, onLoad, step = 10, quietMinutes, inWindow, window, highlight,
+  blocks, chatSize, colors, selection, currentId, focusId, onSelectThread, onLoad, step = 10, quietMinutes, inWindow, window,
+  highlight,
 }) {
   const rows = useMemo(() => streamRows(blocks), [blocks]);
   const closureOf = useMemo(() => replyClosures(rows), [rows]);
@@ -97,12 +98,13 @@ export function TimelineView({
 
   useEffect(() => {
     requestAnimationFrame(() => {
+      if (focusId && scrollToMessage(focusId, FOCUS_RING_MS)) return;
       const target = document.getElementById("timeline-window-start") ||
         document.getElementById(`msg-${blocks.find((b) => b.thread_id === currentId)?.messages[0]?.id}`);
       target?.scrollIntoView({ block: "center" });
     });
     // Re-anchor only when the subject changes, not after every edit or load.
-  }, [anchor, rows.length > 0]);
+  }, [anchor, focusId, rows.length > 0]);
 
   if (!rows.length) return <div className="flex flex-1 items-center justify-center text-sm text-slate-500">No messages to show.</div>;
   const jump = (reply) => scrollToMessage(reply.id) || onLoad?.([reply.seq, reply.seq]);

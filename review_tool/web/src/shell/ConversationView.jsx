@@ -2,7 +2,7 @@ import { useEffect, useMemo } from "react";
 import { formatCount, formatDay, formatSpan } from "./format.js";
 import { countText } from "./planText.js";
 import { blockRows, formatPause, hiddenBetween, minutesBetween, replyClosures, windowEdges } from "./messageStream.js";
-import { Divider, MessageRow, scrollToMessage, ThreadTag, WindowEdge } from "./MessageRow.jsx";
+import { Divider, FOCUS_RING_MS, MessageRow, scrollToMessage, ThreadTag, WindowEdge } from "./MessageRow.jsx";
 import { Ltr } from "./text.jsx";
 
 // The conversation view: one section per conversation (the opened one between the ones the
@@ -69,18 +69,22 @@ export function BetweenMessages({ previous, row, quietMinutes, countHidden = tru
   );
 }
 
-export function ConversationView({ blocks, colors, selection, currentId, onSelectThread, quietMinutes, inWindow, window, highlight }) {
+export function ConversationView({ blocks, colors, selection, currentId, focusId, onSelectThread, quietMinutes, inWindow, window, highlight }) {
   const rows = useMemo(() => blocks.flatMap(blockRows), [blocks]);
   const closureOf = useMemo(() => replyClosures(rows), [rows]);
   const index = useMemo(() => new Map(rows.map((row, i) => [row.key, i])), [rows]);
   for (const block of blocks) colors.get(block.thread_id);
 
-  // Opening a conversation shows its start (in a gold window: its first message inside it).
+  // Opening a conversation shows its start (in a gold window: its first message inside it),
+  // or the message a link named (`focusId`), ringed for a few seconds.
   useEffect(() => {
     const messages = blocks.find((block) => block.thread_id === currentId)?.messages ?? [];
     const first = messages.find((message) => inWindow?.has(message.id)) ?? messages[0];
-    if (first) requestAnimationFrame(() => document.getElementById(`msg-${first.id}`)?.scrollIntoView({ block: "center" }));
-  }, [currentId, blocks.length > 0]);
+    requestAnimationFrame(() => {
+      if (focusId && scrollToMessage(focusId, FOCUS_RING_MS)) return;
+      if (first) document.getElementById(`msg-${first.id}`)?.scrollIntoView({ block: "center" });
+    });
+  }, [currentId, focusId, blocks.length > 0]);
 
   const jump = (reply) => scrollToMessage(reply.id) || onSelectThread?.(reply.thread_id);
   return (

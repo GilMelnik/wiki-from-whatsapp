@@ -134,12 +134,15 @@ export function MessageRow({ message, info, colors, selected, onToggle, outside,
   );
 }
 
-/** Scroll to a shown message (briefly ringed), or report that it is not on the page. */
-export function scrollToMessage(id) {
+/** How long the message a link named stays ringed. */
+export const FOCUS_RING_MS = 8000;
+
+/** Scroll to a shown message (ringed for `ringMs`), or report that it is not on the page. */
+export function scrollToMessage(id, ringMs = 1500) {
   const element = document.getElementById(`msg-${id}`);
   if (!element) return false;
   element.scrollIntoView({ behavior: "smooth", block: "center" });
   element.classList.add("ring-2", "ring-amber-500");
-  setTimeout(() => element.classList.remove("ring-2", "ring-amber-500"), 1500);
+  setTimeout(() => element.classList.remove("ring-2", "ring-amber-500"), ringMs);
   return true;
 }

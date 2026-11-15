@@ -61,6 +61,11 @@ export function tagIn(content, tags) {
   return (tags ?? []).find((tag) => (content ?? "").includes(`@${tag}`)) ?? tags?.[0] ?? "";
 }
 
+/** The member's first tagging message in a conversation (its id), where a link opens it; null when none. */
+export function firstTagIn(messages, threadId) {
+  return (messages ?? []).find((message) => message.thread_id === threadId)?.id ?? null;
+}
+
 /** The name typed or picked, as the server will save it (spaces squashed). */
 export function cleanName(name) {
   return (name ?? "").split(/\s+/).filter(Boolean).join(" ");

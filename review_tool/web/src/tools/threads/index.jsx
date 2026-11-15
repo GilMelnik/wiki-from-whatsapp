@@ -193,7 +193,7 @@ function ThreadsTool({ tool }) {
 
   const ready = summary?.state === "ready";
   const viewProps = {
-    blocks, colors, selection, currentId: data.selectedId, onSelectThread: data.setSelectedId,
+    blocks, colors, selection, currentId: data.selectedId, focusId: data.focusId, onSelectThread: data.setSelectedId,
     quietMinutes: summary?.quiet_minutes, inWindow, window: view?.window ?? null, highlight: data.gold ? "" : data.search.q,
   };
   const main = !summary ? (
