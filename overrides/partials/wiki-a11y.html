@@ -1,0 +1,36 @@
+{#-
+  The accessibility button of the header and its menu. The labels, the icons, the text sizes and
+  the list of switches come from config.json (`site.accessibility`); assets/wiki/a11y.js runs it.
+  Without JavaScript only the link shows: the button and the menu need the script
+  (html.wiki-js, wiki.css).
+-#}
+{% set a11y = config.extra.accessibility %}
+{% set menu = a11y.menu %}
+{% macro icon(name) -%}
+  <span class="wiki-a11y__icon" aria-hidden="true">{% include ".icons/" ~ a11y.icons[name] ~ ".svg" %}</span>
+{%- endmacro %}
+<div class="wiki-a11y">
+  <a class="md-header__button md-icon wiki-a11y__link" href="{{ a11y.path | url }}" title="{{ a11y.title | e }}" aria-label="{{ a11y.title | e }}">
+    {% include ".icons/" ~ a11y.icons.button ~ ".svg" %}
+  </a>
+  <button type="button" class="md-header__button md-icon wiki-a11y__button" aria-expanded="false" aria-controls="wiki-a11y-menu" title="{{ menu.title | e }}" aria-label="{{ menu.title | e }}">
+    {% include ".icons/" ~ a11y.icons.button ~ ".svg" %}
+  </button>
+  <div class="wiki-a11y__menu" id="wiki-a11y-menu" role="group" aria-labelledby="wiki-a11y-title" hidden>
+    <div class="wiki-a11y__head">
+      <p class="wiki-a11y__title" id="wiki-a11y-title">{{ menu.title | e }}</p>
+      <button type="button" class="wiki-a11y__close" title="{{ menu.close | e }}" aria-label="{{ menu.close | e }}">{{ icon("close") }}</button>
+    </div>
+    <div class="wiki-a11y__size" role="group" aria-labelledby="wiki-a11y-size">
+      <p class="wiki-a11y__size-label"><span id="wiki-a11y-size">{{ menu.text_size | e }}</span>: <output class="wiki-a11y__size-value" aria-live="polite">{{ a11y.text_sizes[0] }}%</output></p>
+      <button type="button" class="wiki-a11y__option" data-wiki-a11y-size="1">{{ icon("bigger") }}{{ menu.bigger | e }}</button>
+      <button type="button" class="wiki-a11y__option" data-wiki-a11y-size="-1">{{ icon("smaller") }}{{ menu.smaller | e }}</button>
+      <button type="button" class="wiki-a11y__option" data-wiki-a11y-size="0">{{ icon("text_reset") }}{{ menu.text_reset | e }}</button>
+    </div>
+    {% for name in a11y.toggles %}
+      <button type="button" class="wiki-a11y__option" data-wiki-a11y-toggle="{{ name }}" aria-pressed="false">{{ icon(name) }}{{ menu[name] | e }}</button>
+    {% endfor %}
+    <a class="wiki-a11y__option" href="{{ a11y.path | url }}">{{ icon("statement") }}{{ a11y.title | e }}</a>
+    <button type="button" class="wiki-a11y__option" data-wiki-a11y-reset>{{ icon("reset") }}{{ menu.reset | e }}</button>
+  </div>
+</div>

@@ -469,17 +469,58 @@
     },
     "redirect_text": "הדף הזה אוחד לתוך",
       "contact_email": "comments@gaysurrogacy.co.il",
+      "contact_placeholder": "{contact_email}",
       "disclaimer": {
         "label": "לתשומת לבך",
         "text": "התוכן באתר זה נוצר באופן אוטומטי בידי בינה מלאכותית, על סמך שיחות בקבוצת ווטסאפ מרובת משתתפים. הוא משקף דעות, התרשמויות וחוויות אישיות של חברי הקבוצה, שאינן בהכרח מוסכמות על כולם; הוא לא נבדק ולא אומת, ועלול להיות שגוי, חלקי או לא מעודכן, לרבות בשל טעויות של הבינה המלאכותית. אין באמור ייעוץ רפואי, משפטי, כלכלי או מקצועי אחר, ואין להסתמך עליו כתחליף לייעוץ כזה או לבדיקה עצמאית. השימוש במידע הוא באחריות המשתמש בלבד.",
-        "terms_link_text": "תנאי השימוש המלאים ובקשות לתיקון או להסרה"
+        "agreement": "השימוש באתר מהווה הסכמה ל{terms}.",
+        "terms_link_text": "תנאי השימוש",
+        "contact": "לבקשות לתיקון או הסרה: {email}"
       },
       "terms": {
         "file": "terms.md",
         "source": "step_9_site/pages/terms.md",
-      "contact_placeholder": "{contact_email}",
         "title": "תנאי שימוש",
         "footer_link_text": "תנאי שימוש ובקשות לתיקון או להסרה"
+      },
+      "accessibility": {
+        "file": "accessibility.md",
+        "source": "step_9_site/pages/accessibility.md",
+        "title": "הצהרת נגישות",
+        "updated": "נובמבר 2026",
+        "updated_placeholder": "{updated}",
+        "drawer_label": "תפריט הניווט",
+        "storage_key": "wiki-accessibility",
+        "text_sizes": [100, 125, 150, 175, 200],
+        "toggles": ["contrast", "invert", "gray", "links", "still"],
+        "icons": {
+          "button": "fontawesome/solid/universal-access",
+          "close": "material/close",
+          "bigger": "material/format-font-size-increase",
+          "smaller": "material/format-font-size-decrease",
+          "text_reset": "material/format-size",
+          "contrast": "material/contrast-box",
+          "invert": "material/invert-colors",
+          "gray": "material/water-off-outline",
+          "links": "material/link-variant",
+          "still": "material/motion-pause-outline",
+          "statement": "material/file-document-outline",
+          "reset": "material/restore"
+        },
+        "menu": {
+          "title": "תפריט נגישות",
+          "close": "סגירת תפריט הנגישות",
+          "text_size": "גודל הטקסט",
+          "bigger": "הגדלת טקסט",
+          "smaller": "הקטנת טקסט",
+          "text_reset": "גודל טקסט רגיל",
+          "contrast": "ניגודיות גבוהה",
+          "invert": "היפוך צבעים",
+          "gray": "גווני אפור",
+          "links": "הדגשת קישורים",
+          "still": "עצירת אנימציות",
+          "reset": "איפוס כל ההגדרות"
+        }
       },
       "refs_toggle": {
         "label": "הצגת הפניות ומקורות",
@@ -619,7 +660,7 @@
       "twin_file": "index.md",
       "llms_file": "llms.txt",
       "page_line": "Web page: {url}",
-      "disclaimer": "{label}: {text} [{terms_link_text}]({terms_url})",
+      "disclaimer": "{label}: {text} {agreement} {contact}",
       "updated_line": "Page generated {updated}.",
       "claims_line": "It rests on {total} claims from the group's conversations (members backing them: {supporting}, disputing them: {opposing}).",
       "claims_dates_line": "The claims are dated {first} to {last}.",
@@ -648,17 +689,18 @@
         "palette": [
           {
             "scheme": "default",
-            "primary": "teal",
-            "accent": "teal",
+            "primary": "custom",
+            "accent": "custom",
             "toggle": {"icon": "material/weather-night", "name": "עבור למצב כהה"}
           },
           {
             "scheme": "slate",
-            "primary": "teal",
-            "accent": "teal",
+            "primary": "custom",
+            "accent": "custom",
             "toggle": {"icon": "material/weather-sunny", "name": "עבור למצב בהיר"}
           }
-        ]
+        ],
+        "font": false
       },
       "extra": {"generator": false},
       "plugins": [{"search": {"lang": "he"}}],

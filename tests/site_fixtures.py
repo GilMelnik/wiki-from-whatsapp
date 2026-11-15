@@ -9,6 +9,9 @@ groups (C6, for the references) are ``plan_fixtures.make_groups`` unless a test 
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +19,7 @@ from step_6_plan import operations
 from step_6_plan.model import find_node
 from step_9_site.run import run
 from tests.plan_fixtures import make_groups, make_plan
+from utils.config import PROJECT_ROOT
 from utils.okf import build_front_matter
 
 GENERATED_AT = "2026-11-01T10:00:00Z"
@@ -105,3 +109,12 @@ def run_site(
 
 def issues_of(result: dict[str, Any], kind: str) -> list[tuple[str, str]]:
     return [(issue["page"], issue["target"]) for issue in result["issues"] if issue["issue"] == kind]
+
+
+def build_html(tmp_path: Path, plan: dict[str, Any], pages: dict[str, dict[str, Any]]) -> None:
+    """Step 9 into ``tmp_path/docs``, then ``mkdocs build --strict`` into ``tmp_path/out``."""
+    shutil.copytree(PROJECT_ROOT / "docs" / "stylesheets", tmp_path / "docs" / "stylesheets")
+    run_site(tmp_path, plan, pages)
+    command = [sys.executable, "-m", "mkdocs", "build", "--strict", "-f", str(tmp_path / "mkdocs.yml")]
+    built = subprocess.run([*command, "-d", str(tmp_path / "out")], capture_output=True, text=True, check=False)
+    assert built.returncode == 0, built.stderr

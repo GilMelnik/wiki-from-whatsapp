@@ -69,6 +69,7 @@ html.wiki-refs-on .wiki-refs-toggle__state--off {
 /* ---- above the footer: the terms link, the support line right under it ---- */
 .wiki-footer-lines {
   padding: 0.8rem 0.8rem 1rem;
+  background-color: var(--md-default-bg-color); /* inside the footer, on the page's colour */
   text-align: center;
   font-size: 0.64rem;
   line-height: 1.5;

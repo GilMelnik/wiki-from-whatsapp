@@ -25,7 +25,7 @@ from typing import Any
 import yaml
 
 from step_6_plan.model import check_plan, iter_nodes
-from step_9_site.info_pages import about_body, terms_body
+from step_9_site.info_pages import STATEMENT_CONFIG, about_body, statement_body, terms_body
 from step_7_write_pages.checks import cited_ids
 from step_7_write_pages.inputs import hebrew_month
 from step_9_site.references import References
@@ -41,7 +41,8 @@ ABOUT_CONFIG = SITE_CONFIG["about"]
 TERMS_CONFIG = SITE_CONFIG["terms"]
 ABOUT_FILE = ABOUT_CONFIG["file"]
 TERMS_FILE = TERMS_CONFIG["file"]
-INFO_FILES = (ABOUT_FILE, TERMS_FILE)
+STATEMENT_FILE = STATEMENT_CONFIG["file"]
+INFO_FILES = (ABOUT_FILE, TERMS_FILE, STATEMENT_FILE)
 NavEntry = dict[str, Any]
 Issue = dict[str, str]
 WITHHELD_REFERENCE = "withheld_reference"
@@ -264,11 +265,12 @@ class Site:
 
     @staticmethod
     def _info_pages() -> dict[str, str]:
-        """The about and terms pages: not wiki content, so they stay out of the search."""
+        """The about, terms and accessibility pages: not wiki content, so they stay out of the search."""
         search = {"exclude": True}
         return {
             ABOUT_FILE: with_front_matter({"title": ABOUT_CONFIG["title"], "search": search}, about_body()),
             TERMS_FILE: with_front_matter({"title": TERMS_CONFIG["title"], "search": search}, terms_body()),
+            STATEMENT_FILE: with_front_matter({"title": STATEMENT_CONFIG["title"], "search": search}, statement_body()),
         }
 
     def description(self, page_id: str) -> str:
