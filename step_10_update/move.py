@@ -40,6 +40,7 @@ from typing import Any
 
 from step_3_extract.claims import DERIVED_KEYS
 from step_3_extract.run import write_audit
+from step_3_extract.tagged import load_table, provider_names
 from step_10_update.exports import load_export, message_time
 from step_10_update.move_data import ChatMove, NotTheSameMessages, Restamps
 from step_10_update.move_proof import PipelineData, Proof, people
@@ -55,6 +56,7 @@ from utils.paths import (
     GOLD_THREADS_PATH,
     MEMBERS_PATH,
     STEP_10,
+    TAGGED_MEMBERS_PATH,
     THREADS,
     UPDATE_LEASE_PATH,
     UPDATE_STATE_PATH,
@@ -81,6 +83,7 @@ class MovePaths:
     gold: Path = GOLD_THREADS_PATH
     state: Path = UPDATE_STATE_PATH
     lease: Path = UPDATE_LEASE_PATH
+    tagged: Path = TAGGED_MEMBERS_PATH
 
     def load(self) -> PipelineData:
         audit = read_json_if_present(self.audit)
@@ -95,6 +98,7 @@ class MovePaths:
             audit=audit["audit"] if audit is not None else None,
             gold=read_json_if_present(self.gold),
             state=read_json_if_present(self.state),
+            providers=provider_names(load_table(self.tagged)),
         )
 
 
@@ -113,11 +117,12 @@ def _order_changed(before: dict[str, Any] | None, after: dict[str, Any] | None) 
 
 def moved_data(data: PipelineData, export: list[dict[str, Any]], members: dict[str, str]) -> tuple[PipelineData, dict[str, Any]]:
     """The data after the move, in memory, and its numbers (nothing is written)."""
-    move = ChatMove(data.input, export, members)
+    move = ChatMove(data.input, export, members, data.providers)
     restamps = {name: Restamps() for name in ("step 1", "step 2", "step 3")}
     threads = move.move_threads(data.threads, restamps["step 1"]) if data.threads else None
     edited = move.move_threads(data.threads_edited, restamps["step 1"]) if data.threads_edited else None
-    after = PipelineData(input=move.new_input, threads=threads, threads_edited=edited)
+    after = PipelineData(input=move.new_input, threads=threads, threads_edited=edited,
+                         providers=data.providers)
     old_read = {t["thread_id"]: t for t in (data.read_threads or {}).get("threads", [])}
     new_read = {t["thread_id"]: t for t in (after.read_threads or {}).get("threads", [])}
     if data.classified is not None:

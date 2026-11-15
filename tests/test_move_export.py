@@ -23,7 +23,7 @@ from step_3_extract.claims import input_fingerprint as claims_fingerprint
 from step_10_update.exports import NotAContinuation, check_continuation, compare_exports
 from step_10_update.move import MovePaths, Mover, moved_data
 from step_10_update.move_data import NotTheSameMessages
-from step_10_update.move_proof import PipelineData, Proof
+from step_10_update.move_proof import PipelineData, Proof, step_3_view
 from utils.export_dates import parse_android_datetime
 from utils.paths import BACKUPS_DIR, Artifact
 from utils.reconcile import fingerprint
@@ -70,8 +70,12 @@ def _threads(groups: list[list[str]], source: list[dict[str, Any]]) -> dict[str,
             "metadata": {"format": "threads-c1", "inputs": {i: fingerprint(r) for i, r in records.items()}}}
 
 
-def _old_data(stale_label: bool = False) -> PipelineData:
-    threads = _threads([["A1", "B1", "C1"], ["D1", "E1"]], OLD)
+def _old_data(
+    stale_label: bool = False,
+    source: list[dict[str, Any]] = OLD,
+    providers: dict[str, str] | None = None,
+) -> PipelineData:
+    threads = _threads([["A1", "B1", "C1"], ["D1", "E1"]], source)
     by_id = {t["thread_id"]: t for t in threads["threads"]}
     first, second = by_id["t-A1"], by_id["t-D1"]
     classified = {
@@ -83,21 +87,21 @@ def _old_data(stale_label: bool = False) -> PipelineData:
     edited["threads"][0]["manual_fingerprint"] = content_fingerprint(first)
     edited["threads"][1]["is_knowledge_bearing"] = False
     edited["threads"][1]["manual_fingerprint"] = "stale" if stale_label else content_fingerprint(second)
-    index = export_index(OLD)
+    index = export_index(source)
     current = with_export(first, index)
     claim = {"claim_id": "t-A1-0001", "thread_id": "t-A1", "claim_text": "claim", "entities": ["X"],
              "stance": "positive", "supporting_message_ids": ["B1", "A1"], "opposing_message_ids": [],
              "counters": []}
     pairs, _ = ThreadClaims(current).finalize_all([claim])
     claims = {"claims": [pairs[0][0]],
-              "metadata": {"inputs": {"t-A1": claims_fingerprint(current)},
-                           "message_fingerprints": {"t-A1": message_fingerprints(current)}}}
+              "metadata": {"inputs": {"t-A1": claims_fingerprint(current, providers)},
+                           "message_fingerprints": {"t-A1": message_fingerprints(current, providers)}}}
     gold = {"windows": [], "messages": {},
             "conversations": [{"thread_id": "t-A1", "start": "2024-03-01T10:00:00",
                                "message_ids": ["A1", "B1", "C1"], "added_at": "x"}]}
-    return PipelineData(input=OLD, threads=threads, threads_edited=json.loads(json.dumps(threads)),
+    return PipelineData(input=source, threads=threads, threads_edited=json.loads(json.dumps(threads)),
                         classified=classified, classified_edited=edited, claims=claims,
-                        audit=[pairs[0][1]], gold=gold)
+                        audit=[pairs[0][1]], gold=gold, providers=providers or {})
 
 
 def test_export_times_with_and_without_seconds() -> None:
@@ -139,6 +143,18 @@ def test_a_stale_step_3_fingerprint_stays_stale() -> None:
     assert after.claims["metadata"]["inputs"]["t-A1"] == "stale"
     assert after.claims["claims"] == before.claims["claims"]  # not refreshed: it is read again
     assert {e["person"] for e in after.audit[0]["supporters"]} == {"p-phone", "q-phone"}
+
+
+def test_fingerprints_made_with_the_owners_table_of_providers_stay_valid() -> None:
+    def tagging(export: list[dict[str, Any]]) -> list[dict[str, Any]]:  # A1 tags member Q
+        tag = [{"tag": "111", "member": "q-phone"}]
+        return [{**m, "text": "ask @111", "mentions": tag} if m["id"] == "A1" else m for m in export]
+
+    before = _old_data(source=tagging(OLD), providers={"q-phone": "a public name"})
+    after, numbers = moved_data(before, tagging(NEW), MEMBERS)
+    assert numbers["fingerprints"]["step 3"] == {"re-stamped": 1, "left as they were": 0}
+    assert step_3_view(after) == {"read": {}, "removed": frozenset()}
+    assert Proof.of(before).differences(Proof.of(after)) == []
 
 
 def test_a_member_under_two_ids_is_one_person_after_the_move() -> None:

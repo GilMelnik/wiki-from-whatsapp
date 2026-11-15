@@ -72,15 +72,21 @@ def _sorted_reactions(record: Message) -> Message:
 
 
 class ChatMove:
-    """The old pipeline input, the new export and the members table, and every move."""
+    """The old pipeline input, the new export and the members table, and every move.
+
+    ``providers`` (member id -> public name): the owner's table of tagged providers, which
+    step 3's fingerprints of a tagging message hold. Member ids are the same before and
+    after the move, so one table serves both sides."""
 
     def __init__(
         self,
         old_input: Sequence[Message],
         new_export: Sequence[Message],
         members: Mapping[str, str],
+        providers: Mapping[str, str] | None = None,
     ) -> None:
         self.members = members
+        self.providers = providers or {}
         by_new = {str(m["id"]): m for m in new_export}
         old_by_id = {str(m["id"]): m for m in old_input}
         self._check_same_messages(old_by_id, by_new)
@@ -279,10 +285,12 @@ class ChatMove:
         }
         inputs, matched = {}, set()
         for tid, stored in metadata.get("inputs", {}).items():
-            if tid in current and stored == claims_fingerprint(current[tid][0]):
+            if tid in current and stored == claims_fingerprint(current[tid][0], self.providers):
                 matched.add(tid)
             counts.add(tid in matched)
-            inputs[tid] = claims_fingerprint(current[tid][1]) if tid in matched else stored
+            inputs[tid] = (
+                claims_fingerprint(current[tid][1], self.providers) if tid in matched else stored
+            )
         fingerprints = {
             tid: self._restamp_message_fingerprints(stored, *current[tid]) if tid in current else stored
             for tid, stored in metadata.get("message_fingerprints", {}).items()
@@ -323,11 +331,11 @@ class ChatMove:
         ]
         return result
 
-    @staticmethod
     def _restamp_message_fingerprints(
-        stored: Mapping[str, str], old: Thread, new: Thread
+        self, stored: Mapping[str, str], old: Thread, new: Thread
     ) -> dict[str, str]:
-        before, after = message_fingerprints(old), message_fingerprints(new)
+        before = message_fingerprints(old, self.providers)
+        after = message_fingerprints(new, self.providers)
         return {i: after[i] if i in after and before.get(i) == fp else fp for i, fp in stored.items()}
 
     @staticmethod

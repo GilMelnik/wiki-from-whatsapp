@@ -37,7 +37,8 @@ Payload = dict[str, Any]
 
 @dataclass
 class PipelineData:
-    """The files the move reads and writes (``None`` when a file does not exist)."""
+    """The files the move reads and writes (``None`` when a file does not exist), and the
+    owner's table of tagged providers (member id -> public name), which is only read."""
 
     input: list[dict[str, Any]]
     threads: Payload | None = None
@@ -49,6 +50,7 @@ class PipelineData:
     audit: list[dict[str, Any]] | None = None
     gold: Payload | None = None
     state: Payload | None = None
+    providers: dict[str, str] = field(default_factory=dict)
 
     @property
     def read_threads(self) -> Payload | None:
@@ -119,12 +121,14 @@ def step_3_view(data: PipelineData) -> dict[str, Any]:
         if tid in threads
     }
     metadata = data.claims["metadata"]
-    diff = diff_inputs(metadata.get("inputs", {}), {tid: input_fingerprint(t) for tid, t in current.items()})
+    now = {tid: input_fingerprint(thread, data.providers) for tid, thread in current.items()}
+    diff = diff_inputs(metadata.get("inputs", {}), now)
     stored = metadata.get("message_fingerprints", {})
     read = {}
     for tid in (*diff.new, *diff.changed):
         before = stored.get(tid, {})
-        read[tid] = frozenset(i for i, fp in message_fingerprints(current[tid]).items() if before.get(i) != fp)
+        messages = message_fingerprints(current[tid], data.providers)
+        read[tid] = frozenset(i for i, fp in messages.items() if before.get(i) != fp)
     return {"read": read, "removed": frozenset(diff.removed)}
 
 
