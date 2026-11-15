@@ -10,14 +10,20 @@
 {% endblock %}
 
 {#- The disclaimer in Material's own info admonition (what `!!! info "title"` renders), which the
-    theme styles only inside `md-typeset`. -#}
+    theme styles only inside `md-typeset`. After the text: the agreement sentence, where only the
+    words that stand for `{terms}` link the terms page, and the contact sentence, where `{email}`
+    is the address as a mail link. -#}
 {% block hero %}
   {% set disclaimer = config.extra.disclaimer %}
+  {% set email = config.extra.contact_email %}
+  {% set agreement = disclaimer.agreement.split("{terms}") %}
+  {% set contact = disclaimer.contact.split("{email}") %}
   <div class="wiki-disclaimer md-grid md-typeset">
     <div class="admonition info" role="note">
       <p class="admonition-title">{{ disclaimer.label | e }}</p>
       <p>{{ disclaimer.text | e }}
-        <a href="{{ config.extra.terms_path | url }}">{{ disclaimer.terms_link_text | e }}</a></p>
+        {{ agreement[0] | e }}<a href="{{ config.extra.terms_path | url }}">{{ disclaimer.terms_link_text | e }}</a>{{ agreement[1] | e }}
+        {{ contact[0] | e }}<a href="mailto:{{ email | e }}">{{ email | e }}</a>{{ contact[1] | e }}</p>
     </div>
   </div>
 {% endblock %}

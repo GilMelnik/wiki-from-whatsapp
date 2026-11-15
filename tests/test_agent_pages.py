@@ -107,7 +107,7 @@ def test_every_twin_starts_with_the_disclaimer_and_has_no_marks_or_html(built: P
         assert text.startswith("# "), path
         assert disclaimer["text"] in text.split("\n\n")[1], path
         header = text.split("\n\n")[1]
-        assert f"({BASE}terms/index.md)" in header and SITE["contact_email"] not in header, path
+        assert f"({BASE}terms/index.md)" in header and f"(mailto:{SITE['contact_email']})" in header, path
         assert not MARK.search(text), path
         assert not HTML_TAG.search(text), path
         assert "[[" not in text and "!!!" not in text, path
@@ -119,7 +119,11 @@ def test_get_page_and_the_twins_carry_the_same_disclaimer_line(built: Path) -> N
     index = json.loads((built / "docs" / "wiki_index.json").read_text(encoding="utf-8"))
     disclaimer = SITE["disclaimer"]
     assert index["disclaimer"] == disclaimer_line()
-    assert index["disclaimer"].startswith(f"{disclaimer['label']}: {disclaimer['text']} [{disclaimer['terms_link_text']}]")
+    email = SITE["contact_email"]
+    assert index["disclaimer"] == (
+        f"{disclaimer['label']}: {disclaimer['text']} השימוש באתר מהווה הסכמה ל[תנאי השימוש]({BASE}terms/index.md). "
+        f"לבקשות לתיקון או הסרה: [{email}](mailto:{email})"
+    )
     for path in (built / "out").rglob(AGENT["twin_file"]):
         assert path.read_text(encoding="utf-8").split("\n\n")[1] == f"> {index['disclaimer']}", path
     assert f"> {index['disclaimer']}" in (built / "out" / AGENT["llms_file"]).read_text(encoding="utf-8")
@@ -138,7 +142,7 @@ def test_links_in_the_twins_are_absolute_and_resolve_to_twins(built: Path) -> No
                 target = _site_file(built, url)
                 assert target.is_file() and target.name == AGENT["twin_file"], (path, url)
             else:
-                assert url.startswith("https://"), (path, url)
+                assert url.startswith("https://") or url == f"mailto:{SITE['contact_email']}", (path, url)
     page = (built / "out" / "agencies" / "index.md").read_text(encoding="utf-8")
     assert f"[המרפאות]({BASE}clinics/index.md)" in page
     assert f"[ארה\"ב]({BASE}labels/usa/index.md)" in page

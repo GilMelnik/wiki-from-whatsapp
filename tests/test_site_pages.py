@@ -79,7 +79,9 @@ def test_config_text_is_the_approved_banner() -> None:
     disclaimer = SITE["disclaimer"]
     assert disclaimer["text"] == APPROVED_BANNER
     assert disclaimer["label"] == "לתשומת לבך"  # the box's title: no colon
-    assert disclaimer["terms_link_text"] == "תנאי השימוש המלאים ובקשות לתיקון או להסרה"
+    assert disclaimer["agreement"] == "השימוש באתר מהווה הסכמה ל{terms}."
+    assert disclaimer["terms_link_text"] == "תנאי השימוש"
+    assert disclaimer["contact"] == "לבקשות לתיקון או הסרה: {email}"
     assert SITE["contact_email"] == "comments@gaysurrogacy.co.il"
 
 
@@ -130,16 +132,19 @@ def test_disclaimer_is_in_the_html_of_every_page(built_site: Path) -> None:
         title, banner = box.groups()
         assert title == SITE["disclaimer"]["label"] and not title.endswith(":"), name
         assert APPROVED_BANNER in banner, name
-        # the contact address is on the terms page only
-        assert "mailto:" not in banner and SITE["contact_email"] not in banner, name
+        # the ending: only the terms words link the terms page, then the address as a mail link
         terms_href = (
             r"\./" if name == "terms/index.html" else r"(?:\.\./|/)*terms/"
         )  # the terms page links to itself
+        email = SITE["contact_email"]
         assert re.search(
-            rf'<a href="{terms_href}">'
-            + re.escape(SITE["disclaimer"]["terms_link_text"]),
-            banner,
+            re.escape(APPROVED_BANNER) + r"\s+" + re.escape("השימוש באתר מהווה הסכמה ל")
+            + rf'<a href="{terms_href}">' + re.escape("תנאי השימוש") + r"</a>\.\s+"
+            + re.escape("לבקשות לתיקון או הסרה: ")
+            + re.escape(f'<a href="mailto:{email}">{email}</a>') + r"$",
+            banner.strip(),
         ), name
+        assert banner.count("<a ") == 2, name
         assert "wiki-disclaimer-bar" not in html and "<strong>" not in banner, name
 
 

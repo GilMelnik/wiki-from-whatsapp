@@ -99,6 +99,7 @@ def build_config(
             "coffee_link_text": SITE_CONFIG["coffee_link_text"],
             "coffee_url": SITE_CONFIG["coffee_url"],
             "disclaimer": SITE_CONFIG["disclaimer"],
+            "contact_email": SITE_CONFIG["contact_email"],
             "refs_toggle": SITE_CONFIG["refs_toggle"],
             "terms_path": SITE_CONFIG["terms"]["file"].removesuffix(".md") + "/",
             "terms_footer_text": SITE_CONFIG["terms"]["footer_link_text"],

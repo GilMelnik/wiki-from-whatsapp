@@ -60,9 +60,16 @@ def twin_docs_path(docs_file: str) -> str:
 
 
 def disclaimer_line() -> str:
-    """The site's disclaimer as one markdown line, linking the terms twin: every twin opens with
-    it, ``llms.txt`` carries it and ``wiki_index.json`` hands it to the MCP ``get_page``."""
-    return AGENT_CONFIG["disclaimer"].format(terms_url=twin_url(TERMS_FILE), **SITE_CONFIG["disclaimer"])
+    """The site's disclaimer as one markdown line, the same sentences as the HTML box: the terms
+    words link the terms twin, the contact address is a mail link. Every twin opens with it,
+    ``llms.txt`` carries it and ``wiki_index.json`` hands it to the MCP ``get_page``."""
+    disclaimer, email = SITE_CONFIG["disclaimer"], SITE_CONFIG["contact_email"]
+    return AGENT_CONFIG["disclaimer"].format(
+        label=disclaimer["label"],
+        text=disclaimer["text"],
+        agreement=disclaimer["agreement"].format(terms=f"[{disclaimer['terms_link_text']}]({twin_url(TERMS_FILE)})"),
+        contact=disclaimer["contact"].format(email=f"[{email}](mailto:{email})"),
+    )
 
 
 def strip_marks(body: str) -> str:
