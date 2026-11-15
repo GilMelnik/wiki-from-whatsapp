@@ -49,11 +49,6 @@ def family_base(thread_id: str) -> str:
     return SPLIT_SUFFIX.sub("", thread_id)
 
 
-def ordered(threads: Iterable[Thread]) -> list[Thread]:
-    """Threads in the order step 1 writes them: by start time, then id."""
-    return sorted(threads, key=lambda thread: (thread["start_time"], thread["thread_id"]))
-
-
 def _count(n: int, noun: str) -> str:
     return f"{n} {noun}" if n == 1 else f"{n} {noun}s"
 
@@ -144,13 +139,22 @@ class ThreadEditor:
         if clash:
             raise EditRefused(f"Cannot undo: {', '.join(clash)} exists again in the meantime.")
         result.update((thread["thread_id"], thread) for thread in before)
-        return ordered(result.values())
+        return self._ordered(result.values())
 
     # ---------------------------------------------------------------- helpers
     def _require_threads(self, thread_ids: Iterable[str]) -> None:
         unknown = [thread_id for thread_id in thread_ids if thread_id not in self.by_id]
         if unknown:
             raise UnknownItem(f"No conversation {', '.join(unknown)} (any more).")
+
+    def _ordered(self, threads: Iterable[Thread]) -> list[Thread]:
+        """Threads in the order step 1 writes them: by start time, then by the chat place of
+        their first message."""
+        last = len(self.seq)
+        return sorted(
+            threads,
+            key=lambda thread: (thread["start_time"], self.seq.get(thread["messages"][0]["id"], last)),
+        )
 
     def _first_seq(self, thread_id: str) -> int:
         return min(self.seq[m["id"]] for m in self.by_id[thread_id]["messages"])
@@ -176,4 +180,4 @@ class ThreadEditor:
     ) -> Edit:
         before = tuple(t for k, t in self.by_id.items() if result.get(k) is not t)
         after_ids = tuple(k for k, t in result.items() if self.by_id.get(k) is not t)
-        return Edit(label, focus, ordered(result.values()), before, after_ids, created, tuple(removed))
+        return Edit(label, focus, self._ordered(result.values()), before, after_ids, created, tuple(removed))

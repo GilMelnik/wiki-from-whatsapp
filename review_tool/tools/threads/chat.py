@@ -2,7 +2,7 @@
 
 The threads file holds every message of the chat once, cut into threads. ``ChatIndex`` puts
 them back in chat order (``seq`` 0, 1, 2, ...: time, then the export's own order for messages
-of the same minute) and answers what a reviewer needs to judge a split:
+of the same time) and answers what a reviewer needs to judge a split:
 
 - ``reply_to``: the message a reply quotes, found as step 1's reply rule finds it (same sender
   and text, the latest earlier one), so "who replied to whom" is the splitter's own view;

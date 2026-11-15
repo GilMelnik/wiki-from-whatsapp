@@ -84,7 +84,9 @@ def add_context(
         missing = sorted(wa_id for wa_id in outside if wa_id not in tagged_of)
         if missing:
             raise ValueError(f"{len(missing)} shown messages are not tagged, e.g. {missing[:3]}")
-        ordered = sorted(outside, key=lambda wa_id: (moments[wa_id], wa_id))
+        # Time order; messages of the same time keep their order in the tagged file.
+        listed = [m["id"] for t in tagged for m in t["messages"] if m["id"] in outside]
+        ordered = sorted(listed, key=moments.__getitem__)
         for wa_id in ordered:
             if wa_id in context:
                 raise ValueError(f"message {wa_id} was shown in two gold windows")

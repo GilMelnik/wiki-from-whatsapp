@@ -261,11 +261,12 @@ class Measurement:
 
     def incremental(self, params: SplitParams, full: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
         rows = []
+        order = {message["id"]: place for place, message in enumerate(self.messages)}
         for fraction in MEASURE_CONFIG["incremental_cuts"]:
             cut = int(len(self.messages) * fraction)
             splitter = ThreadSplitter(params, self.embed)
             first = splitter.split(self.messages[:cut])
-            added = splitter.assign_new_messages(first, self.messages[cut:])
+            added = splitter.assign_new_messages(first, self.messages[cut:], order)
             rows.append(
                 {
                     "cut": fraction,
