@@ -14,6 +14,9 @@ behind ``python -m <module>`` (``None`` while the step has no command line), and
   it would make no paid call).
 - ``review_tool``: the review tool where a person looks at the step's output before the
   pipeline goes on (``python -m review_tool --tool <name>``); the update driver stops there.
+- ``review_before``: the review tool where a person decides what the step reads, before it
+  runs (step 3: the Tagged members page); the update driver says how many decisions wait
+  (``update.waiting_hints``) and goes on.
 
 The rows are the one description of the pipeline: their order is the order the steps run in
 (``pipeline.py`` and ``step_10_update`` walk them), ``Step.run_function`` is the step's own
@@ -41,6 +44,7 @@ class StepSpec:
     incremental_safe: bool = False
     paid: bool = False
     review_tool: str | None = None
+    review_before: str | None = None
 
 
 STEP_SPECS: tuple[StepSpec, ...] = (
@@ -51,7 +55,7 @@ STEP_SPECS: tuple[StepSpec, ...] = (
     ),
     StepSpec(
         "claims", "Step 3 · Extract claims", "step_3_extract.run", incremental_safe=True,
-        paid=True, review_tool="pii",
+        paid=True, review_tool="pii", review_before="tagged",
     ),
     StepSpec(
         "entities", "Step 4 · Find entities", "step_4_entities.run", incremental_safe=True,
@@ -111,6 +115,7 @@ class Step:
             "incremental_safe": spec.incremental_safe,
             "paid": spec.paid,
             "review_tool": spec.review_tool,
+            "review_before": spec.review_before,
             "command": self._shown(rebuild=False),
             "rebuild_command": self._shown(rebuild=True),
         }

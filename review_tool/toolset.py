@@ -18,6 +18,7 @@ from review_tool.tools.plan.tool import PlanTool
 from review_tool.tools.status.tool import StatusTool
 from review_tool.tools.status.update_status import UpdateStatus
 from review_tool.tools.suggestions.tool import SuggestionsTool
+from review_tool.tools.tagged.tool import TaggedTool
 from review_tool.tools.threads.tool import ThreadsTool
 from utils.config import DATA_DIR
 from utils.paths import UPDATE_LEASE_PATH, UPDATE_STATE_PATH
@@ -27,6 +28,7 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         GRAPH, DATA_DIR, UpdateStatus(UPDATE_STATE_PATH, UPDATE_LEASE_PATH, SERVED_STEPS.steps, GRAPH)
     ).spec,
     ThreadsTool(GRAPH).spec,
+    TaggedTool(GRAPH).spec,
     PiiTool(GRAPH).spec,
     EntitiesTool(GRAPH).spec,
     GroupsTool(GRAPH).spec,

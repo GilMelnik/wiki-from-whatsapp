@@ -43,6 +43,7 @@ from utils.paths import (
     STEP_8_PROOFREAD,
     STEP_9,
     SUGGESTIONS,
+    TAGGED_MEMBERS_PATH,
     THREADS,
     WIKI_INDEX_FILE,
     WIKI_PAGES,
@@ -195,7 +196,12 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
         # Hand-tagged, frozen on purpose (``evaluate --freeze-gold``): no step, never stale.
         ArtifactNode("gold_threads", "Gold conversations (hand-tagged)", GOLD_THREADS_PATH),
         ArtifactNode.from_pair("classified", "Classified conversations", CLASSIFIED, STEP_2, ("threads",)),
-        ArtifactNode.from_pair("claims", "Claims", CLAIMS, STEP_3, ("threads", "classified")),
+        # The owner's word on which tagged members are providers (the Tagged members page): no
+        # step; step 3 shows their tags by it, so a change makes the claims stale.
+        ArtifactNode("tagged_members", "Tagged members", TAGGED_MEMBERS_PATH),
+        ArtifactNode.from_pair(
+            "claims", "Claims", CLAIMS, STEP_3, ("threads", "classified", "tagged_members")
+        ),
         ArtifactNode.from_pair("entities", "Entities", ENTITIES, STEP_4, ("claims",)),
         # Near-duplicate claims the owner groups by hand in the entity reviewer: no step.
         ArtifactNode("claim_aggregations", "Claims merged by hand", MANUAL_AGGREGATIONS_PATH),

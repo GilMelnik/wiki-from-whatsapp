@@ -9,6 +9,7 @@ import pii from "./pii/index.jsx";
 import plan from "./plan/index.jsx";
 import status from "./status/index.jsx";
 import suggestions from "./suggestions/index.jsx";
+import tagged from "./tagged/index.jsx";
 import threads from "./threads/index.jsx";
 
-export const TOOLS = [status, threads, pii, entities, groups, plan, suggestions];
+export const TOOLS = [status, threads, tagged, pii, entities, groups, plan, suggestions];

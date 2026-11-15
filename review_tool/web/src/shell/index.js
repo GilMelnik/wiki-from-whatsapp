@@ -25,7 +25,7 @@ export { PanelState } from "./states.jsx";
 export { Dialog } from "./Dialog.jsx";
 export { useToast } from "./Toast.jsx";
 export { useBanner } from "./Banner.jsx";
-export { ToolLink } from "./navigation.jsx";
+export { takeLinkParam, ToolLink } from "./navigation.jsx";
 export { JobLog, useStepRun } from "./JobControls.jsx";
 export { ActionButton } from "./ActionButton.jsx";
 

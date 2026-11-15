@@ -20,6 +20,9 @@ One update, start to end:
 4. After a step with a review tool whose output changed, the update stops (unless
    ``--no-stops`` or ``--through``); running the command again means "reviewed, go on". A
    finished step is never redone, except as in 2.
+5. Before a step whose review comes first (``review_before``: step 3's Tagged members), the log
+   and the report say in one line how many decisions wait there (``waiting``, by tool;
+   ``update.waiting_hints``). It never stops the update.
 """
 
 from __future__ import annotations
@@ -138,6 +141,7 @@ class UpdateDriver:
         server_check: Callable[[], str | None],
         paths: UpdatePaths = UpdatePaths(),
         runners: Mapping[str, Callable[[], dict[str, Any]]] | None = None,
+        waiting: Mapping[str, Callable[[], int]] | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self.graph = graph
@@ -146,6 +150,7 @@ class UpdateDriver:
         self.estimator = estimator
         self.server_check = server_check
         self.runners = runners or {}
+        self.waiting = waiting or {}
         self.logger = logger or logging.getLogger(__name__)
         self.lease = StepLease(paths.lease)
         self.state = UpdateState.load(paths.state)
@@ -337,6 +342,7 @@ class UpdateDriver:
         replaces_input = (self.input_key in step.upstream
                           and not self.state.current()["input"]["replaced"])
         before = self._fingerprint(step)
+        self._say_waiting(step, report)
         try:
             if step.spec.paid:
                 estimate = self.estimator(step)
@@ -387,6 +393,15 @@ class UpdateDriver:
                               f"`python -m review_tool --tool {tool}`, then run `{COMMAND}` "
                               "to go on.")
         return None
+
+    def _say_waiting(self, step: Step, report: UpdateReport) -> None:
+        """One line when decisions wait in the review that comes before ``step``."""
+        tool = step.spec.review_before
+        count = self.waiting[tool]() if tool in self.waiting else 0
+        if count:
+            message = UPDATE_CONFIG["waiting_hints"][tool].format(count=count)
+            report.add("waiting", step.key, tool=tool, count=count, message=message)
+            self.logger.info(message)
 
     def _stop(self, report: UpdateReport, kind: str, step: Step, message: str) -> Outcome:
         self.state.stop(kind, step.key, message)

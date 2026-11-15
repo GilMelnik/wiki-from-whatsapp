@@ -48,7 +48,7 @@ def test_unknown_key_error_names_the_known_keys(tmp_path: Path) -> None:
 def test_default_graph_is_the_pipeline_in_order() -> None:
     keys = [node.key for node in GRAPH.nodes]
     assert keys == [
-        "export", "threads", "gold_threads", "classified", "claims", "entities",
+        "export", "threads", "gold_threads", "classified", "tagged_members", "claims", "entities",
         "claim_aggregations", "groups", "plan", "assignments", "pages", "suggestions",
         "proofread", "site",
     ]  # fmt: skip
@@ -64,7 +64,8 @@ def test_default_graph_is_the_pipeline_in_order() -> None:
         None,
     )
     assert GRAPH.node("groups").upstream == ("claims", "entities", "claim_aggregations")
-    assert GRAPH.node("claims").upstream == ("threads", "classified")
+    assert GRAPH.node("claims").upstream == ("threads", "classified", "tagged_members")
+    assert (GRAPH.node("tagged_members").step, GRAPH.node("tagged_members").edited) == (None, None)
     assert GRAPH.node("claims").original.name == "claims.json"
     assert GRAPH.node("claims").edited.name == "claims_edited.json"
 

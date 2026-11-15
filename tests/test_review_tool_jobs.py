@@ -348,6 +348,7 @@ def test_http_api_and_write_guard(
         "incremental_safe": True,
         "paid": True,
         "review_tool": "writer",
+        "review_before": None,
         "command": f"python -m {FAKE_STEP}",
         "rebuild_command": f"python -m {FAKE_STEP} --rebuild",
     }

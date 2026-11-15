@@ -30,15 +30,19 @@ function Chips({ keys, byKey, changed = [], onSelect, emptyText }) {
   );
 }
 
-/** The tools that read or write the file; the step's own review tool first, as the primary button. */
-function ReviewTools({ artifactKey, ownToolId }) {
+/** The tools that read or write the file; the step's own review tool first, as the primary button; the
+ * review that comes before the step (what it reads is decided there) next. */
+function ReviewTools({ artifactKey, ownToolId, beforeToolId }) {
   const { tools } = useTools();
   const related = tools.filter((tool) => tool.reads.includes(artifactKey) || tool.writes.includes(artifactKey));
   if (related.length === 0) return <p className="text-slate-500">No review tool works on this file.</p>;
   const ordered = [
     ...related.filter((tool) => tool.name === ownToolId),
-    ...related.filter((tool) => tool.name !== ownToolId),
+    ...related.filter((tool) => tool.name === beforeToolId),
+    ...related.filter((tool) => tool.name !== ownToolId && tool.name !== beforeToolId),
   ];
+  const role = (tool) =>
+    tool.name === beforeToolId ? "decide before the step" : tool.writes.includes(artifactKey) ? "edits it" : "shows it";
   return (
     <div className="flex flex-wrap gap-2">
       {ordered.map((tool) => {
@@ -46,7 +50,7 @@ function ReviewTools({ artifactKey, ownToolId }) {
         return (
           <ToolLink key={tool.name} toolId={tool.name} className={`btn btn-sm ${own ? "btn-primary" : ""}`} title="Ctrl+click opens it in a new tab">
             {tool.title}
-            <span className={own ? "opacity-80" : "text-slate-500"}>{tool.writes.includes(artifactKey) ? "edits it" : "shows it"}</span>
+            <span className={own ? "opacity-80" : "text-slate-500"}>{role(tool)}</span>
           </ToolLink>
         );
       })}
@@ -77,7 +81,7 @@ export function ArtifactDetail({ artifact, state, step, running, latest, detail,
         <NextAction artifact={artifact} state={state} step={step} running={running} latest={latest} byKey={byKey} />
         <Withheld artifactKey={artifact.key} metadata={detail.data?.metadata} />
         <Section title="Review it in">
-          <ReviewTools artifactKey={artifact.key} ownToolId={step?.review_tool} />
+          <ReviewTools artifactKey={artifact.key} ownToolId={step?.review_tool} beforeToolId={step?.review_before} />
         </Section>
         <div className="grid gap-6 md:grid-cols-2">
           <Section title="Made from">
