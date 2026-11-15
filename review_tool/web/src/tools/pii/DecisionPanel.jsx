@@ -2,8 +2,8 @@ import { Bidi, Kbd, Ltr, Panel, PanelState } from "@shell";
 import { MARK, restoreLabel, typeLabel } from "./review.js";
 
 // The side column: the decision on the selected claim, with only the actions that fit it. To
-// decide: which removed values to put back (none marked = all), then keep the removal or
-// restore. Decided: undo. "Undo the previous decision" stays offered after moving on.
+// decide: which removed values to show again (none marked = all), then "hide" (the removal
+// stays) or "show" (the values go back into the claim). Decided: undo. "Undo the previous decision" stays offered after moving on.
 
 function ActionButton({ label, keyName, primary = false, disabled, onClick }) {
   return (
@@ -35,15 +35,15 @@ function ToDecide({ claim, chosen, saving, onToggle, onAccept, onRestore }) {
   const several = claim.redactions.length > 1;
   return (
     <div className="space-y-3">
-      <p className="text-slate-700">Should the detail stay out of the claim, or go back in?</p>
+      <p className="text-slate-700">Step 3 took this detail out of the claim. Hide it for good, or show it again?</p>
       {several && claim.marks_match && (
         <>
           <RedactionChoices claim={claim} chosen={chosen} onToggle={onToggle} disabled={saving} />
-          <p className="text-xs text-slate-500">Mark details (or press their number) to restore only those.</p>
+          <p className="text-xs text-slate-500">Mark details (or press their number) to show only those.</p>
         </>
       )}
-      <ActionButton label={<>Keep the removal: <Bidi>{MARK}</Bidi></>} keyName="a" primary disabled={saving} onClick={onAccept} />
-      {claim.marks_match && <ActionButton label={restoreLabel(chosen.length, claim.redactions.length)} keyName="r" disabled={saving} onClick={onRestore} />}
+      <ActionButton label={<>Hide: the claim keeps <Bidi>{MARK}</Bidi></>} keyName="h" primary disabled={saving} onClick={onAccept} />
+      {claim.marks_match && <ActionButton label={restoreLabel(chosen.length, claim.redactions.length)} keyName="s" disabled={saving} onClick={onRestore} />}
     </div>
   );
 }

@@ -6,25 +6,26 @@ export const PAGE_SIZE = 100;
 // The mark step 3 puts in the claim text in place of a removed detail (content, kept as is).
 export const MARK = "[הוסר]";
 
-// The list's sections, in the server's order: to decide, removal kept, restored.
+// The list's sections, in the server's order: to decide, hidden (the removal stays), shown
+// (the details are back in the claim). "Hide" and "show" say what happens to the detail.
 export const SECTION_LABELS = {
   pending: "To decide",
-  accepted: "Removal kept",
-  restored: "Restored",
-  partial: "Restored",
+  accepted: "Hidden",
+  restored: "Shown",
+  partial: "Shown",
 };
 
 export const STATUS_LABELS = {
   pending: "To decide",
-  accepted: "Removal kept",
-  restored: "Restored",
-  partial: "Partly restored",
+  accepted: "Hidden",
+  restored: "Shown",
+  partial: "Partly shown",
 };
 
 export const DECISION_TOASTS = {
-  accepted: "Removal kept",
-  restored: "Details restored",
-  partial: "Marked details restored",
+  accepted: "Hidden: the detail stays out of the claim",
+  restored: "Shown: the details are back in the claim",
+  partial: "Shown: the marked details are back in the claim",
 };
 
 export const TYPE_LABELS = { phone: "Phone", email: "Email" };
@@ -68,8 +69,8 @@ export function marksToRestore(chosen, count) {
 }
 
 export function restoreLabel(chosenCount, total) {
-  if (chosenCount === 0 || chosenCount === total) return total === 1 ? "Restore the detail" : "Restore all details";
-  return `Restore ${chosenCount} of ${total} details`;
+  if (chosenCount === 0 || chosenCount === total) return total === 1 ? "Show: put the detail back" : "Show: put all details back";
+  return `Show: put ${chosenCount} of ${total} details back`;
 }
 
 /** "2024-01-05" or "2024-01-05 – 2024-02-01" (C3 dates are YYYY-MM-DD). */

@@ -54,7 +54,7 @@ function RemovedDetail({ claim, redaction, index, pending }) {
         <span className="text-xs text-slate-500">{typeLabel(redaction.type)}</span>
         <Ltr className="break-all font-medium text-slate-900">{redaction.value}</Ltr>
         {!pending && (
-          <span className={`badge ${redaction.in_text ? "badge-emerald" : "badge-slate"}`}>{redaction.in_text ? "Restored" : "Removed"}</span>
+          <span className={`badge ${redaction.in_text ? "badge-emerald" : "badge-slate"}`}>{redaction.in_text ? "Shown" : "Hidden"}</span>
         )}
       </p>
       <Owners owners={redaction.owners ?? []} entitiesKnown={claim.context?.entities} />
@@ -89,7 +89,7 @@ function TheClaim({ claim }) {
         {!claim.marks_match && (
           <p className="note note-warning">
             The number of marks in the text does not match the number of removed details, so the details cannot be put back
-            automatically. You can keep the removal.
+            automatically. You can only hide them.
           </p>
         )}
       </>
@@ -112,7 +112,7 @@ function Restored({ claim, chosen }) {
   if (claim.status !== "pending" || !claim.marks_match) return null;
   const restored = marksToRestore(chosen, claim.redactions.length);
   return (
-    <Section title={chosen.length > 0 ? "The claim if you restore the marked details" : "The claim if you restore"}>
+    <Section title={chosen.length > 0 ? "The claim if you show the marked details" : "The claim if you show the details"}>
       <div className="card">
         <ClaimText segments={claim.segments} redactions={claim.redactions} restored={restored} mode="preview" />
       </div>

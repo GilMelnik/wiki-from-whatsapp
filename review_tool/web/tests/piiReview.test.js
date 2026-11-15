@@ -19,12 +19,12 @@ test("the list page follows the selected claim's queue position", () => {
   assert.equal(pageStart(257, 100), 200);
 });
 
-test("the list is cut into to decide, removal kept and restored", () => {
+test("the list is cut into to decide, hidden and shown", () => {
   assert.equal(sectionOf({ status: "pending" }), "To decide");
-  assert.equal(sectionOf({ status: "accepted" }), "Removal kept");
-  // Restored in full or in part: one section.
-  assert.equal(sectionOf({ status: "restored" }), "Restored");
-  assert.equal(sectionOf({ status: "partial" }), "Restored");
+  assert.equal(sectionOf({ status: "accepted" }), "Hidden");
+  // Shown in full or in part: one section.
+  assert.equal(sectionOf({ status: "restored" }), "Shown");
+  assert.equal(sectionOf({ status: "partial" }), "Shown");
 });
 
 test("choosing marks to restore toggles them and keeps them sorted", () => {
@@ -36,10 +36,10 @@ test("choosing marks to restore toggles them and keeps them sorted", () => {
 test("no chosen mark means every mark is restored", () => {
   assert.deepEqual(marksToRestore([], 3), [0, 1, 2]);
   assert.deepEqual(marksToRestore([1], 3), [1]);
-  assert.equal(restoreLabel(0, 1), "Restore the detail");
-  assert.equal(restoreLabel(0, 3), "Restore all details");
-  assert.equal(restoreLabel(3, 3), "Restore all details");
-  assert.equal(restoreLabel(1, 3), "Restore 1 of 3 details");
+  assert.equal(restoreLabel(0, 1), "Show: put the detail back");
+  assert.equal(restoreLabel(0, 3), "Show: put all details back");
+  assert.equal(restoreLabel(3, 3), "Show: put all details back");
+  assert.equal(restoreLabel(1, 3), "Show: put 1 of 3 details back");
 });
 
 test("what was removed and when it was said read well", () => {

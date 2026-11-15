@@ -17,8 +17,8 @@ import { DecisionPanel } from "./DecisionPanel.jsx";
 import { DECISION_TOASTS, PAGE_SIZE, sectionOf, toggleMark } from "./review.js";
 
 // Privacy: every claim whose phone numbers or e-mail addresses step 3 removed. Decided here:
-// per claim, keep the removal or put the details back. The list holds the claims in sections
-// (to decide, removal kept, restored); the main column the claim with each removed detail in
+// per claim, hide the details (the removal stays) or show them (they go back into the claim).
+// The list holds the claims in sections (to decide, hidden, shown); the main column the claim with each removed detail in
 // place, whose contact it is and the chat message it came from; the side column the decision.
 // A decision is saved at once and the next claim to decide is shown; "u" undoes. Everything
 // follows the files on disk: a step-3 re-run, or step 4 finding contacts, shows up live.
@@ -106,9 +106,9 @@ function PiiTool({ tool }) {
   };
 
   useShortcuts([
-    { keys: "a", label: "Keep the removal", run: () => decide("accept") },
-    { keys: "r", label: "Restore the details (all, or only the marked ones)", run: () => decide("restore") },
-    { keys: DIGITS, label: "Mark a detail to restore by its number", run: (event) => toggle(Number(event.code.slice(-1)) - 1) },
+    { keys: "h", label: "Hide: the detail stays out of the claim", run: () => decide("accept") },
+    { keys: "s", label: "Show: put the details back into the claim (all, or only the marked ones)", run: () => decide("restore") },
+    { keys: DIGITS, label: "Mark a detail to show by its number", run: (event) => toggle(Number(event.code.slice(-1)) - 1) },
     { keys: "u", label: "Undo the last decision", run: undo },
   ]);
 
