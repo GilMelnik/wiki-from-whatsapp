@@ -207,7 +207,8 @@ class ViewsMixin:
 
     def detail(self, entity_id: str, view: EntityView) -> dict[str, Any]:
         entity = self.find(entity_id)
-        conflicts = [self.annotator.ref(name) for name in entity.get("conflict_with") or []]
+        conflicts = [self.annotator.ref(name, exclude=entity_id)
+                     for name in entity.get("conflict_with") or []]
         detail = {
             **self.list_item(entity),
             "canonical_manual": bool(entity.get("canonical_manual")),

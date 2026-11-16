@@ -59,7 +59,7 @@ STEP_SPECS: tuple[StepSpec, ...] = (
     ),
     StepSpec(
         "entities", "Step 4 · Find entities", "step_4_entities.run", incremental_safe=True,
-        review_tool="entities",
+        paid=True, review_tool="entities",
     ),
     StepSpec(
         "groups", "Step 5 · Group claims", "step_5_aggregate.run", incremental_safe=True,

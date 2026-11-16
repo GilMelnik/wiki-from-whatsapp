@@ -35,10 +35,14 @@ class ClaimAnnotator:
             if words:
                 self._by_first_word.setdefault(words[0], []).append(name)
 
-    def ref(self, name: str) -> dict[str, Any]:
-        """A link to the entity holding ``name`` (``entity_id`` None when nobody does)."""
+    def ref(self, name: str, exclude: str | None = None) -> dict[str, Any]:
+        """A link to the entity holding ``name`` (``entity_id`` None when nobody does). A name
+        held by several entities (a name with two meanings) links to one other than
+        ``exclude`` when there is one."""
 
         entity_id = self.entity_of_name.get(name)
+        if entity_id is not None and entity_id == exclude:
+            entity_id = next((e for e in self.holders.get(name, []) if e != exclude), entity_id)
         return {
             "name": name,
             "entity_id": entity_id,

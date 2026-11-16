@@ -8,11 +8,17 @@ claims are touched, so every manual decision about other claims survives as it i
   reviewer put it (moved, copied or excluded claims included);
 * a new pair for a name the state already knows goes to that name's member (the one with
   the most claims when the reviewer split the name across entities);
-* a name nobody has seen becomes a member: it joins the one existing entity it confidently
-  matches (similarity to EVERY member over the threshold, context guard included, the same
-  complete linkage as a full clustering), otherwise it is clustered with the other new
-  names into new entities; a name matching several entities is put in a new entity
-  flagged ``ambiguous`` (``conflict_with`` names the candidates);
+* a name nobody has seen becomes a member. With the model stages (``matcher``, see
+  ``match`` and ``match_apply``) the model decides where it goes, and the names it could not
+  decide follow the spelling rules below and are flagged ``ambiguous``. By spelling, it joins
+  the one existing entity it confidently matches (similarity to EVERY member over the
+  threshold, context guard included, the same complete linkage as a full clustering),
+  otherwise it is clustered with the other new names into new entities; a name matching
+  several entities is put in a new entity flagged ``ambiguous`` (``conflict_with`` names the
+  candidates);
+* with the model stages, the new claims of a known name that members of several entities
+  hold (a name with two meanings, or one the reviewer split) are divided between them by the
+  model, per claim, instead of all going to the member with the most claims;
 * names of entities the reviewer deleted (``deleted_names``) and hard-deleted claims
   (``deleted_claims``) are never brought back;
 * members emptied by this update are removed and entities left without members are dropped.
@@ -29,6 +35,9 @@ from typing import Any
 
 from step_4_entities.cluster import EntityClusterer, flag_conflict
 from step_4_entities.collect import ClaimCorpus, tagged_names
+from step_4_entities.match import EntityMatcher
+from step_4_entities.match_apply import ModelPlacement, flag_for_review
+from step_4_entities.match_senses import SenseJob
 from step_4_entities.records import (
     CONTACT_KINDS,
     allocate_entity_id,
@@ -57,9 +66,14 @@ class EntityUpdate:
     """One incremental update of an entities payload (mutated in place)."""
 
     def __init__(
-        self, state: dict[str, Any], corpus: ClaimCorpus, clusterer: EntityClusterer
+        self,
+        state: dict[str, Any],
+        corpus: ClaimCorpus,
+        clusterer: EntityClusterer,
+        matcher: EntityMatcher | None = None,
     ) -> None:
         self.state = state
+        self.matcher = matcher
         self.entities: list[dict[str, Any]] = state.setdefault("entities", [])
         self.corpus = corpus
         self.clusterer = clusterer
@@ -144,17 +158,23 @@ class EntityUpdate:
         """Add new pairs of known names to their member; return the names nobody has seen."""
 
         primary: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
+        holders: dict[str, list[tuple[dict[str, Any], dict[str, Any]]]] = {}
         for entity in self.entities:
             for member in entity.get("members") or []:
                 best = primary.get(member["name"])
                 if best is None or (member.get("count") or 0) > (best[1].get("count") or 0):
                     primary[member["name"]] = (entity, member)
+                if entity.get("status") != "rejected":
+                    holders.setdefault(member["name"], []).append((entity, member))
         unseen: list[str] = []
+        shared: dict[str, set[str]] = {}
         for name in sorted(valid):
             missing = valid[name] - placed.get(name, set())
             if not missing:
                 continue
-            if name in primary:
+            if self.matcher is not None and len(holders.get(name, [])) > 1:
+                shared[name] = missing
+            elif name in primary:
                 entity, member = primary[name]
                 self.stats["pairs_added_to_known_names"] += len(missing)
                 self._rebuild(entity, member, add=missing)
@@ -162,7 +182,47 @@ class EntityUpdate:
                 self.stats["deleted_names_skipped"] += 1
             else:
                 unseen.append(name)
+        self._divide_known(shared, holders)
         return unseen
+
+    def _divide_known(
+        self,
+        missing: dict[str, set[str]],
+        holders: dict[str, list[tuple[dict[str, Any], dict[str, Any]]]],
+    ) -> None:
+        """The new claims of known names held in several entities, divided by the model."""
+
+        if not missing or self.matcher is None:
+            return
+        ordered = {
+            name: sorted(holders[name], key=lambda h: -(h[1].get("count") or 0))
+            for name in missing
+        }
+        jobs = [
+            SenseJob(
+                name,
+                tuple(sorted(claims)),
+                tuple(
+                    (self.matcher.record.group_label([m["name"] for m in e["members"]])
+                     or e.get("canonical_name") or "", tuple(e.get("aliases") or []))
+                    for e, _ in ordered[name]
+                ),
+            )
+            for name, claims in sorted(missing.items())
+        ]
+        ids = {name: [e["entity_id"] for e, _ in ordered[name]] for name in missing}
+        picked = self.matcher.divide_known(jobs, ids)
+        for name, claims in picked.items():
+            for index, (entity, member) in enumerate(ordered[name]):
+                add = {c for c, targets in claims.items() if index in targets}
+                if add:
+                    self.stats["pairs_added_to_known_names"] += len(add)
+                    self._rebuild(entity, member, add=add)
+            for one, _ in ordered[name]:
+                for other, _ in ordered[name]:
+                    if one is not other:
+                        flag_conflict(one, other)
+        self.stats["known_names_divided"] += len(picked)
 
     def _drop_empty(self) -> None:
         for entity in list(self.touched.values()):
@@ -177,20 +237,43 @@ class EntityUpdate:
 
     # --- new names ----------------------------------------------------------
 
+    def _existing(self) -> list[tuple[dict[str, Any], dict[str, Any]]]:
+        """Every (entity, member) a new name may join: entities not ``rejected``."""
+
+        return [
+            (entity, member)
+            for entity in self.entities
+            if entity.get("status") != "rejected"
+            for member in entity.get("members") or []
+        ]
+
     def _assign(self, new_members: list[dict[str, Any]]) -> None:
-        """Attach each new member to the one entity it confidently matches, else cluster.
+        """Place the new members: by the model when there is a ``matcher`` (the names it could
+        not decide by spelling, flagged), otherwise by spelling."""
+
+        if self.matcher is None or not new_members:
+            self._assign_by_spelling(new_members)
+            return
+        existing = self._existing()
+        result = self.matcher.match(new_members, existing)
+        leftovers = ModelPlacement(self, result, existing).place(new_members)
+        placed = self._assign_by_spelling(leftovers)
+        for member in leftovers:
+            flag_for_review(placed[member["name"]])
+        self.stats["unjudged_names"] += len(leftovers)
+
+    def _assign_by_spelling(self, new_members: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+        """Attach each new member to the one entity it confidently matches, else cluster;
+        returns the entity of every new member.
 
         A new member is compared with every existing member, then (repeatedly) with the new
         members attached in the previous pass, so ``Foo Agency`` can follow ``Foo`` into the
         entity ``Foo`` matched. Entities the reviewer marked ``rejected`` take no new members.
         """
 
-        existing = [
-            (entity, member)
-            for entity in self.entities
-            if entity.get("status") != "rejected"
-            for member in entity.get("members") or []
-        ]
+        if not new_members:
+            return {}
+        existing = self._existing()
         by_key = {id(e): e for e in self.entities}
         index = self.clusterer.index([m for _, m in existing] + new_members)
         owner: dict[int, dict[str, Any]] = {j: e for j, (e, _) in enumerate(existing)}
@@ -240,6 +323,7 @@ class EntityUpdate:
             for key in conflicts[k] - {id(owner[k])}:
                 self.stats["conflicts_flagged"] += 1
                 flag_conflict(owner[k], by_key[key])
+        return {new_members[k - offset]["name"]: owner[k] for k in range(offset, offset + len(new_members))}
 
     def _attach(
         self,

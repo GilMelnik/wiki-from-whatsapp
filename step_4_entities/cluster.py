@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from pathlib import Path
 from typing import Any
 
@@ -81,7 +81,44 @@ class EntityClusterer:
             seed_groups=seeds,
         )
 
-    def _seeded(self, entity: dict[str, Any], member_seeds: list[str | None]) -> None:
+    def _signals(self, index: EntityPairIndex, indices: list[int]) -> set[str]:
+        """The signals of the pairs among ``indices`` that reach the threshold."""
+
+        signals: set[str] = set()
+        for a in indices:
+            for b in indices:
+                if a < b:
+                    sim, fired, _ = index.pair_signals(a, b)
+                    if sim >= self.similarity_threshold:
+                        signals |= fired
+        return signals
+
+    def group_entity(
+        self,
+        members: list[dict[str, Any]],
+        allocate_id: Callable[[], str],
+        *,
+        signals: Collection[str] = (),
+        member_seeds: list[str | None] | None = None,
+    ) -> dict[str, Any]:
+        """One new entity holding exactly ``members``, a group decided elsewhere (the model):
+        the spelling signals among them plus ``signals``, their spelling cohesion as the score,
+        and the seed's name, type and status by ``member_seeds`` (default: each member's own
+        seed entry)."""
+
+        index = self.index(members)
+        dist, _ = index.distance_matrix()
+        indices = list(range(len(members)))
+        entity = new_entity(
+            allocate_id(),
+            members,
+            merge_signals=sorted(self._signals(index, indices) | set(signals)),
+            score=_cohesion(indices, dist),
+        )
+        self.adopt_seed(entity, index.seed_groups if member_seeds is None else member_seeds)
+        return entity
+
+    def adopt_seed(self, entity: dict[str, Any], member_seeds: list[str | None]) -> None:
         """Adopt the seed's canonical name (when it is a member), type and reviewed status.
 
         ``member_seeds`` holds the seed id of each member (``None`` for an unseeded name). A
@@ -126,20 +163,13 @@ class EntityClusterer:
         entities: list[dict[str, Any]] = []
         entity_of: dict[int, dict[str, Any]] = {}
         for indices in sorted(grouped.values(), key=lambda ix: (-total(ix), min(ix))):
-            signals: set[str] = set()
-            for a in indices:
-                for b in indices:
-                    if a < b:
-                        sim, fired, _ = index.pair_signals(a, b)
-                        if sim >= self.similarity_threshold:
-                            signals |= fired
             entity = new_entity(
                 allocate_id(),
                 [members[i] for i in indices],
-                merge_signals=sorted(signals),
+                merge_signals=sorted(self._signals(index, indices)),
                 score=_cohesion(indices, dist),
             )
-            self._seeded(entity, [index.seed_groups[i] for i in indices])
+            self.adopt_seed(entity, [index.seed_groups[i] for i in indices])
             entities.append(entity)
             for i in indices:
                 entity_of[i] = entity

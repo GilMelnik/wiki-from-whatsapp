@@ -14,7 +14,8 @@
       "apply": {"provider": "anthropic", "model": "claude-sonnet-5-5", "thinking_param": "medium"},
       "propose": {"provider": "anthropic", "model": "claude-sonnet-5-5", "thinking_param": "low"},
       "update": {"provider": "anthropic", "model": "claude-sonnet-5-5", "thinking_param": "medium"},
-      "proofread": {"provider": "anthropic", "model": "claude-fable-5-2", "thinking_param": "high"}
+      "proofread": {"provider": "anthropic", "model": "claude-fable-5-2", "thinking_param": "high"},
+      "entity_judge": {"provider": "anthropic", "model": "claude-opus-5-5", "thinking_param": "high"}
     },
     "batch_poll_interval": 30.0,
     "max_tokens_ceiling": 16384,
@@ -58,7 +59,42 @@
       "seed": "seed",
       "prefix": "prefix",
       "string": "string",
-      "transliteration": "transliteration"
+      "transliteration": "transliteration",
+      "model": "model"
+    },
+    "match": {
+      "enabled": true,
+      "screen_probability": 0.2,
+      "net": {
+        "spelling_similarity": 0.7,
+        "neighbours": 20,
+        "embedding_kind": "similarity",
+        "text_claims": 3,
+        "text_separator": " | "
+      },
+      "examples": {"min_claims": 3, "max_claims": 10, "claim_chars": 280},
+      "screen": {
+        "stage": "entity_screen",
+        "prompt_version": 1,
+        "claims_per_name": 2,
+        "chunk": 500,
+        "question": "Name A and Name B refer to the same real-world thing: the same person, business, clinic, agency, place or public body (another spelling, language, abbreviation or title of it, or a person and their own practice). A general word and one specific name, or two different bodies of one kind, are not the same thing."
+      },
+      "judge": {
+        "stage": "entity_judge",
+        "prompt_version": 1,
+        "max_bundle_names": 40,
+        "max_output_tokens": 16000,
+        "batch": true
+      },
+      "senses": {"prompt_version": 1, "claims_per_call": 60, "context_claims": 3},
+      "estimate": {"chars_per_token": 1.7, "senses_per_judge_call": 0.05, "sense_claims": 60},
+      "trial": {
+        "bars": [0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7],
+        "cross_seed_pairs": 200,
+        "seed": 0,
+        "folder": "match_trial"
+      }
     }
   },
   "input": {
@@ -98,7 +134,8 @@
   "classifier": {
     "stages": {
       "knowledge": {"provider": "typesafe", "model": "jev-latest"},
-      "assign": {"provider": "typesafe", "model": "jev-latest"}
+      "assign": {"provider": "typesafe", "model": "jev-latest"},
+      "entity_screen": {"provider": "typesafe", "model": "jev-latest"}
     },
     "fallback": {"provider": "anthropic", "model": "claude-haiku-5-5"},
     "concurrency": 8,
@@ -778,7 +815,9 @@
         "update": 6000,
         "review": 6000,
         "propose": 4000,
-        "proofread": 23000
+        "proofread": 23000,
+        "entity_judge": 800,
+        "entity_senses": 1800
       },
       "proposal_input_tokens": 30000,
       "classifier_tokens_per_group": 12200,

@@ -19,8 +19,12 @@ at the typical figure of ``output_tokens_per_call.proofread``, at the batch disc
 uses the batch API.
 Every figure is therefore rough; the estimate says what it counted.
 
+Step 4 (``run(estimate=True)``, ``step_4_entities.match_estimate``) prices its model stages
+itself, as a range: the judge and the per-claim calls (Opus) are its paid calls; the price and
+the calls given here are the upper end of the range.
+
 ``paid_calls`` counts chat-model calls only. The cheap classifier (Jev) and the embeddings are
-priced but never stop the update: steps 1, 2, 4 and 5 use only them and run without a flag
+priced but never stop the update: steps 1, 2 and 5 use only them and run without a flag
 (cents for an update of a few hundred messages).
 """
 
@@ -44,7 +48,7 @@ from step_8_review.proofreader import PROOFREAD_CONFIG
 from utils.config import section
 from utils.llm_client.settings import CLASSIFIER_CONFIG
 from utils.model_prices import ESTIMATE_CONFIG, stage_model, usd
-from utils.paths import STEP_3, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_8_PROOFREAD
+from utils.paths import STEP_3, STEP_4, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_8_PROOFREAD
 from utils.token_counters import CharTokenCounter
 
 EMBEDDING_MODEL = section("embedding")["model"]
@@ -83,6 +87,7 @@ class Estimator:
         self._review_counter = CharTokenCounter(REVIEW_CONFIG["chars_per_token"])
         self._by_step: Mapping[str, Callable[[RunFunction, str], Estimate]] = {
             STEP_3: self._claims,
+            STEP_4: self._entities,
             STEP_6_ASSIGN: self._assignments,
             STEP_7: self._pages,
             STEP_8: self._review,
@@ -110,6 +115,24 @@ class Estimator:
             f"of instructions read from the prompt cache, {price.output_tokens} output tokens "
             f"in proportion to the conversations' length"
             f"{', batch price' if result['batch_mode'] else ''}",
+        )
+
+    def _entities(self, run: RunFunction, key: str) -> Estimate:
+        result = run(estimate=True)
+        stages = result["stages"]
+
+        def span(values: Sequence[int]) -> str:
+            return str(values[0]) if values[0] == values[1] else f"{values[0]}-{values[1]}"
+
+        return Estimate(
+            key, result["paid_calls"][1], result["usd"][1],
+            f"{span(stages['judge']['calls'])} judge calls and {span(stages['senses']['calls'])} "
+            f"per-claim calls, {span(stages['screen']['calls'])} pairs for the classifier, "
+            f"{stages['embed']['calls'][0]} texts to embed (${result['usd'][0]:.2f} to "
+            f"${result['usd'][1]:.2f})",
+            "the model stages run dry on the caches; tokens by characters, output at a typical "
+            f"figure per call{', batch price' if result['batch'] else ''}; the upper end of the "
+            "range is shown",
         )
 
     def _assignments(self, run: RunFunction, key: str) -> Estimate:

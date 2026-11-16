@@ -138,6 +138,18 @@ class LLMClient:
             req.system, req.user, json_mode=True, response_schema=req.response_schema
         )
 
+    def cached_json(self, req: BatchRequest) -> Any | None:
+        """The parsed answer the disk cache holds for this batch item, or ``None`` when
+        there is none or it does not parse (never asks the provider): for estimates."""
+
+        entry = self.cache._read_cache(self._batch_key(req))
+        if not isinstance(entry, str):
+            return None
+        try:
+            return extract_json(entry)
+        except ValueError:
+            return None
+
     def set_logger(self, logger: logging.Logger) -> None:
         """Retarget this client's (and its provider's) logging, e.g. per step."""
         self.logger = logger
