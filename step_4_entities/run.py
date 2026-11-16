@@ -224,11 +224,12 @@ def run(
     }
     out_inputs.update(inputs)
     state["metadata"] = _metadata(state, out_inputs, resolved, stats)
+    backup = guarded_write(artifact.edited, state, backup=True)
+    guarded_write(artifact.original, state, backup=False)
+    # After the entities: a run that fails before this point leaves no half-recorded decisions.
     if matcher is not None and matcher.record.save(match_metadata(matcher)):
         logger.info(f"Entity matches: {dict(matcher.counts)}; chat usage {matcher.usage()}; "
                     f"written to {matches_path}")
-    backup = guarded_write(artifact.edited, state, backup=True)
-    guarded_write(artifact.original, state, backup=False)
     meta = state["metadata"]
     logger.info(
         f"Entities: {meta['entity_count']} entities ({meta['multi_member_count']} multi-member, "

@@ -116,6 +116,8 @@ class FakeLLM:
         self.cache: dict[str, Any] = {}
         self.calls: list[str] = []
         self.usage: list[dict[str, int]] = []
+        self.resumable: list[bool] = []
+        self.batch_error: Exception | None = None  # a batch that fails as a whole
 
     def supports_batch(self) -> bool:
         return True
@@ -140,7 +142,11 @@ class FakeLLM:
             self.cache[key] = answer
         return answer
 
-    def complete_batch_json(self, requests: Sequence[BatchRequest]) -> dict[str, Any]:
+    def complete_batch_json(self, requests: Sequence[BatchRequest], *,
+                            resumable: bool = False) -> dict[str, Any]:
+        self.resumable.append(resumable)
+        if self.batch_error is not None:
+            raise self.batch_error
         answers = {req.request_id: self._answer(req) for req in requests}
         return {rid: answer for rid, answer in answers.items() if answer is not None}
 

@@ -24,23 +24,20 @@ from utils.config import ENTITIES_CONFIG
 
 JUDGE_CONFIG = ENTITIES_CONFIG["match"]["judge"]
 BUNDLE_PREFIX = "b-"
-BUNDLE_HASH_CHARS = 10
 
 
 @dataclass
 class Bundle:
-    """One judge call's names (sorted), its fixed units (each of two or more names) and the
-    edges inside it."""
+    """One judge call's names (sorted) and its fixed units (each of two or more names)."""
 
     bundle_id: str
     names: list[str]
     units: list[list[str]] = field(default_factory=list)
-    pairs: list[PairKey] = field(default_factory=list)
 
 
 def bundle_id(names: Iterable[str]) -> str:
     digest = hashlib.sha1("\n".join(sorted(names)).encode("utf-8")).hexdigest()
-    return f"{BUNDLE_PREFIX}{digest[:BUNDLE_HASH_CHARS]}"
+    return f"{BUNDLE_PREFIX}{digest[:JUDGE_CONFIG['bundle_hash_chars']]}"
 
 
 class _Parts:
@@ -126,11 +123,7 @@ def build_bundles(
         for part in _cut(component, inside, comp_units, cap):
             if len(part) > 1:
                 keep = set(part)
-                bundle = Bundle(
-                    bundle_id(part), part,
-                    [u for u in comp_units if u[0] in keep],
-                    sorted(p for p in inside if p[0] in keep and p[1] in keep),
-                )
+                bundle = Bundle(bundle_id(part), part, [u for u in comp_units if u[0] in keep])
                 bundles.append(bundle)
                 placed.update(dict.fromkeys(part, bundle.bundle_id))
         cut += sorted(p for p in inside if placed.get(p[0]) is None
