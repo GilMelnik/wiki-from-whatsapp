@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from step_2_classify import rename_model as rename
 from step_2_classify import run as step
 from step_2_classify.labels import MANUAL_FINGERPRINT, content_fingerprint, hand_record
 from utils import reconcile
@@ -32,6 +34,7 @@ class _FakeProvider(ClassifierProvider):
     def __init__(self) -> None:
         super().__init__("fake-1", LOGGER)
         self.calls: list[str] = []
+        self.config_model = "jev-latest"  # the model name the stage has in config.json
 
     def _create_client(self) -> None:
         return None
@@ -68,7 +71,7 @@ def provider(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _FakeProvider:
     def for_stage(stage: str, *, logger: logging.Logger | None = None) -> Classifier:
         classifier = Classifier(
             "typesafe",
-            "jev-latest",
+            fake.config_model,
             logger=logger,
             use_cache=False,
             cache_dir=tmp_path / "cache",
@@ -82,6 +85,8 @@ def provider(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _FakeProvider:
     monkeypatch.setattr(
         step, "CLASSIFIED", Artifact(tmp_path / "classified.json", tmp_path / "classified_edited.json")
     )
+    monkeypatch.setattr(rename, "THREADS", step.THREADS)
+    monkeypatch.setattr(rename, "CLASSIFIED", step.CLASSIFIED)
     monkeypatch.setattr(reconcile, "BACKUPS_DIR", tmp_path / "backups")
     return fake
 
@@ -351,3 +356,85 @@ def test_c1_shaped_threads(provider: _FakeProvider) -> None:
     provider.calls.clear()
     step.run()
     assert provider.calls == []
+
+
+# ------------------------------------------- the same model under another name in config.json
+OTHER = _thread("t-5", "a lawyer in Tel Aviv", "thanks")
+LAST_YEAR_NS = 1_700_000_000 * 1_000_000_000
+
+
+def _both_files() -> tuple[dict[str, Any], dict[str, Any]]:
+    return _read(step.CLASSIFIED.original), _read(step.CLASSIFIED.edited)
+
+
+def test_a_renamed_model_is_not_asked_again_and_no_label_moves(provider: _FakeProvider) -> None:
+    """An alias replaced by the exact name of the model that answered: after the carry-over
+    step 2 asks only about the conversation that needed a label anyway."""
+    _write_threads(KNOWLEDGE, CHATTER, OTHER)
+    step.run()
+    _hand_label(CHATTER, True)
+    _write_threads(_thread("t-1", "which lawyer?", "a new message"), CHATTER, OTHER)
+    before_original, before_edited = _both_files()
+    for path in (step.CLASSIFIED.original, step.CLASSIFIED.edited):
+        os.utime(path, ns=(LAST_YEAR_NS, LAST_YEAR_NS))
+    provider.calls.clear()
+
+    provider.config_model = "jev-1.14.0"
+    assert rename.rename_model("jev-latest") == {"carried": 2, "left": 1}
+
+    # no answer changed, so the files do not look newer than what was built from them
+    assert step.CLASSIFIED.original.stat().st_mtime_ns == LAST_YEAR_NS
+    assert step.CLASSIFIED.edited.stat().st_mtime_ns == LAST_YEAR_NS
+    original, edited = _both_files()
+    assert original["threads"] == before_original["threads"]
+    assert edited["threads"] == before_edited["threads"]
+    for payload, before in ((original, before_original), (edited, before_edited)):
+        assert payload["metadata"]["classifier"]["model"] == "jev-1.14.0"
+        inputs, old = payload["metadata"]["inputs"], before["metadata"]["inputs"]
+        assert inputs["t-1"] == old["t-1"]  # its record no longer held: left alone
+        assert inputs["t-2"] != old["t-2"] and inputs["t-5"] != old["t-5"]
+    assert provider.calls == []
+    backups = sorted(path.name for path in (step.CLASSIFIED.original.parent / "backups").iterdir())
+    assert [name.split("_2")[0] for name in backups] == ["classified", "classified_edited"]
+
+    step.run()
+    assert len(provider.calls) == 1  # the changed conversation only
+    records = _records(step.CLASSIFIED.edited)
+    assert records["t-2"]["is_knowledge_bearing"] is True  # the owner's label
+    assert records["t-2"][MANUAL_FINGERPRINT] == content_fingerprint(CHATTER)
+    assert records["t-5"] == _records(step.CLASSIFIED.original)["t-5"] == before_original["threads"][2]
+    assert rename.rename_model("jev-latest") == {"carried": 0, "left": 0}  # nothing left to do
+
+
+def test_without_the_carry_over_a_renamed_model_answers_everything_again(provider: _FakeProvider) -> None:
+    _write_threads(KNOWLEDGE, CHATTER, OTHER)
+    step.run()
+    provider.calls.clear()
+    provider.config_model = "jev-1.14.0"
+    step.run()
+    assert len(provider.calls) == 3
+
+
+def test_rename_refuses_anything_but_a_rename_of_the_model(
+    provider: _FakeProvider, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_threads(KNOWLEDGE, CHATTER)
+    step.run()
+    _hand_label(CHATTER, True)
+    before = _both_files()
+
+    provider.config_model = "jev-1.14.0"
+    with pytest.raises(ValueError, match="made by 'jev-latest'.*given: 'jev-preview'"):
+        rename.rename_model("jev-preview")
+    monkeypatch.setitem(step.CLASSIFY_CONFIG, "threshold", 0.9)
+    with pytest.raises(ValueError, match=r"other settings that differ from config.json: \['threshold'\]"):
+        rename.rename_model("jev-latest")
+
+    assert _both_files() == before
+    assert not (step.CLASSIFIED.original.parent / "backups").exists()
+
+
+def test_rename_needs_an_output_of_step_2(provider: _FakeProvider) -> None:
+    _write_threads(KNOWLEDGE)
+    with pytest.raises(ValueError, match="no output to carry over"):
+        rename.rename_model("jev-latest")
