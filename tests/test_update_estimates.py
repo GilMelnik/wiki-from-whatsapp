@@ -24,7 +24,7 @@ from tests.test_extract_run import Corpus, FakeLLM, _message, answer_by_text
 from utils.config import section
 from utils.embedder import embed_texts
 from utils.llm_client import Classifier, LLMClient, Question
-from utils.paths import STEP_3, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_8_PROOFREAD
+from utils.paths import STEP_3, STEP_4, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_8_PROOFREAD
 from utils.token_counters import CharTokenCounter
 
 STEPS = {step.key: step for step in SERVED_STEPS.steps}
@@ -153,6 +153,16 @@ def test_the_split_experiment_prices_step_3_as_step_10_does() -> None:
     experiment = experiment_estimate(jobs, use_batch=True)
     assert experiment["calls"] == step_10.paid_calls == 4
     assert experiment["usd"] == pytest.approx(step_10.usd, rel=0.1)
+
+
+def test_step_4_estimate_shows_the_upper_end_of_its_range() -> None:
+    stages = {"embed": {"calls": [3, 3]}, "screen": {"calls": [10, 50]},
+              "judge": {"calls": [2, 6]}, "senses": {"calls": [0, 1]}}
+    result = {"estimate": True, "stages": stages, "usd": [0.1, 0.4], "paid_calls": [2, 7],
+              "batch": True}
+    estimate = Estimator(lambda step: lambda **kwargs: result)(STEPS[STEP_4])
+    assert (estimate.paid_calls, estimate.usd) == (7, 0.4)
+    assert "2-6 judge calls" in estimate.what and "$0.10 to $0.40" in estimate.what
 
 
 def test_unpaid_steps_have_no_estimate_and_embeddings_are_cheap() -> None:

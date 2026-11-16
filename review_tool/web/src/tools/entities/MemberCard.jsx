@@ -11,11 +11,13 @@ import { colour, moreShown, SIGNAL_LABELS } from "./entities.js";
 
 function AttachedNotice({ attachedBy, saving, onConfirm, onMove }) {
   const signals = attachedBy.signals.map((signal) => SIGNAL_LABELS[signal] ?? signal).join(", ");
+  const byModel = attachedBy.signals.includes("model");
   return (
     <div className="note note-warning flex flex-wrap items-center gap-2 p-2 text-xs">
       <span title={`Similarity ${attachedBy.similarity}`}>
-        An update attached this name because it looks like “<Bidi className="font-semibold">{attachedBy.matched}</Bidi>”
-        {signals && ` (${signals})`}. Does it belong here?
+        {byModel ? "An update attached this name because the model judged it the same thing as “" : "An update attached this name because it looks like “"}
+        <Bidi className="font-semibold">{attachedBy.matched}</Bidi>”
+        {!byModel && signals && ` (${signals})`}. Does it belong here?
       </span>
       <span className="ms-auto flex gap-1">
         <button type="button" className="btn btn-sm" disabled={saving} onClick={onConfirm}>

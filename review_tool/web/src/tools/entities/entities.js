@@ -58,6 +58,7 @@ export const SIGNAL_LABELS = {
   prefix: "Prefix",
   seed: "Seed list",
   transliteration: "Transliteration",
+  model: "Model",
 };
 
 export const CONTACT_KINDS = [
