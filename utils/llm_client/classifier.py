@@ -155,6 +155,13 @@ class Classifier:
         )
         return [results[key] for key in keys]
 
+    def cached(self, state: str, questions: Sequence[Question]) -> list[Answer] | None:
+        """The answers in the disk cache for this request, or ``None`` (never asks the
+        provider): for estimates that must not pay."""
+
+        entry = self.cache._read_cache(self._cache_key(state, questions))
+        return [Answer(**answer) for answer in entry] if isinstance(entry, list) else None
+
     def _cache_key(self, state: str, questions: Sequence[Question]) -> str:
         return self.cache._cache_key(
             state=state, questions=[asdict(question) for question in questions]

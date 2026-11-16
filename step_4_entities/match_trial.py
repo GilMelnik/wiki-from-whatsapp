@@ -1,6 +1,7 @@
 """Trials of step 4's model stages on the current entities, scored against the seed file.
 
     python -m step_4_entities.match_trial --net
+    python -m step_4_entities.match_trial --screen
 
 The names are the member names of the current entities (``entities_edited.json`` when it
 exists), each with all its claims; the seed file says which names belong together. The seed
@@ -10,6 +11,9 @@ the list lacks is not thereby wrong.
 * ``--net``: the net over every name with the seed links hidden: how many of the seed's pairs
   it holds, in all and without each source, and how many candidate pairs it makes. Embeds the
   names (cents; cached).
+* ``--screen``: the screen on the seed pairs in that net that are not strong, and on a sample
+  of candidate pairs whose names come from two different seed entries
+  (``entities.match.trial.cross_seed_pairs``): the share kept at each bar of ``trial.bars``.
 
 Only numbers reach the console and the log. Everything with names goes to
 ``<data>/step_4_entities/<trial.folder>/<mode>_<stamp>.json``.
@@ -20,6 +24,8 @@ from __future__ import annotations
 import argparse
 import itertools
 import logging
+import random
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -29,10 +35,12 @@ from step_4_entities.collect import load_claims_for_entities
 from step_4_entities.match_claims import ClaimSampler
 from step_4_entities.match_estimate import default_embed
 from step_4_entities.match_net import MEANING_SOURCES, SPELLING_SOURCES, CandidateNet, PairKey, pair_key
+from step_4_entities.match_screen import SCREEN_CONFIG, PairScreen
 from step_4_entities.mentions import DictaAnalyzer, build_or_load_analysis
 from step_4_entities.normalize import normalize_name
 from utils.config import ENTITIES_CONFIG
 from utils.json_io import read_json_file, write_json_file
+from utils.llm_client import Classifier
 from utils.logging_setup import setup_step_logging
 from utils.paths import ENTITIES_SEED_PATH, ENTITY_ANALYSIS_PATH, STEP_4, resolve, step_path
 from utils.paths import ENTITIES as ENTITIES_ARTIFACT
@@ -119,15 +127,46 @@ def net_trial(data: TrialData, logger: logging.Logger) -> dict[str, Any]:
     return numbers
 
 
+def screen_trial(data: TrialData, logger: logging.Logger) -> dict[str, Any]:
+    pairs = data.net()
+    seed = sorted(p for p in data.seed_pairs if p in pairs and not pairs[p].strong)
+    cross = sorted(p for p, c in pairs.items() if not c.strong
+                   and data.seed_of.get(p[0]) and data.seed_of.get(p[1])
+                   and data.seed_of[p[0]] != data.seed_of[p[1]])
+    rng = random.Random(TRIAL_CONFIG["seed"])
+    cross = sorted(rng.sample(cross, min(len(cross), TRIAL_CONFIG["cross_seed_pairs"])))
+    classifier = Classifier.for_stage(SCREEN_CONFIG["stage"], logger=logger)
+    screen = PairScreen(classifier, data.sampler, data.claim_lists(), logger)
+    answered = screen.screen([*seed, *cross])
+    prob = answered.probabilities
+
+    def kept(found: Sequence[PairKey], bar: float) -> float:
+        known = [p for p in found if p in prob]
+        return round(sum(1 for p in known if prob[p] >= bar) / len(known), 4) if known else 0.0
+
+    numbers = {"seed_pairs_screened": len(seed), "cross_seed_pairs_screened": len(cross),
+               "weak_pairs_in_net": sum(1 for c in pairs.values() if not c.strong),
+               "failed": len(answered.failed), "requests": answered.requests,
+               "kept_share_by_bar": {str(bar): {"seed": kept(seed, bar), "cross": kept(cross, bar)}
+                                     for bar in TRIAL_CONFIG["bars"]}}
+    _write("screen", {"numbers": numbers,
+                      "seed": [[*p, prob.get(p)] for p in seed],
+                      "cross": [[*p, prob.get(p)] for p in cross]}, logger)
+    return numbers
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Trials of step 4's model stages (numbers only).")
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--net", action="store_true", help="how many seed pairs the net holds")
+    mode.add_argument("--screen", action="store_true", help="the screen's share kept per bar")
     args = parser.parse_args(argv)
     logger = setup_step_logging(STEP_4)
     data = TrialData(logger)
     if args.net:
         numbers = net_trial(data, logger)
+    else:
+        numbers = screen_trial(data, logger)
     logger.info(f"Trial numbers: {numbers}")
 
 
