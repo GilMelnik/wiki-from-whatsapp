@@ -227,6 +227,7 @@ def test_edits_survive_a_real_step_4_rerun_and_the_tool_follows_it(tmp_path: Pat
             analyzer=SimpleAnalyzer(),
             analysis_path=setup.cache,
             seed_path=tmp_path / "seed.json",
+            match=False,
         )
 
     step_4()

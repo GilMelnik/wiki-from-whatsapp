@@ -2,6 +2,9 @@
 
 ``python -m step_4_entities.evaluate [--incremental]``
 
+It measures the spelling rules (``run(match=False)``): the model stages are paid and are
+measured by ``step_4_entities.match_trial`` instead.
+
 Reads, never writes, ``entities.eval_reviewed`` (the reviewed ``entities_edited.json`` of the
 backup). Entities are compared by their member strings: two strings "belong together" when
 the reviewer left them in one entity (a string the reviewer split across entities counts for
@@ -114,7 +117,7 @@ class IncrementalExperiment:
         cache = self.work / f"{artifact.original.stem}_analysis.json"
         if not cache.is_file() and ENTITY_ANALYSIS_PATH.is_file():
             shutil.copy2(ENTITY_ANALYSIS_PATH, cache)
-        return run(claims_path=path, artifact=artifact, analysis_path=cache)
+        return run(claims_path=path, artifact=artifact, analysis_path=cache, match=False)
 
     def _store(self) -> EntityStore:
         return EntityStore(

@@ -64,7 +64,7 @@ class Step:
             analyzer=self.analyzer,
             analysis_path=self.analysis_path,
             seed_path=self.seed_path,
-            **kwargs,
+            **{"match": False, **kwargs},
         )
 
     def edited(self) -> dict:
