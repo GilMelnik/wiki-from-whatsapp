@@ -232,7 +232,12 @@
     "message_fingerprint_chars": 12,
     "long_messages": 30,
     "max_output_tokens": 64000,
-    "privacy_review": {"phone_min_digits": 7, "country_code": "972"},
+    "privacy_review": {
+      "phone_min_digits": 7,
+      "country_code": "972",
+      "date_years": [1900, 2100],
+      "currency_marks": ["$", "₪", "€", "ש\"ח", "ש״ח", "שקל", "שקלים", "דולר", "דולרים", "יורו", "אירו", "USD", "NIS", "ILS", "EUR"]
+    },
     "tagged_members": {"min_taggers": 3},
     "split_experiment": {
       "variants": {

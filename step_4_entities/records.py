@@ -10,7 +10,7 @@ import re
 from collections.abc import Callable, Collection, Iterable, Mapping
 from typing import Any
 
-from step_3_extract.scrub import EMAIL_RE, PHONE_RE, SHORT_PHONE_RE
+from step_3_extract.scrub import EMAIL_RE, SHORT_PHONE_RE, phone_matches, restore_scrubbed_text
 from utils.config import ENTITIES_CONFIG
 
 CONTACT_KINDS = ("email", "phone", "website")
@@ -33,10 +33,11 @@ def find_emails(text: str) -> list[str]:
 
 
 def find_phones(text: str) -> list[str]:
+    """Phone numbers as the scrub sees them: a date or a price is not one."""
     seen: set[str] = set()
     out: list[str] = []
-    for pattern in (PHONE_RE, SHORT_PHONE_RE):
-        for match in pattern.finditer(text or ""):
+    for find in (phone_matches, SHORT_PHONE_RE.finditer):
+        for match in find(text or ""):
             value = match.group(0)
             if value not in seen:
                 seen.add(value)
@@ -59,16 +60,22 @@ def union_contacts(members: Iterable[Mapping[str, Any]], key: str = "contacts") 
 def claim_contacts(
     claim: Mapping[str, Any], original: Mapping[str, Any] | None = None
 ) -> tuple[list[str], list[str], list[str]]:
-    """Emails, phones, websites from a claim and its pipeline-original redaction trail."""
+    """Emails, phones, websites from a claim and its pipeline-original redaction trail.
+
+    The trail's values are read in their place in the text (the marks filled in again), so a
+    value an earlier scrub removed as a phone number counts only if it still reads as one (a
+    date or a price does not). A value whose mark is no longer in the text is read on its own.
+    """
 
     found: dict[str, set[str]] = {kind: set() for kind in CONTACT_KINDS}
     for src in (claim,) if original is None else (claim, original):
         text = src.get("claim_text", "")
-        for red in src.get("_redactions") or []:
-            if red.get("type") in ("email", "phone"):
-                found[red["type"]].add(red["value"])
-        found["email"].update(find_emails(text))
-        found["phone"].update(find_phones(text))
+        trail = src.get("_redactions") or []
+        restored = restore_scrubbed_text(text, trail)
+        unplaced = [red["value"] for red in trail if red["value"] not in restored]
+        for piece in (restored, *unplaced):
+            found["email"].update(find_emails(piece))
+            found["phone"].update(find_phones(piece))
         found["website"].update(m.group(0).rstrip(".") for m in _URL_RE.finditer(text or ""))
     return sorted(found["email"]), sorted(found["phone"]), sorted(found["website"])
 
