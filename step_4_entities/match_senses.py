@@ -20,17 +20,15 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from step_4_entities.match_claims import ClaimSampler
-from step_4_entities.match_judge import CALL_ERRORS
+from step_4_entities.match_judge import ask_stage
 from utils.config import ENTITIES_CONFIG
 from utils.llm_client import BatchRequest, LLMClient
-from utils.llm_client.ask import ask_json
 
 SENSES_CONFIG = ENTITIES_CONFIG["match"]["senses"]
 CLAIM_ID = "C"
 GROUP_ID = "G"
 UNCLEAR = "unclear"
 REQUEST_PREFIX = "senses-"
-REQUEST_HASH_CHARS = 16
 
 SENSES_SYSTEM = """\
 You help build a Hebrew wiki from the conversations of an Israeli WhatsApp group of gay men \
@@ -147,7 +145,7 @@ class SenseSplitter:
         for threads in self.chunks(job):
             claims = [c for thread in threads for c in thread]
             seed = "\n".join([job.name, *claims])
-            digest = hashlib.sha1(seed.encode("utf-8")).hexdigest()[:REQUEST_HASH_CHARS]
+            digest = hashlib.sha1(seed.encode("utf-8")).hexdigest()[:SENSES_CONFIG["request_hash_chars"]]
             request_id = f"{REQUEST_PREFIX}{digest}"
             out.append((BatchRequest(request_id, SENSES_SYSTEM, self.user_prompt(job, threads),
                                      task=f"entity-senses:{request_id}",
@@ -188,12 +186,8 @@ class SenseSplitter:
                     answers[request.request_id] = cached
         else:
             result.requests = len(planned)
-            try:
-                answers = ask_json(self.llm, [request for _, request, _ in planned],
-                                   batch=batch and self.llm.supports_batch(), logger=self.logger)
-            except CALL_ERRORS as exc:
-                self.logger.error(f"Entity senses: the calls failed ({exc!r})")
-                answers = {}
+            answers = ask_stage(self.llm, [request for _, request, _ in planned],
+                                stage="senses", batch=batch, logger=self.logger)
         for job, request, claims in planned:
             if request.request_id not in answers:
                 if not dry and job.name not in result.failed:

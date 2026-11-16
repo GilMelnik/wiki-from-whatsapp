@@ -33,8 +33,32 @@ from utils.llm_client.ask import ask_json
 JUDGE_CONFIG = ENTITIES_CONFIG["match"]["judge"]
 NAME_ID = "N"
 UNIT_ID = "U"
-# Errors a whole batch (or a sync call) can end with; one bundle's failure is never fatal.
+# Errors the calls of a stage can end with as a whole (a batch that cannot be submitted,
+# polled or fetched). One bundle's missing or unusable answer is not one of them.
 CALL_ERRORS = (anthropic.APIError, RuntimeError, ValueError, OSError)
+
+
+class StageFailed(RuntimeError):
+    """The calls of a model stage failed as a whole: the run stops and writes nothing."""
+
+    def __init__(self, stage: str, count: int, cause: BaseException) -> None:
+        super().__init__(
+            f"Entity {stage}: the calls of {count} requests failed as a whole ({cause!r}); "
+            "nothing was written. Run the step again: a batch already submitted is picked up, "
+            "not paid for again."
+        )
+
+
+def ask_stage(llm: LLMClient, requests: Sequence[BatchRequest], *, stage: str, batch: bool,
+              logger: logging.Logger) -> dict[str, Any]:
+    """The answers of one stage's requests (a resumable batch when ``batch``); a failure of
+    the calls as a whole raises ``StageFailed``."""
+
+    try:
+        return ask_json(llm, requests, batch=batch and llm.supports_batch(), logger=logger,
+                        resumable=True)
+    except CALL_ERRORS as exc:
+        raise StageFailed(stage, len(requests), exc) from exc
 
 JUDGE_SYSTEM = """\
 You help build a Hebrew wiki from the conversations of an Israeli WhatsApp group of gay men \
@@ -248,13 +272,8 @@ class Judge:
                     answers[bid] = cached
         else:
             result.requests = len(requests)
-            try:
-                answers = ask_json(self.llm, list(requests.values()),
-                                   batch=batch and self.llm.supports_batch(), logger=self.logger)
-            except CALL_ERRORS as exc:
-                self.logger.error(f"Entity judge: the calls failed ({exc!r}); "
-                                  f"{len(requests)} bundles keep the spelling rules")
-                answers = {}
+            answers = ask_stage(self.llm, list(requests.values()), stage="judge", batch=batch,
+                                logger=self.logger)
         for bid in requests:
             if bid not in answers:
                 if not dry:

@@ -190,7 +190,11 @@ class EntityUpdate:
         missing: dict[str, set[str]],
         holders: dict[str, list[tuple[dict[str, Any], dict[str, Any]]]],
     ) -> None:
-        """The new claims of known names held in several entities, divided by the model."""
+        """The new claims of known names held in several entities, divided by the model.
+
+        When two of those entities cannot be told apart by their label and names (for example
+        two entities that both hold only that name), nobody is asked: the new claims go to the
+        member with the most claims, and the entities are flagged."""
 
         if not missing or self.matcher is None:
             return
@@ -198,20 +202,22 @@ class EntityUpdate:
             name: sorted(holders[name], key=lambda h: -(h[1].get("count") or 0))
             for name in missing
         }
-        jobs = [
-            SenseJob(
-                name,
-                tuple(sorted(claims)),
-                tuple(
-                    (self.matcher.record.group_label([m["name"] for m in e["members"]])
-                     or e.get("canonical_name") or "", tuple(e.get("aliases") or []))
-                    for e, _ in ordered[name]
-                ),
+        groups = {
+            name: tuple(
+                (self.matcher.record.group_label([m["name"] for m in e["members"]])
+                 or e.get("canonical_name") or "", tuple(e.get("aliases") or []))
+                for e, _ in ordered[name]
             )
-            for name, claims in sorted(missing.items())
-        ]
+            for name in missing
+        }
+        alike = {name for name in missing
+                 if len({(label, frozenset(names)) for label, names in groups[name]})
+                 < len(groups[name])}
+        jobs = [SenseJob(name, tuple(sorted(claims)), groups[name])
+                for name, claims in sorted(missing.items()) if name not in alike]
         ids = {name: [e["entity_id"] for e, _ in ordered[name]] for name in missing}
         picked = self.matcher.divide_known(jobs, ids)
+        picked.update({name: {c: [0] for c in missing[name]} for name in alike})
         for name, claims in picked.items():
             for index, (entity, member) in enumerate(ordered[name]):
                 add = {c for c, targets in claims.items() if index in targets}
@@ -222,7 +228,8 @@ class EntityUpdate:
                 for other, _ in ordered[name]:
                     if one is not other:
                         flag_conflict(one, other)
-        self.stats["known_names_divided"] += len(picked)
+        self.stats["known_names_divided"] += len(picked) - len(alike)
+        self.stats["known_names_not_told_apart"] += len(alike)
 
     def _drop_empty(self) -> None:
         for entity in list(self.touched.values()):

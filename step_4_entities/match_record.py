@@ -6,7 +6,7 @@ starts it afresh; an update adds its decisions to the ones already there. Shape:
     {"groups": [{group_id, bundle_id, label, names}],       # one real-world thing each
      "senses": [{name, targets: [{id, label}], claims: {claim_id: [target id]},
                  unclear: [claim_id], failed}],              # a name with two meanings
-     "unsure": [{names: [a, b], reason, source}],            # source: judge | cut | unscreened
+     "unsure": [{names: [a, b], reason, source}],  # judge | cut | unscreened | shared_name
      "unjudged": [{name, why}],                              # why: net | judge | omitted
      "metadata": {generated_at, git_commit, models, prompt_versions, config, counts, usage,
                   runs}}
@@ -46,9 +46,23 @@ class MatchRecord:
         self.changed |= bool(new)
 
     def add_senses(self, entries: Iterable[Mapping[str, Any]]) -> None:
-        added = [dict(entry) for entry in entries]
-        self.data["senses"] += added
-        self.changed |= bool(added)
+        """Add per-claim decisions; an entry for the same name and targets as a stored one
+        replaces it in place (a rerun of the same decisions does not repeat them)."""
+
+        def key(entry: Mapping[str, Any]) -> tuple[str, tuple[str, ...]]:
+            return entry["name"], tuple(target["id"] for target in entry["targets"])
+
+        position = {key(entry): i for i, entry in enumerate(self.data["senses"])}
+        for entry in entries:
+            if key(entry) in position:
+                stored = self.data["senses"][position[key(entry)]]
+                merged = {**entry, "claims": {**stored["claims"], **entry["claims"]},
+                          "unclear": sorted({*stored["unclear"], *entry["unclear"]})}
+                self.data["senses"][position[key(entry)]] = merged
+            else:
+                position[key(entry)] = len(self.data["senses"])
+                self.data["senses"].append(dict(entry))
+            self.changed = True
 
     def add_unsure(self, entries: Iterable[Mapping[str, Any]]) -> None:
         seen = {(tuple(e["names"]), e["source"]) for e in self.data["unsure"]}

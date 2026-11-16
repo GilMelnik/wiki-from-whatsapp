@@ -83,9 +83,10 @@ def test_a_seed_alias_with_two_meanings_is_divided_per_claim(tmp_path: Path) -> 
     step.run(CLAIMS)
     lawyer, insurer = sorted(step.entities_of("Dana"), key=lambda e: len(e["members"]),
                              reverse=True)
-    # the seed entry stays whole and keeps its accepted status, holding the lawyer's claims
+    # the seed entry stays whole, holding the lawyer's claims; the model took claims of its
+    # alias away, so it is not adopted as accepted: the owner checks it
     assert sorted(lawyer["aliases"]) == ["Dana", "Dana Levi"]
-    assert lawyer["canonical_name"] == "Dana Levi" and lawyer["status"] == "accepted"
+    assert lawyer["canonical_name"] == "Dana Levi" and lawyer["status"] == "ambiguous"
     assert lawyer["type"] == "lawyer"
     # the second thing has no other name: an entity of its own, not taken for the seed entry
     assert insurer["aliases"] == ["Dana"] and insurer.get("type") is None
@@ -213,4 +214,6 @@ def test_a_failed_senses_call_keeps_the_claims_together_and_flags(tmp_path: Path
     lawyer = step.entity_of("Dana")
     assert len(step.member(lawyer, "Dana")["claim_ids"]) == 5
     assert step.matches()["senses"][0]["failed"]
-    assert step.entity_of("Dana Levi") is not None
+    # the claims stay in the seed entry, which the owner is asked to check
+    assert lawyer is not None and "Dana Levi" in lawyer["aliases"]
+    assert lawyer["status"] == "ambiguous"

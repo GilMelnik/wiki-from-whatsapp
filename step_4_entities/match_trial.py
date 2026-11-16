@@ -59,7 +59,6 @@ from utils.paths import ENTITIES_SEED_PATH, ENTITY_ANALYSIS_PATH, STEP_4, resolv
 from utils.paths import ENTITIES as ENTITIES_ARTIFACT
 
 TRIAL_CONFIG = MATCH_CONFIG["trial"]
-STAMP = "%Y%m%d_%H%M%S"
 
 
 class TrialData:
@@ -115,7 +114,7 @@ class TrialData:
 
 
 def _write(mode: str, payload: dict[str, Any], logger: logging.Logger) -> Path:
-    path = step_path(STEP_4, TRIAL_CONFIG["folder"], f"{mode}_{datetime.now().strftime(STAMP)}.json")
+    path = step_path(STEP_4, TRIAL_CONFIG["folder"], f"{mode}_{datetime.now().strftime(TRIAL_CONFIG['stamp_format'])}.json")
     write_json_file(payload, path)
     logger.info(f"Trial {mode}: details with names written to {path}")
     return path

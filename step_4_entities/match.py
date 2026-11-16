@@ -13,8 +13,10 @@ existing names as partners):
 The result (``MatchResult``) says, for every new name, the groups it belongs to, how a name
 with two meanings divides its claims, the pairs to flag, and the names the model could not
 decide (they keep the spelling rules; see ``match_apply``). Every decision is added to
-``entity_matches.json`` (``match_record``). No stage has a fallback model: a failed call leaves
-its names undecided, never silently.
+``entity_matches.json`` (``match_record``). No stage has a fallback model: a missing or unusable
+answer leaves its names undecided, never silently; a failure of a stage's calls as a whole (a
+batch that cannot be submitted, polled or fetched) stops the run before anything is written
+(``match_judge.StageFailed``), and the next run picks the batch up instead of paying again.
 
 ``dry=True`` (the estimate) asks nothing: the embeddings, screen answers and judge answers
 already in the disk caches are used, the rest is counted in ``tally`` (see ``match_estimate``).
@@ -51,8 +53,6 @@ from utils.config import ENTITIES_CONFIG
 from utils.llm_client import Classifier, LLMClient
 
 MATCH_CONFIG = ENTITIES_CONFIG["match"]
-# Strong pairs weigh more than any screen probability when an oversized bundle is cut.
-STRONG_WEIGHT = 2.0
 SOURCE_JUDGE = "judge"
 SOURCE_CUT = "cut"
 SOURCE_UNSCREENED = "unscreened"
@@ -101,6 +101,8 @@ class EntityMatcher:
         self.dry = dry
         self.counts: Counter[str] = Counter()
         self.tally = Tally()
+        # Dry run: new names whose embeddings are missing, so their meaning partners are unknown.
+        self.uncertain: set[str] = set()
 
     # --- clients --------------------------------------------------------------
 
@@ -127,8 +129,14 @@ class EntityMatcher:
 
     def names_in_play(self, new_members: Sequence[dict[str, Any]], existing: Existing
                       ) -> tuple[list[dict[str, Any]], dict[str, list[str]], list[list[str]]]:
-        """One member per distinct name (new first), each name's claims, and the fixed units
-        (seed entries; the existing entities with two or more names)."""
+        """One member per distinct name (new first), each name's claims, and the fixed units.
+
+        The units are the existing entities and the seed entries, without the names several
+        existing entities hold (a known name with two meanings is shown as a name of its own,
+        so the judge can tell those entities apart and no two entities are joined through it).
+        A seed entry whose names the current entities hold in two or more entities is no unit:
+        the current entities win over the seed file.
+        """
 
         claims_of: dict[str, set[str]] = {}
         biggest: dict[str, dict[str, Any]] = {}
@@ -143,13 +151,21 @@ class EntityMatcher:
         for member in members:
             claims_of[member["name"]] = set(member.get("claim_ids") or [])
         members += [{**biggest[n], "claim_ids": sorted(claims_of[n])} for n in sorted(biggest)]
+        held_by: dict[str, set[int]] = {}
+        for key, names in by_entity.items():
+            for name in names:
+                held_by.setdefault(name, set()).add(key)
+        shared = {name for name, keys in held_by.items() if len(keys) > 1}
         seeds: dict[str, list[str]] = {}
         for member in members:
             seed_id = self.clusterer.norm_to_seed.get(normalize_name(member["name"]))
-            if seed_id:
+            if seed_id and member["name"] not in shared:
                 seeds.setdefault(seed_id, []).append(member["name"])
-        units = [sorted(names) for names in seeds.values() if len(names) > 1]
-        units += [sorted(names) for names in by_entity.values() if len(names) > 1]
+        units = [sorted(names) for names in seeds.values() if len(names) > 1
+                 and len({k for n in names for k in held_by.get(n, ())}) < 2]
+        units += [sorted(names - shared) for names in by_entity.values()
+                  if len(names - shared) > 1]
+        self.counts["names_held_by_several_entities"] += len(shared)
         return members, {n: sorted(c) for n, c in claims_of.items()}, units
 
     # --- stages ---------------------------------------------------------------
@@ -159,11 +175,14 @@ class EntityMatcher:
         try:
             pairs = net.pairs()
         except EmbeddingsMissing:
+            names = [m["name"] for m in members]
             for texts in net.texts().values():
                 try:
                     self.embed(texts, NET_CONFIG["embedding_kind"])
                 except EmbeddingsMissing as missing:
                     self.tally.missing_embeddings(missing.texts)
+                    lacking = set(missing.texts)
+                    self.uncertain |= {names[i] for i in net.new if texts[i] in lacking}
             self.tally.meaning_unknown(len(net.new))
             pairs = net.pairs(meaning=False)
         except RuntimeError as exc:  # the embedder's error after its own retries
@@ -181,7 +200,7 @@ class EntityMatcher:
                result: MatchResult) -> tuple[dict[PairKey, float], dict[PairKey, float]]:
         """The pairs that reach the judge (weights) and, dry, the pairs not yet screened."""
 
-        edges = {p: STRONG_WEIGHT + c.similarity for p, c in pairs.items() if c.strong}
+        edges = {p: JUDGE_CONFIG["strong_pair_weight"] + c.similarity for p, c in pairs.items() if c.strong}
         weak = [p for p, c in pairs.items() if not c.strong]
         screen = PairScreen(self.classifier, self.sampler, claims_of, self.logger)
         answered = screen.screen(weak, dry=self.dry)
@@ -250,9 +269,9 @@ class EntityMatcher:
         entries = []
         for job in jobs:
             targets = [g["group_id"] for g in groups_of[job.name]]
-            others = [sum(len(claims_of.get(n) or []) for n in g["names"] if n != job.name)
-                      for g in groups_of[job.name]]
-            picked, unclear, failed = self.divide(job, answered.answers.get(job.name), others)
+            picked, unclear, failed = self.divide(
+                job, answered.answers.get(job.name),
+                self._fallback_weights(job.name, groups_of[job.name], claims_of))
             result.senses[job.name] = {c: [targets[i] for i in ix] for c, ix in picked.items()}
             if failed:
                 result.senses_failed.add(job.name)
@@ -263,22 +282,40 @@ class EntityMatcher:
                             "failed": failed})
         self.record.add_senses(entries)
 
+    def _fallback_weights(self, name: str, groups: Sequence[Mapping[str, Any]],
+                          claims_of: Mapping[str, list[str]]) -> list[float]:
+        """Where a two-meaning name's claims go when the model placed none of them: the group
+        of its seed entry (the owner's list wins), else the group whose other names have the
+        most claims."""
+
+        seed_of = self.clusterer.norm_to_seed
+        seed_id = seed_of.get(normalize_name(name))
+        weights: list[float] = []
+        for group in groups:
+            others = [n for n in group["names"] if n != name]
+            weight = float(sum(len(claims_of.get(n) or []) for n in others))
+            if seed_id and any(seed_of.get(normalize_name(n)) == seed_id for n in others):
+                weight = float("inf")
+            weights.append(weight)
+        return weights
+
     def _splitter(self) -> SenseSplitter:
         return SenseSplitter(self.llm, self.sampler, self.corpus.claims_by_id, self.logger)
 
     @staticmethod
-    def divide(job: SenseJob, answers: Mapping[str, list[int]] | None, fallback: Sequence[int]
+    def divide(job: SenseJob, answers: Mapping[str, list[int]] | None, fallback: Sequence[float]
                ) -> tuple[dict[str, list[int]], list[str], bool]:
         """``(claim -> group indexes, unclear claims, failed)``. A claim about several groups
-        is in each of them; an unclear claim goes to the group that got the most claims of the
-        name; without an answer every claim goes to the group whose ``fallback`` weight is
-        highest (first on a tie)."""
+        is in each of them; an unclear claim goes to the group that got the most answered
+        claims of the name; when no claim was answered (or the call failed) every unclear
+        claim goes to the group whose ``fallback`` weight is highest (first on a tie)."""
 
+        fallen = max(range(len(job.groups)), key=lambda i: (fallback[i], -i))
         if answers is None:
-            best = max(range(len(job.groups)), key=lambda i: (fallback[i], -i))
-            return {c: [best] for c in job.claim_ids}, list(job.claim_ids), True
+            return {c: [fallen] for c in job.claim_ids}, list(job.claim_ids), True
         got = Counter(i for indexes in answers.values() for i in indexes)
-        best = max(range(len(job.groups)), key=lambda i: (got.get(i, 0), -i))
+        best = (max(range(len(job.groups)), key=lambda i: (got.get(i, 0), -i)) if got
+                else fallen)
         unclear = [c for c in job.claim_ids if not answers.get(c)]
         return ({c: list(answers.get(c) or [best]) for c in job.claim_ids}, unclear, False)
 
@@ -301,17 +338,25 @@ class EntityMatcher:
         edges, unscreened = self._edges(pairs, claims_of, result)
         names = [m["name"] for m in members]
         bundles, cut = self._bundles(names, edges, units, new)
+        judge = Judge(self.llm, self.sampler, claims_of, self.logger)
+        extra: list[Bundle] = []
         if self.dry and unscreened:
             high, _ = self._bundles(names, {**edges, **unscreened}, units, new)
-            self.tally.judge_high(Judge(self.llm, self.sampler, claims_of, self.logger),
-                                  [b for b in high if b.bundle_id not in
-                                   {x.bundle_id for x in bundles}])
+            extra = [b for b in high if b.bundle_id not in {x.bundle_id for x in bundles}]
+            self.tally.judge_high(judge, extra)
         self.counts["cut_pairs"] += len(cut)
         result.unsure += [{"names": list(p), "reason": "", "source": SOURCE_CUT} for p in cut]
         verdicts = self._judged(bundles, claims_of, new, result)
         in_bundles = {n for b in bundles for n in b.names}
         result.judged |= new - in_bundles
         self._two_meanings(result, verdicts, claims_of, new)
+        if self.dry:
+            # What the unknown answers could still cause: one bundle per new name without its
+            # embeddings, and a per-claim split of every new name no cached verdict covers.
+            unanswered = {n for b in [*bundles, *extra] if b.bundle_id not in verdicts
+                          for n in b.names}
+            self.tally.possible(judge, sorted(self.uncertain & new),
+                                sorted((unanswered | self.uncertain) & new), claims_of)
         result.judged -= set(result.unjudged)
         self.counts["judged_names"] += len(result.judged)
         self.counts["unjudged_names"] += len(result.unjudged)

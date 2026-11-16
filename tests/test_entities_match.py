@@ -98,7 +98,7 @@ def test_an_oversized_bundle_is_cut_at_its_weakest_links_and_drops_no_pair() -> 
     bundles, cut = build_bundles(names, edges, units=[["e", "f"]], cap=3)
     assert [b.names for b in bundles] == [["a", "b", "c"], ["d", "e", "f"]]
     assert cut == [("c", "d")]
-    inside = {p for b in bundles for p in b.pairs}
+    inside = {p for p in edges for b in bundles if set(p) <= set(b.names)}
     assert inside | set(cut) == set(edges)
     assert bundles[1].units == [["e", "f"]]
     again, _ = build_bundles(names, edges, units=[["e", "f"]], cap=3)
