@@ -207,6 +207,26 @@ def test_an_oversized_bundle_records_its_cut_pairs(tmp_path: Path, monkeypatch: 
                        for u in cut)
 
 
+
+@pytest.mark.parametrize(("probability", "recorded"), [(0.2, False), (0.6, True)])
+def test_a_weak_cut_pair_is_flagged_only_from_the_bar_up(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, probability: float, recorded: bool
+) -> None:
+    from step_4_entities.match_bundles import JUDGE_CONFIG
+
+    monkeypatch.setitem(JUDGE_CONFIG, "max_bundle_names", 2)
+    monkeypatch.setitem(JUDGE_CONFIG, "cut_unsure_probability", 0.3)
+    claims = [claim("t1-a", ["Orion"], "Orion agency"), claim("t1-b", ["Orion Agency"], "agency"),
+              claim("t1-c", ["Vesper"], "a clinic")]
+    clients = MatchClients(embed=FakeEmbed(), classifier=FakeClassifier(lambda a, b: probability),
+                           llm=FakeLLM(grouped({}), by_keyword({})))
+    step = MatchStep(tmp_path, clients)
+    stats = step.run(claims)
+    cut = [u["names"] for u in step.matches()["unsure"] if u["source"] == "cut"]
+    assert any("Vesper" in names for names in cut) is recorded
+    assert len(step.entities_of("Vesper")) == 1 and stats["entity_count"] >= 2
+
+
 def test_a_failed_senses_call_keeps_the_claims_together_and_flags(tmp_path: Path) -> None:
     step = _step(tmp_path)
     step.clients.llm.senses = lambda user: None

@@ -358,8 +358,14 @@ class EntityMatcher:
             high, _ = self._bundles(names, {**edges, **unscreened}, units, new)
             extra = [b for b in high if b.bundle_id not in {x.bundle_id for x in bundles}]
             self.tally.judge_high(judge, extra)
+        # A cut pair is one the judge never saw together. The weak ones (a low screen
+        # probability; thousands of them at a low screen bar) are dropped like the pairs the
+        # screen dropped; from ``cut_unsure_probability`` up, and every strong pair, it is
+        # recorded as unsure, so both entities are flagged for review.
+        flagged = [p for p in cut if edges[p] >= JUDGE_CONFIG["cut_unsure_probability"]]
         self.counts["cut_pairs"] += len(cut)
-        result.unsure += [{"names": list(p), "reason": "", "source": SOURCE_CUT} for p in cut]
+        self.counts["cut_pairs_flagged"] += len(flagged)
+        result.unsure += [{"names": list(p), "reason": "", "source": SOURCE_CUT} for p in flagged]
         verdicts = self._judged(bundles, claims_of, new, result)
         in_bundles = {n for b in bundles for n in b.names}
         result.judged |= new - in_bundles
