@@ -18,6 +18,8 @@ from utils.llm_client.classifier import Classifier
 from utils.llm_client.client import LLMClient
 from utils.llm_client.models import (
     Answer,
+    BatchGone,
+    BatchUnfinished,
     BatchRequest,
     CacheSegment,
     ClassifierError,
@@ -34,6 +36,8 @@ __all__ = [
     "Question",
     "Answer",
     "ClassifierError",
+    "BatchGone",
+    "BatchUnfinished",
     "BatchRequest",
     "CacheSegment",
     "extract_json",

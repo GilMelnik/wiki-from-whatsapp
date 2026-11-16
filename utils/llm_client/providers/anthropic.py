@@ -38,6 +38,7 @@ from anthropic.types.messages.batch_create_params import Request
 
 from utils.llm_client.models import (
     Answer,
+    BatchGone,
     BatchRequest,
     CacheSegment,
     ClassifierError,
@@ -173,8 +174,12 @@ class AnthropicProvider(LLMProvider):
             for req in requests
         ]
 
+        self.unfinished = []
         if batch_id is not None:
-            batch = self._client.messages.batches.retrieve(batch_id)
+            try:
+                batch = self._client.messages.batches.retrieve(batch_id)
+            except anthropic.NotFoundError as exc:
+                raise BatchGone(batch_id, exc) from exc
             self.logger.info(
                 f"Anthropic batch {batch.id} picked up again ({len(requests)} requests)"
             )
@@ -201,8 +206,16 @@ class AnthropicProvider(LLMProvider):
 
         out: dict[str, tuple[str, bool]] = {}
         usages: list[Usage] = []
-        for result in self._client.messages.batches.results(batch.id):
+        try:
+            results = list(self._client.messages.batches.results(batch.id))
+        except anthropic.NotFoundError as exc:
+            if batch_id is None:
+                raise
+            raise BatchGone(batch_id, exc) from exc
+        for result in results:
             request_id = id_map.get(result.custom_id, result.custom_id)
+            if result.result.type in ("expired", "canceled"):
+                self.unfinished.append(request_id)
             if result.result.type != "succeeded":
                 self.logger.warning(
                     f"Anthropic batch item {request_id} -> {result.result.type}"

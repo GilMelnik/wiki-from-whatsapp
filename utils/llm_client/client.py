@@ -13,8 +13,16 @@ A batch call with ``resumable=True`` saves the id of the batch it submits under
 ``<data dir>/<batch_state_dir>/<key>.json`` (the key covers the client's identity, its
 ``max_tokens`` and every request's cache key) before polling it. When that run dies or is
 interrupted, the next call with the same requests picks the batch up (poll, fetch, cache)
-instead of paying for it again; the file is removed once the answers are cached. Without
+instead of paying for it again; the file is removed once the answers are cached. A saved
+batch that can no longer be retrieved drops its file and raises ``BatchGone``; a batch that
+ended with items that never ran (expired, canceled) caches the answered ones, drops its
+file and raises ``BatchUnfinished``, so the next call submits only those. Without
 ``resumable`` nothing changes.
+
+A response cut off at ``max_tokens`` is retried only with a window at least
+``min_retry_growth`` times larger (twice the window, at most ``max_tokens_ceiling``); a
+client already at or near the ceiling gives up at once instead of paying for a retry that
+cannot help.
 
 Provider/model per stage and every other non-secret tunable live in
 ``config.json`` (see ``settings``); only API keys live in ``.env``. Build a
@@ -39,7 +47,7 @@ from typing import Any, Sequence
 from utils.json_io import read_json_if_present, write_json_file
 from utils.llm_client.cache import LLMCache
 from utils.llm_client.failure_log import append_failure
-from utils.llm_client.models import BatchRequest, PromptInput
+from utils.llm_client.models import BatchGone, BatchRequest, BatchUnfinished, PromptInput
 from utils.llm_client.prompts import _flatten, extract_json
 from utils.llm_client.providers import create_provider
 from utils.llm_client.settings import CONFIG, DATA_DIR
@@ -248,18 +256,25 @@ class LLMClient:
             self.cache._write_cache(key, response)
         return response
 
+    def _grown_max_tokens(self) -> int | None:
+        """The window a truncated response is retried with (double, at most the ceiling), or
+        ``None`` when it would not be at least ``min_retry_growth`` times the current one."""
+
+        grown = min(self.max_tokens * 2, CONFIG["max_tokens_ceiling"])
+        return grown if grown >= self.max_tokens * CONFIG["min_retry_growth"] else None
+
     def _raise_max_tokens(self) -> bool:
-        """Double max_tokens toward the ceiling; return False if already there.
+        """Grow max_tokens for a retry (``_grown_max_tokens``); False when that cannot help.
 
         ponytail: raising the ceiling is free (billing is on tokens actually
         generated), so the bump persists for the client's lifetime rather than
         being restored per-call — later batches likely need the extra room too.
         """
 
-        ceiling = CONFIG["max_tokens_ceiling"]
-        if self.max_tokens >= ceiling:
+        grown = self._grown_max_tokens()
+        if grown is None:
             return False
-        self.max_tokens = min(self.max_tokens * 2, ceiling)
+        self.max_tokens = grown
         return True
 
     def complete_json(
@@ -396,6 +411,11 @@ class LLMClient:
             batch_results = self._provider.generate_batch(
                 pending, batch_id=saved, on_submit=remember
             )
+        except BatchGone:
+            if state is not None:
+                state.unlink(missing_ok=True)
+                self.logger.error(f"LLM: {saved} can no longer be retrieved; dropped {state}")
+            raise
         except Exception:  # noqa: BLE001 - say where the batch id is kept, then re-raise
             if state is not None and state.exists():
                 self.logger.error(
@@ -420,6 +440,9 @@ class LLMClient:
                 self._log_call(False, req.task, f"batch_empty ({req.request_id})")
         if state is not None:
             state.unlink(missing_ok=True)
+            unfinished = list(getattr(self._provider, "unfinished", []) or [])
+            if unfinished:
+                raise BatchUnfinished(unfinished)
         return results
 
     def complete_batch_json(
@@ -455,7 +478,7 @@ class LLMClient:
                 self.cache._write_bad_cache(key, text)
                 # Never let an unparseable response linger in the good cache.
                 self.cache._delete_cache(key)
-                if truncated and self.max_tokens < CONFIG["max_tokens_ceiling"]:
+                if truncated and self._grown_max_tokens() is not None:
                     retry.append(req)
                     continue
                 self._record_failure(

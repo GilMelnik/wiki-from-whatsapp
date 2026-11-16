@@ -51,6 +51,9 @@ class LLMProvider(ABC):
         # ``{request_id (None for a sync call), input_tokens, output_tokens,
         # cache_creation_input_tokens, cache_read_input_tokens}``.
         self.usage: list[dict[str, Any]] = []
+        # The request ids of the last batch that never ran (``expired`` or ``canceled``):
+        # unlike an answer that failed, they can still be answered by a later batch.
+        self.unfinished: list[str] = []
 
     @abstractmethod
     def generate(
