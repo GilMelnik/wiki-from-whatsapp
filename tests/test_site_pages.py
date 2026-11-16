@@ -221,6 +221,20 @@ def test_about_page_states_its_principles_before_the_steps() -> None:
     assert about["steps"][0]["models"] == ["embedding.model"]
 
 
+def test_about_page_names_every_model_of_the_name_matching_step() -> None:
+    """Step 4 asks the analyzer, the embedder, a classifier stage and an LLM stage."""
+    match = ROOT_CONFIG["entities"]["match"]
+    step = next(step for step in SITE["about"]["steps"] if "entities.analyzer.model" in step["models"])
+    assert step["models"] == [
+        "entities.analyzer.model",
+        "embedding.model",
+        f"classifier.stages.{match['screen']['stage']}.model",
+        f"llm_client.stages.{match['judge']['stage']}.model",
+    ]
+    for path in step["models"]:
+        assert f"`{config_value(path)}`" in about_body()
+
+
 def test_config_value_names_the_missing_part() -> None:
     with pytest.raises(KeyError, match="llm_client.stages.nothing.model"):
         config_value("llm_client.stages.nothing.model")
