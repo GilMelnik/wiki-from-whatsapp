@@ -47,7 +47,7 @@ from step_4_entities.match_net import (
 )
 from step_4_entities.match_record import MatchRecord
 from step_4_entities.match_screen import SCREEN_CONFIG, PairScreen
-from step_4_entities.match_senses import SenseJob, SenseSplitter
+from step_4_entities.match_senses import SENSES_CONFIG, SenseJob, SenseSplitter
 from step_4_entities.normalize import normalize_name
 from utils.config import ENTITIES_CONFIG
 from utils.llm_client import Classifier, LLMClient
@@ -98,11 +98,13 @@ class EntityMatcher:
         self._embed = embed
         self._classifier = classifier
         self._llm = llm
+        self._given_llm = llm
         self.dry = dry
         self.counts: Counter[str] = Counter()
         self.tally = Tally()
-        # Dry run: new names whose embeddings are missing, so their meaning partners are unknown.
+        # Dry run: new names whose meaning partners are unknown (some embedding is missing).
         self.uncertain: set[str] = set()
+        self._senses_llm: LLMClient | None = None
 
     # --- clients --------------------------------------------------------------
 
@@ -124,6 +126,17 @@ class EntityMatcher:
             self._llm = LLMClient.for_stage(JUDGE_CONFIG["stage"], logger=self.logger,
                                             max_tokens=JUDGE_CONFIG["max_output_tokens"])
         return self._llm
+
+    @property
+    def senses_llm(self) -> LLMClient:
+        """The per-claim stage's own client (same stage, its own ``max_tokens``), so neither
+        stage's window leaks into the other's batch key; an injected ``llm`` serves both."""
+
+        if self._senses_llm is None:
+            self._senses_llm = self._given_llm if self._given_llm is not None else LLMClient.for_stage(
+                JUDGE_CONFIG["stage"], logger=self.logger,
+                max_tokens=SENSES_CONFIG["max_output_tokens"])
+        return self._senses_llm
 
     # --- the names in play ----------------------------------------------------
 
@@ -175,14 +188,14 @@ class EntityMatcher:
         try:
             pairs = net.pairs()
         except EmbeddingsMissing:
-            names = [m["name"] for m in members]
             for texts in net.texts().values():
                 try:
                     self.embed(texts, NET_CONFIG["embedding_kind"])
                 except EmbeddingsMissing as missing:
                     self.tally.missing_embeddings(missing.texts)
-                    lacking = set(missing.texts)
-                    self.uncertain |= {names[i] for i in net.new if texts[i] in lacking}
+            # Without the meaning neighbours (any text missing turns them off for every name),
+            # no new name's partners are known: each counts as uncertain.
+            self.uncertain |= new
             self.tally.meaning_unknown(len(net.new))
             pairs = net.pairs(meaning=False)
         except RuntimeError as exc:  # the embedder's error after its own retries
@@ -300,7 +313,8 @@ class EntityMatcher:
         return weights
 
     def _splitter(self) -> SenseSplitter:
-        return SenseSplitter(self.llm, self.sampler, self.corpus.claims_by_id, self.logger)
+        return SenseSplitter(self.senses_llm, self.sampler, self.corpus.claims_by_id,
+                             self.logger)
 
     @staticmethod
     def divide(job: SenseJob, answers: Mapping[str, list[int]] | None, fallback: Sequence[float]
@@ -407,8 +421,10 @@ class EntityMatcher:
     def usage(self) -> dict[str, int]:
         """The chat tokens the API reported in this run (cached answers add nothing)."""
 
-        if self._llm is None:
+        clients = list({id(c): c for c in (self._llm, self._senses_llm) if c is not None}.values())
+        if not clients:
             return {}
         keys = ("input_tokens", "output_tokens", "cache_creation_input_tokens",
                 "cache_read_input_tokens")
-        return {key: sum(int(entry.get(key) or 0) for entry in self._llm.usage) for key in keys}
+        return {key: sum(int(entry.get(key) or 0) for c in clients for entry in c.usage)
+                for key in keys}

@@ -10,8 +10,9 @@ range:
 * screen: the pairs not yet answered (low = high, plus the bound above);
 * judge: low = the bundles of the pairs known to reach the judge (strong pairs, cached
   answers over the bar); high = also the bundles that appear when every unanswered pair
-  passes, plus one possible bundle per new name whose embeddings are missing (its partners by
-  meaning are unknown; that bundle is priced as the name and one partner of its size);
+  passes, plus one possible bundle per new name whenever any embedding is missing (the meaning
+  neighbours are then off for every name, so no new name's partners are known; that bundle is
+  priced as the name and one partner of its size);
 * two meanings: low = the calls of the cached verdicts; high = also a per-claim split of every
   new name that no cached verdict covers (each could be listed twice), at its own claims.
 

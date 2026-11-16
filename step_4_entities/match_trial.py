@@ -48,7 +48,7 @@ from step_4_entities.match_estimate import default_embed
 from step_4_entities.match_judge import JUDGE_CONFIG, Judge
 from step_4_entities.match_net import MEANING_SOURCES, SPELLING_SOURCES, CandidateNet, PairKey, pair_key
 from step_4_entities.match_screen import SCREEN_CONFIG, PairScreen
-from step_4_entities.match_senses import SenseJob, SenseSplitter
+from step_4_entities.match_senses import SENSES_CONFIG, SenseJob, SenseSplitter
 from step_4_entities.mentions import DictaAnalyzer, build_or_load_analysis
 from step_4_entities.normalize import normalize_name
 from utils.config import ENTITIES_CONFIG
@@ -203,8 +203,10 @@ def judge_trial(data: TrialData, listed: list[list[str]], *, hide_seed: bool, ba
                             "groups": [{"label": g.label, "names": g.names} for g in verdict.groups],
                             "unsure": [[*p, reason] for p, reason in verdict.unsure],
                             "omitted": verdict.omitted})
-    senses = SenseSplitter(llm, data.sampler, data.claims_by_id, logger).split(shared_jobs,
-                                                                              batch=batch)
+    senses_llm = LLMClient.for_stage(JUDGE_CONFIG["stage"], logger=logger,
+                                     max_tokens=SENSES_CONFIG["max_output_tokens"])
+    senses = SenseSplitter(senses_llm, data.sampler, data.claims_by_id, logger).split(
+        shared_jobs, batch=batch)
     divided = []
     claims_per_group: list[list[int]] = []
     for job in shared_jobs:
@@ -225,7 +227,8 @@ def judge_trial(data: TrialData, listed: list[list[str]], *, hide_seed: bool, ba
                "names_with_two_meanings": len(shared_jobs),
                "claims_per_meaning": claims_per_group,
                "senses_failed": len(senses.failed),
-               "chat_usage": {key: sum(int(u.get(key) or 0) for u in llm.usage)
+               "chat_usage": {key: sum(int(u.get(key) or 0) for u in [*llm.usage,
+                                                                      *senses_llm.usage])
                               for key in ("input_tokens", "output_tokens",
                                           "cache_creation_input_tokens", "cache_read_input_tokens")}}
     _write("judge", {"numbers": numbers, "bundles": out_bundles, "senses": divided}, logger)
