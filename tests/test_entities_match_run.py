@@ -23,15 +23,15 @@ from tests.entities_match_support import (
 
 THINGS = {
     "Ministry of Health": ["health ministry"], "MoH": ["health ministry"],
-    "Gaia Clinic": ["Gaia"], "Gala Clinic": ["Gala"],
+    "Nerida Clinic": ["Nerida"], "Nereda Clinic": ["Nereda"],
     "Dana Levi": ["lawyer"], "Dana": ["lawyer", "insurer"],
 }
 SEED = [{"canonical": "Dana Levi", "aliases": ["Dana"], "type": "lawyer", "status": "accepted"}]
 CLAIMS = [
     claim("t1-a", ["Ministry of Health"], "Ministry of Health approved the papers", "2023-01-01"),
     claim("t1-b", ["MoH"], "MoH approved the birth certificate", "2023-02-01"),
-    claim("t2-a", ["Gaia Clinic"], "Gaia Clinic did the transfer", "2023-03-01"),
-    claim("t2-b", ["Gala Clinic"], "Gala Clinic did the blood tests", "2023-04-01"),
+    claim("t2-a", ["Nerida Clinic"], "Nerida Clinic did the transfer", "2023-03-01"),
+    claim("t2-b", ["Nereda Clinic"], "Nereda Clinic did the blood tests", "2023-04-01"),
     claim("t3-a", ["Dana Levi"], "Levi prepared the court order", "2023-05-01"),
     claim("t4-a", ["Dana"], "Dana handled our court order", "2023-06-01"),
     claim("t5-a", ["Dana"], "Dana insurance covered the newborn", "2023-07-01"),
@@ -54,7 +54,7 @@ def _step(tmp_path: Path, *, judge: object = None, seed: list[dict] | None = SEE
     clients = MatchClients(
         embed=FakeEmbed({"MoH": "Ministry of Health", "משרד הבריאות": "Ministry of Health"}),
         classifier=FakeClassifier(_same, failing),
-        llm=FakeLLM(judge or grouped(THINGS, unsure=[("Gaia Clinic", "Gala Clinic")]),
+        llm=FakeLLM(judge or grouped(THINGS, unsure=[("Nerida Clinic", "Nereda Clinic")]),
                     by_keyword(KEYWORDS)),
     )
     return MatchStep(tmp_path, clients, seed)
@@ -67,12 +67,12 @@ def test_the_judge_groups_are_applied(tmp_path: Path) -> None:
     assert sorted(ministry["aliases"]) == ["Ministry of Health", "MoH"]
     assert "model" in ministry["merge_signals"]
     # look-alikes spelling would merge, kept apart by the judge and flagged as unsure
-    gaia, gala = step.entity_of("Gaia Clinic"), step.entity_of("Gala Clinic")
-    assert gaia is not gala and gaia["aliases"] == ["Gaia Clinic"]
+    gaia, gala = step.entity_of("Nerida Clinic"), step.entity_of("Nereda Clinic")
+    assert gaia is not gala and gaia["aliases"] == ["Nerida Clinic"]
     assert gaia["status"] == "ambiguous" and gala["canonical_name"] in gaia["conflict_with"]
     assert stats["unjudged_names"] == 0
     matches = step.matches()
-    assert {"names": ["Gaia Clinic", "Gala Clinic"], "reason": "not clear",
+    assert {"names": ["Nereda Clinic", "Nerida Clinic"], "reason": "not clear",
             "source": "judge"} in matches["unsure"]
     assert matches["metadata"]["counts"]["bundles"] >= 3
     assert matches["metadata"]["prompt_versions"] == {"screen": 1, "judge": 1, "senses": 1}
@@ -143,7 +143,7 @@ def test_a_failed_judge_call_leaves_the_spelling_rules_and_a_flag(tmp_path: Path
     step = _step(tmp_path, judge=lambda ids: None, seed=None)
     stats = step.run(CLAIMS[:4])
     assert stats["unjudged_names"] == 4
-    gaia = step.entity_of("Gaia Clinic")
+    gaia = step.entity_of("Nerida Clinic")
     assert gaia["status"] == "ambiguous"
     assert {e["why"] for e in step.matches()["unjudged"]} == {"judge"}
 

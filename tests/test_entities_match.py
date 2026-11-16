@@ -28,8 +28,8 @@ from tests.entities_fixtures import collect_entities
 LOGGER = logging.getLogger("test")
 
 CLAIMS = [
-    claim("t1-a", ["Gaia Clinic"], "Gaia Clinic did the transfer", "2023-01-05"),
-    claim("t1-b", ["Gala Clinic"], "Gala Clinic did the tests", "2023-02-05"),
+    claim("t1-a", ["Nerida Clinic"], "Nerida Clinic did the transfer", "2023-01-05"),
+    claim("t1-b", ["Nereda Clinic"], "Nereda Clinic did the tests", "2023-02-05"),
     claim("t2-a", ["Ministry of Health"], "Ministry of Health approved the papers", "2023-03-01"),
     claim("t2-b", ["MoH"], "MoH approved the papers", "2023-04-01"),
     claim("t3-a", ["Orion"], "Orion agency helped us", "2023-05-01"),
@@ -51,7 +51,7 @@ def _net(tmp_path: Path, new: set[str] | None = None,
 def test_the_net_holds_spelling_and_meaning_pairs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(NET_CONFIG, "neighbours", 1)
     pairs = _net(tmp_path).pairs()
-    look_alike = pairs[("Gaia Clinic", "Gala Clinic")]
+    look_alike = pairs[("Nereda Clinic", "Nerida Clinic")]
     assert SOURCE_SPELLING in look_alike.sources and look_alike.strong
     prefix = pairs[("Orion", "Orion Agency")]
     assert SOURCE_PREFIX in prefix.sources and prefix.strong
@@ -80,9 +80,9 @@ def test_strong_pairs_skip_the_screen_and_weak_ones_below_the_bar_drop(tmp_path:
     result = PairScreen(classifier, ClaimSampler({c["claim_id"]: c for c in CLAIMS}),
                         {c["entities"][0]: [c["claim_id"]] for c in CLAIMS}, LOGGER).screen(weak)
     asked = {FakeClassifier.names(state) for state in classifier.states}
-    assert ("Gaia Clinic", "Gala Clinic") not in asked and ("Orion", "Orion Agency") not in asked
+    assert ("Nereda Clinic", "Nerida Clinic") not in asked and ("Orion", "Orion Agency") not in asked
     assert result.probabilities[("Ministry of Health", "MoH")] == 0.9
-    assert "Gaia Clinic did the transfer" in classifier.states[0] or classifier.states
+    assert all("Name A: " in s and "\n- 2023-" in s for s in classifier.states)
 
 
 def test_a_failed_screen_pair_is_reported_not_dropped(tmp_path: Path) -> None:
