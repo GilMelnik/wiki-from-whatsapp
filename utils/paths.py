@@ -105,6 +105,7 @@ TAGGED_MEMBERS_PATH = step_path(STEP_3, "tagged_members.json")
 # -------------------------------------------------------------- step 4 entities
 ENTITIES_SEED_PATH = step_path(STEP_4, "entities_seed.json")
 ENTITY_ANALYSIS_PATH = step_path(STEP_4, "entity_claim_analysis.json")
+ENTITY_MATCHES_PATH = step_path(STEP_4, "entity_matches.json")
 # Manual claim aggregations created in the entity reviewer (no pipeline original);
 # step 5 treats each one as a must-link: its claims end up in one group.
 MANUAL_AGGREGATIONS_PATH = step_path(STEP_4, "claim_aggregations.json")
