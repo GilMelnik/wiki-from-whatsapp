@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Mapping, Sequence, cast
+from typing import Any, Callable, Mapping, Sequence, cast
 
 import anthropic
 from anthropic.types import (
@@ -151,7 +151,11 @@ class AnthropicProvider(LLMProvider):
         )
 
     def generate_batch(
-        self, requests: Sequence[BatchRequest]
+        self,
+        requests: Sequence[BatchRequest],
+        *,
+        batch_id: str | None = None,
+        on_submit: Callable[[str], None] | None = None,
     ) -> dict[str, tuple[str, bool]]:
         if self._client is None:
             self._client = anthropic.Anthropic()
@@ -169,11 +173,19 @@ class AnthropicProvider(LLMProvider):
             for req in requests
         ]
 
-        batch = self._client.messages.batches.create(requests=api_requests)
-        self.logger.info(
-            f"Anthropic batch {batch.id} submitted "
-            f"({len(requests)} requests, ~50% cheaper)..."
-        )
+        if batch_id is not None:
+            batch = self._client.messages.batches.retrieve(batch_id)
+            self.logger.info(
+                f"Anthropic batch {batch.id} picked up again ({len(requests)} requests)"
+            )
+        else:
+            batch = self._client.messages.batches.create(requests=api_requests)
+            self.logger.info(
+                f"Anthropic batch {batch.id} submitted "
+                f"({len(requests)} requests, ~50% cheaper)..."
+            )
+            if on_submit is not None:
+                on_submit(batch.id)
 
         while True:
             batch = self._client.messages.batches.retrieve(batch.id)

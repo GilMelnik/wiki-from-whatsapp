@@ -24,6 +24,7 @@
     "default_max_tokens": 8192,
     "cache_dir": "shared/llm_cache",
     "failure_log": "shared/llm_failures.jsonl",
+    "batch_state_dir": "shared/llm_batches",
     "log_cache": true,
     "anthropic_prompt_cache": true
   },
@@ -85,15 +86,23 @@
         "prompt_version": 1,
         "max_bundle_names": 40,
         "max_output_tokens": 16000,
-        "batch": true
+        "batch": true,
+        "strong_pair_weight": 2.0,
+        "bundle_hash_chars": 10
       },
-      "senses": {"prompt_version": 1, "claims_per_call": 60, "context_claims": 3},
-      "estimate": {"chars_per_token": 1.7, "senses_per_judge_call": 0.05, "sense_claims": 60},
+      "senses": {
+        "prompt_version": 1,
+        "claims_per_call": 60,
+        "context_claims": 3,
+        "request_hash_chars": 16
+      },
+      "estimate": {"chars_per_token": 1.7},
       "trial": {
         "bars": [0.02, 0.05, 0.1, 0.2, 0.3, 0.5, 0.7],
         "cross_seed_pairs": 200,
         "seed": 0,
-        "folder": "match_trial"
+        "folder": "match_trial",
+        "stamp_format": "%Y%m%d_%H%M%S"
       }
     }
   },

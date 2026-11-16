@@ -9,6 +9,13 @@ The client exposes methods used across the wiki pipeline:
   items *truncated at max_tokens* as another batch with a larger window; other
   unparseable items are logged and dropped rather than retried)
 
+A batch call with ``resumable=True`` saves the id of the batch it submits under
+``<data dir>/<batch_state_dir>/<key>.json`` (the key covers the client's identity, its
+``max_tokens`` and every request's cache key) before polling it. When that run dies or is
+interrupted, the next call with the same requests picks the batch up (poll, fetch, cache)
+instead of paying for it again; the file is removed once the answers are cached. Without
+``resumable`` nothing changes.
+
 Provider/model per stage and every other non-secret tunable live in
 ``config.json`` (see ``settings``); only API keys live in ``.env``. Build a
 per-stage client with ``LLMClient.for_stage(stage)``; construct one directly with
@@ -23,16 +30,20 @@ flattened prompts, JSON mode and the response schema.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from pathlib import Path
 from typing import Any, Sequence
 
+from utils.json_io import read_json_if_present, write_json_file
 from utils.llm_client.cache import LLMCache
 from utils.llm_client.failure_log import append_failure
 from utils.llm_client.models import BatchRequest, PromptInput
 from utils.llm_client.prompts import _flatten, extract_json
 from utils.llm_client.providers import create_provider
 from utils.llm_client.settings import CONFIG, DATA_DIR
+from utils.timestamps import utc_now
 
 
 class LLMClient:
@@ -99,6 +110,7 @@ class LLMClient:
             cache_dir if cache_dir is not None else DATA_DIR / CONFIG["cache_dir"],
             identity,
         )
+        self.batch_state_dir = DATA_DIR / CONFIG["batch_state_dir"]
 
     def supports_batch(self) -> bool:
         return self._provider.supports_batch
@@ -333,8 +345,15 @@ class LLMClient:
         self._log_call(False, task, "parse_error exhausted -> logged")
         raise last_exc  # type: ignore[misc]
 
+    def _batch_state_path(self, pending: Sequence[BatchRequest]) -> Path:
+        """Where a resumable batch of exactly these requests keeps its batch id."""
+
+        keys = sorted(self._batch_key(req) for req in pending)
+        seed = json.dumps([self.cache.identity, self.max_tokens, keys], sort_keys=True)
+        return self.batch_state_dir / f"{hashlib.sha256(seed.encode('utf-8')).hexdigest()}.json"
+
     def complete_batch(
-        self, requests: Sequence[BatchRequest]
+        self, requests: Sequence[BatchRequest], *, resumable: bool = False
     ) -> dict[str, tuple[str, bool]]:
         """Run many prompts via the provider batch API (50% cheaper, async).
 
@@ -363,7 +382,28 @@ class LLMClient:
             raise ValueError(f"Batch API not supported for provider {self.provider!r}")
 
         self._provider.max_tokens = self.max_tokens
-        batch_results = self._provider.generate_batch(pending)
+        state = self._batch_state_path(pending) if resumable else None
+        saved = (read_json_if_present(state) or {}).get("batch_id") if state else None
+        if saved:
+            self.logger.info(f"LLM: picking up batch {saved} of an earlier run ({state.name})")
+
+        def remember(batch_id: str) -> None:
+            if state is not None:
+                write_json_file({"batch_id": batch_id, "requests": len(pending),
+                                 "model": self.model, "submitted_at": utc_now()}, state)
+
+        try:
+            batch_results = self._provider.generate_batch(
+                pending, batch_id=saved, on_submit=remember
+            )
+        except Exception:  # noqa: BLE001 - say where the batch id is kept, then re-raise
+            if state is not None and state.exists():
+                self.logger.error(
+                    f"LLM: the batch did not finish here; its id is kept in {state}, so the "
+                    "next run with the same requests picks it up (delete the file to "
+                    "submit a new batch)"
+                )
+            raise
 
         for req in pending:
             response, truncated = batch_results.get(req.request_id, ("", False))
@@ -378,9 +418,13 @@ class LLMClient:
                     self.cache._write_cache(self._batch_key(req), response)
             else:
                 self._log_call(False, req.task, f"batch_empty ({req.request_id})")
+        if state is not None:
+            state.unlink(missing_ok=True)
         return results
 
-    def complete_batch_json(self, requests: Sequence[BatchRequest]) -> dict[str, Any]:
+    def complete_batch_json(
+        self, requests: Sequence[BatchRequest], *, resumable: bool = False
+    ) -> dict[str, Any]:
         """Batch call returning parsed JSON per request, self-healing bad ones.
 
         Runs the batch and parses each response. Items *truncated at max_tokens*
@@ -395,7 +439,8 @@ class LLMClient:
         parsed: dict[str, Any] = {}
         pending: list[BatchRequest] = list(requests)
         while pending:
-            raw = self.complete_batch(pending)
+            raw = (self.complete_batch(pending, resumable=True) if resumable
+                   else self.complete_batch(pending))
             retry: list[BatchRequest] = []  # truncated -> worth a larger window
             for req in pending:
                 text, truncated = raw.get(req.request_id, ("", False))

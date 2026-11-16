@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 import threading
 from abc import ABC, abstractmethod
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 from utils.llm_client.models import (
     Answer,
@@ -64,8 +64,15 @@ class LLMProvider(ABC):
         """Return ``(text, truncated)`` for a single completion."""
 
     def generate_batch(
-        self, requests: Sequence[BatchRequest]
+        self,
+        requests: Sequence[BatchRequest],
+        *,
+        batch_id: str | None = None,
+        on_submit: Callable[[str], None] | None = None,
     ) -> dict[str, tuple[str, bool]]:
+        """``{request_id: (text, truncated)}``. ``batch_id``: pick up that batch (already
+        submitted for these requests) instead of submitting; ``on_submit`` gets the id of a
+        newly submitted batch before it is polled."""
         raise NotImplementedError(f"Provider {self.name!r} does not support batch")
 
 
