@@ -4,6 +4,7 @@ rerun of the record. Fakes only; every name is invented."""
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -27,6 +28,7 @@ from tests.entities_match_support import (
     grouped,
 )
 from tests.test_entities_match_run import CLAIMS, KEYWORDS, SEED, THINGS, _step
+from utils.llm_client import BatchGone, BatchRequest, BatchUnfinished
 from utils.paths import STEP_4
 
 
@@ -223,3 +225,59 @@ def test_the_record_is_written_after_the_entities_and_a_rerun_does_not_repeat_it
     record = MatchRecord(step.matches_path, fresh=False)
     record.add_senses(step.matches()["senses"])
     assert len(record.data["senses"]) == 1
+
+
+# --- last round A: an existing name's changed text turns the meaning net off for all ---------
+
+def test_a_changed_existing_text_makes_every_new_name_uncertain(tmp_path: Path) -> None:
+    step = _step(tmp_path)
+    base = [c for c in CLAIMS if c["entities"] != ["MoH"]]
+    step.run(base)
+    with_moh = [*base, claim("t9-a", ["MoH"], "MoH approved the birth certificate", "2024-01-01")]
+    step.clients.llm.batch_error = RuntimeError("the batch could not be polled")
+    with pytest.raises(StageFailed):
+        step.run(with_moh)  # the new name was embedded and screened, nothing was written
+    step.clients.llm.batch_error = None
+    live = step.clients.embed
+    _with(step, embed=CacheOnlyEmbed(live))
+    newer = [*with_moh, claim("t9-b", ["Ministry of Health"], "Ministry of Health again",
+                              "2024-02-01")]
+    estimate = step.run(newer, estimate=True)
+    assert estimate["paid_calls"][1] >= 1 and estimate["exact"] is False
+    calls = len(step.clients.llm.calls)
+    _with(step, embed=live)
+    step.run(newer)
+    assert len(step.clients.llm.calls) > calls
+
+
+# --- last round B: requests that never ran stop the stage ------------------------------------
+
+def test_an_unfinished_batch_stops_the_run_and_says_what_a_rerun_does(tmp_path: Path) -> None:
+    step = _step(tmp_path)
+    step.clients.llm.batch_error = BatchUnfinished(["b-1"])
+    with pytest.raises(StageFailed, match="submits only the unfinished ones"):
+        step.run(CLAIMS)
+    assert not step.artifact.edited.exists() and not step.matches_path.exists()
+    step.clients.llm.batch_error = BatchGone("batch_9", RuntimeError("not found"))
+    with pytest.raises(StageFailed, match="submits a new batch"):
+        step.run(CLAIMS)
+
+
+# --- last round C: room for the judge, and a client of its own per stage ---------------------
+
+def test_the_judge_and_the_per_claim_stage_have_their_own_large_window(tmp_path: Path) -> None:
+    from step_4_entities.cluster import EntityClusterer
+    from step_4_entities.collect import ClaimCorpus
+    from step_4_entities.match import EntityMatcher
+
+    matcher = EntityMatcher(ClaimCorpus([], {}), EntityClusterer(
+        {}, similarity_threshold=0.8, seed_path=tmp_path / "none.json"),
+        MatchRecord(tmp_path / "m.json", fresh=True), logging.getLogger("test"))
+    judge, senses = matcher.llm, matcher.senses_llm
+    assert judge is not senses
+    assert judge.max_tokens == senses.max_tokens == 128000
+    assert judge._grown_max_tokens() is None  # a cut-off answer fails at once: no paid retry
+    requests = [BatchRequest("x", "s", "u")]
+    before = senses._batch_state_path(requests)
+    judge.max_tokens = 64000
+    assert senses._batch_state_path(requests) == before

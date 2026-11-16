@@ -27,7 +27,7 @@ from step_4_entities.match_bundles import Bundle
 from step_4_entities.match_claims import ClaimSampler
 from step_4_entities.match_net import PairKey, pair_key
 from utils.config import ENTITIES_CONFIG
-from utils.llm_client import BatchRequest, LLMClient
+from utils.llm_client import BatchGone, BatchRequest, BatchUnfinished, LLMClient
 from utils.llm_client.ask import ask_json
 
 JUDGE_CONFIG = ENTITIES_CONFIG["match"]["judge"]
@@ -39,13 +39,24 @@ CALL_ERRORS = (anthropic.APIError, RuntimeError, ValueError, OSError)
 
 
 class StageFailed(RuntimeError):
-    """The calls of a model stage failed as a whole: the run stops and writes nothing."""
+    """The calls of a model stage did not finish: the run stops and writes nothing.
+
+    That is a batch that cannot be submitted, polled or fetched (the next run picks it up), a
+    saved batch that can no longer be retrieved (the next run submits a new one), or a batch
+    that ended with requests that never ran, expired or canceled (their answered siblings are
+    cached; the next run submits only the unfinished ones)."""
 
     def __init__(self, stage: str, count: int, cause: BaseException) -> None:
+        if isinstance(cause, BatchGone):
+            then = "the saved batch is gone, so the next run submits a new batch."
+        elif isinstance(cause, BatchUnfinished):
+            then = (f"{len(cause.request_ids)} requests never ran; the answered ones are "
+                    "cached and the next run submits only the unfinished ones.")
+        else:
+            then = "a batch already submitted is picked up, not paid for again."
         super().__init__(
-            f"Entity {stage}: the calls of {count} requests failed as a whole ({cause!r}); "
-            "nothing was written. Run the step again: a batch already submitted is picked up, "
-            "not paid for again."
+            f"Entity {stage}: the calls of {count} requests did not finish ({cause!r}); "
+            f"nothing was written. Run the step again: {then}"
         )
 
 

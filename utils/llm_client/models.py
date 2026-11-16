@@ -69,6 +69,29 @@ class Answer:
     probabilities: dict[str, float] | float
 
 
+class BatchUnfinished(RuntimeError):
+    """A resumable batch ended with items that never ran (``expired`` or ``canceled``). The
+    answered items are cached, so the next call submits only these."""
+
+    def __init__(self, request_ids: list[str]) -> None:
+        super().__init__(
+            f"{len(request_ids)} batch requests did not finish (expired or canceled); the "
+            "answered ones are cached and a rerun submits only the unfinished ones"
+        )
+        self.request_ids = request_ids
+
+
+class BatchGone(RuntimeError):
+    """A saved batch can no longer be retrieved (unknown id, or its results are gone)."""
+
+    def __init__(self, batch_id: str, cause: BaseException) -> None:
+        super().__init__(
+            f"batch {batch_id} can no longer be retrieved ({cause!r}); its saved id was "
+            "dropped and a rerun submits a new batch"
+        )
+        self.batch_id = batch_id
+
+
 class ClassifierError(RuntimeError):
     """A classifier request failed. ``index`` is the failing item's position in
     the ``classify_many`` call, or ``None`` for a single ``classify``."""

@@ -19,6 +19,7 @@
     },
     "batch_poll_interval": 30.0,
     "max_tokens_ceiling": 16384,
+    "min_retry_growth": 1.5,
     "json_parse_retries": 2,
     "default_temperature": 0.2,
     "default_max_tokens": 8192,
@@ -85,7 +86,7 @@
         "stage": "entity_judge",
         "prompt_version": 1,
         "max_bundle_names": 40,
-        "max_output_tokens": 16000,
+        "max_output_tokens": 128000,
         "batch": true,
         "strong_pair_weight": 2.0,
         "bundle_hash_chars": 10
@@ -94,7 +95,8 @@
         "prompt_version": 1,
         "claims_per_call": 60,
         "context_claims": 3,
-        "request_hash_chars": 16
+        "request_hash_chars": 16,
+        "max_output_tokens": 128000
       },
       "estimate": {"chars_per_token": 1.7},
       "trial": {
