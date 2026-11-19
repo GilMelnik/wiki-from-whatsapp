@@ -1,5 +1,5 @@
 import { ActionButton, Bidi, Kbd, kindOf, nodeById, Panel } from "@shell";
-import { DETAILS_TAB, GROUPS_TAB, isAssignmentRow } from "./assign.js";
+import { DETAILS_TAB, CLAIMS_TAB, isAssignmentRow } from "./assign.js";
 import { reorderOp } from "./plan.js";
 
 // Side column: what can be done with the selected item, each with its key; for a proposal of
@@ -63,7 +63,7 @@ function ProposalActions({ proposal, saving, on }) {
       <ActionButton label="Reject" keyName="x" danger disabled={saving} onClick={() => on.decide(proposal, "reject")} />
       <p className="text-xs text-slate-500">
         Accepting opens the change prefilled, to correct before it is saved; the next assignment run then places its
-        groups. A rejected proposal is not made again.
+        claims. A rejected proposal is not made again.
       </p>
     </>
   );
@@ -73,7 +73,7 @@ function MoveHelp() {
   return (
     <div className="space-y-1 text-xs text-slate-600">
       <p>
-        Pick groups with the boxes (or <Kbd>a</Kbd> for every shown one), then:
+        Pick claims with the boxes (or <Kbd>a</Kbd> for every shown one), then:
       </p>
       <p>
         <Kbd>p</Kbd> move to a page · <Kbd>2</Kbd> second page · <Kbd>x</Kbd> remove from here · <Kbd>o</Kbd> off every page
@@ -81,7 +81,7 @@ function MoveHelp() {
       <p>
         <Kbd>b</Kbd> labels · <Kbd>r</Kbd> back to automatic assignment · <Kbd>f</Kbd> search · <Kbd>u</Kbd> undo
       </p>
-      <p>Every move is saved at once and marks the group as assigned by hand: the assignment step will not decide it again.</p>
+      <p>Every move is saved at once and marks the claim as assigned by hand: the assignment step will not decide it again.</p>
     </div>
   );
 }
@@ -90,7 +90,7 @@ export function ActionsPanel({ overview, selectedId, proposal, labelsView, savin
   const kind = kindOf(overview, selectedId);
   const node = nodeById(overview, selectedId);
   const special = !labelsView && isAssignmentRow(selectedId) && !proposal;
-  const itemGroups = (kind === "page" || kind === "label") && tab === GROUPS_TAB;
+  const itemClaims = (kind === "page" || kind === "label") && tab === CLAIMS_TAB;
   return (
     <Panel
       title={proposal ? "Decide" : "Actions"}
@@ -111,13 +111,13 @@ export function ActionsPanel({ overview, selectedId, proposal, labelsView, savin
         )}
         {proposal && <ProposalActions proposal={proposal} saving={saving} on={on} />}
         {(kind === "page" || kind === "label") && (
-          <ActionButton label={itemGroups ? "Back to the details" : "Its claim groups"} keyName="g" onClick={() => on.showTab(itemGroups ? DETAILS_TAB : GROUPS_TAB)} />
+          <ActionButton label={itemClaims ? "Back to the details" : "Its claims"} keyName="g" onClick={() => on.showTab(itemClaims ? DETAILS_TAB : CLAIMS_TAB)} />
         )}
         {kind === "page" && <PageActions id={selectedId} saving={saving} on={on} />}
         {kind === "category" && <CategoryActions node={node} saving={saving} on={on} />}
         {kind === "label" && <LabelActions id={selectedId} overview={overview} saving={saving} on={on} />}
         {node && <Reorder node={node} saving={saving} on={on} />}
-        {(special || itemGroups) && <MoveHelp />}
+        {(special || itemClaims) && <MoveHelp />}
         {!kind && !special && !proposal && (
           <p className="text-slate-500">
             Select a page, category or label in the list (<Kbd>j</Kbd> / <Kbd>k</Kbd>). Text changes are saved at once;

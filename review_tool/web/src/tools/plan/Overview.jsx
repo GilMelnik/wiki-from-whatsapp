@@ -1,4 +1,4 @@
-import { Bidi, formatCount, formatDateTime, groupCount, Ltr, Panel, PanelState, useResource } from "@shell";
+import { Bidi, formatCount, formatDateTime, claimCount, Ltr, Panel, PanelState, useResource } from "@shell";
 import { api } from "./api.js";
 import { UNPLACED_ID } from "./assign.js";
 import { NotRunYet } from "./AssignmentViews.jsx";
@@ -6,7 +6,7 @@ import { percent } from "./plan.js";
 import { overviewTodos } from "./todos.js";
 
 // Main column when the plan itself is selected: what there is to do (every warning, the
-// proposals waiting for a decision, the groups on no page or waiting, the labels worth
+// proposals waiting for a decision, the claims on no page or waiting, the labels worth
 // checking; each opens what it is about), what changed since the model's proposal, and,
 // folded, the model's reasons for the structure and the coverage check of the planning run
 // (it describes the model's proposal on a sample, so it stays apart from the real lists).
@@ -15,7 +15,7 @@ const TODO_TONES = { warning: "note-warning", info: "note-plain" };
 
 function Todos({ overview, onSelect }) {
   const todos = overviewTodos(overview, formatCount);
-  if (todos.length === 0) return <p className="text-slate-500">Nothing to do: no warning, no proposal and no group on no page.</p>;
+  if (todos.length === 0) return <p className="text-slate-500">Nothing to do: no warning, no proposal and no claim on no page.</p>;
   return (
     <ul className="space-y-2">
       {todos.map((todo) => (
@@ -34,14 +34,14 @@ function Todos({ overview, onSelect }) {
   );
 }
 
-function GroupList({ groups }) {
+function ClaimList({ claims }) {
   return (
     <ul className="space-y-1">
-      {groups
-        .filter((group) => !group.missing)
-        .map((group) => (
-          <li key={group.group_id} className="card p-2" title={group.group_id}>
-            <Bidi as="p">{group.claim_text}</Bidi>
+      {claims
+        .filter((claim) => !claim.missing)
+        .map((claim) => (
+          <li key={claim.short_id} className="card p-2" title={claim.short_id}>
+            <Bidi as="p">{claim.claim_text}</Bidi>
           </li>
         ))}
     </ul>
@@ -55,9 +55,9 @@ function Unplaced({ reads }) {
       {unplaced.data && (
         <div className="space-y-3">
           <h4 className="text-xs font-medium text-slate-600">Fit no page</h4>
-          <GroupList groups={unplaced.data.none} />
+          <ClaimList claims={unplaced.data.none} />
           <h4 className="text-xs font-medium text-slate-600">Unclear which page</h4>
-          <GroupList groups={unplaced.data.unsure} />
+          <ClaimList claims={unplaced.data.unsure} />
         </div>
       )}
     </PanelState>
@@ -69,7 +69,7 @@ function Coverage({ coverage, unplaced, reads, onSelect }) {
   return (
     <div className="space-y-2">
       <p>
-        The cheap classifier placed a sample of {groupCount(coverage.sample_size, formatCount)} by the titles and scopes
+        The cheap classifier placed a sample of {claimCount(coverage.sample_size, formatCount)} by the titles and scopes
         alone: {percent(coverage.confident_share)} with confidence, {percent(coverage.unsure_share)} without, {percent(coverage.none_share)} on
         no page. It was checked {formatDateTime(coverage.generated_at)} on the plan as the model proposed it; changes since are not measured.
       </p>
@@ -77,7 +77,7 @@ function Coverage({ coverage, unplaced, reads, onSelect }) {
         <p className="text-xs text-slate-600">
           After the assignment step the real list is{" "}
           <button type="button" className="underline" onClick={() => onSelect(UNPLACED_ID)}>
-            the groups on no page
+            the claims on no page
           </button>
           .
         </p>

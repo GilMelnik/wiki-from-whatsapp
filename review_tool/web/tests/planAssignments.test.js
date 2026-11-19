@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { pickState, setPicked, togglePicked } from "../src/shell/picking.js";
-import { assignmentLines, countText, groupCount, quote } from "../src/shell/planText.js";
+import { assignmentLines, countText, claimCount, quote } from "../src/shell/planText.js";
 import { stanceOf } from "../src/shell/stance.js";
 import {
   assignmentRows,
-  DEFAULT_GROUP_VIEW,
+  DEFAULT_CLAIM_VIEW,
   findingText,
-  groupsQuery,
+  claimsQuery,
   isAssignmentRow,
   labelChanges,
   labelShare,
@@ -27,7 +27,7 @@ const OVERVIEW = {
   labels: { usa: { title_he: "ארה״ב", kind: "country" }, georgia: { title_he: "גאורגיה", kind: "country" } },
   assignments: { exists: true, counts: { waiting: 0 }, proposals: { pending: 2 } },
 };
-const row = (id, p, labels = []) => ({ group_id: id, record: true, p, labels });
+const row = (id, p, labels = []) => ({ short_id: id, record: true, p, labels });
 
 test("multi-picking: toggle, pick or drop the visible rows, and the box state", () => {
   assert.deepEqual(togglePicked(["a"], "b"), ["a", "b"]);
@@ -46,7 +46,7 @@ test("stances read in English, unknown ones as themselves", () => {
   assert.equal(stanceOf(undefined).label, "—");
 });
 
-test("the tree list gets the assignment rows; waiting only when some groups wait", () => {
+test("the tree list gets the assignment rows; waiting only when some claims wait", () => {
   assert.deepEqual(assignmentRows(OVERVIEW).map((item) => item.id), [UNPLACED_ID, PROPOSALS_ID]);
   const waiting = { ...OVERVIEW, assignments: { ...OVERVIEW.assignments, counts: { waiting: 3 } } };
   assert.deepEqual(assignmentRows(waiting).map((item) => item.id), [UNPLACED_ID, WAITING_ID, PROPOSALS_ID]);
@@ -55,10 +55,10 @@ test("the tree list gets the assignment rows; waiting only when some groups wait
 });
 
 test("the list query sends the role only for a page and leaves out an empty filter", () => {
-  assert.deepEqual(groupsQuery("page", "costs", { ...DEFAULT_GROUP_VIEW, role: "mention" }, 50), {
+  assert.deepEqual(claimsQuery("page", "costs", { ...DEFAULT_CLAIM_VIEW, role: "mention" }, 50), {
     scope: "page", id: "costs", role: "mention", sort: "uncertain", q: undefined, offset: 50,
   });
-  assert.deepEqual(groupsQuery("unplaced", null, { sort: "date", role: "primary", q: "  x " }, 0), {
+  assert.deepEqual(claimsQuery("unplaced", null, { sort: "date", role: "primary", q: "  x " }, 0), {
     scope: "unplaced", id: undefined, role: undefined, sort: "date", q: "x", offset: 0,
   });
 });
@@ -97,17 +97,17 @@ test("a proposal prefills its dialog; an unknown category falls back to the firs
   assert.equal(proposalForm({ kind: "label", label_kind: "country" }, OVERVIEW).kind, "country");
 });
 
-test("what a plan change does to the groups, in words", () => {
+test("what a plan change does to the claims, in words", () => {
   assert.deepEqual(assignmentLines(null, OVERVIEW), []);
   const none = { redirected: 0, reask: 0, screen_pages: [], asked_labels: [], pages_cleared: 0, labels_cleared: 0, manual_lost: 0, manual_reask: 0 };
   assert.deepEqual(assignmentLines(none, OVERVIEW), []);
   const lines = assignmentLines({ ...none, redirected: 1, reask: 12, screen_pages: ["costs"], manual_lost: 2, manual_reask: 1 }, OVERVIEW);
   assert.deepEqual(lines.map((line) => line.tone), ["info", "warning", "info", "danger", "info"]);
-  assert.match(lines[0].text, /^The assignment of 1 group will move/);
-  assert.match(lines[1].text, /the page of 12 groups again/);
+  assert.match(lines[0].text, /^The assignment of 1 claim will move/);
+  assert.match(lines[1].text, /the page of 12 claims again/);
   assert.ok(lines[2].text.endsWith(`do they belong on ${quote("עלויות")}?`));
-  assert.match(lines[3].text, /^The deleted page will also be taken off 2 groups you assigned by hand\. The manual assignment of 1 group will be cancelled/);
-  assert.equal(groupCount(3133, (n) => n.toLocaleString("en")), "3,133 groups");
+  assert.match(lines[3].text, /^The deleted page will also be taken off 2 claims you assigned by hand\. The manual assignment of 1 claim will be cancelled/);
+  assert.equal(claimCount(3133, (n) => n.toLocaleString("en")), "3,133 claims");
 });
 
 test("counts and quoted titles read as English", () => {
@@ -119,6 +119,6 @@ test("counts and quoted titles read as English", () => {
 
 test("label findings say what to judge", () => {
   const large = findingText({ label_id: "usa", count: 913, share: 0.29, finding: "large" }, OVERVIEW);
-  assert.ok(large.startsWith(`The label ${quote("ארה״ב")} is attached to 29% of the groups (913):`));
-  assert.match(findingText({ label_id: "georgia", count: 4, share: 0.001, finding: "few" }, OVERVIEW), /attached to only 4 groups:/);
+  assert.ok(large.startsWith(`The label ${quote("ארה״ב")} is attached to 29% of the claims (913):`));
+  assert.match(findingText({ label_id: "georgia", count: 4, share: 0.001, finding: "few" }, OVERVIEW), /attached to only 4 claims:/);
 });

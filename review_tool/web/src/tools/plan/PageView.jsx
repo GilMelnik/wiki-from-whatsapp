@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
 import { Bidi, countText, EditableText, formatCount, Ltr, Panel, PanelState, pathTitles, TextArea, textToAliases, useResource } from "@shell";
 import { api, pagePath } from "./api.js";
-import { GROUPS_TAB } from "./assign.js";
-import { ItemGroups, ItemTabs } from "./AssignmentViews.jsx";
+import { CLAIMS_TAB } from "./assign.js";
+import { ItemClaims, ItemTabs } from "./AssignmentViews.jsx";
 import { ChangeBadge, MergedFrom, Warnings } from "./bits.jsx";
 import { aliasesToText } from "./plan.js";
 import { ScopeEvidence } from "./ScopeEvidence.jsx";
 
 // Main column for a page, in two tabs. Details: the scope is the star, a large editor, with
-// the evidence to judge it right next to it (ScopeEvidence: its size, a sample of its groups,
-// the closest groups it did not get, the model's examples); its warnings (a size outside the
+// the evidence to judge it right next to it (ScopeEvidence: its size, a sample of its claims,
+// the closest claims it did not get, the model's examples); its warnings (a size outside the
 // guide among them) above; saving a scope goes through a dialog that says the page's claims
-// will be classified again. Claim groups: what the assignment step put on the page, least
+// will be classified again. Claims: what the assignment step put on the page, least
 // certain first, to check and move.
 
 function ScopeEditor({ page, saving, scopeRef, onSave }) {
@@ -91,7 +91,7 @@ function AliasesEditor({ page, saving, onSave }) {
   );
 }
 
-export function PageView({ overview, pageId, saving, reads, scopeRef, tab, groups, on }) {
+export function PageView({ overview, pageId, saving, reads, scopeRef, tab, claims, on }) {
   const page = overview.pages[pageId];
   const detail = useResource(() => api.get(pagePath(pageId)), [pageId], { watch: reads });
   const sizes = overview.assignments?.pages?.[pageId];
@@ -109,8 +109,8 @@ export function PageView({ overview, pageId, saving, reads, scopeRef, tab, group
     >
       <div className="space-y-6 p-4 text-sm">
         <ItemTabs count={sizes?.all} tab={tab} onChange={on.showTab} />
-        {tab === GROUPS_TAB ? (
-          <ItemGroups scope="page" itemId={pageId} groups={groups} />
+        {tab === CLAIMS_TAB ? (
+          <ItemClaims scope="page" itemId={pageId} claims={claims} />
         ) : (
           <PageDetails overview={overview} page={page} pageId={pageId} detail={detail} saving={saving} scopeRef={scopeRef} on={on} />
         )}
@@ -133,7 +133,7 @@ function PageDetails({ overview, page, pageId, detail, saving, scopeRef, on }) {
         </div>
         <div className="xl:col-span-2">
           <PanelState loading={detail.loading} error={detail.error} hasData={Boolean(detail.data)} onRetry={detail.reload}>
-            {detail.data && <ScopeEvidence overview={overview} detail={detail} onGroups={() => on.showTab(GROUPS_TAB)} />}
+            {detail.data && <ScopeEvidence overview={overview} detail={detail} onClaims={() => on.showTab(CLAIMS_TAB)} />}
           </PanelState>
         </div>
       </div>

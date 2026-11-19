@@ -9,7 +9,7 @@ import { warningsFor } from "./plan.js";
 // size of a to-do list. Ids are in the tooltip.
 
 const ASSIGNMENT_ROWS = {
-  unplaced: { title: "Groups on no page", count: (summary) => summary.counts.unplaced },
+  unplaced: { title: "Claims on no page", count: (summary) => summary.counts.unplaced },
   waiting: { title: "Waiting for the assignment run", count: (summary) => summary.counts.waiting },
   proposals: { title: "Proposals to change the plan", count: (summary) => summary.proposals.pending },
 };
@@ -25,7 +25,7 @@ function AssignmentRow({ overview, item }) {
         <span className="ms-auto text-xs text-slate-500">6b has not run</span>
       ) : (
         count > 0 && (
-          <span className="badge badge-amber ms-auto" title={item.kind === "proposals" ? "Waiting for a decision" : "Claim groups"}>
+          <span className="badge badge-amber ms-auto" title={item.kind === "proposals" ? "Waiting for a decision" : "Claims"}>
             {formatCount(count)}
           </span>
         )
@@ -88,8 +88,8 @@ export function LabelRow({ overview, item }) {
         <ChangeBadge overview={overview} id={item.id} />
         <WarningMark overview={overview} id={item.id} />
         {finding && (
-          <span className="badge badge-amber" title={finding.finding === "large" ? "On a very large share of the groups" : "On very few groups"}>
-            {finding.finding === "large" ? "Very common" : countText(finding.count, "group", formatCount)}
+          <span className="badge badge-amber" title={finding.finding === "large" ? "On a very large share of the claims" : "On very few claims"}>
+            {finding.finding === "large" ? "Very common" : countText(finding.count, "claim", formatCount)}
           </span>
         )}
       </span>

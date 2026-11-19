@@ -1,42 +1,42 @@
 import { useState } from "react";
-import { Bidi, DryRun, formatCount, formatDateTime, groupCount, JOB_STATE_LABELS, Ltr, Panel, PanelState, titleOf, useJobs } from "@shell";
+import { Bidi, DryRun, formatCount, formatDateTime, claimCount, JOB_STATE_LABELS, Ltr, Panel, PanelState, titleOf, useJobs } from "@shell";
 import { ASSIGNMENTS_KEY, PROPOSAL_KINDS, proposalOperation, proposalRowId, STATUS_LABELS } from "./assign.js";
 import { NotRunYet, RunAssignButton } from "./AssignmentViews.jsx";
 
-// The proposals of the assignment step for groups that fit no page: a new page, a new label
+// The proposals of the assignment step for claims that fit no page: a new page, a new label
 // or a wider scope. The list column holds every proposal still to decide; one proposal shows,
 // in the order the owner decides: why the step proposes it, what it would add or change, the
-// groups it is for, and the dry run of the plan change (what accepting it does downstream).
+// claims it is for, and the dry run of the plan change (what accepting it does downstream).
 // The decision is in the side column. Accepting opens the plan's own dialog prefilled (the
 // owner fixes the id, the category or the text) and saves the plan change and the decision
-// together; the groups are then placed by the next assignment run, which is offered here (the
+// together; the claims are then placed by the next assignment run, which is offered here (the
 // frame asks before a paid run). Rejected proposals are never made again; they can be put
 // back to pending from the list of all proposals.
 
-const SHOWN_GROUPS = 5;
+const SHOWN_CLAIMS = 5;
 const KIND_BADGES = { page: "badge-emerald", label: "badge-sky", scope: "badge-amber" };
 const STATUS_BADGES = { pending: "badge-amber", accepted: "badge-emerald", rejected: "badge-slate" };
 
-function Groups({ groups }) {
+function Claims({ claims }) {
   const [all, setAll] = useState(false);
-  const shown = all ? groups : groups.slice(0, SHOWN_GROUPS);
+  const shown = all ? claims : claims.slice(0, SHOWN_CLAIMS);
   return (
     <div className="space-y-2">
       <ul className="space-y-1">
-        {shown.map((group) => (
-          <li key={group.group_id} className="card p-2" title={group.group_id}>
-            {group.missing ? (
-              <span className="text-slate-500">The group is no longer in the groups file.</span>
+        {shown.map((claim) => (
+          <li key={claim.short_id} className="card p-2" title={claim.short_id}>
+            {claim.missing ? (
+              <span className="text-slate-500">The claim is no longer among the claims (deleted or re-extracted).</span>
             ) : (
-              <Bidi as="p">{group.claim_text}</Bidi>
+              <Bidi as="p">{claim.claim_text}</Bidi>
             )}
-            {group.withheld && <span className="badge badge-amber mt-1">Withheld from the wiki</span>}
+            {claim.withheld && <span className="badge badge-amber mt-1">Withheld from the wiki</span>}
           </li>
         ))}
       </ul>
-      {groups.length > SHOWN_GROUPS && (
+      {claims.length > SHOWN_CLAIMS && (
         <button type="button" className="btn btn-sm" onClick={() => setAll(!all)}>
-          {all ? "Fewer" : `${formatCount(groups.length - SHOWN_GROUPS)} more`}
+          {all ? "Fewer" : `${formatCount(claims.length - SHOWN_CLAIMS)} more`}
         </button>
       )}
     </div>
@@ -140,8 +140,8 @@ export function ProposalDetail({ proposal, overview, offer, on }) {
             )}
           </div>
         </Section>
-        <Section title={`The groups it is for: ${groupCount(proposal.groups.length, formatCount)}`}>
-          <Groups groups={proposal.groups} />
+        <Section title={`The claims it is for: ${claimCount(proposal.claims.length, formatCount)}`}>
+          <Claims claims={proposal.claim_rows} />
         </Section>
         {pending && <DryRun op={proposalOperation(proposal, overview)} overview={overview} title="What accepting it as proposed does to the plan" />}
       </div>
@@ -159,8 +159,8 @@ function RunOffer({ offer, onDismiss }) {
       <p>
         {offer.label}: saved.{" "}
         {ranSince
-          ? `The assignment step has run since (${JOB_STATE_LABELS[latest.state] ?? latest.state}); the proposal's groups now show as it placed them.`
-          : "The proposal's groups are placed only at the next run of the assignment step: it asks again only about what the change touches (paid, usually cents)."}
+          ? `The assignment step has run since (${JOB_STATE_LABELS[latest.state] ?? latest.state}); the proposal's claims now show as it placed them.`
+          : "The proposal's claims are placed only at the next run of the assignment step: it asks again only about what the change touches (paid, usually cents)."}
       </p>
       <div className="flex flex-wrap gap-2">
         {!ranSince && <RunAssignButton />}
@@ -177,7 +177,7 @@ function ProposalLine({ proposal, busy, on }) {
     <li className="card flex flex-wrap items-center gap-2">
       <span className={`badge ${KIND_BADGES[proposal.kind] ?? "badge-slate"}`}>{PROPOSAL_KINDS[proposal.kind] ?? proposal.kind}</span>
       <Bidi className="min-w-0 flex-1">{proposal.title_he}</Bidi>
-      <span className="text-xs text-slate-500">{groupCount(proposal.groups.length, formatCount)}</span>
+      <span className="text-xs text-slate-500">{claimCount(proposal.claims.length, formatCount)}</span>
       {proposal.status === "pending" ? (
         <button type="button" className="btn btn-sm" onClick={() => on.select(proposalRowId(proposal.id))}>
           Open
@@ -215,7 +215,7 @@ export function ProposalsView({ overview, proposals, busy, offer, on }) {
             hasData={Boolean(proposals.data)}
             onRetry={proposals.reload}
             empty={Boolean(proposals.data) && items.length === 0}
-            emptyText="The assignment step proposed no changes: it found no shared subject among the groups it did not place."
+            emptyText="The assignment step proposed no changes: it found no shared subject among the claims it did not place."
           >
             <section>
               <h3 className="section-title">To decide</h3>

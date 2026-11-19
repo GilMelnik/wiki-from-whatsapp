@@ -6,7 +6,7 @@ import { assignmentLines, consequenceLines } from "./planText.js";
 // The dialog of every structural change. While the owner fills in the form, the server runs
 // the operation as a dry run and the dialog shows what it would mean downstream (what
 // disappears, what is redirected, whose claims are classified again, and once step 6b has
-// run how many claim groups the next assignment run redirects, asks again or takes off a
+// run how many claims the next assignment run redirects, asks again or takes off a
 // deleted page) or, verbatim, which plan rules it would break. Confirm is possible only after
 // a successful dry run; it calls `onConfirm(op)` (throws → the error stays in the dialog).
 // `note` replaces the line under the consequences (what happens after saving) for a dialog
