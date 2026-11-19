@@ -112,6 +112,10 @@ PLAN_COVERAGE_PATH = step_path(STEP_6, "coverage_report.json")
 DOCS_DIR = PROJECT_ROOT / section("site")["docs_dir"]
 MKDOCS_PATH = PROJECT_ROOT / section("site")["mkdocs_file"]
 WIKI_INDEX_FILE = section("mcp")["index_file"]
+# The owner's word on the entities whose name only partly matches a page or label of the plan
+# (``step_9_site.entity_tags``; the Plan page writes it, no run deletes it):
+# ``{"decisions": {entity_id: "covered" | "tag"}, "metadata": {...}}``.
+ENTITY_TAG_DECISIONS_PATH = step_path(STEP_9, "entity_tag_decisions.json")
 
 # --------------------------------------------------------------- step 10 update
 # Contract C13. Per update ``<stamp>``, all in ``UPDATES_DIR`` (private, like the export):

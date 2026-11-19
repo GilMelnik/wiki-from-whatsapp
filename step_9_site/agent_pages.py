@@ -177,10 +177,12 @@ class AgentPages:
         return [" ".join(line)]
 
     def _label_page(self, label_id: str) -> str:
+        """A label's twin; an entity tag's has no description (``Site._label_page``)."""
         site = self.site
-        label = site.plan["labels"][label_id]
+        label = site.catalog[label_id]
         items = [self._item(page_id) for page_id in site.order if label_id in site.page_labels[page_id]]
-        body = [label["description"], "", f"## {SITE_CONFIG['label_pages_heading']}", "", *items]
+        intro = [label["description"], ""] if label["description"] else []
+        body = [*intro, f"## {SITE_CONFIG['label_pages_heading']}", "", *items]
         return "\n".join([*self._header(label["title_he"], label_file(label_id)), *body, ""])
 
     def _contents(self) -> list[str]:
@@ -190,8 +192,10 @@ class AgentPages:
         kind_titles = SITE_CONFIG["label_kind_titles"]
         by_kind: dict[str, list[str]] = {}
         for label_id in site.labels:
-            label = site.plan["labels"][label_id]
-            item = f"- [{label['title_he']}]({twin_url(label_file(label_id))}): {label['description']}"
+            label = site.catalog[label_id]
+            item = f"- [{label['title_he']}]({twin_url(label_file(label_id))})"
+            if label["description"]:
+                item += f": {label['description']}"
             by_kind.setdefault(label["kind"], []).append(item)
         if by_kind:
             lines += ["", f"## {LLMS_CONFIG['optional_heading']}"]

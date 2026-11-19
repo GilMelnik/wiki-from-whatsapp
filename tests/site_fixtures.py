@@ -19,6 +19,7 @@ from typing import Any
 from step_6_plan import operations
 from step_6_plan.model import find_node
 from step_6_plan.claim_records import Record
+from step_9_site.entity_tags import write_decisions
 from step_9_site.run import run
 from tests.claim_fixtures import claim_records, write_claim_inputs
 from tests.pages_fixtures import IDS
@@ -90,9 +91,11 @@ def run_site(
     pages: dict[str, dict[str, Any]],
     claims: list[Record] | None = None,
     threads: dict[str, Any] | None = None,
+    decisions: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Write the inputs under ``tmp_path`` and build the site into ``tmp_path/docs``; the
-    messages run from ``FIRST_MESSAGE`` to ``LAST_MESSAGE`` unless ``threads`` says otherwise."""
+    messages run from ``FIRST_MESSAGE`` to ``LAST_MESSAGE`` unless ``threads`` says otherwise;
+    ``decisions`` are the owner's entity tag decisions (none by default)."""
     plan_path, pages_path = tmp_path / "plan.json", tmp_path / "wiki_pages.json"
     threads_path = tmp_path / "threads.json"
     chat = make_threads(FIRST_MESSAGE, "2023-08-01T12:00:00", LAST_MESSAGE) if threads is None else threads
@@ -100,6 +103,9 @@ def run_site(
     plan_path.write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
     pages_path.write_text(json.dumps({"pages": pages, "metadata": {}}, ensure_ascii=False), encoding="utf-8")
     sources = write_claim_inputs(claim_records(4) if claims is None else claims, tmp_path)
+    decisions_path = tmp_path / "entity_tag_decisions.json"
+    if decisions is not None:
+        write_decisions(decisions, decisions_path)
     return run(
         plan_path=plan_path,
         pages_path=pages_path,
@@ -107,6 +113,7 @@ def run_site(
         threads_path=threads_path,
         docs_dir=tmp_path / "docs",
         mkdocs_path=tmp_path / "mkdocs.yml",
+        decisions_path=decisions_path,
     )
 
 
@@ -114,10 +121,12 @@ def issues_of(result: dict[str, Any], kind: str) -> list[tuple[str, str]]:
     return [(issue["page"], issue["target"]) for issue in result["issues"] if issue["issue"] == kind]
 
 
-def build_html(tmp_path: Path, plan: dict[str, Any], pages: dict[str, dict[str, Any]]) -> None:
+def build_html(
+    tmp_path: Path, plan: dict[str, Any], pages: dict[str, dict[str, Any]], claims: list[Record] | None = None
+) -> None:
     """Step 9 into ``tmp_path/docs``, then ``mkdocs build --strict`` into ``tmp_path/out``."""
     shutil.copytree(PROJECT_ROOT / "docs" / "stylesheets", tmp_path / "docs" / "stylesheets")
-    run_site(tmp_path, plan, pages)
+    run_site(tmp_path, plan, pages, claims)
     command = [sys.executable, "-m", "mkdocs", "build", "--strict", "-f", str(tmp_path / "mkdocs.yml")]
     built = subprocess.run([*command, "-d", str(tmp_path / "out")], capture_output=True, text=True, check=False)
     assert built.returncode == 0, built.stderr
