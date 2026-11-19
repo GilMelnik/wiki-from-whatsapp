@@ -258,6 +258,10 @@
       "page_file": "split_experiment.html"
     }
   },
+  "claim_records": {
+    "short_id_prefix": "g-",
+    "short_id_hash_chars": 8
+  },
   "aggregate": {
     "embedding_kind": "similarity",
     "merge_threshold": {"shared_entity": 0.95, "no_shared_entity": 0.96},

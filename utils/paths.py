@@ -141,6 +141,9 @@ UPDATE_LOG_SUFFIX = "update.log"
 BACKUPS_DIR = step_path(SHARED, "backups")
 # The export tool's members file (``--members``): every member id with its raw WhatsApp ids.
 MEMBERS_PATH = step_path(SHARED, "members.json")
+# The contradictions the owner accepted by hand, as pairs of claim short ids (contract C6;
+# ``step_6_plan.claim_records``): ``{"pairs": [[short_id, short_id], ...], "metadata": {...}}``.
+MANUAL_CONTRADICTIONS_PATH = step_path(SHARED, "manual_contradictions.json")
 
 
 def resolve(artifact: Artifact) -> Path:

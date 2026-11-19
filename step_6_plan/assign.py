@@ -52,7 +52,7 @@ from step_6_plan.assign_rules import (
     ASSIGN_CONFIG,
     Record,
     follow_all,
-    groups_on_page,
+    claims_on_page,
     item_id,
     kept,
     label_question,
@@ -155,8 +155,8 @@ def summary(assignments: Mapping[str, Record], plan: Mapping[str, Any]) -> dict[
         "unplaced": sum(1 for r in records if not r["pages"]),
         "two_pages": sum(1 for r in records if len(r["pages"]) > 1),
         "manual": sum(1 for r in records if r.get("manual")),
-        "page_sizes": {pid: {"all": len(groups_on_page(assignments, pid)),
-                             "primary": len(groups_on_page(assignments, pid, primary_only=True))}
+        "page_sizes": {pid: {"all": len(claims_on_page(assignments, pid)),
+                             "primary": len(claims_on_page(assignments, pid, primary_only=True))}
                        for pid in plan["pages"]},
         "label_counts": {lid: sum(1 for r in records if lid in r["labels"]) for lid in plan["labels"]},
     }

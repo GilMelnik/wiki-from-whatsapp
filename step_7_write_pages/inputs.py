@@ -11,7 +11,7 @@ they are in no page's groups, in no other group's ``contradicts``, in no front m
 no label count. Each is accounted for in its primary page's ``left_out`` (``withheld_on``)
 and listed in the run's metadata (``withheld_list``).
 
-A page's groups are ``groups_on_page(assignments, page_id)`` in C6 order. A group whose
+A page's groups are ``claims_on_page(assignments, page_id)`` in C6 order. A group whose
 ``pages[0]`` is the page is a ``main`` group (written there in full); a group that has the
 page second is a ``mention`` (mentioned there, with a link to its primary page). Unplaced
 groups are on no page; a group with no assignment record is skipped and counted (the
@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from step_6_plan.assign_rules import groups_on_page
+from step_6_plan.assign_rules import claims_on_page
 from step_6_plan.model import find_node, validation_errors, PlanError
 from step_7_write_pages.withhold import REASON as WITHHELD, withheld_ids
 from utils.config import section
@@ -167,7 +167,7 @@ class Corpus:
                 if gid in self.withheld and (page_id := self._assigned_page(gid)) is not None]
 
     def page_group_ids(self, page_id: str) -> list[str]:
-        return groups_on_page(self.placed(), page_id)
+        return claims_on_page(self.placed(), page_id)
 
     def catalogue(self) -> str:
         """Every page (``id | title | description``) and label (``label:id | title | kind``)."""
