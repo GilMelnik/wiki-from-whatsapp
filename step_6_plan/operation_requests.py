@@ -3,7 +3,7 @@ calls exactly one function of ``step_6_plan.operations`` (which validates the re
 names itself in English for the toast, the undo button and the log.
 
 Shared by the plan tool (``review_tool.tools.plan``) and step 8's structural proposals
-(``step_8_review.proposals``, on the pipeline's run path), so it belongs to step 6, not to a
+(``step_9_review.proposals``, on the pipeline's run path), so it belongs to step 6, not to a
 tool.
 """
 

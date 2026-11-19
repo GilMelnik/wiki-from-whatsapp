@@ -12,8 +12,8 @@ from typing import Any
 
 import pytest
 
-from step_7_write_pages.checks import AnswerRules, problems, sentences
-from step_8_review.proofreader import (
+from step_8_write_pages.checks import AnswerRules, problems, sentences
+from step_10_proofread.proofreader import (
     PROOFREAD_CONFIG,
     SCHEMA,
     SYSTEM,

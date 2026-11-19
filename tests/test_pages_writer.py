@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 
 from step_6_plan import operations
-from step_7_write_pages.checks import AnswerRules, cited_ids, problems, repair, rules_for
-from step_7_write_pages.front_matter import LabelRule, page_front_matter
-from step_7_write_pages.inputs import (
+from step_8_write_pages.checks import AnswerRules, cited_ids, problems, repair, rules_for
+from step_8_write_pages.front_matter import LabelRule, page_front_matter
+from step_8_write_pages.inputs import (
     PAGES_CONFIG,
     Corpus,
     PageContext,
@@ -18,8 +18,8 @@ from step_7_write_pages.inputs import (
     page_state,
     writer_fingerprint,
 )
-from step_7_write_pages.prompts import update_prompt, write_prompt
-from step_7_write_pages.writer import ClaimDelta, PageWriter
+from step_8_write_pages.prompts import update_prompt, write_prompt
+from step_8_write_pages.writer import ClaimDelta, PageWriter
 from tests.pages_fixtures import (
     IDS,
     SECRET,

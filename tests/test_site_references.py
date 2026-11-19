@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from step_9_site.references import References, reference_text
+from step_11_site.references import References, reference_text
 from tests.claim_fixtures import claim_record, claim_records
 from tests.site_fixtures import IDS, build_html, issues_of, make_page, make_site_plan, run_site
 from utils.config import section

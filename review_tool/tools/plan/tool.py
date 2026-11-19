@@ -6,7 +6,7 @@ manages labels. Every change is one call of ``step_6_plan.operations``; the plan
 validated, so an invalid plan is never written. Once step 6b has run, the owner also checks
 where the classifier put each claim (contract C8): moves claims between pages and labels
 (which pins them) and decides on the step's proposals. The claims are the C6 records
-(``step_6_plan.claim_records``), joined from the claims, the entities, step 3's audit and the
+(``step_5_same_complaint.claim_records``), joined from the claims, the entities, step 3's audit and the
 manual contradictions; a change to any of them reloads the store, and so does a change to the
 same-complaint check's answers or the owner's "keep withheld" marks (they decide which claims
 the rows mark as withheld from the wiki). Endpoints, under
@@ -59,7 +59,7 @@ from review_tool.tools.plan.entity_tags import EntityTagsView, TagDecision
 from review_tool.tools.plan.history import PlanHistory
 from review_tool.tools.plan.proposals import PENDING, REJECTED
 from review_tool.tools.plan.store import ItemNotFound, PlanConflict, PlanStore
-from step_6_plan.claim_records import ClaimSources
+from step_5_same_complaint.claim_records import ClaimSources
 from step_6_plan.operation_requests import Operation
 from utils.paths import (
     AUDIT_PATH,

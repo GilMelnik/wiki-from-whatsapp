@@ -255,6 +255,15 @@
     "short_id_prefix": "g-",
     "short_id_hash_chars": 8
   },
+  "withhold": {"stance": "negative", "min_supporters": 2, "reason": "withheld"},
+  "same_complaint": {
+    "stage": "same_complaint",
+    "prompt_version": 1,
+    "max_claims_per_call": 150,
+    "max_output_tokens": 32000,
+    "batch": true,
+    "estimate": {"chars_per_token": 1.7, "output_tokens_per_call": {"low": 1500, "high": 6000}}
+  },
   "plan": {
     "prompt_version": 3,
     "max_pages": 80,
@@ -328,15 +337,6 @@
     "concurrency": 4,
     "max_statements_per_point": {"default": 2, "by_kind": {"dispute": 4, "change": 4}},
     "max_left_out_share": 0.3,
-    "withhold": {"stance": "negative", "min_supporters": 2, "reason": "withheld"},
-    "same_complaint": {
-      "stage": "same_complaint",
-      "prompt_version": 1,
-      "max_claims_per_call": 150,
-      "max_output_tokens": 32000,
-      "batch": true,
-      "estimate": {"chars_per_token": 1.7, "output_tokens_per_call": {"low": 1500, "high": 6000}}
-    },
     "points": {
       "kinds": {
         "common_view": "what members generally recommend or report on a question (said once, however many claims repeat it)",
@@ -512,13 +512,13 @@
       },
       "terms": {
         "file": "terms.md",
-        "source": "step_9_site/pages/terms.md",
+        "source": "step_11_site/pages/terms.md",
         "title": "תנאי שימוש",
         "footer_link_text": "תנאי שימוש ובקשות לתיקון או להסרה"
       },
       "accessibility": {
         "file": "accessibility.md",
-        "source": "step_9_site/pages/accessibility.md",
+        "source": "step_11_site/pages/accessibility.md",
         "title": "הצהרת נגישות",
         "updated": "נובמבר 2026",
         "updated_placeholder": "{updated}",

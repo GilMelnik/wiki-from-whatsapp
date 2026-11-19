@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 
 from review_tool.steps import SERVED_STEPS
-from step_10_update.estimate import Estimator
+from update_run.estimate import Estimator
 from step_4_entities import run as step_run
 from step_4_entities.match_estimate import EmbeddingsMissing
 from step_4_entities.match_judge import StageFailed

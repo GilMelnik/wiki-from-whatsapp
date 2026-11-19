@@ -16,9 +16,9 @@ from review_tool.events import EventBus
 from review_tool.jobs import JOB_SETTINGS, JobRunner
 from review_tool.steps import StepRegistry, StepSpec
 from review_tool.tools.suggestions.changes import sentence_changes, snapshot_after
-from step_6_plan.claim_records import load_claim_records, load_manual_pairs
+from step_5_same_complaint.claim_records import load_claim_records, load_manual_pairs
 from step_6_plan.operations import delete
-from step_8_review.inputs import REVIEW_CONFIG
+from step_9_review.inputs import REVIEW_CONFIG
 from tests.pages_fixtures import IDS
 from tests.review_fixtures import corrector, sentence_a
 from tests.suggestions_tool_support import FIXED, Gate, ToolSetup, failing_provider

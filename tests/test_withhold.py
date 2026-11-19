@@ -9,11 +9,11 @@ from typing import Any
 
 import pytest
 
-from step_7_write_pages.checks import problems, repair, rules_for
-from step_7_write_pages.inputs import Corpus
-from step_7_write_pages.same_complaint_release import withheld_ids
-from step_7_write_pages.withhold import REASON, withholds
-from step_8_review.inputs import ReviewInput
+from step_5_same_complaint.release import withheld_ids
+from step_5_same_complaint.withhold import REASON, withholds
+from step_8_write_pages.checks import problems, repair, rules_for
+from step_8_write_pages.inputs import Corpus
+from step_9_review.inputs import ReviewInput
 from tests.claim_fixtures import claim_record, claim_records
 from tests.pages_fixtures import IDS, FakeWriter, PagesWorkspace
 from tests.site_fixtures import issues_of, make_page, make_site_plan, run_site

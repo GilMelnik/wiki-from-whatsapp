@@ -11,8 +11,8 @@ import pytest
 import yaml
 
 from step_6_plan import operations
-from step_9_site.agent_pages import disclaimer_line, plain_admonitions, strip_marks, twin_docs_path, twin_url
-from step_9_site.run import build_config
+from step_11_site.agent_pages import disclaimer_line, plain_admonitions, strip_marks, twin_docs_path, twin_url
+from step_11_site.run import build_config
 from tests.site_fixtures import IDS, build_html, make_page, make_site_plan
 from utils.config import PROJECT_ROOT, section
 

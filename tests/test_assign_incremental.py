@@ -10,8 +10,8 @@ from typing import Any
 import pytest
 
 from step_6_plan import operations
-from step_6_plan.assign_rules import apply_plan_edit
 from step_6_plan.coverage import NONE
+from step_7_assign.rules import apply_plan_edit
 from tests.assign_fixtures import FakeClassifier, Workspace, by_topic, topic
 from tests.claim_fixtures import claim_records
 from tests.plan_fixtures import PAGE_IDS, FakeLLM, short_id_of

@@ -1,7 +1,7 @@
 """Step 6: let the planning model propose the wiki's structure from the claims (contract C7).
 
 How it works, in plain words: the model configured for stage ``plan.stage`` (Opus 5.5) reads
-every claim record (C6, ``step_6_plan.claim_records``), one compact line each (or, when they do
+every claim record (C6, ``step_5_same_complaint.claim_records``), one compact line each (or, when they do
 not fit ``plan.max_input_tokens``, a sample of them: ``step_6_plan.fit``), and proposes a tree of
 content: an abstraction layer on top (for example the phases of the process), categories
 below it, and pages as the leaves (sized by ``plan.page_claims``, with ``plan.max_pages``
@@ -34,7 +34,7 @@ import logging
 from collections.abc import Sequence
 from typing import Any
 
-from step_6_plan.claim_records import ClaimSources, Record, load_claim_records
+from step_5_same_complaint.claim_records import ClaimSources, Record, load_claim_records
 from step_6_plan.coverage import COVERAGE_CONFIG, coverage_check, findings, named_claims
 from step_6_plan.fit import fitted_prompt
 from step_6_plan.model import PLAN_CONFIG, PlanError, validation_errors

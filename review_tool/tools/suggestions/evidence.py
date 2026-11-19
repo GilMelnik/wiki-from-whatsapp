@@ -1,5 +1,5 @@
 """The evidence the suggestions tool shows next to a suggestion, read from the wiki as it is
-NOW (effective pages, claim records, plan and assignments: ``step_8_review.inputs.ReviewInput``).
+NOW (effective pages, claim records, plan and assignments: ``step_9_review.inputs.ReviewInput``).
 
 - mistake: the quoted sentence inside its paragraph of the current page (``quote``: the
   paragraph as a reader reads it and where the sentence sits in it, ``None`` when the page no
@@ -22,8 +22,8 @@ from typing import Any
 from review_tool.tools.suggestions.apply import sentences
 from step_6_plan.model import iter_nodes
 from step_6_plan.operation_requests import title_of
-from step_8_review.inputs import ReviewInput
-from step_8_review.proposals import CONTRADICTION, MISTAKE, effective_proposal, plain_text
+from step_9_review.inputs import ReviewInput
+from step_9_review.proposals import CONTRADICTION, MISTAKE, effective_proposal, plain_text
 
 _PARAGRAPH = re.compile(r"\n\s*\n")
 

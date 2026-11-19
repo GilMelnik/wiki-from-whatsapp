@@ -24,7 +24,7 @@ import math
 import random
 from collections.abc import Sequence
 
-from step_6_plan.claim_records import Record
+from step_5_same_complaint.claim_records import Record
 from step_6_plan.model import PLAN_CONFIG
 from step_6_plan.prompt import claims_block, initial_request, plan_system, sample_note
 

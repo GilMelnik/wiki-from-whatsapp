@@ -11,8 +11,8 @@ from typing import Any
 import pytest
 
 from review_tool.toolset import TOOL_SPECS
-from step_8_review.inputs import REVIEW_CONFIG
-from step_8_review.proposals import plain_text
+from step_9_review.inputs import REVIEW_CONFIG
+from step_9_review.proposals import plain_text
 from tests.pages_fixtures import IDS
 from tests.review_fixtures import FakeReviewer, flat, sentence_a
 from tests.suggestions_tool_support import ToolSetup

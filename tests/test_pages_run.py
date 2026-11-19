@@ -12,8 +12,8 @@ import pytest
 from review_tool.artifacts import GRAPH
 from review_tool.steps import SERVED_STEPS
 from step_6_plan import operations
-from step_7_write_pages.checks import cited_ids
-from step_9_site.content import Site
+from step_8_write_pages.checks import cited_ids
+from step_11_site.content import Site
 from tests.pages_fixtures import IDS, SECRET, FakeWriter, PagesWorkspace, main_ids_in, points_of
 from utils.llm_client import _flatten
 from utils.okf import validate_front_matter
@@ -238,4 +238,4 @@ def test_pages_node_and_step_row() -> None:
                              "withheld_vetoes")
     step = SERVED_STEPS.step(node.step)
     assert step.spec.incremental_safe and step.spec.paid
-    assert step.command()[1:] == ["-m", "step_7_write_pages.run"]
+    assert step.command()[1:] == ["-m", "step_8_write_pages.run"]

@@ -16,8 +16,8 @@ from typing import Any
 
 from review_tool.artifacts import ArtifactNode
 from review_tool.fs import stamp
-from step_6_plan.claim_records import ClaimSources, Record, claim_backers, load_claim_records
-from step_7_write_pages.same_complaint_release import (
+from step_5_same_complaint.claim_records import ClaimSources, Record, claim_backers, load_claim_records
+from step_5_same_complaint.release import (
     ANSWERED,
     MIN_SUPPORTERS,
     NO_CALL,
@@ -28,7 +28,7 @@ from step_7_write_pages.same_complaint_release import (
     entity_name,
     load_answers,
 )
-from step_7_write_pages.withhold import withholds
+from step_5_same_complaint.withhold import withholds
 
 # Where a claim of a released group stands.
 RELEASED = "released"

@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from step_6_plan.claim_records import ClaimSources
-from step_7_write_pages.inputs import Corpus
-from step_7_write_pages.prompts import write_prompt
+from step_5_same_complaint.claim_records import ClaimSources
+from step_8_write_pages.inputs import Corpus
+from step_8_write_pages.prompts import write_prompt
 from tests.claim_fixtures import claim_record, write_claim_inputs
 from tests.plan_fixtures import make_plan
 from utils.json_io import write_json_file

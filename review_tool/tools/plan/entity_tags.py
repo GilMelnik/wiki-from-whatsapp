@@ -1,5 +1,5 @@
 """The Plan page's "Entity tags" view: the numbers of the owner's tag rule and a yes / no on each
-entity whose name only partly matches a page or label of the plan (``step_9_site.entity_tags``).
+entity whose name only partly matches a page or label of the plan (``step_11_site.entity_tags``).
 
 Endpoints, under ``/api/plan``:
 
@@ -26,8 +26,8 @@ from pydantic import BaseModel
 from review_tool.artifacts import ArtifactGraph
 from review_tool.stores import StoreHandle
 from review_tool.tools.plan.store import PlanConflict
-from step_6_plan.claim_records import ClaimSources
-from step_9_site.entity_tags import TAGS_CONFIG, Candidate, TagData, TagInputs, write_decisions
+from step_5_same_complaint.claim_records import ClaimSources
+from step_11_site.entity_tags import TAGS_CONFIG, Candidate, TagData, TagInputs, write_decisions
 
 Decision = Literal["covered", "tag"] | None
 

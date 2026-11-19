@@ -18,9 +18,9 @@ from typing import Any
 
 from step_6_plan import operations
 from step_6_plan.model import find_node
-from step_6_plan.claim_records import ClaimSources, Record
-from step_9_site.entity_tags import write_decisions
-from step_9_site.run import run
+from step_5_same_complaint.claim_records import ClaimSources, Record
+from step_11_site.entity_tags import write_decisions
+from step_11_site.run import run
 from tests.claim_fixtures import claim_records, write_claim_inputs
 from tests.pages_fixtures import IDS
 from tests.plan_fixtures import make_plan

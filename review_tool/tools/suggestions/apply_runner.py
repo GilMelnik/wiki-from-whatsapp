@@ -33,8 +33,8 @@ from review_tool.tools.suggestions.store import (
     SuggestionNotFound,
     SuggestionsStore,
 )
-from step_8_review.inputs import REVIEW_CONFIG
-from step_8_review.proposals import ACCEPTED, STRUCTURAL
+from step_9_review.inputs import REVIEW_CONFIG
+from step_9_review.proposals import ACCEPTED, STRUCTURAL
 from utils.timestamps import utc_now_z
 
 logger = logging.getLogger(__name__)

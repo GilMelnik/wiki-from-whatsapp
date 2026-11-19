@@ -11,10 +11,10 @@ from typing import Any
 import pytest
 
 from review_tool.steps import SERVED_STEPS
-from step_7_write_pages.checks import sentences
-from step_8_review.proofread import MOVED, run
-from step_8_review.proofreader import PROOFREAD_CONFIG, prompt_chars
-from step_10_update.estimate import Estimator
+from step_8_write_pages.checks import sentences
+from step_10_proofread.run import MOVED, run
+from step_10_proofread.proofreader import PROOFREAD_CONFIG, prompt_chars
+from update_run.estimate import Estimator
 from tests.pages_fixtures import IDS, FakeProofreader, FakeWriter, main_ids_in, points_of
 from tests.review_fixtures import (
     FakeReviewer,
@@ -27,7 +27,7 @@ from tests.review_fixtures import (
 )
 from tests.site_fixtures import make_page, make_site_plan, run_site
 from utils.json_io import write_json_file
-from utils.paths import STEP_8_PROOFREAD, resolve
+from utils.paths import STEP_10, resolve
 from utils.reconcile import fingerprint
 
 PAGES = ["agencies", "costs", "clinics", "hospital"]
@@ -236,13 +236,13 @@ def test_an_apply_after_proofreading_works_on_the_proofread_text(ws: ReviewWorks
 
 def test_the_estimate_prices_proofreading_as_its_own_step(ws: ReviewWorkspace) -> None:
     estimator = Estimator(lambda step: lambda **kwargs: proofread(ws, **kwargs))
-    first = estimator(SERVED_STEPS.step(STEP_8_PROOFREAD))
+    first = estimator(SERVED_STEPS.step(STEP_10))
     assert first.paid_calls == 4 and first.usd > 0 and "4 pages" in first.what
     proofread(ws, FakeProofreader(lead_edit))
-    after = estimator(SERVED_STEPS.step(STEP_8_PROOFREAD))
+    after = estimator(SERVED_STEPS.step(STEP_10))
     assert after.paid_calls == 0 and after.usd == 0 and after.what.startswith("no call")
     write_json_file(ws.pages(), ws.artifact.edited)  # an apply-like rewrite of every page
-    assert estimator(SERVED_STEPS.step(STEP_8_PROOFREAD)).paid_calls == 4
+    assert estimator(SERVED_STEPS.step(STEP_10)).paid_calls == 4
 
 
 def test_the_site_names_the_pages_holding_text_never_proofread(

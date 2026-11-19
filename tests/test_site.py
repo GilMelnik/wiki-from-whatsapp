@@ -10,9 +10,9 @@ import pytest
 import yaml
 
 from step_6_plan import operations
-from step_9_site.agent_pages import twin_docs_path, twin_url
-from step_9_site.hebrew_search import prefix_variants
-from step_9_site.run import run, sync_docs
+from step_11_site.agent_pages import twin_docs_path, twin_url
+from step_11_site.hebrew_search import prefix_variants
+from step_11_site.run import run, sync_docs
 from tests.claim_fixtures import claim_records, write_claim_inputs
 from tests.site_fixtures import FIRST_MESSAGE, IDS, issues_of, make_page, make_site_plan, make_threads, run_site
 from utils.paths import Artifact

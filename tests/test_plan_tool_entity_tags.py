@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from step_6_plan.claim_records import Record
-from step_9_site.entity_tags import TAGS_CONFIG
+from step_5_same_complaint.claim_records import Record
+from step_11_site.entity_tags import TAGS_CONFIG
 from tests.claim_fixtures import claim_record, write_claim_inputs
 from tests.test_plan_tool import PlanSetup
 from utils.json_io import write_json_file

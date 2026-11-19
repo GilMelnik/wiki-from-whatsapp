@@ -1,10 +1,10 @@
 """The code's three layers, checked on every tracked ``*.py`` file (the owner's rule, task 63).
 
 1. ``utils/`` is infrastructure: it imports no step, no ``review_tool`` and not ``pipeline``.
-2. A step (``step_1_…`` to ``step_9_…``) imports ``utils``, itself and EARLIER steps only:
-   never a later step, ``step_10_update``, ``review_tool`` or ``pipeline``. What a step uses
+2. A step (``step_1_…`` to ``step_11_…``) imports ``utils``, itself and EARLIER steps only:
+   never a later step, ``update_run``, ``review_tool`` or ``pipeline``. What a step uses
    first lives in that step; later steps import it from there.
-3. ``pipeline.py``, ``step_10_update`` and ``review_tool`` run the steps and may import them.
+3. ``pipeline.py``, ``update_run`` and ``review_tool`` run the steps and may import them.
 
 The web app has the same kind of guard (``review_tool/web/scripts/check-imports.mjs``).
 """
@@ -18,7 +18,7 @@ from pathlib import Path
 
 from utils.config import PROJECT_ROOT
 
-ORCHESTRATION = ("step_10_update", "review_tool", "pipeline")
+ORCHESTRATION = ("update_run", "review_tool", "pipeline")
 STEP = re.compile(r"step_(\d+)_")
 # (importing file, imported module): why it is allowed.
 EXCEPTIONS = {

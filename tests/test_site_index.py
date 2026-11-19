@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from step_9_site.agent_pages import disclaimer_line
+from step_11_site.agent_pages import disclaimer_line
 from tests.schema_check import schema_errors
 from tests.site_fixtures import GENERATED_AT, make_page, make_site_plan, run_site
 from utils.config import PROJECT_ROOT, section

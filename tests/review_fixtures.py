@@ -19,8 +19,8 @@ from typing import Any
 
 from review_tool.tools.suggestions.apply import Applier
 from review_tool.tools.suggestions.store import SuggestionsStore
-from step_8_review.proposals import ANSWER_FIELDS
-from step_8_review.run import run
+from step_9_review.proposals import ANSWER_FIELDS
+from step_9_review.run import run
 from tests.pages_fixtures import (
     IDS,
     FakeWriter,

@@ -1,6 +1,6 @@
 """The plan tool's assignment views, claim moves, proposals and undo across both files.
 
-The assignments are made by the real step 6b (``step_6_plan.assign.run``) with a fake
+The assignments are made by the real step 6b (``step_7_assign.run.run``) with a fake
 classifier over the synthetic plan of ``tests.plan_fixtures`` (pages agencies / costs /
 clinics / hospital; claim ``i`` is about topic ``i % 4``): topic 0 -> agencies, topic 1 ->
 costs + agencies (two pages), topic 2 -> clinics (unsure), topic 3 -> no page. Nothing here
@@ -16,9 +16,9 @@ from typing import Any
 
 import pytest
 
-from step_6_plan.assign import run
 from step_6_plan.coverage import NONE
 from step_6_plan.operation_requests import quote
+from step_7_assign.run import run
 from tests.assign_fixtures import FakeClassifier, topic
 from tests.claim_fixtures import claim_record, claim_records, write_claim_inputs
 from tests.plan_fixtures import FakeLLM, short_id_of

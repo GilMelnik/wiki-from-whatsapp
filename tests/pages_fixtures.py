@@ -8,7 +8,7 @@ unplaced. The claim inputs on disk hold ids that would be private in real data (
 and person ids, each with ``SECRET``) that no prompt may show. ``FakeWriter`` answers like the
 model: one point per ``main`` claim of the prompt's ``<claims>`` block, then an article with
 one sentence per claim (each citing it) and links to one other page and a label.
-``FakeProofreader`` stands in for the Hebrew language edit of ``step_8_review.proofread`` (no
+``FakeProofreader`` stands in for the Hebrew language edit of ``step_10_proofread.run`` (no
 edits unless told). Nothing here comes from real data.
 """
 
@@ -21,13 +21,13 @@ from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
 from typing import Any
 
-from step_6_plan.claim_records import (
+from step_5_same_complaint.claim_records import (
     SHORT_ID_HASH_CHARS,
     SHORT_ID_PREFIX,
     Record,
     load_claim_records,
 )
-from step_7_write_pages.run import run
+from step_8_write_pages.run import run
 from tests.claim_fixtures import claim_record, write_claim_inputs
 from tests.plan_fixtures import PAGE_IDS, make_plan, short_id_of
 from utils.json_io import write_json_file

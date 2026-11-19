@@ -1,4 +1,4 @@
-"""The entity tag rule (``step_9_site.entity_tags``): claims, pages, the plan's coverage, the
+"""The entity tag rule (``step_11_site.entity_tags``): claims, pages, the plan's coverage, the
 owner's decisions and the report. Synthetic names and records only."""
 
 from __future__ import annotations
@@ -11,11 +11,11 @@ from typing import Any
 
 import pytest
 
+from step_5_same_complaint.claim_records import Record
+from step_5_same_complaint.release import withheld_ids
 from step_6_plan import operations
-from step_6_plan.claim_records import Record
 from step_6_plan.model import slug_error
-from step_7_write_pages.same_complaint_release import withheld_ids
-from step_9_site.entity_tags import (
+from step_11_site.entity_tags import (
     COVERED,
     FEW_PAGES,
     FROM_ASSIGNMENTS,
@@ -207,7 +207,7 @@ def test_the_report_reads_the_written_pages_when_there_are_some(tmp_path: Path) 
 
 def test_main_logs_the_report(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
                               tmp_path: Path) -> None:
-    from step_9_site import entity_tags as module
+    from step_11_site import entity_tags as module
 
     inputs = _inputs(tmp_path, named("e0001", "Clinica Sol", 0), None)
     monkeypatch.setattr(module, "TagInputs", lambda: inputs)

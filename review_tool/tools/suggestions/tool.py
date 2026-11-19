@@ -59,9 +59,9 @@ from review_tool.tools.suggestions.store import (
     SuggestionsStore,
 )
 from step_6_plan.model import PlanError
-from step_8_review.inputs import REVIEW_CONFIG
-from step_8_review.parts import ReviewPasses, batch_available, review_usd, stored_passes
-from step_8_review.proposals import ACCEPTED
+from step_9_review.inputs import REVIEW_CONFIG
+from step_9_review.parts import ReviewPasses, batch_available, review_usd, stored_passes
+from step_9_review.proposals import ACCEPTED
 from utils.config import LLM_CONFIG
 from utils.json_io import read_json_if_present
 from utils.paths import AUDIT_PATH, BACKUPS_DIR, MANUAL_CONTRADICTIONS_PATH

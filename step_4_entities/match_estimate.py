@@ -17,7 +17,7 @@ range:
   new name that no cached verdict covers (each could be listed twice), at its own claims.
 
 ``exact`` is false whenever something was not cached. The update driver's pay gate reads
-the HIGH end (``step_10_update.estimate``), so a call that may happen always asks first.
+the HIGH end (``update_run.estimate``), so a call that may happen always asks first.
 
 Tokens are characters / ``entities.match.estimate.chars_per_token`` (Hebrew claims); output
 is a typical figure per call (``update.estimate.output_tokens_per_call``); prices from

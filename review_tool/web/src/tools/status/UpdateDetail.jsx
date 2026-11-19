@@ -2,7 +2,7 @@ import { formatDateTime, Ltr, Panel, PanelState, ToolLink, useToast, useTools } 
 import { StateLabel } from "./ArtifactRow.jsx";
 import { estimateText, exportText, UPDATE_STEP_STATES, updateState } from "./status.js";
 
-// An update in progress (step_10_update), for the decision it waits on: review a step's
+// An update in progress (update_run), for the decision it waits on: review a step's
 // output in its tool, allow a paid step after reading its estimate, or retry a failed step.
 // The driver's own stop line comes first, with the tool to review in or the estimate, then the
 // exact command to go on (nothing here runs it), what the export added, and the steps as a

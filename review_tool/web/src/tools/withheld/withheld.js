@@ -3,7 +3,7 @@ import { countText, formatCount } from "@shell";
 
 export const TOOL_ID = "withheld";
 export const VETOES_KEY = "withheld_vetoes";
-export const RUN_COMMAND = "python -m step_7_write_pages.same_complaint";
+export const RUN_COMMAND = "python -m step_5_same_complaint.run";
 
 export const RELEASED_VIEW = "released";
 export const WITHHELD_VIEW = "withheld";

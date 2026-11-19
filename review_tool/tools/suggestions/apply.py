@@ -12,9 +12,9 @@ incremental steps do the rest.
   of the page's sentences must stay word for word. The corrected page goes to the pages'
   EDITED file, the starting text of every later update. It keeps the page's ``language_edits``
   record: the sentences the correction wrote were never proofread, and the proofreading pass
-  that follows the owner's decisions (``step_8_review.proofread``) edits only those.
+  that follows the owner's decisions (``step_10_proofread.run``) edits only those.
 - ``contradiction``: the pairs (short ids) become the owner's manual contradiction pairs
-  (``step_6_plan.claim_records.add_manual_contradiction``; the claim records join them into
+  (``step_5_same_complaint.claim_records.add_manual_contradiction``; the claim records join them into
   ``contradicts`` on every load), so they survive every re-run and rewrite; and every page of
   the suggestion is corrected as for a mistake so both sides show now (the pages are written
   from the claims as they will be, link included).
@@ -34,14 +34,14 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from step_6_plan.claim_records import ClaimSources, add_manual_contradiction
+from step_5_same_complaint.claim_records import ClaimSources, add_manual_contradiction
 from step_6_plan.model import PlanError
-from step_7_write_pages.checks import sentences, strip_definitions
-from step_7_write_pages.front_matter import LabelRule, page_front_matter
-from step_7_write_pages.inputs import PAGES_CONFIG, Corpus, PageContext
-from step_7_write_pages.writer import ClaimDelta, PageText, PageWriter, current_text
-from step_8_review.inputs import REVIEW_CONFIG, ReviewInput
-from step_8_review.proposals import (
+from step_8_write_pages.checks import sentences, strip_definitions
+from step_8_write_pages.front_matter import LabelRule, page_front_matter
+from step_8_write_pages.inputs import PAGES_CONFIG, Corpus, PageContext
+from step_8_write_pages.writer import ClaimDelta, PageText, PageWriter, current_text
+from step_9_review.inputs import REVIEW_CONFIG, ReviewInput
+from step_9_review.proposals import (
     MISTAKE,
     STRUCTURAL,
     effective_proposal,

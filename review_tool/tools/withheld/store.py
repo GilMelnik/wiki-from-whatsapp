@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from step_7_write_pages.same_complaint_release import load_vetoes, save_vetoes
+from step_5_same_complaint.release import load_vetoes, save_vetoes
 from utils.reconcile import backup_file
 
 

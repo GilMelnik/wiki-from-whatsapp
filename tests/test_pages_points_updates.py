@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from step_7_write_pages.inputs import PAGES_CONFIG
+from step_8_write_pages.inputs import PAGES_CONFIG
 from tests.claim_fixtures import claim_record
 from tests.pages_fixtures import IDS, FakeWriter, PagesWorkspace, main_ids_in, points_of
 from tests.plan_fixtures import short_id_of

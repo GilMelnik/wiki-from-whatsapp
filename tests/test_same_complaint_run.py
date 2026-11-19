@@ -1,4 +1,4 @@
-"""The same-complaint check's runs (``step_7_write_pages.same_complaint``) with a fake model:
+"""The same-complaint check's runs (``step_5_same_complaint.run``) with a fake model:
 what is asked, what is stored, when an entity is asked again, the estimate. Synthetic data."""
 
 from __future__ import annotations
@@ -9,10 +9,10 @@ from typing import Any
 
 import pytest
 
-from step_6_plan.claim_records import load_claim_records
-from step_7_write_pages import same_complaint
-from step_7_write_pages.same_complaint import SCHEMA, SYSTEM, main, parse_answer, run
-from step_7_write_pages.same_complaint_release import Check
+from step_5_same_complaint import run as same_complaint
+from step_5_same_complaint.claim_records import load_claim_records
+from step_5_same_complaint.release import Check
+from step_5_same_complaint.run import SCHEMA, SYSTEM, main, parse_answer, run
 from tests.same_complaint_support import FakeModel, World, same_text
 from utils.json_io import read_json_file
 from utils.model_prices import ESTIMATE_CONFIG, usd

@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from step_9_site.info_pages import about_body, config_value
-from step_9_site.run import build_config
+from step_11_site.info_pages import about_body, config_value
+from step_11_site.run import build_config
 from step_6_plan import operations
 from tests.site_fixtures import IDS, build_html, make_page, make_site_plan, run_site
 from utils.config import PROJECT_ROOT, ROOT_CONFIG, section

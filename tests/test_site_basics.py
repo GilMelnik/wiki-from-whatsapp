@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 
-from step_9_site.run import build_config
+from step_11_site.run import build_config
 from utils.config import PROJECT_ROOT, section
 
 COFFEE_KEYS = ("coffee_text", "coffee_link_text", "coffee_url")

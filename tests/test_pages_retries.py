@@ -14,11 +14,11 @@ from typing import Any
 
 import pytest
 
-from step_7_write_pages.checks import AnswerRules, problems, rules_for, statements
-from step_7_write_pages.inputs import PAGES_CONFIG, Corpus, PageContext
-from step_7_write_pages.points import told_cap
-from step_7_write_pages.prompts import retry_prompt, update_prompt, write_prompt
-from step_7_write_pages.writer import ClaimDelta, PageWriter
+from step_8_write_pages.checks import AnswerRules, problems, rules_for, statements
+from step_8_write_pages.inputs import PAGES_CONFIG, Corpus, PageContext
+from step_8_write_pages.points import told_cap
+from step_8_write_pages.prompts import retry_prompt, update_prompt, write_prompt
+from step_8_write_pages.writer import ClaimDelta, PageWriter
 from tests.claim_fixtures import claim_record
 from tests.pages_fixtures import IDS, FakeWriter, PagesWorkspace
 from utils.llm_client import _flatten

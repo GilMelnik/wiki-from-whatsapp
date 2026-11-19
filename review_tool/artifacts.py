@@ -36,13 +36,13 @@ from utils.paths import (
     STEP_2,
     STEP_3,
     STEP_4,
+    STEP_5,
     STEP_6,
-    STEP_6_ASSIGN,
     STEP_7,
-    STEP_7_SAME_COMPLAINT,
     STEP_8,
-    STEP_8_PROOFREAD,
     STEP_9,
+    STEP_10,
+    STEP_11,
     SUGGESTIONS,
     TAGGED_MEMBERS_PATH,
     THREADS,
@@ -204,43 +204,43 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
             "claims", "Claims", CLAIMS, STEP_3, ("threads", "classified", "tagged_members")
         ),
         ArtifactNode.from_pair("entities", "Entities", ENTITIES, STEP_4, ("claims",)),
-        # Steps 6 to 9 read the claim records, joined on read from the claims and the entities
-        # (``step_6_plan.claim_records``): they depend on those two nodes.
-        # Curated: a normal step-6 run keeps the owner's plan as is, so new claims never make
-        # it stale; the assignment step places them.
-        ArtifactNode.from_pair("plan", "Wiki plan", PLAN, STEP_6, ("claims", "entities"), curated=True),
-        ArtifactNode.from_pair(
-            "assignments", "Claims assigned to pages", ASSIGNMENTS, STEP_6_ASSIGN,
-            ("claims", "entities", "plan"),
-        ),
+        # Steps 5 to 11 read the claim records, joined on read from the claims and the entities
+        # (``step_5_same_complaint.claim_records``): they depend on those two nodes.
         # The same-complaint check (paid): which lone complaints about a named thing a second
         # person's same complaint releases. It reads the claim records (and step 3's audit).
         ArtifactNode(
             "same_complaint", "Same-complaint answers", SAME_COMPLAINT_PATH,
-            step=STEP_7_SAME_COMPLAINT, upstream=("claims", "entities"),
+            step=STEP_5, upstream=("claims", "entities"),
         ),
         # The owner's "keep withheld" marks (the Withheld page): no step; with the check's
         # answers they decide which claims the pages may use, so a change makes the pages stale.
         ArtifactNode("withheld_vetoes", "Claims kept withheld", SAME_COMPLAINT_VETOES_PATH),
+        # Curated: a normal step-6 run keeps the owner's plan as is, so new claims never make
+        # it stale; the assignment step places them.
+        ArtifactNode.from_pair("plan", "Wiki plan", PLAN, STEP_6, ("claims", "entities"), curated=True),
         ArtifactNode.from_pair(
-            "pages", "Wiki pages", WIKI_PAGES, STEP_7,
+            "assignments", "Claims assigned to pages", ASSIGNMENTS, STEP_7,
+            ("claims", "entities", "plan"),
+        ),
+        ArtifactNode.from_pair(
+            "pages", "Wiki pages", WIKI_PAGES, STEP_8,
             ("claims", "entities", "plan", "assignments", "same_complaint", "withheld_vetoes"),
         ),
         # The whole-wiki review's suggestions (a human gate: the owner decides on each one).
         ArtifactNode.from_pair(
-            "suggestions", "Review suggestions", SUGGESTIONS, STEP_8, ("plan", "pages")
+            "suggestions", "Review suggestions", SUGGESTIONS, STEP_9, ("plan", "pages")
         ),
         # The Hebrew language edit after the owner's decisions: it rewrites the pages' edited
         # file; its record stands for the pass (stale when a page changed since).
         ArtifactNode(
-            "proofread", "Proofreading", PROOFREAD_RECORD, step=STEP_8_PROOFREAD,
+            "proofread", "Proofreading", PROOFREAD_RECORD, step=STEP_10,
             upstream=("claims", "entities", "plan", "assignments", "pages"),
         ),
         # The owner's covered / make-a-tag decisions on the Plan page (hand-made, no step).
         ArtifactNode("entity_tag_decisions", "Entity tag decisions", ENTITY_TAG_DECISIONS_PATH),
         # The published site (docs/ + mkdocs.yml); its index file stands for the whole folder.
         ArtifactNode(
-            "site", "Site", DOCS_DIR / WIKI_INDEX_FILE, step=STEP_9,
+            "site", "Site", DOCS_DIR / WIKI_INDEX_FILE, step=STEP_11,
             upstream=("plan", "pages", "claims", "entities", "threads", "entity_tag_decisions"),
         ),
     )

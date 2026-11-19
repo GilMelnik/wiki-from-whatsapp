@@ -25,9 +25,9 @@ from review_tool.tools.plan.history import Record
 from review_tool.tools.plan.proposals import ACCEPTED, PENDING, REJECTED, status_of
 from review_tool.tools.plan.sizes import page_sizes
 from review_tool.tools.plan.views import claim_summary, redirect_map
-from step_6_plan.assign_rules import ASSIGN_CONFIG, apply_plan_edit
 from step_6_plan.model import PLAN_CONFIG, iter_nodes
 from step_6_plan.operations import PlanEdit
+from step_7_assign.rules import ASSIGN_CONFIG, apply_plan_edit
 
 REVIEW_CONFIG = PLAN_CONFIG["review"]
 FINDINGS = REVIEW_CONFIG["label_findings"]
@@ -248,7 +248,7 @@ class AssignmentView:
     def plan_edit_effect(self, edit: PlanEdit) -> dict[str, Any]:
         """For the operation dialogs: how many claims the next assignment run redirects,
         asks again or takes off a deleted page / label, and how many hand-pinned records
-        lose a page (``step_6_plan.assign_rules.apply_plan_edit``)."""
+        lose a page (``step_7_assign.rules.apply_plan_edit``)."""
 
         result = apply_plan_edit(self.stored, edit)
         moved = set(edit.redirects)

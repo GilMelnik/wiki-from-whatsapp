@@ -36,7 +36,7 @@ export function NotRunYet() {
     <div className="note note-info space-y-2">
       <p>
         Step 6b (assigning the claims to pages and labels) has not run yet. Run it once the plan is reviewed (
-        <Ltr>python -m step_6_plan.assign</Ltr>); then this is where you see and fix where every claim went, and how big
+        <Ltr>python -m step_7_assign.run</Ltr>); then this is where you see and fix where every claim went, and how big
         every page is.
       </p>
       <RunAssignButton />

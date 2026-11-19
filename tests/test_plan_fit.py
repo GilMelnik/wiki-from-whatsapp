@@ -14,7 +14,7 @@ import pytest
 from step_6_plan import coverage
 from step_6_plan.fit import PlanPrompt, backed_by_many, fitted_prompt
 from step_6_plan.model import PLAN_CONFIG
-from step_6_plan.claim_records import Record
+from step_5_same_complaint.claim_records import Record
 from step_6_plan.prompt import claim_line, scaled_guide
 from step_6_plan.run import run
 from tests.claim_fixtures import claim_record, claim_records, write_claim_inputs

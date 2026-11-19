@@ -1,5 +1,5 @@
-"""What the same-complaint check releases (``step_7_write_pages.same_complaint_release``) and the
-backers of a claim (``step_6_plan.claim_records.claim_backers``). Synthetic claims and people."""
+"""What the same-complaint check releases (``step_5_same_complaint.release``) and the
+backers of a claim (``step_5_same_complaint.claim_records.claim_backers``). Synthetic claims and people."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from typing import Any
 
 import pytest
 
-from step_6_plan.claim_records import claim_backers, load_claim_records
-from step_7_write_pages.same_complaint_release import (
+from step_5_same_complaint.claim_records import claim_backers, load_claim_records
+from step_5_same_complaint.release import (
     ANSWERED,
     NO_CALL,
     UNUSABLE,
@@ -22,7 +22,7 @@ from step_7_write_pages.same_complaint_release import (
     load_vetoes,
     save_vetoes,
 )
-from step_7_write_pages.withhold import withholds
+from step_5_same_complaint.withhold import withholds
 from tests.same_complaint_support import World, person
 from utils.json_io import read_json_file, write_json_file
 

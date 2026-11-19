@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from step_7_write_pages.inputs import Corpus
-from step_7_write_pages.prompts import write_prompt
+from step_8_write_pages.inputs import Corpus
+from step_8_write_pages.prompts import write_prompt
 from tests.pages_fixtures import IDS, PagesWorkspace
 from utils.llm_client import CacheSegment, _flatten, _to_blocks
 

@@ -15,7 +15,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from step_6_plan.claim_records import ClaimSources, Record, load_claim_records
+from step_5_same_complaint.claim_records import ClaimSources, Record, load_claim_records
 from tests.claim_fixtures import claim_record, write_claim_inputs
 from utils.json_io import read_json_file, write_json_file
 from utils.llm_client import BatchRequest

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from step_10_update.exports import (
+from update_run.exports import (
     NotAContinuation,
     check_continuation,
     compare_exports,

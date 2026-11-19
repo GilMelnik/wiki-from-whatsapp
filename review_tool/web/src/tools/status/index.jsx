@@ -20,7 +20,7 @@ import { UpdateDetail, UpdateRow } from "./UpdateDetail.jsx";
 // to review a file; during an update, what the update waits for. The list is the pipeline in
 // order with one state per file (running, last run failed, out of date, not made yet, up to
 // date) and when it last changed, under an "Update in progress" row while an update
-// (step_10_update) is not completed: that row is shown first, with the driver's stop, the
+// (update_run) is not completed: that row is shown first, with the driver's stop, the
 // estimate before a paid step, the command to go on and the steps as a timeline. For a file
 // the main column says why and offers the run, with the review tools, the inputs that
 // changed, the last run's log, and folded away the files and metadata. Everything follows

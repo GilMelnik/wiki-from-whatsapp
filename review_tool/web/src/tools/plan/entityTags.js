@@ -1,6 +1,6 @@
 // Pure helpers of the plan tool's "Entity tags" view (no React): the list row, the texts and
 // the split of the entities into those to decide and those decided. The rule itself runs on
-// the server (step_9_site.entity_tags); these only shape what the owner reads.
+// the server (step_11_site.entity_tags); these only shape what the owner reads.
 
 export const ENTITY_TAGS_ID = "__entity_tags";
 export const ENTITY_TAGS_KEYS = ["plan", "claims", "entities", "pages", "assignments"];

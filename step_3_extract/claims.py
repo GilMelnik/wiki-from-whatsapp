@@ -17,7 +17,7 @@ when a later dissent adds a link to it.
 
 ``participant_count`` is the number of distinct people who wrote in the claim's thread (not
 people who only reacted); the private audit keeps who they were (``participants``), and the
-claim records (``step_6_plan.claim_records``) count them from there.
+claim records (``step_5_same_complaint.claim_records``) count them from there.
 
 ``ThreadClaims`` works on one thread whose messages already carry quotes, reactions and tags
 (``utils.threads_io.with_export``).

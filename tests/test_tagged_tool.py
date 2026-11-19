@@ -15,7 +15,7 @@ from review_tool.artifacts import ArtifactNode
 from review_tool.steps import STEP_SPECS
 from review_tool.tools.tagged.tool import TaggedTool
 from review_tool.toolset import TOOL_SPECS
-from step_10_update.driver import COMPLETED, UPDATE_CONFIG, Options, UpdateDriver
+from update_run.driver import COMPLETED, UPDATE_CONFIG, Options, UpdateDriver
 from tests.review_tool_support import BASE_URL, build_app, build_graph, locked_elsewhere, write_file
 from tests.update_support import PAID_STEPS, World, newer_chat
 from utils.paths import BACKUPS_DIR, STEP_3

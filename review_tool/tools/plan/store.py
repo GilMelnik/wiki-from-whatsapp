@@ -1,7 +1,7 @@
 """The plan tool's store: a thin layer over ``step_6_plan.operations`` and the assignments.
 
 It reads the effective plan (edited copy, else the original the planning step wrote), the
-claim records (C6, ``step_6_plan.claim_records``, for the texts), the coverage report of the
+claim records (C6, ``step_5_same_complaint.claim_records``, for the texts), the coverage report of the
 planning run and, when step 6b has run, the effective assignments
 (``assignments.AssignmentsFile``). A plan change runs one operation; the operation validates
 the whole new plan, so an invalid plan is never written. A claim move or a proposal decision
@@ -45,7 +45,8 @@ from review_tool.tools.plan.views import (
     flat_tree,
     labels_by_kind,
 )
-from step_6_plan.claim_records import ClaimSources, Record, load_claim_records
+from step_5_same_complaint.claim_records import ClaimSources, Record, load_claim_records
+from step_5_same_complaint.release import withheld_ids
 from step_6_plan.model import (
     PLAN_CONFIG,
     PlanError,
@@ -56,7 +57,6 @@ from step_6_plan.model import (
 )
 from step_6_plan.operation_requests import Delete, Merge, Operation, quote, title_of
 from step_6_plan.operations import PlanEdit, kind_of
-from step_7_write_pages.same_complaint_release import withheld_ids
 from utils.json_io import read_json_file, write_json_file
 from utils.reconcile import backup_file
 from utils.timestamps import utc_now

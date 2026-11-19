@@ -20,10 +20,10 @@ from step_1_threads_split.splitter import SplitParams, ThreadSplitter, thread_re
 from step_2_classify.labels import LabelRule, content_fingerprint, input_fingerprint
 from step_3_extract.claims import ThreadClaims, message_fingerprints
 from step_3_extract.claims import input_fingerprint as claims_fingerprint
-from step_10_update.exports import NotAContinuation, check_continuation, compare_exports
-from step_10_update.move import MovePaths, Mover, moved_data
-from step_10_update.move_data import NotTheSameMessages
-from step_10_update.move_proof import PipelineData, Proof, step_3_view
+from update_run.exports import NotAContinuation, check_continuation, compare_exports
+from update_run.move import MovePaths, Mover, moved_data
+from update_run.move_data import NotTheSameMessages
+from update_run.move_proof import PipelineData, Proof, step_3_view
 from utils.export_dates import parse_android_datetime
 from utils.paths import BACKUPS_DIR, Artifact
 from utils.reconcile import fingerprint
@@ -255,7 +255,7 @@ def test_the_update_refuses_an_export_of_the_other_kind_and_says_what_to_do() ->
     moved, _ = moved_data(_old_data(), NEW, MEMBERS)
     with pytest.raises(NotAContinuation, match="Export again with the current export tool"):
         check_continuation(compare_exports(moved.input, OLD))
-    with pytest.raises(NotAContinuation, match="step_10_update.move"):
+    with pytest.raises(NotAContinuation, match="update_run.move"):
         check_continuation(compare_exports(OLD, NEW))
     diff = compare_exports(moved.input, NEW)
     check_continuation(diff)

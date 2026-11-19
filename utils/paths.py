@@ -17,18 +17,14 @@ STEP_1 = "step_1_threads_split"
 STEP_2 = "step_2_classify"
 STEP_3 = "step_3_extract"
 STEP_4 = "step_4_entities"
+STEP_5 = "step_5_same_complaint"
 STEP_6 = "step_6_plan"
-# The assignment step's id in the review tool's step registry; it writes into STEP_6's folder.
-STEP_6_ASSIGN = "step_6_assign"
-STEP_7 = "step_7_write_pages"
-# The same-complaint check's id in the review tool's step registry; it writes into STEP_7's folder.
-STEP_7_SAME_COMPLAINT = "step_7_same_complaint"
-STEP_8 = "step_8_review"
-# The proofreading pass's id in the review tool's step registry; it writes into STEP_8's folder
-# (its record) and into the pages' edited file.
-STEP_8_PROOFREAD = "step_8_proofread"
-STEP_9 = "step_9_site"
-STEP_10 = "step_10_update"
+STEP_7 = "step_7_assign"
+STEP_8 = "step_8_write_pages"
+STEP_9 = "step_9_review"
+STEP_10 = "step_10_proofread"
+STEP_11 = "step_11_site"
+UPDATE_RUN = "update_run"
 SHARED = "shared"
 
 
@@ -75,17 +71,17 @@ PLAN = Artifact(
 )
 # Which claims go on which page and carry which labels (contract C8).
 ASSIGNMENTS = Artifact(
-    step_path(STEP_6, "assignments.json"), step_path(STEP_6, "assignments_edited.json")
+    step_path(STEP_7, "assignments.json"), step_path(STEP_7, "assignments_edited.json")
 )
 WIKI_PAGES = Artifact(
-    step_path(STEP_7, "wiki_pages.json"), step_path(STEP_7, "wiki_pages_edited.json")
+    step_path(STEP_8, "wiki_pages.json"), step_path(STEP_8, "wiki_pages_edited.json")
 )
 # The whole-wiki review's suggestions and the owner's decisions on them (contract C12).
 SUGGESTIONS = Artifact(
-    step_path(STEP_8, "suggestions.json"), step_path(STEP_8, "suggestions_edited.json")
+    step_path(STEP_9, "suggestions.json"), step_path(STEP_9, "suggestions_edited.json")
 )
-# What the last proofreading pass did (``step_8_review.proofread``; the text is in the pages).
-PROOFREAD_RECORD = step_path(STEP_8, "proofread.json")
+# What the last proofreading pass did (``step_10_proofread.run``; the text is in the pages).
+PROOFREAD_RECORD = step_path(STEP_10, "proofread.json")
 
 # ponytail: named aliases for call-site readability
 ORIGINAL_THREADS_PATH = THREADS.original
@@ -104,38 +100,38 @@ ENTITIES_SEED_PATH = step_path(STEP_4, "entities_seed.json")
 ENTITY_ANALYSIS_PATH = step_path(STEP_4, "entity_claim_analysis.json")
 ENTITY_MATCHES_PATH = step_path(STEP_4, "entity_matches.json")
 
+# ------------------------------------------------------- step 5 same complaint
+# The same-complaint check (``step_5_same_complaint.run``): per entity the fingerprint
+# of its list of negative claims and the model's groups of short ids (private: no text, no
+# person). Re-made by the check's runs only.
+SAME_COMPLAINT_PATH = step_path(STEP_5, "same_complaint.json")
+# The owner's "keep withheld" marks on the Withheld page (short ids). No run ever writes or
+# deletes it.
+SAME_COMPLAINT_VETOES_PATH = step_path(STEP_5, "same_complaint_vetoes.json")
+
 # ---------------------------------------------------------------- step 6 plan
 # The coverage check of the last planning run (not part of the plan itself).
 PLAN_COVERAGE_PATH = step_path(STEP_6, "coverage_report.json")
 
-# ---------------------------------------------------------- step 7 write pages
-# The same-complaint check (``step_7_write_pages.same_complaint``): per entity the fingerprint
-# of its list of negative claims and the model's groups of short ids (private: no text, no
-# person). Re-made by the check's runs only.
-SAME_COMPLAINT_PATH = step_path(STEP_7, "same_complaint.json")
-# The owner's "keep withheld" marks on the Withheld page (short ids). No run ever writes or
-# deletes it.
-SAME_COMPLAINT_VETOES_PATH = step_path(STEP_7, "same_complaint_vetoes.json")
-
-# ---------------------------------------------------------------- step 9 site
-# The published site lives in the repository, not under data_dir: step 9 owns ``docs/`` and
+# --------------------------------------------------------------- step 11 site
+# The published site lives in the repository, not under data_dir: step 11 owns ``docs/`` and
 # writes ``mkdocs.yml``; ``docs/wiki_index.json`` is the MCP index (contract C11).
 DOCS_DIR = PROJECT_ROOT / section("site")["docs_dir"]
 MKDOCS_PATH = PROJECT_ROOT / section("site")["mkdocs_file"]
 WIKI_INDEX_FILE = section("mcp")["index_file"]
 # The owner's word on the entities whose name only partly matches a page or label of the plan
-# (``step_9_site.entity_tags``; the Plan page writes it, no run deletes it):
+# (``step_11_site.entity_tags``; the Plan page writes it, no run deletes it):
 # ``{"decisions": {entity_id: "covered" | "tag"}, "metadata": {...}}``.
-ENTITY_TAG_DECISIONS_PATH = step_path(STEP_9, "entity_tag_decisions.json")
+ENTITY_TAG_DECISIONS_PATH = step_path(STEP_11, "entity_tag_decisions.json")
 
-# --------------------------------------------------------------- step 10 update
+# --------------------------------------------------------------- the update run
 # Contract C13. Per update ``<stamp>``, all in ``UPDATES_DIR`` (private, like the export):
 # ``<stamp>_<export_filename>`` (the full export), ``<stamp>_new_messages.json`` (what was not
 # seen before), ``<stamp>_report.json`` (config, commit, fingerprint, each step's summary) and
 # ``<stamp>_update.log``.
-UPDATE_STATE_PATH = step_path(STEP_10, "state.json")
+UPDATE_STATE_PATH = step_path(UPDATE_RUN, "state.json")
 # Held (``flock``) by a running update; names the step it runs (``utils.step_lease``).
-UPDATE_LEASE_PATH = step_path(STEP_10, "running.json")
+UPDATE_LEASE_PATH = step_path(UPDATE_RUN, "running.json")
 NEW_MESSAGES_SUFFIX = "new_messages.json"
 UPDATE_REPORT_SUFFIX = "report.json"
 UPDATE_LOG_SUFFIX = "update.log"
@@ -145,7 +141,7 @@ BACKUPS_DIR = step_path(SHARED, "backups")
 # The export tool's members file (``--members``): every member id with its raw WhatsApp ids.
 MEMBERS_PATH = step_path(SHARED, "members.json")
 # The contradictions the owner accepted by hand, as pairs of claim short ids (contract C6;
-# ``step_6_plan.claim_records``): ``{"pairs": [[short_id, short_id], ...], "metadata": {...}}``.
+# ``step_5_same_complaint.claim_records``): ``{"pairs": [[short_id, short_id], ...], "metadata": {...}}``.
 MANUAL_CONTRADICTIONS_PATH = step_path(SHARED, "manual_contradictions.json")
 
 

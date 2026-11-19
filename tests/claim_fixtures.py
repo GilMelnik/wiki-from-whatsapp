@@ -2,7 +2,7 @@
 
 ``claim_record`` / ``claim_records`` build records for tests that pass records directly.
 ``write_claim_inputs`` writes claims, entities and audit files from which
-``step_6_plan.claim_records.load_claim_records`` returns exactly the given records, for tests
+``step_5_same_complaint.claim_records.load_claim_records`` returns exactly the given records, for tests
 that run a step. Nothing here comes from real data. Ids that would be private in real data
 (claim, thread, person and message ids) contain ``SECRET``, so a test can assert that none of
 them reaches a prompt.
@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from step_4_entities.records import claim_entity_index
-from step_6_plan.claim_records import (
+from step_5_same_complaint.claim_records import (
     RECORD_KEYS,
     ClaimSources,
     Record,
