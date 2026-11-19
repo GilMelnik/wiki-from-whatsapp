@@ -41,6 +41,7 @@ from step_4_entities.match_judge import CALL_ERRORS
 from step_6_plan.claim_records import ClaimSources, Record, claim_backers, load_claim_records
 from step_7_write_pages.same_complaint_release import (
     Check,
+    entity_name,
     groups_problem,
     list_fingerprint,
     load_answers,
@@ -111,11 +112,6 @@ def local_ids(claims: Sequence[Record]) -> dict[str, str]:
     """``C1 -> short id`` ... in the list's order: the only ids the model sees."""
 
     return {f"{CLAIM_ID}{k}": claim["short_id"] for k, claim in enumerate(claims, 1)}
-
-
-def entity_name(entity_id: str, claims: Sequence[Record]) -> str:
-    record = claims[0]
-    return record["entity_names"][record["entity_ids"].index(entity_id)]
 
 
 def user_prompt(name: str, claims: Sequence[Record]) -> str:

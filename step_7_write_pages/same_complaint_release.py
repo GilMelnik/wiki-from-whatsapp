@@ -78,6 +78,13 @@ def entity_lists(records: Iterable[Record]) -> dict[str, list[Record]]:
     return lists
 
 
+def entity_name(entity_id: str, claims: Sequence[Record]) -> str:
+    """The canonical name of ``entity_id``, from a claim of its list."""
+
+    record = claims[0]
+    return record["entity_names"][record["entity_ids"].index(entity_id)]
+
+
 def list_fingerprint(claims: Sequence[Record]) -> str:
     """What an answer was given for: the claims' short ids and texts, in order."""
 
