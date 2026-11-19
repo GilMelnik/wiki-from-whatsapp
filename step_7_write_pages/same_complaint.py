@@ -187,7 +187,6 @@ class SameComplaintRun:
 
     def __init__(self, sources: ClaimSources, answers_path: Path, vetoes_path: Path,
                  llm: LLMClient | None, logger: logging.Logger) -> None:
-        self.sources = sources
         self.answers_path = answers_path
         self.vetoes_path = vetoes_path
         self.logger = logger
@@ -211,9 +210,10 @@ class SameComplaintRun:
             self.logger.info(f"Estimate: {result}")
             return {"estimate": result, "lists": len(asked), "due": len(due)}
         answers = self._ask(list(requests.values()), batch=batch)
-        entries = {} if rebuild else dict(stored)
-        if only is None:
-            entries = {e: entry for e, entry in entries.items() if e in asked}
+        if only is not None:  # every other answer stays as it is
+            entries = dict(stored)
+        else:
+            entries = {} if rebuild else {e: entry for e, entry in stored.items() if e in asked}
         counts = {"lists": len(asked), "due": len(due), "answered": 0, "unusable": 0, "failed": 0}
         for entity_id, claims in due.items():
             if entity_id not in answers:

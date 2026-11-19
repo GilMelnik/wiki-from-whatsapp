@@ -129,6 +129,8 @@ def test_only_asks_the_given_entities_and_keeps_the_other_answers(
     with caplog.at_level(logging.WARNING):
         result = setup.run(only=["e0003"])
     assert result["due"] == 0 and "e0003" in caplog.text
+    rebuilt = setup.run(only=["e0002"], rebuild=True)
+    assert rebuilt["due"] == 1 and set(setup.stored()["entities"]) == {"e0001", "e0002"}
 
 
 def test_an_unusable_answer_is_stored_with_its_problem_and_releases_nothing(
