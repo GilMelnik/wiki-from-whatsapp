@@ -1,7 +1,7 @@
 """What a paid step would process and roughly cost, without calling any paid endpoint.
 
-Each paid step has an estimate mode that plans its run and makes no model call (steps 3, 7,
-8: ``run(estimate=True, count_tokens=...)``; steps 6b and 8b: ``run(estimate=True)``). The Anthropic
+Each paid step has an estimate mode that plans its run and makes no model call (steps 3, 8,
+9: ``run(estimate=True, count_tokens=...)``; steps 7 and 10: ``run(estimate=True)``). The Anthropic
 token counter needs credits, so the prompts are counted here by characters
 (``update.estimate.chars_per_token``). Output tokens are a typical figure per call
 (``output_tokens_per_call``), except for step 3 (``step_3_extract.price``, calibrated on the API's
@@ -11,9 +11,9 @@ reported usage, task 55): its Hebrew conversations are counted at their own
 ``cache_read_price_factor`` of the input price, and the claims it writes grow with the
 conversations it reads, not with the number of calls: output is ``extract_output_ratio``
 times the conversations' tokens. Prices are ``usd_per_million_tokens`` per model, with
-``batch_discount`` when step 3 or step 8 uses the batch API. Step 8's Hebrew prompts are
+``batch_discount`` when step 3 or step 9 uses the batch API. Step 9's Hebrew prompts are
 counted with their own measured ratio (``wiki_review.chars_per_token``), one output figure per
-due review pass. Step 8b, the Hebrew language edit (one call per page holding text that was
+due review pass. Step 10, the Hebrew language edit (one call per page holding text that was
 never proofread), reads the page body: its prompt is counted at the review's ratio too, output
 at the typical figure of ``output_tokens_per_call.proofread``, at the batch discount when it
 uses the batch API.
@@ -21,13 +21,13 @@ Every figure is therefore rough; the estimate says what it counted.
 
 Step 4 (``run(estimate=True)``, ``step_4_entities.match_estimate``) prices its model stages
 itself, as a range: the judge and the per-claim calls (Opus) are its paid calls; the price and
-the calls given here are the upper end of the range. So does step 7a, the same-complaint check
+the calls given here are the upper end of the range. So does step 5, the same-complaint check
 (``step_5_same_complaint.run``, ``run(estimate=True)``): one Opus call per entity list
 whose answer is missing or stale and not in the LLM disk cache, input by characters, output at
 a low and a high figure per call (``same_complaint.estimate``); the upper end is shown.
 
 ``paid_calls`` counts chat-model calls only. The cheap classifier (Jev) and the embeddings are
-priced but never stop the update: steps 1, 2 and 5 use only them and run without a flag
+priced but never stop the update: steps 1 and 2 use only them and run without a flag
 (cents for an update of a few hundred messages).
 """
 

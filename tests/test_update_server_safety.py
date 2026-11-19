@@ -1,4 +1,4 @@
-"""Step 10 next to a running review server: the lease, the job runner's refusal, the write
+"""The update run next to a running review server: the lease, the job runner's refusal, the write
 guard's 423 for the step the update runs, and the driver's check of jobs and applies."""
 
 from __future__ import annotations

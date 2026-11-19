@@ -1,4 +1,4 @@
-"""The suggestions tool on step 8's synthetic workspace (``tests.review_fixtures``): one
+"""The suggestions tool on step 9's synthetic workspace (``tests.review_fixtures``): one
 suggestion of every kind, a fake page corrector, the tool hosted in the
 review app with a recording event sink. Nothing here comes from real data."""
 

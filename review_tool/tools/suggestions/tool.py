@@ -1,6 +1,6 @@
 """The suggestions tool of the review server: ``python -m review_tool --tool suggestions``.
 
-The owner goes through what the whole-wiki review (step 8, contract C12) proposed: reads each
+The owner goes through what the whole-wiki review (step 9, contract C12) proposed: reads each
 suggestion with its evidence, accepts, rejects or re-opens it (one or several at once),
 corrects the proposal first when it is nearly right, has the accepted ones carried out and
 sees what each changed. A thin layer over
@@ -12,7 +12,7 @@ every move, check and refusal; this module shows, collects and reports. Endpoint
   names, ``paid``, ``busy``), the counts, the review's note and run, the apply queue, and
   ``rerun``: what running the review now would cost (``due`` of ``passes`` review passes,
   ``usd``, ``batch``; counted by characters, no call to any endpoint; ``null`` when the wiki
-  cannot be read); ``exists: false`` (and nothing else to show) before step 8 has run
+  cannot be read); ``exists: false`` (and nothing else to show) before step 9 has run
 - ``GET  /suggestions/{id}``       ``{suggestion, evidence, changes}`` (``evidence``: see
   ``review_tool.tools.suggestions.evidence``; ``changes``: what an applied suggestion
   changed, else ``null``)

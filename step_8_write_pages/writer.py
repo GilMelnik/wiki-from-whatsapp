@@ -1,9 +1,9 @@
-"""The two model calls of step 7: write a page in full, or update it from its current text.
+"""The two model calls of step 8: write a page in full, or update it from its current text.
 
 ``PageWriter.write(context)`` and ``PageWriter.update(context, current, delta)`` are the whole
 contract (tasks 26 and 50 build on ``update``). Both return a ``PageText``: the page's points
 and the claims left out (``step_8_write_pages.points``), the body with its ``[^g-…]`` marks
-and no footnote definitions (step 9 renders the references from the claims), the summary,
+and no footnote definitions (step 11 renders the references from the claims), the summary,
 the questions, ``related`` in the C9 form ``[{slug, relation}]``, whether the text changed,
 and a ``report`` (calls, problems found, repairs, points by kind, claims left out and why,
 statements, marks, uncited disputed claims). Each answer is checked
@@ -114,7 +114,7 @@ class PageWriter:
         the points as the model returned them (a new claim that joined a point). Checks: those
         of a write over the whole page, except that sentences of the current body are not held
         to the "told once" rule. ``request``: a free-text correction to carry
-        out (step 8 applies an accepted review suggestion with an empty ``delta`` and a
+        out (step 9 applies an accepted review suggestion with an empty ``delta`` and a
         request); the checks are the same.
         """
         rules = rules_for(context.page_id, context.records, self.plan,

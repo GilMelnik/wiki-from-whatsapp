@@ -1,4 +1,4 @@
-"""The pages step 9 adds that are not wiki content: the terms page, the accessibility statement and
+"""The pages step 11 adds that are not wiki content: the terms page, the accessibility statement and
 the about page.
 
 All are plain Hebrew markdown. The terms text and the statement live in source files of the

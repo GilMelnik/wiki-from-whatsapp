@@ -1,7 +1,7 @@
-"""From a dispute recorded in step 3 to the page writer's prompt (read-only on step 7).
+"""From a dispute recorded in step 3 to the page writer's prompt (read-only on step 8).
 
 Two synthetic claims dispute each other (C3 ``counters``); the claim records join them as each
-other's ``contradicts`` and step 7's own input builder then makes the prompt of a full write
+other's ``contradicts`` and step 8's own input builder then makes the prompt of a full write
 (no model call). The other side's text must reach the writer, as task 25b designed it: on the
 same page as its own claim line, on another page inside the ``contradicts`` field with that
 page's id.

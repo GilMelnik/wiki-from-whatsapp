@@ -1,4 +1,4 @@
-"""Step 7 end to end with a fake model: C9 output, incremental re-runs (C14), registry rows."""
+"""Step 8 end to end with a fake model: C9 output, incremental re-runs (C14), registry rows."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ def test_first_run_writes_c9_pages(ws: PagesWorkspace) -> None:
     payload = ws.pages()
     assert list(payload["pages"]) == PAGES
     for page_id, page in payload["pages"].items():
-        # step 7 does not proofread: no language_edits record yet
+        # step 8 does not proofread: no language_edits record yet
         assert list(page) == ["front_matter", "body_md", "points", "left_out", "input_fingerprint"]
         validate_front_matter(page["front_matter"])
         assert not page["body_md"].startswith(("---", "# "))
@@ -81,7 +81,7 @@ def test_step_9_accepts_the_written_pages(ws: PagesWorkspace) -> None:
 
 def test_participant_counts_and_baked_definitions_change_no_page(ws: PagesWorkspace) -> None:
     payload = ws.pages()
-    for page in payload["pages"].values():  # pages as an older step 7 stored them
+    for page in payload["pages"].values():  # pages as an older step 8 stored them
         page["body_md"] += "".join(f"\n[^{sid}]: טענה (נאמר במאי 2024)" for sid in cited_ids(page["body_md"]))
     ws.artifact.original.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     claims = ws.claims()

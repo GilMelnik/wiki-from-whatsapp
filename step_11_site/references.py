@@ -1,4 +1,4 @@
-"""The references under a wiki page, rendered by step 9 from the claim records (C6).
+"""The references under a wiki page, rendered by step 11 from the claim records (C6).
 
 A page body (C9) cites claims with markdown footnote marks ``[^g-xxxxxxxx]`` (their short ids)
 and stores no definitions. At build time each cited claim gets one definition, in order of
@@ -12,7 +12,7 @@ not as a left-to-right line that starts with the id. The result is ordinary pyth
 footnotes, so the references toggle of the site (``sup[id^="fnref"]``, ``.footnote``) works
 unchanged.
 
-A body stored with definitions (step 7 before this change) is read without them. A mark of a
+A body stored with definitions (step 8 before this change) is read without them. A mark of a
 claim that exists nowhere is dropped and reported to the caller.
 """
 

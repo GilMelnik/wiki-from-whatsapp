@@ -2,7 +2,7 @@
 credit-gated endpoint), and as the API reported it after.
 
 The estimate counts every request as one fresh call (an upper bound: answers already in the
-disk cache cost nothing) and prices it as step 10 prices step 3 (``extract_price``, so the two
+disk cache cost nothing) and prices it as the update run prices step 3 (``extract_price``, so the two
 agree): the user prompts by characters (``update.estimate.extract_chars_per_token``), every
 call's instructions read from the prompt cache, output in proportion to the tokens of the
 unit's own messages (background and instructions write no claims), at the extract stage's

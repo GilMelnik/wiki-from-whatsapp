@@ -23,10 +23,10 @@ function NotRunYet({ rerun }) {
   const run = useStepRun();
   return (
     <div className="max-w-2xl space-y-3 p-4 text-sm">
-      <p>Step 8 (the review of the whole wiki) has not run yet, so there are no suggestions to look at.</p>
+      <p>Step 9 (the review of the whole wiki) has not run yet, so there are no suggestions to look at.</p>
       <p className="text-slate-600">
         The review reads the wiki in parts of a few related pages, one model call each, plus one call that compares the
-        pages through their points (pages written before step 7 listed points are left out of it)
+        pages through their points (pages written before step 8 listed points are left out of it)
         {rerun && (
           <>
             : {rerun.passes} calls sent together, about {formatUsd(rerun.usd)}

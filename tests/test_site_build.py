@@ -1,4 +1,4 @@
-"""``mkdocs build --strict`` on step 9's output: clean, footer kept, metadata hidden, search fix."""
+"""``mkdocs build --strict`` on step 11's output: clean, footer kept, metadata hidden, search fix."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def test_generated_site_builds_strict_with_footer_hidden_metadata_and_search_var
     assert '<a href="../clinics/">מרפאות</a>' in agencies
     assert '<a href="../labels/usa/">תגית</a>' in agencies
     assert 'class="footnote"' in agencies and f'sup id="fnref:{IDS[1]}"' in agencies
-    # the body was stored with its definition (older step 7): the reference replaces it
+    # the body was stored with its definition (older step 8): the reference replaces it
     assert f"{IDS[1]} · פברואר 2023 – יוני 2024" in agencies and "טקסט ישן" not in agencies
     assert 'http-equiv="refresh" content="0; url=../agencies/"' in pages_html["costs/index.html"]
     assert (out / section("mcp")["index_file"]).is_file()

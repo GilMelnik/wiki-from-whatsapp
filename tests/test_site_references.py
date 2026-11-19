@@ -1,4 +1,4 @@
-"""Step 9's references: short id · when · participants, rendered from the claim records (C6)."""
+"""Step 11's references: short id · when · participants, rendered from the claim records (C6)."""
 
 from __future__ import annotations
 
@@ -83,7 +83,7 @@ def test_the_site_renders_references_without_claim_text(tmp_path: Path) -> None:
 
 def test_no_private_id_reaches_the_built_site(tmp_path: Path) -> None:
     """Every claim, thread and person id of the test records carries ``SECRET``: none of them may
-    reach what step 9 writes (docs, the agents' pages, the MCP index, mkdocs.yml) or the HTML."""
+    reach what step 11 writes (docs, the agents' pages, the MCP index, mkdocs.yml) or the HTML."""
     plan = make_site_plan()
     cites = "".join(f"[^{short_id}]" for short_id in IDS[:4])
     pages = {page_id: make_page(plan, page_id, f"## רקע\n\nטענה.{cites}\n", related=("costs",))

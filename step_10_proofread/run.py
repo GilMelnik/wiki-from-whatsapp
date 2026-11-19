@@ -1,13 +1,14 @@
-"""Step 8b: proofread the wiki's Hebrew after the review, once the owner's decisions are applied.
+"""Step 10: proofread the wiki's Hebrew after the review, once the owner's decisions are applied.
 
-The order is the owner's (2026-11-13): step 7 writes, step 8 reviews, the owner decides on the
+The order is the owner's (2026-11-13): step 8 writes, step 9 reviews, the owner decides on the
 suggestions and the accepted ones are applied; only then does the language editor read the
-text, and step 9 publishes it. How it works, in plain words:
+text, and step 11 publishes it. How it works, in plain words:
 
 - Every planned page with text is read from the EFFECTIVE pages (the edited file when it
-  exists, else step 7's file: ``inputs.effective_pages``). Its ``language_edits`` record holds
-  the fingerprints of the sentences that have been through the editor; every other sentence
-  was never proofread (``step_10_proofread.proofreader.sentence_split``): text step 7 wrote or
+  exists, else step 8's file: ``step_9_review.inputs.effective_pages``). Its ``language_edits``
+  record holds the fingerprints of the sentences that have been through the editor; every other
+  sentence
+  was never proofread (``step_10_proofread.proofreader.sentence_split``): text step 8 wrote or
   an update added, a correction an apply wrote, a sentence the owner typed by hand. A page with
   no such sentence is not sent.
 - Every page that has one is sent, all in ONE batch (half price; ``--sync``: one call per
@@ -17,12 +18,12 @@ text, and step 9 publishes it. How it works, in plain words:
 - A page whose edits break a check keeps its body and is recorded as proofread with no edit
   applied, so it is not paid for again. A failed call loses only its page: nothing is stored
   for it, and the next pass sends it again.
-- The results go into the pages' EDITED file (created from step 7's file when the owner has
+- The results go into the pages' EDITED file (created from step 8's file when the owner has
   none; the previous one backed up), under the file's lock, and only for pages that did not
   change while the editor read them. Each page's ``language_edits`` also gets
-  ``review_fingerprint``: for step 8 the page after the pass counts as the page before it
-  (``inputs.page_fingerprint``), so proofreading makes no review pass due and marks no
-  suggestion's page as changed. Step 7 decides by its inputs, which proofreading never
+  ``review_fingerprint``: for step 9 the page after the pass counts as the page before it
+  (``step_9_review.inputs.page_fingerprint``), so proofreading makes no review pass due and
+  marks no suggestion's page as changed. Step 8 decides by its inputs, which proofreading never
   touches; an update starts from the proofread text and keeps the record.
 - ``proofread.enabled: false``: the command does nothing.
 
@@ -94,7 +95,7 @@ class DuePage:
 
 def proofread_page(page: Mapping[str, Any], outcome: Proofread) -> dict[str, Any]:
     """``page`` after a successful pass: the edited body (when an edit was applied) and the
-    pass's ``language_edits`` record, with the fingerprint step 8 keeps counting."""
+    pass's ``language_edits`` record, with the fingerprint step 9 keeps counting."""
     out = {key: value for key, value in page.items()
            if key not in ("language_edits", "input_fingerprint")}
     if outcome.language_edits["applied"]:
@@ -134,7 +135,7 @@ class ProofreadPass:
                 continue
             context = corpus.context(page_id, catalogue)
             if context is None:
-                logger.warning(f"{page_id}: no claims on this page any more (run step 7); "
+                logger.warning(f"{page_id}: no claims on this page any more (run step 8); "
                                "not proofread")
                 continue
             self.due.append(DuePage(page_id, pages[page_id], context, done, len(new)))
@@ -272,7 +273,7 @@ def run(
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Step 8b: proofread the text that was never proofread (after the review).")
+        description="Step 10: proofread the text that was never proofread (after the review).")
     parser.add_argument("--estimate", action="store_true",
                         help="list the pages that would be sent; no call, nothing written")
     parser.add_argument("--only", nargs="+", metavar="PAGE_ID", help="proofread these pages only")

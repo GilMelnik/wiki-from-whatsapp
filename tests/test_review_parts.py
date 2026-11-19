@@ -1,4 +1,4 @@
-"""Step 8's review passes: the cutting rule, what each pass's prompt holds, the cross pass and
+"""Step 9's review passes: the cutting rule, what each pass's prompt holds, the cross pass and
 its pages, the scope of a pass, batch and sync, a failing pass, what a change re-runs,
 ``--only``, a file of the one-call review, and the estimate (offline: fake review model,
 synthetic wiki whose parts are ``before`` and ``during``, plus ``cross``)."""

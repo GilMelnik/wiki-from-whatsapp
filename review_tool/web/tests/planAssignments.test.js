@@ -50,7 +50,7 @@ test("the tree list gets the assignment rows; waiting only when some claims wait
   assert.deepEqual(assignmentRows(OVERVIEW).map((item) => item.id), [UNPLACED_ID, PROPOSALS_ID]);
   const waiting = { ...OVERVIEW, assignments: { ...OVERVIEW.assignments, counts: { waiting: 3 } } };
   assert.deepEqual(assignmentRows(waiting).map((item) => item.id), [UNPLACED_ID, WAITING_ID, PROPOSALS_ID]);
-  assert.deepEqual(assignmentRows({}).map((item) => item.id), [UNPLACED_ID, PROPOSALS_ID]); // 6b not run
+  assert.deepEqual(assignmentRows({}).map((item) => item.id), [UNPLACED_ID, PROPOSALS_ID]); // step 7 not run
   assert.ok(isAssignmentRow(PROPOSALS_ID) && !isAssignmentRow("costs"));
 });
 

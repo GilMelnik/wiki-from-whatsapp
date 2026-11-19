@@ -400,7 +400,7 @@ def update_prompt(context: PageContext, current: Mapping[str, Any], *, new: Sequ
     questions, related, points and left_out of the current effective page (as
     ``writer.current_text`` gives them); the points are shown without the claims that are
     no longer main claims of the page. ``request``: a free-text correction the editor asks
-    for (step 8 applies an accepted review suggestion this way); it goes into <changes> after
+    for (step 9 applies an accepted review suggestion this way); it goes into <changes> after
     the claim changes, and an update without one is unchanged."""
     carried = tidy(current["points"], current["left_out"], context.main_ids)
     tail = "\n\n".join([

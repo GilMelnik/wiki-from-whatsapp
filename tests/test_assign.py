@@ -1,4 +1,4 @@
-"""Step 6b assignment: decision rules, the C8 shape, questions, proposals, registry entries."""
+"""Step 7 assignment: decision rules, the C8 shape, questions, proposals, registry entries."""
 
 from __future__ import annotations
 

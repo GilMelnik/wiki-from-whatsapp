@@ -1,4 +1,4 @@
-"""Step 10: what a newer export adds (new / changed / missing) and whether it continues the
+"""The update run: what a newer export adds (new / changed / missing) and whether it continues the
 pipeline input. Synthetic messages only."""
 
 from __future__ import annotations

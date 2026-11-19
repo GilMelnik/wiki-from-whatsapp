@@ -3,11 +3,11 @@
 Material's search matches the start of indexed words only, so ``קולומביה`` misses a section
 that only says ``בקולומביה``. After the search plugin has written ``search/search_index.json``
 this hook adds to every entry an extra field (``extra.hebrew_search.field``, registered with
-the search plugin's ``fields`` option by step 9) holding the words of the entry with a prefix
+the search plugin's ``fields`` option by step 11) holding the words of the entry with a prefix
 (``ו``, ``ב``, ``וה``...) stripped. The field is searched but never displayed.
 
 Loaded by mkdocs from its path (``hooks:`` in mkdocs.yml), so it imports nothing from this
-project; its settings come from ``extra.hebrew_search`` (written by step 9 from config.json).
+project; its settings come from ``extra.hebrew_search`` (written by step 11 from config.json).
 """
 
 from __future__ import annotations

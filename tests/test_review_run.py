@@ -1,4 +1,4 @@
-"""Step 8's run: C12 shape, stable ids, checks on the model's proposals, and the re-run cases
+"""Step 9's run: C12 shape, stable ids, checks on the model's proposals, and the re-run cases
 of the whole run (offline: fake review model, synthetic wiki). The passes themselves (cutting,
 prompts, scope, batch, failures, ``--only``) are in ``test_review_parts``."""
 

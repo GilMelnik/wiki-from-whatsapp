@@ -1,4 +1,4 @@
-"""Step 9's entity tag pages: next to the label pages, in the labels' navigation, in the agents'
+"""Step 11's entity tag pages: next to the label pages, in the labels' navigation, in the agents'
 pages and in the MCP index; only the entity's name and the pages, never anything private."""
 
 from __future__ import annotations

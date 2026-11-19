@@ -10,7 +10,7 @@ Endpoints, under ``/api/plan``:
   forgets it) → the same view
 
 The rule reads the claim records (C6), the entities' names, the effective plan, the written
-pages (or, before step 7 has run, the assignments' estimate) and the decisions file; a change to
+pages (or, before step 8 has run, the assignments' estimate) and the decisions file; a change to
 any of them reloads it. Only the decisions file is written (atomically, under its lock). An entity
 that has no partial match now → 409.
 """

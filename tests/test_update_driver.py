@@ -1,4 +1,4 @@
-"""Step 10's driver on a synthetic pipeline (fake steps, estimates and server; no API call):
+"""The update run's driver on a synthetic pipeline (fake steps, estimates and server; no API call):
 C13 files and state, review stops, paid stops, resume, ``--plan``, failures, refusals, the
 re-run after applied suggestions, and a second identical export."""
 
@@ -183,7 +183,8 @@ def test_a_saved_update_stopped_at_the_removed_step_goes_on(world: World) -> Non
     world.run(world.export(newer_chat()), pay=PAID_STEPS)
     while world.state()["update"]["stopped"]["step"] != STEP_4:
         world.run(pay=PAID_STEPS)
-    state = world.state()  # as the old pipeline left it: step 5 ran and waits for its review
+    # as the old pipeline left it: its step 5 (removed since) ran and waits for its review
+    state = world.state()
     update = state["update"]
     update["steps"][STEP_4]["gate_passed"] = True
     update["steps"][REMOVED_STEP] = {"runs": 1, "gate_passed": False, "changed": True, "at": "x"}

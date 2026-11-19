@@ -9,7 +9,7 @@ export const DECISION_LABELS = { covered: "Covered by the plan", tag: "Gets a ta
 
 export const SOURCE_NOTES = {
   pages: "Pages are the written pages that cite the entity.",
-  assignments: "Step 7 has not written pages yet: the pages are estimated from the assignments (step 6b).",
+  assignments: "Step 8 has not written pages yet: the pages are estimated from the assignments (step 7).",
   none: "There are no written pages and no assignments yet: every entity is on no page.",
 };
 

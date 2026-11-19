@@ -2,7 +2,7 @@
 suggestions (``proposals.answer_schema``).
 
 - A PART pass reads the plan block of the whole wiki, then each page of its part (its body
-  with citation marks and links, then the claim lines step 7's writer read for it), then the
+  with citation marks and links, then the claim lines step 8's writer read for it), then the
   suggestions already raised about those pages. It may raise every kind of suggestion, about
   the pages and claims of its part only.
 - The CROSS pass reads the plan block, then per page with stored points its title, labels and
@@ -215,7 +215,7 @@ any other page or claim is discarded.
 
 
 def evidence_line(record: Record, part: Collection[str]) -> str:
-    """A claim as the reviewer reads it: step 7's own line, or, on a page that only mentions
+    """A claim as the reviewer reads it: step 8's own line, or, on a page that only mentions
     it while its main page is in the same part, a pointer to that page (the prompt stays lean)."""
     if record["role"] != MAIN and record["primary"] in part:
         return f"{record['id']} | mention -> {record['primary']} (full line on that page)"

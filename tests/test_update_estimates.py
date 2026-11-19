@@ -1,4 +1,4 @@
-"""Step 10's estimates: the paid steps' estimate modes make no call and write nothing, the
+"""The update run's estimates: the paid steps' estimate modes make no call and write nothing, the
 prices come from config, and no test can build a real model client (the conftest guard)."""
 
 from __future__ import annotations
@@ -141,7 +141,7 @@ def test_step_3_is_priced_as_the_api_reported_it() -> None:
 def test_the_split_experiment_prices_step_3_as_step_10_does() -> None:
     """The same conversations, once as the experiment's units and once as what step 3's
     estimate mode reports for them, cost the same (within the few tokens of the
-    "Conversation:" heading, which only step 10 counts as conversation)."""
+    "Conversation:" heading, which only the update run counts as conversation)."""
     messages = message_set()
     jobs = [UnitJob(unit, messages) for unit in
             build_units(messages, threads(NEW_SPLIT), threads(OLD_SPLIT), ["A"])["A"]]

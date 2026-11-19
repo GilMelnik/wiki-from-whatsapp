@@ -9,11 +9,12 @@ a retry on each. Run it only against a private copy, never the canonical data:
 
 1. Copies what the claim records are joined from (the claims, the entities, the private audit
    and the manual contradiction pairs), what decides which claims are withheld (the
-   same-complaint check's answers and the owner's "keep withheld" marks), the plan and the assignments (step 6) and the stored
-   pages (step 7, "before"), original and edited files, from ``--source`` into the current
-   data dir (``WIKI_DATA_DIR``); refuses when the two are the same folder.
+   same-complaint check's answers and the owner's "keep withheld" marks), the plan (step 6),
+   the assignments (step 7) and the stored pages (step 8, "before"), original and edited files,
+   from ``--source`` into the current data dir (``WIKI_DATA_DIR``); refuses when the two are the
+   same folder.
 2. Writes the pages (``pages.consolidation_check.pages``, or ``--pages``) in full with the
-   current prompt (step 7's own ``run(only=…, rebuild=True)``; answers are cached in the
+   current prompt (step 8's own ``run(only=…, rebuild=True)``; answers are cached in the
    scratch dir, so a re-run after a crash costs nothing). ``--compare-only`` skips this.
 3. Logs per page, before / after: prose words, statements, marks, claims cited, years named
    in the prose, links; after only: points by kind, claims left out with their reason, and
@@ -161,7 +162,7 @@ class ConsolidationCheck:
                              "WIKI_DATA_DIR to an empty scratch folder, not to --source")
 
     def prepare(self) -> None:
-        """Copy the input files of steps 6-7 and the pages (original and edited) from the
+        """Copy the input files of step 8 and the pages (original and edited) from the
         source to the target."""
         for path in INPUTS:
             source, target = _moved(path, self.source), _moved(path, self.target)
@@ -176,7 +177,7 @@ class ConsolidationCheck:
 
     def write(self, llm: LLMClient | None = None,
               update_llm: LLMClient | None = None) -> dict[str, Any]:
-        """Step 7 in the target, on the chosen pages only, in full, with the current prompt."""
+        """Step 8 in the target, on the chosen pages only, in full, with the current prompt."""
         return run(sources=self.claim_sources(),
                    plan_path=resolve(_under(PLAN, self.target)),
                    assignments_path=resolve(_under(ASSIGNMENTS, self.target)),

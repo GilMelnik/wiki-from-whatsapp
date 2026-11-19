@@ -1,5 +1,5 @@
 """The same-complaint check wired into the pipeline: what is withheld now follows the check's
-answers and the owner's "keep withheld" marks in step 7 (the writer), step 9 (the site), the
+answers and the owner's "keep withheld" marks in step 8 (the writer), step 11 (the site), the
 Plan page and the update run. Synthetic claims, people and answers, a fake model; no paid call.
 """
 
@@ -156,7 +156,7 @@ def test_the_same_person_twice_releases_nothing(ws: PagesWorkspace) -> None:
     assert withheld(ws) == [FIRST, SECOND]
 
 
-# ------------------------------------------------------------------------------ step 9
+# ------------------------------------------------------------------------------ step 11
 
 
 def test_the_site_follows_the_check_and_the_marks(tmp_path: Path) -> None:

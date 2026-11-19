@@ -13,7 +13,7 @@ be applied again (after a merge, or with other thresholds) without asking again.
 followed through merges and cleared of deleted ids.
 
 Questions (classifier stage ``assign.stage``): the coverage check's page question
-(``coverage.page_question``: one choice over the page ids + "none", from titles and scopes)
+(``step_6_plan.coverage.page_question``: one choice over the page ids + "none", from titles and scopes)
 and one yes/no question per label from its title and description, in the same request. After
 a new page or a scope change, a yes/no "screen" question per changed page finds the claims
 that might move to it, so only those are asked the page question again.

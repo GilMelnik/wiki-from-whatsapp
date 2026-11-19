@@ -1,4 +1,4 @@
-"""Step 7's code-side guarantees, prompts and front matter, offline on synthetic data."""
+"""Step 8's code-side guarantees, prompts and front matter, offline on synthetic data."""
 
 from __future__ import annotations
 
@@ -106,7 +106,7 @@ def test_fingerprint_follows_text_inputs_not_the_catalogue(tmp_path: Path, monke
     ws.write_plan(plan)
     assert fp() == first
     claims = ws.claims()
-    claims[0]["participant_count"] = 7  # rendered by step 9 only: no rewrite
+    claims[0]["participant_count"] = 7  # rendered by step 11 only: no rewrite
     ws.write_claims(claims)
     assert fp() == first
     claims[0]["supporter_count"] += 1

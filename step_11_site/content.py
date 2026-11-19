@@ -1,4 +1,4 @@
-"""What step 9 publishes, computed in memory from the plan (C7), the written pages (C9), the
+"""What step 11 publishes, computed in memory from the plan (C7), the written pages (C9), the
 claim records (C6) and the period of the chat messages (``utils.threads_io.messages_period``).
 
 ``Site(plan, pages, claims, period)`` decides which planned pages are published (those that have a written
@@ -19,7 +19,7 @@ references under a page are rendered from the claim records (``step_11_site.refe
 
 A page that cites a withheld claim (``withheld``: a negative statement about a named entity
 that fewer than two members reported, ``step_5_same_complaint.withhold``) is an issue of kind
-``withheld_reference``: a page written before the rule, or edited by hand, that step 7 must
+``withheld_reference``: a page written before the rule, or edited by hand, that step 8 must
 write again before the site is published.
 """
 
@@ -104,7 +104,7 @@ class Site:
         unplanned = sorted(set(pages) - set(plan["pages"]))
         if unplanned:
             raise ValueError(
-                f"written pages that are not in the plan: {unplanned}; re-run step 7 so its "
+                f"written pages that are not in the plan: {unplanned}; re-run step 8 so its "
                 "output follows the current plan"
             )
         self._check_pages(pages)

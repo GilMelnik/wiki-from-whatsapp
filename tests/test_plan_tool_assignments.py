@@ -1,6 +1,6 @@
 """The plan tool's assignment views, claim moves, proposals and undo across both files.
 
-The assignments are made by the real step 6b (``step_7_assign.run.run``) with a fake
+The assignments are made by the real step 7 (``step_7_assign.run.run``) with a fake
 classifier over the synthetic plan of ``tests.plan_fixtures`` (pages agencies / costs /
 clinics / hospital; claim ``i`` is about topic ``i % 4``): topic 0 -> agencies, topic 1 ->
 costs + agencies (two pages), topic 2 -> clinics (unsure), topic 3 -> no page. Nothing here
@@ -63,7 +63,7 @@ PROPOSALS = {"proposals": [
 
 
 class AssignSetup(PlanSetup):
-    """The plan tool over claims, a plan and assignments the real step 6b wrote."""
+    """The plan tool over claims, a plan and assignments the real step 7 wrote."""
 
     def __init__(self, root: Path, *, with_assignments: bool = True) -> None:
         super().__init__(root)
@@ -114,7 +114,7 @@ def snapshot(*paths: Path) -> list[bytes | None]:
     return [path.read_bytes() if path.is_file() else None for path in paths]
 
 
-# ------------------------------------------------------------- without step 6b
+# ------------------------------------------------------------- without step 7
 
 
 def test_without_assignments_the_plan_tool_works_as_before(tmp_path: Path) -> None:
@@ -127,7 +127,7 @@ def test_without_assignments_the_plan_tool_works_as_before(tmp_path: Path) -> No
     assert setup.post("/operations/preview", {"op": "delete", "item_id": "hospital"})["assignments"] is None
     setup.apply({"op": "rename", "item_id": "costs", "title_he": "עלויות"})
     assert setup.post("/undo")["label"].startswith("Renamed")
-    setup.run_step(FakeLLM([PROPOSALS]))  # step 6b ran: picked up without a restart
+    setup.run_step(FakeLLM([PROPOSALS]))  # step 7 ran: picked up without a restart
     assert setup.get("/plan")["assignments"]["counts"]["unplaced"] == 3
 
 
@@ -182,7 +182,7 @@ def test_labels_unplaced_and_waiting_lists(setup: AssignSetup) -> None:
     unplaced = setup.claims(scope="unplaced")
     assert ids(unplaced) == UNPLACED and unplaced["items"][0]["certainty"] == 0.15
     assert setup.claims(scope="waiting")["total"] == 0
-    write_claim_inputs([*claim_records(), claim_record(12)], setup.root)  # newer than 6b's run
+    write_claim_inputs([*claim_records(), claim_record(12)], setup.root)  # newer than step 7's run
     waiting = setup.claims(scope="waiting")
     assert ids(waiting) == [short_id_of(12)] and waiting["items"][0]["record"] is False
     setup.edit([short_id_of(12)], {"action": "unplace"}, status=409)

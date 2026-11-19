@@ -1,7 +1,7 @@
 """The site as plain markdown for AI agents that fetch it over HTTP: a twin of every page and ``llms.txt``.
 
 An agent that reads the Material HTML pays for navigation, scripts and markup around the text.
-Step 9 therefore also publishes, for every content page (home, wiki pages, label pages, the about,
+Step 11 therefore also publishes, for every content page (home, wiki pages, label pages, the about,
 terms and accessibility pages), a markdown twin at ``<page url>index.md`` (``/georgia/`` -> ``/georgia/index.md``)
 and an ``/llms.txt`` that lists them (https://llmstxt.org). The twin of a wiki page is built from
 ``Site.bodies``, the very text that ``wiki_index.json`` (and so the MCP ``get_page``) holds as

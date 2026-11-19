@@ -127,7 +127,7 @@ def test_a_removed_claim_leaves_its_point_and_the_emptied_point_goes(ws: PagesWo
 
 def test_a_page_stored_without_points_gets_them_listed_at_its_update(ws: PagesWorkspace) -> None:
     payload = ws.pages()
-    for page in payload["pages"].values():  # as step 7 stored pages before task 27b
+    for page in payload["pages"].values():  # as step 8 stored pages before task 27b
         del page["points"], page["left_out"]
     write_json_file(payload, ws.artifact.original)
     claims = ws.claims()

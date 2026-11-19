@@ -19,7 +19,7 @@ cites a withheld claim is deleted whole (its statement is never kept without its
 unknown citation is removed, an unknown or malformed link becomes its plain text (``utils.wiki_links``), a front-matter block, a ``#`` heading and
 any footnote definition the model wrote are taken out, ``related`` keeps only planned pages,
 the points keep only the page's main claims, each once. A missing citation or an unaccounted
-claim cannot be repaired; it is recorded. A page body holds the marks only: step 9 renders the
+claim cannot be repaired; it is recorded. A page body holds the marks only: step 11 renders the
 references from the claims. A mark is ``[^<short id>]``, the short id's prefix from the
 ``claim_records`` section of ``config.json``. ``strip_definitions`` takes the definitions out of a body stored
 before that change.

@@ -58,7 +58,8 @@ class PlanPrompt:
             note = sample_note(shown_many, many, len(self.shown) - shown_many, self.total - many)
             self.claims_text = f"{note}\n\n{self.claims_text}"
         # The formula of utils.token_counters.CharTokenCounter (written out here while that
-        # class lived in step 10, which step 6 could not import).
+        # class lived in the update run's package, then numbered step 10, which step 6 could not
+        # import).
         user = self.user(initial_request(len(self.shown), self.total))
         self.estimated_tokens = math.ceil(
             (len(self.system) + len(user)) / PLAN_CONFIG["chars_per_token"]

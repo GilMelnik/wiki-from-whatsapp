@@ -1,5 +1,5 @@
 """A contradiction applied from the review is saved as the owner's manual pair and survives:
-the claim records join it on every load (also after the claims are written again), and step 7
+the claim records join it on every load (also after the claims are written again), and step 8
 writes both sides (synthetic claim records and fake page writers)."""
 
 from __future__ import annotations

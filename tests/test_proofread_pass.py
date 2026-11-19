@@ -1,4 +1,4 @@
-"""Step 8b, proofreading after the review, with fake models on the synthetic wiki: one batch of
+"""Step 10, proofreading after the review, with fake models on the synthetic wiki: one batch of
 the pages holding text never proofread, the record of what was proofread, the edited file,
 what an update, an apply or the owner adds, a failed call, and why nothing else becomes due."""
 
@@ -99,7 +99,7 @@ def test_every_page_never_proofread_goes_in_one_batch_into_the_edited_file(
     result = proofread(ws, fake)
     assert fake.batches == [PAGES] and fake.calls == []
     assert (result["proofread"], result["language_edits"], result["left"]) == (4, 4, [])
-    assert ws.pages() == original  # step 7's own file is not touched
+    assert ws.pages() == original  # step 8's own file is not touched
     edited = ws.pages(edited=True)
     for page_id, page in edited["pages"].items():
         assert page["body_md"].startswith(f"{proofread_lead(page_id)}.[^")

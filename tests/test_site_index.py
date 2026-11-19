@@ -1,4 +1,4 @@
-"""Step 9's ``docs/wiki_index.json`` against contract C11 and the Worker's JSON Schema."""
+"""Step 11's ``docs/wiki_index.json`` against contract C11 and the Worker's JSON Schema."""
 
 from __future__ import annotations
 

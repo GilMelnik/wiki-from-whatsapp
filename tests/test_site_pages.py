@@ -1,4 +1,4 @@
-"""Reader-facing pages of step 9: no Material notice, disclaimer on every page, references toggle,
+"""Reader-facing pages of step 11: no Material notice, disclaimer on every page, references toggle,
 terms and about pages (built with ``mkdocs build --strict``)."""
 
 from __future__ import annotations

@@ -94,7 +94,7 @@ class SuggestionsStore:
         payload = read_json_if_present(self.artifact.edited) or read_json_if_present(self.artifact.original)
         if payload is None:
             raise FileNotFoundError(f"no review suggestions yet at {self.artifact.original}; "
-                                    "run step 8 (python -m step_9_review.run)")
+                                    "run step 9 (python -m step_9_review.run)")
         return payload
 
     def list(self) -> dict[str, Any]:

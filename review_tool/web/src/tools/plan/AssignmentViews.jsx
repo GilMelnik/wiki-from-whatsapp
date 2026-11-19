@@ -4,7 +4,7 @@ import { Tabs } from "./bits.jsx";
 import { ClaimTable } from "./ClaimTable.jsx";
 
 // The assignment views that are not about one page or label: the lists of claims on no page
-// and of claims waiting for the next assignment run, what to show before step 6b has run, and
+// and of claims waiting for the next assignment run, what to show before step 7 has run, and
 // the tabs that switch a page or a label between its details and its claims.
 
 const LIST_TEXTS = {
@@ -18,7 +18,7 @@ const LIST_TEXTS = {
   },
 };
 
-/** The step-6b run button (the frame confirms a paid run first). */
+/** The step-7 run button (the frame confirms a paid run first). */
 export function RunAssignButton({ label = "Run the assignment step…" }) {
   const run = useStepRun();
   const { stepsByArtifact, runningByArtifact } = useJobs();
@@ -35,7 +35,7 @@ export function NotRunYet() {
   return (
     <div className="note note-info space-y-2">
       <p>
-        Step 6b (assigning the claims to pages and labels) has not run yet. Run it once the plan is reviewed (
+        Step 7 (assigning the claims to pages and labels) has not run yet. Run it once the plan is reviewed (
         <Ltr>python -m step_7_assign.run</Ltr>); then this is where you see and fix where every claim went, and how big
         every page is.
       </p>

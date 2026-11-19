@@ -155,7 +155,7 @@ export function claimCount(count, format = String) {
 
 /**
  * What a plan change does to the claims at the next assignment run, as English lines
- * `{tone, text}`, from the preview's `assignments` (null before step 6b has run).
+ * `{tone, text}`, from the preview's `assignments` (null before step 7 has run).
  */
 export function assignmentLines(effect, overview, format = String) {
   if (!effect) return [];

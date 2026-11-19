@@ -2,10 +2,11 @@
 ``python -m step_5_same_complaint.run [--estimate] [--only ENTITY_ID ...] [--rebuild]``.
 
 The wiki publishes a negative statement about a named provider, place or public body only when
-at least two different members reported it (``withhold`` in ``config.json``). A lone complaint is released
-when a second person made the SAME complaint, and a model judges "same", entity by entity:
+at least two different members reported it (``withhold`` in ``config.json``). A lone complaint
+is released when a second person made the SAME complaint, and a model judges "same", entity by
+entity:
 
-- For every entity whose list (its negative claims, ``same_complaint_release.entity_lists``)
+- For every entity whose list (its negative claims, ``step_5_same_complaint.release.entity_lists``)
   could release something (``needs_call``), one call to the stage ``same_complaint.stage``
   (Opus 5.5, effort high, structured JSON). The user message names the entity (its canonical
   name) and lists the claims as ``C1: <text>``, ``C2: <text>`` ... in the list's order: never a
@@ -16,7 +17,7 @@ when a second person made the SAME complaint, and a model judges "same", entity 
   entities only and leaves every other stored answer as it is. A list longer than
   ``max_claims_per_call`` stops the run before any call (a list is never cut).
 - The answers are stored in ``ClaimSources.same_complaint`` (``SAME_COMPLAINT_PATH``) as short ids (shape: see
-  ``same_complaint_release``), with the run's metadata (model, prompt version, config, git
+  ``step_5_same_complaint.release``), with the run's metadata (model, prompt version, config, git
   commit). An answer that does not fit its list is stored with its ``problem`` and releases
   nothing; a call without an answer stores nothing (the next run asks again).
 - ``--estimate``: the calls a run would make that the LLM disk cache cannot answer, their
@@ -26,9 +27,9 @@ when a second person made the SAME complaint, and a model judges "same", entity 
   as a batch. No model call, nothing written.
 
 What the answers release, and so what is withheld now, is computed on every read
-(``same_complaint_release.withheld_ids``). In the pipeline the check runs after the assignment
-of claims to pages and before the pages (``review_tool.steps``); the update run stops after it
-for the owner's look at the Withheld page when its answers changed.
+(``step_5_same_complaint.release.withheld_ids``). In the pipeline the check is step 5: it runs
+right after the entities and before the plan (``review_tool.steps``); the update run stops after
+it for the owner's look at the Withheld page when its answers changed.
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@
 
 The chat stage ``assign.proposals.stage`` (Sonnet 5.5) reads the plan (pages with their
 scopes, categories, labels), the proposals already made (pending, accepted or rejected: never
-to be made again) and the unplaced claims, one compact line each (``prompt.claim_line``: short
+to be made again) and the unplaced claims, one compact line each (``step_6_plan.prompt.claim_line``: short
 id, stance, support counts, months, entity names, claim text; nothing about people). It answers
 with few, concrete proposals: a new page, a new label, or a wider scope for an existing page,
 each naming the claims it would house. Nothing here changes the plan: the owner accepts a

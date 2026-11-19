@@ -1,6 +1,6 @@
 """mkdocs hook: ship the markdown twins of the pages (see ``step_11_site/agent_pages.py``).
 
-Step 9 writes the twins under ``docs/<extra.agent_markdown.dir>/`` mirroring the built site
+Step 11 writes the twins under ``docs/<extra.agent_markdown.dir>/`` mirroring the built site
 (``<dir>/georgia/index.md``) and keeps that folder out of the build with ``exclude_docs``, since
 mkdocs would turn a ``.md`` file into an HTML page. This hook
 
@@ -10,7 +10,7 @@ mkdocs would turn a ``.md`` file into an HTML page. This hook
   the search (which only knows pages).
 
 Loaded by mkdocs from its path (``hooks:`` in mkdocs.yml), so it imports nothing from this
-project; its settings come from ``extra.agent_markdown`` (written by step 9 from config.json).
+project; its settings come from ``extra.agent_markdown`` (written by step 11 from config.json).
 """
 
 from __future__ import annotations

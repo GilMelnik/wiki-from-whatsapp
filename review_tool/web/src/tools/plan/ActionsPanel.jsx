@@ -123,7 +123,7 @@ export function ActionsPanel({ overview, selectedId, proposal, labelsView, savin
         {tagsRow && (
           <p className="text-slate-500">
             Decide on each entity in the main column. A decision is saved at once; the site uses it at its next build
-            (step 9).
+            (step 11).
           </p>
         )}
         {!kind && !special && !proposal && !tagsRow && (

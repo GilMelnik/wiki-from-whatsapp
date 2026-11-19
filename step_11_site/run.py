@@ -1,4 +1,4 @@
-"""Step 9: publish the wiki: ``docs/`` and ``mkdocs.yml`` from the plan (C7) and the pages (C9).
+"""Step 11: publish the wiki: ``docs/`` and ``mkdocs.yml`` from the plan (C7) and the pages (C9).
 
 Reads the effective plan, the effective written pages, the claim records (C6, joined on read
 by ``step_5_same_complaint.claim_records``, for the references and for the check that no page cites a
@@ -30,7 +30,7 @@ The step owns ``docs/``: files it did not write are removed, except the top-leve
 ``site.keep``. A file whose content is unchanged is not rewritten, so a re-run on unchanged
 inputs changes nothing. Problems (a planned page nobody wrote, a link to a page that is not
 published, a label nobody carries...) are logged and returned under ``issues``; a page citing a
-withheld claim (``withheld_reference``) is logged as an error: re-run step 7 before publishing.
+withheld claim (``withheld_reference``) is logged as an error: re-run step 8 before publishing.
 A published page holding text that was never proofread (``step_10_proofread.run``) is named
 in a warning and in ``unproofread``; the site is built anyway (the owner may publish it).
 """
@@ -148,7 +148,7 @@ def _check_docs_dir(docs_dir: Path) -> None:
     """Refuse a folder whose cleanup would delete the project (the step owns ``docs_dir``)."""
     resolved = docs_dir.resolve()
     if resolved == PROJECT_ROOT or resolved in PROJECT_ROOT.parents or (resolved / ".git").exists():
-        raise ValueError(f"{docs_dir} is not a docs folder step 9 may own (it holds the project)")
+        raise ValueError(f"{docs_dir} is not a docs folder step 11 may own (it holds the project)")
 
 
 def sync_docs(docs_dir: Path, files: dict[str, str]) -> tuple[list[str], list[str]]:
@@ -172,7 +172,7 @@ def sync_docs(docs_dir: Path, files: dict[str, str]) -> tuple[list[str], list[st
 
 def _load(path: Path, what: str) -> dict[str, Any]:
     if not path.is_file():
-        raise FileNotFoundError(f"step 9 needs the {what} at {path}; run the earlier steps first")
+        raise FileNotFoundError(f"step 11 needs the {what} at {path}; run the earlier steps first")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -195,7 +195,7 @@ def run(
     proofread).
     """
     plan = _load(plan_path or resolve_plan_path(), "plan (step 6)")
-    pages = _load(pages_path or resolve_wiki_pages_path(), "written pages (step 7)")["pages"]
+    pages = _load(pages_path or resolve_wiki_pages_path(), "written pages (step 8)")["pages"]
     claims = load_claim_records(sources)
     period = messages_period(_load(threads_path or resolve_threads_path(), "conversations (step 1)"))
     names = TagInputs(sources).names()
@@ -246,8 +246,8 @@ def run(
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Step 9: build docs/ and mkdocs.yml.")
-    parser.add_argument("--docs-dir", type=Path, default=DOCS_DIR, help="the folder step 9 owns")
+    parser = argparse.ArgumentParser(description="Step 11: build docs/ and mkdocs.yml.")
+    parser.add_argument("--docs-dir", type=Path, default=DOCS_DIR, help="the folder step 11 owns")
     parser.add_argument("--mkdocs-file", type=Path, default=MKDOCS_PATH, help="mkdocs.yml to write")
     args = parser.parse_args(argv)
     setup_step_logging(STEP_11)

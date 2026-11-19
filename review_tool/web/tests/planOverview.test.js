@@ -58,7 +58,7 @@ test("the overview's to-dos: warnings to act on first, each opening what it name
   assert.match(todos[5].text, /only 1 claim:/);
 });
 
-test("no to-dos when nothing waits; none from step 6b before it has run", () => {
+test("no to-dos when nothing waits; none from step 7 before it has run", () => {
   assert.deepEqual(overviewTodos({ ...BASE, assignments: summary({}) }), []);
   assert.deepEqual(overviewTodos({ ...BASE, assignments: { exists: false } }), []);
   const broken = { ...BASE, assignments: { exists: true, problem: "unreadable" }, warnings: [{ code: "x", ids: ["costs"], text: "W" }] };

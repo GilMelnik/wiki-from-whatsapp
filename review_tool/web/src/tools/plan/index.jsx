@@ -28,7 +28,7 @@ import { LabelRow, TreeRow } from "./Rows.jsx";
 import { Toolbar } from "./Toolbar.jsx";
 
 // The wiki plan: the page tree the planning model proposed, made the owner's, and (once step
-// 6b has run) where the classifier put every claim. The list is the tree (phases →
+// 7 has run) where the classifier put every claim. The list is the tree (phases →
 // categories → pages, with the claims on no page and the step's proposals, each to decide,
 // on top, then the entity tags the site will add) or the labels by kind; the main column shows
 // the selected item (the overview: what there is to do; the entity tags: their numbers and a

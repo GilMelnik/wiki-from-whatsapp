@@ -1,4 +1,4 @@
-"""How step 8 cuts the wiki into review passes, and what each pass's fingerprint covers.
+"""How step 9 cuts the wiki into review passes, and what each pass's fingerprint covers.
 
 A review run is a set of passes; each pass is one model call with its own input, its own cap
 of suggestions (``proposals.Scope``) and its own fingerprint.
@@ -11,7 +11,7 @@ of suggestions (``proposals.Scope``) and its own fingerprint.
   (``wiki_review.chars_per_token``, measured on the Hebrew review prompt): the part prompt's
   rules, the plan block of the whole wiki, then each page's block as it reads alone.
 - The CROSS pass (id ``wiki_review.cross.id``) reads the plan block and the stored points of
-  every page that has them; a page without points (written before step 7 listed them) is left
+  every page that has them; a page without points (written before step 8 listed them) is left
   out (``without_points``). With fewer than two such pages there is no cross pass.
 
 Fingerprints: a part's covers the reviewer (model, prompt version, the pass kind and its cap),
@@ -184,7 +184,7 @@ class ReviewPasses:
 
 
 def review_usd(estimate: Mapping[str, Any]) -> float:
-    """The price of the review passes a step-8 estimate counted as due (``calls``,
+    """The price of the review passes a step-9 estimate counted as due (``calls``,
     ``input_tokens``, ``batch``): output at a typical figure per pass."""
     output = estimate["calls"] * ESTIMATE_CONFIG["output_tokens_per_call"][REVIEW_CONFIG["stage"]]
     cost = usd(stage_model(REVIEW_CONFIG["stage"]), estimate["input_tokens"], output)

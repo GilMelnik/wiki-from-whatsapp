@@ -178,7 +178,7 @@ class AssignmentsFile:
     def require(self) -> None:
         if not self.exists:
             raise AssignmentsConflict(
-                "There is no assignments file yet: run the assignment step (6b, "
+                "There is no assignments file yet: run the assignment step (7, "
                 "python -m step_7_assign.run) after reviewing the plan."
             )
         if self.problem:

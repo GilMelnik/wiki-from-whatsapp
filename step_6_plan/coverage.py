@@ -6,7 +6,7 @@ fixed-seed sample of claims goes to the classifier stage ``plan.coverage.stage``
 page titles and scopes. The report says how many claims got a confident page, how many fell
 to "none", how the sample spreads over the pages (projected onto all claims), and which pages
 fall outside the size guide ``plan.page_claims`` (too small to be a page, too large for one).
-It is part of the run's report, not of the plan. Step 6b builds the real assignment on
+It is part of the run's report, not of the plan. Step 7 builds the real assignment on
 ``page_question`` and ``claim_state``.
 """
 

@@ -21,7 +21,7 @@ An entity (step 4; any review status, people included) gets a tag when ALL hold:
    - no match: not covered.
 
 ``entity_tags(...)`` is the rule as one pure function. Its pages come from what each page
-cites: the written pages (``cited_claims``), or, before step 7 has run, an estimate from the
+cites: the written pages (``cited_claims``), or, before step 8 has run, an estimate from the
 assignments (``assigned_claims``). The tag's id is ``id_prefix`` + the entity id: the prefix
 holds a character a plan slug may not hold, so a tag id never equals a label id. A tag page
 shows the entity's canonical name and the list of pages; nothing from the claims.
@@ -364,8 +364,8 @@ class TagData:
 
 
 SOURCE_NOTES = {
-    FROM_PAGES: "pages = the written pages (step 7) that cite the entity",
-    FROM_ASSIGNMENTS: "pages ESTIMATED from the assignments (step 6b): step 7 has not written pages yet",
+    FROM_PAGES: "pages = the written pages (step 8) that cite the entity",
+    FROM_ASSIGNMENTS: "pages ESTIMATED from the assignments (step 7): step 8 has not written pages yet",
     NO_PAGES: "no pages and no assignments yet: every entity is on 0 pages",
 }
 

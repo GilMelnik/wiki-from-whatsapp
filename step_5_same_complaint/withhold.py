@@ -16,13 +16,13 @@ The one way out for a claim the rule withholds is the same-complaint check
 (``step_5_same_complaint.run``): a model found a second person making the SAME
 complaint about the same entity, and the owner did not mark the claim "keep withheld" on the
 Withheld page. What is withheld NOW (the rule, minus what the check released) is
-``step_5_same_complaint.release.withheld_ids``: every reader (step 7, step 9, the
+``step_5_same_complaint.release.withheld_ids``: every reader (step 8, step 11, the
 Plan page, the Withheld page) uses that one function, once per load of the records. Without the
 check's answers file nothing is released.
 
-Step 7's ``Corpus`` treats a withheld claim as placed on no page (it never reaches the writer,
-another claim's ``contradicts``, the front matter or step 8's claim lines) and accounts for it
-in its primary page's ``left_out`` with reason ``withhold.reason``; step 9 reports a
+Step 8's ``Corpus`` treats a withheld claim as placed on no page (it never reaches the writer,
+another claim's ``contradicts``, the front matter or step 9's claim lines) and accounts for it
+in its primary page's ``left_out`` with reason ``withhold.reason``; step 11 reports a
 page that still cites one.
 """
 

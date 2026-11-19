@@ -1,4 +1,4 @@
-"""Synthetic step-7 inputs: claim records, a plan, assignments on disk and a fake page-writing
+"""Synthetic step-8 inputs: claim records, a plan, assignments on disk and a fake page-writing
 model.
 
 The plan is ``plan_fixtures.make_plan`` (pages agencies / costs / clinics / hospital, labels

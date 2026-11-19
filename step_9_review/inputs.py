@@ -1,7 +1,7 @@
 """What the review reads, and the page fingerprints its suggestions keep.
 
 The review reads the EFFECTIVE pages (C9; the owner's edits included) and, as each page's
-evidence, the very claim lines step 7's writer read for that page: step 7's own ``Corpus``
+evidence, the very claim lines step 8's writer read for that page: step 8's own ``Corpus``
 (claim records, effective plan and assignments) builds the records and ``claim_line`` renders
 them (short id, role, stance, support, last backed, disputed, when said, entities,
 contradictions, claim text; nothing about people). The page body is sent without its footnote
@@ -50,7 +50,7 @@ def effective_pages(artifact: Artifact = WIKI_PAGES) -> tuple[dict[str, Any], Pa
         payload = read_json_if_present(path)
         if payload is not None:
             return payload, path
-    raise FileNotFoundError(f"step 8 needs the wiki pages at {artifact.original}; run step 7 first")
+    raise FileNotFoundError(f"step 9 needs the wiki pages at {artifact.original}; run step 8 first")
 
 
 def page_fingerprint(page: Mapping[str, Any]) -> str:
@@ -119,7 +119,7 @@ class ReviewInput:
     @property
     def sources(self) -> dict[str, Path]:
         """Every file the review reads, by role (for the "an input is newer" check and the
-        metadata): step 7's inputs and the pages."""
+        metadata): step 8's inputs and the pages."""
         return {**self.corpus.sources, "pages": self.pages_path}
 
     def page_fingerprints(self) -> dict[str, str]:
@@ -154,7 +154,7 @@ class ReviewInput:
 
     def outdated_pages(self) -> list[str]:
         """Pages whose stored ``input_fingerprint`` no longer matches their claims and plan
-        fields (step 7 has not caught up with an upstream change)."""
+        fields (step 8 has not caught up with an upstream change)."""
         model = LLM_CONFIG["stages"][PAGES_CONFIG["write"]["stage"]]["model"]
         writer = writer_fingerprint(model)
         catalogue = self.corpus.catalogue()
@@ -175,5 +175,5 @@ class ReviewInput:
                            f"reviewed: {unwritten}")
         if outdated:
             logger.warning(f"{len(outdated)} pages are older than their claims or plan fields "
-                           f"(run step 7 first for a review of current pages): {outdated}")
+                           f"(run step 8 first for a review of current pages): {outdated}")
         return {"unwritten": unwritten, "outdated": outdated}

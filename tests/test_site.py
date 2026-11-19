@@ -1,4 +1,4 @@
-"""Step 9 on synthetic inputs: nav, links, label pages, home page, redirects, cleanup, re-runs."""
+"""Step 11 on synthetic inputs: nav, links, label pages, home page, redirects, cleanup, re-runs."""
 
 from __future__ import annotations
 
@@ -91,7 +91,7 @@ def test_wiki_links_are_resolved_outside_code(built: tuple[Path, dict[str, Any]]
     assert "ו-גאורגיה." in body  # a label nobody carries has no page: its title, unlinked
     assert "[כאן](agencies.md)" in body
     assert "`[[costs]]`" in body and "```\n[[clinics]]\n```" in body
-    # a body stored with its definition (older step 7): the stored text gives way to the reference
+    # a body stored with its definition (older step 8): the stored text gives way to the reference
     reference = f"[^{IDS[1]}]: {section('site')['references']['start_mark']}{IDS[1]} · "
     assert reference in body and "טענה." not in body
 

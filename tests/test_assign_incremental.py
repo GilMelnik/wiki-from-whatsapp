@@ -1,4 +1,4 @@
-"""Step 6b re-runs (C14): only what changed is asked, manual records survive, plan edits are
+"""Step 7 re-runs (C14): only what changed is asked, manual records survive, plan edits are
 followed (scope change, new page, merge, delete, labels), and ``apply_plan_edit``."""
 
 from __future__ import annotations

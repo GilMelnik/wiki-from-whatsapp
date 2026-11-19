@@ -2,15 +2,15 @@
 releases, and so what is withheld from the wiki now. Recomputed on every read; nothing derived
 is stored.
 
-The rule (``step_5_same_complaint.withhold.withholds``, ``withhold`` in ``config.json``): a claim record (C6)
-whose stance is ``negative``, that names at least one entity and is backed by fewer than
+The rule (``step_5_same_complaint.withhold.withholds``, ``withhold`` in ``config.json``): a
+claim record (C6) whose stance is ``negative``, that names at least one entity and is backed by fewer than
 ``min_supporters`` (2) different people is withheld from every page. The check
 (``step_5_same_complaint.run``) asks a model, entity by entity, which of the negative
 claims naming the entity make the same complaint, and stores its groups (``SAME_COMPLAINT_PATH``).
 
 ``withheld_ids(records, sources)`` is THE answer to "what is withheld now": the rule, minus what
 the check releases, with the owner's "keep withheld" marks applied. Every reader calls it once
-per load of the records (step 7's ``Corpus``, step 9, the Plan page); the Withheld page, which
+per load of the records (step 8's ``Corpus``, step 11, the Plan page); the Withheld page, which
 shows the check's details, reads the same ``Check.withheld``. With no answers file (the check
 never ran) nothing is released and neither the audit nor the marks are read.
 

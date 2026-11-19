@@ -1,4 +1,4 @@
-"""Step 6b: put every claim on its page(s) and labels (contract C8).
+"""Step 7: put every claim on its page(s) and labels (contract C8).
 
 How it works, in plain words: after the owner has reviewed the page plan, the cheap
 classifier (stage ``assign.stage``, Jev) reads each claim's text and entity names and
@@ -412,7 +412,7 @@ def run(
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Step 6b: assign claims to pages (C8).")
+    parser = argparse.ArgumentParser(description="Step 7: assign claims to pages (C8).")
     parser.add_argument("--rebuild", action="store_true",
                         help="ask every automatic claim again (manual records and proposals stay)")
     parser.add_argument("--only", nargs="+", metavar="SHORT_ID",

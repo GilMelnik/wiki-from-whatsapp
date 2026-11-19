@@ -2,7 +2,7 @@ import { Bidi, countText, formatCount, claimCount, stanceOf, titleOf } from "@sh
 import { percent } from "./plan.js";
 
 // What a page's scope is judged by, next to the scope editor: the page's exact size against
-// the planning guide (once step 6b has run), a sample of the claims on it (least certain
+// the planning guide (once step 7 has run), a sample of the claims on it (least certain
 // first), the claims the classifier found closest to it that it did not put there, the
 // example claims the planning model gave, and (folded) the planning run's coverage numbers.
 // From GET /pages/{id}. The size flag itself is one of the page's warnings, above the scope.
@@ -73,11 +73,11 @@ function Size({ size, coverage }) {
     return (
       <p className="text-slate-600">
         About {claimCount(coverage.projected + coverage.merged_projected, formatCount)}, projected from the planning
-        sample. The exact size comes with step 6b.
+        sample. The exact size comes with step 7.
       </p>
     );
   }
-  return <p className="text-slate-500">Known once step 6b has assigned the claims.</p>;
+  return <p className="text-slate-500">Known once step 7 has assigned the claims.</p>;
 }
 
 function Examples({ examples, claimsAvailable }) {

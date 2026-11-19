@@ -3,7 +3,7 @@ rebuilds the site, and the home page's sentence moves to the month of the newest
 
 The driver walks every step it has not run in this update (it never skips a step because the
 one before it changed nothing); this runs that walk on the synthetic pipeline of
-``tests.update_support`` with the real step 9 as the last step. No API call, no real data."""
+``tests.update_support`` with the real step 11 as the last step. No API call, no real data."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ UNCHANGED = (STEP_2, STEP_3, STEP_4, STEP_5, STEP_7, STEP_8, STEP_9,
 
 class SiteWorld(World):
     """The synthetic pipeline whose step 1 writes a C1 threads file from the pipeline input and
-    whose step 9 is the real one, reading what the fake steps left under the temp folder."""
+    whose step 11 is the real one, reading what the fake steps left under the temp folder."""
 
     def __init__(self, root: Path) -> None:
         super().__init__(root)

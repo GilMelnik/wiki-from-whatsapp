@@ -429,7 +429,7 @@
       "failed_checks": "The correction of page {page_id} failed the checks: {problems}",
       "too_much_changed": "The correction of page {page_id} changed too much: only {kept} of the sentences stayed word for word (at least {required} is required).",
       "link_refused": "The contradiction link was not saved: {error}",
-      "plan_applied": "The change is saved in the plan. Run the assignment step (6b) and then step 7 so the pages follow it.",
+      "plan_applied": "The change is saved in the plan. Run the assignment step (7) and then step 8 so the pages follow it.",
       "page_applied": "Page {page_id} was corrected ({kept} of the sentences stayed word for word).",
       "page_unchanged": "Page {page_id} already showed both sides and was not changed.",
       "link_applied": "The contradiction link is saved: the claims contradict each other from now on, in every step."

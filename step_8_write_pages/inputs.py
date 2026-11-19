@@ -1,4 +1,4 @@
-"""What step 7 reads, and what one page's text depends on.
+"""What step 8 reads, and what one page's text depends on.
 
 The step reads the claim records (C6, ``step_5_same_complaint.claim_records.load_claim_records``: one
 record per claim, joined on read from the effective claims and entities, step 3's private
@@ -9,7 +9,7 @@ the participant count. A record already counts the distinct people per claim and
 with neutral reactions (a heart, praying hands) left out. A claim is referred to by its
 ``short_id`` only.
 
-Claims withheld from the wiki now (``same_complaint_release.withheld_ids``: the owner's rule
+Claims withheld from the wiki now (``step_5_same_complaint.release.withheld_ids``: the owner's rule
 of ``step_5_same_complaint.withhold``, a negative statement about a named entity that fewer than
 two members reported, minus what the same-complaint check released) are treated as placed on
 no page:
@@ -27,7 +27,7 @@ Each claim is turned into a compact ``record`` (the fields the model sees). The 
 ``input_fingerprint`` covers the page's own plan fields, its records (with their role) and
 the writer (write-stage model + ``pages.prompt_version``). It does not cover the link
 catalogue, the breadcrumb, the labels or the corpus-wide "as of" date: renaming a page or a
-category must not rewrite the wiki (step 9 follows merged ids and unlinks unpublished
+category must not rewrite the wiki (step 11 follows merged ids and unlinks unpublished
 targets; front matter is rebuilt in code).
 """
 
@@ -72,7 +72,7 @@ def last_backed(by_month: Mapping[str, Mapping[str, int]]) -> tuple[str, int] | 
 
 def _read(path: Path, what: str) -> dict[str, Any]:
     if not path.is_file():
-        raise FileNotFoundError(f"step 7 needs the {what} at {path}; run the earlier steps first")
+        raise FileNotFoundError(f"step 8 needs the {what} at {path}; run the earlier steps first")
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -131,7 +131,7 @@ class Corpus:
         errors = validation_errors(plan)
         if errors:
             raise PlanError([f"{plan_path} is not a valid C7 plan; fix it in the plan tool", *errors])
-        assignments = _read(assignments_path, "assignments (step 6b)")["assignments"]
+        assignments = _read(assignments_path, "assignments (step 7)")["assignments"]
         files = {**sources.files(), "plan": plan_path, "assignments": assignments_path}
         corpus = cls({claim["short_id"]: claim for claim in claims}, plan, assignments, files,
                      withheld=withheld_ids(claims, sources))

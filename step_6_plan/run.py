@@ -17,7 +17,7 @@ clear message instead of being truncated.
 
 A plan is curated, not derived: the owner edits it (``step_6_plan.operations``, the plan
 review tool). So a normal run on an existing plan makes NO model call and writes nothing: it
-validates the plan and reports how many claims are newer than it (step 6b assigns them). Only
+validates the plan and reports how many claims are newer than it (step 7 assigns them). Only
 ``run(rebuild=True)`` / ``--rebuild`` plans again, after backing up the edited plan.
 
     python -m step_6_plan.run [--rebuild]

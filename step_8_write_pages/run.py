@@ -1,4 +1,4 @@
-"""Step 7: write the wiki's pages (contract C9) from the plan, the claims and their pages.
+"""Step 8: write the wiki's pages (contract C9) from the plan, the claims and their pages.
 
 How it works, in plain words: for every page of the reviewed plan (C7) the step collects the
 claims assigned to it (C8; the claim records of C6, ``step_8_write_pages.inputs``) and asks
@@ -13,11 +13,11 @@ disputed claims are cited, every main claim is accounted for in a point or left 
 reason, every point is said and no point is told
 again and again (one retry that names the problems, then repair); the OKF front matter is
 written in code (``front_matter``). A negative statement about a named entity that fewer
-than two members reported never reaches the writer (``withhold`` in ``config.json``): code adds it to its page's
-``left_out`` with reason ``withheld`` and lists it in ``metadata.withheld``. The body keeps
-its ``[^g-…]`` marks (short ids) only: step 9 renders
+than two members reported never reaches the writer (``withhold`` in ``config.json``): code adds
+it to its page's ``left_out`` with reason ``withheld`` and lists it in ``metadata.withheld``. The body keeps
+its ``[^g-…]`` marks (short ids) only: step 11 renders
 the references from the claims (a body stored with definitions keeps them until its text
-changes; step 9 ignores them). The points and the claims left out are stored with the page:
+changes; step 11 ignores them). The points and the claims left out are stored with the page:
 an update starts from them.
 
 Re-runs (C14) work per page. ``metadata.pages[page_id]`` keeps a fingerprint of the writer
@@ -389,7 +389,7 @@ def run(
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Step 7: write the wiki pages (C9).")
+    parser = argparse.ArgumentParser(description="Step 8: write the wiki pages (C9).")
     parser.add_argument("--rebuild", action="store_true",
                         help="write every page in full (after backing up the edited file)")
     parser.add_argument("--only", nargs="+", metavar="PAGE_ID", help="work on these pages only")

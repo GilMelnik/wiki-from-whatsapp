@@ -1,7 +1,7 @@
-"""Step 10: absorb a newer chat export as an update of the wiki (contract C13).
+"""The update run: absorb a newer chat export as an update of the wiki (contract C13).
 
     python -m update_run.run [EXPORT] [--plan] [--pay STEP ...] [--through STEP]
-                                 [--no-stops] [--drop-missing]
+                             [--no-stops] [--drop-missing]
 
 ``EXPORT`` is a new FULL export of the chat (default: the newest ``*_chat_android.json`` in
 ``data/updates/``). The command finds what is new, records it, and runs the pipeline's steps
@@ -10,8 +10,9 @@ spend money; it then prints one line saying what to do. Running the same command
 on from there (``update_run.driver`` explains the whole flow).
 
 - ``--plan``: say what the update would do and estimate the next step; change nothing.
-- ``--pay STEP ...``: allow these paid steps (``step_3_extract``, ``step_6_assign``,
-  ``step_8_write_pages``, ``step_9_review``, ``step_8_proofread``) to make their model calls.
+- ``--pay STEP ...``: allow these paid steps (``step_3_extract``, ``step_4_entities``,
+  ``step_5_same_complaint``, ``step_7_assign``, ``step_8_write_pages``, ``step_9_review``,
+  ``step_10_proofread``) to make their model calls.
   Without it a paid step stops the update with its estimate (unless it would make no paid
   call). Proofreading comes after the review's stop: it reads the text once the owner's
   decisions on the suggestions are applied.

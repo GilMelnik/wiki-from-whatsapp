@@ -1,4 +1,4 @@
-"""The claim records steps 6 to 10 and the review site read (contract C6): one record per claim,
+"""The claim records steps 5 to 11 and the review site read (contract C6): one record per claim,
 joined on every call from the files people edit, never stored.
 
 Inputs:
@@ -16,7 +16,7 @@ on the Privacy page, or entity ids the owner already merged.
 A record holds exactly ``RECORD_KEYS``:
 - ``short_id``: ``claim_records.short_id_prefix`` + the first ``short_id_hash_chars`` hex digits
   of ``sha1(claim_id)``; on a collision the claim id is hashed again with a ``#<n>`` suffix, in
-  the order of the claims file. FROM STEP 6 ON A CLAIM IS NAMED BY ITS ``short_id`` ONLY.
+  the order of the claims file. FROM STEP 5 ON A CLAIM IS NAMED BY ITS ``short_id`` ONLY.
 - ``claim_id`` and ``thread_id`` hold WhatsApp message ids. They stay in the record for the
   review tool's own lookups and must NEVER reach a prompt, a page or the site.
 - ``entity_ids`` (canonical ids, sorted) and ``entity_names`` (``canonical_name`` per id, the

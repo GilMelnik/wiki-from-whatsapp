@@ -1,9 +1,9 @@
-"""Step 8: the wiki reviewed in parts, plus one pass across every page's points (C12).
+"""Step 9: the wiki reviewed in parts, plus one pass across every page's points (C12).
 
 How it works, in plain words: the wiki is cut along the plan tree into PARTS of a few related
 pages (``step_9_review.parts``). For each part the model of stage ``wiki_review.stage`` (Opus
 5.5) reads the plan of the whole wiki and the part's effective pages (the owner's edits
-included) with the claim lines step 7's writer read for them; one CROSS pass reads the plan
+included) with the claim lines step 8's writer read for them; one CROSS pass reads the plan
 and the stored points of every page, to see what no part can (``prompts``). Every pass answers
 with a short list of suggestions, most valuable first: pages that contradict each other, a
 page to split, two to merge, a missing page or label, and (parts only) plain mistakes in a
@@ -99,7 +99,7 @@ def over_budget(review_pass: ReviewPass, tokens: int) -> str | None:
 
 
 class ReviewRun:
-    """One run of step 8 over the current wiki and the suggestions already raised."""
+    """One run of step 9 over the current wiki and the suggestions already raised."""
 
     def __init__(self, review: ReviewInput, artifact: Artifact, *, model: str, rebuild: bool,
                  only: Collection[str] | None) -> None:
@@ -221,7 +221,7 @@ def run(
     passes = job.passes
     if passes.without_points:
         logger.warning(f"{len(passes.without_points)} pages have no stored points (written "
-                       "before step 7 listed them) and are left out of the cross-page pass: "
+                       "before step 8 listed them) and are left out of the cross-page pass: "
                        f"{passes.without_points}")
     batch = use_batch and (llm.supports_batch() if llm is not None else batch_available())
     count = count_tokens or AnthropicTokenCounter(model)
@@ -318,7 +318,7 @@ def run(
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Step 8: review the wiki in parts (C12).")
+    parser = argparse.ArgumentParser(description="Step 9: review the wiki in parts (C12).")
     parser.add_argument("--rebuild", action="store_true",
                         help="ask afresh: drop undecided suggestions, keep every decided one")
     parser.add_argument("--estimate", action="store_true",

@@ -1,4 +1,4 @@
-"""Synthetic step-8 workspace: step 7's synthetic wiki (``pages_fixtures``) written with longer
+"""Synthetic step-9 workspace: step 8's synthetic wiki (``pages_fixtures``) written with longer
 pages, a plan pair, a suggestions pair, a fake review model and a fake page corrector.
 
 Pages (plan ``agencies`` / ``costs`` under ``before`` > ``choosing``, ``clinics`` / ``hospital``
@@ -135,7 +135,7 @@ def count_tokens(system: str, user: str) -> int:
 
 
 class ReviewWorkspace(PagesWorkspace):
-    """The step-7 workspace with its pages written, plus the step-8 files. An applied
+    """The step-8 workspace with its pages written, plus the step-9 files. An applied
     contradiction goes to ``sources.contradictions`` (no such file at the start)."""
 
     def __init__(self, root: Path) -> None:
