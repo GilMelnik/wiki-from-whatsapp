@@ -10,5 +10,6 @@ import status from "./status/index.jsx";
 import suggestions from "./suggestions/index.jsx";
 import tagged from "./tagged/index.jsx";
 import threads from "./threads/index.jsx";
+import withheld from "./withheld/index.jsx";
 
-export const TOOLS = [status, threads, tagged, pii, entities, plan, suggestions];
+export const TOOLS = [status, threads, tagged, pii, entities, plan, withheld, suggestions];

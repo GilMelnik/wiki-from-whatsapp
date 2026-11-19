@@ -7,7 +7,9 @@ validated, so an invalid plan is never written. Once step 6b has run, the owner 
 where the classifier put each claim (contract C8): moves claims between pages and labels
 (which pins them) and decides on the step's proposals. The claims are the C6 records
 (``step_6_plan.claim_records``), joined from the claims, the entities, step 3's audit and the
-manual contradictions; a change to any of them reloads the store. Endpoints, under
+manual contradictions; a change to any of them reloads the store, and so does a change to the
+same-complaint check's answers or the owner's "keep withheld" marks (they decide which claims
+the rows mark as withheld from the wiki). Endpoints, under
 ``/api/plan``:
 
 - ``GET  /plan``                  the plan as the tool shows it (tree rows, pages, labels by
@@ -62,6 +64,8 @@ PLAN_KEY = "plan"
 CLAIMS_KEY = "claims"
 ENTITIES_KEY = "entities"
 ASSIGNMENTS_KEY = "assignments"
+# Optional files that decide which claims are withheld now (watched, never required).
+WITHHELD_KEYS = ("same_complaint", "withheld_vetoes")
 Scope = Literal[SCOPES]
 Role = Literal[ROLES]
 Sort = Literal[SORTS]
@@ -84,21 +88,23 @@ class PlanTool:
     ) -> None:
         plan, assignments = graph.node(PLAN_KEY), graph.node(ASSIGNMENTS_KEY)
         claims, entities = graph.node(CLAIMS_KEY), graph.node(ENTITIES_KEY)
+        answers, vetoes = (graph.node(key).original for key in WITHHELD_KEYS)
         self._history = PlanHistory()
 
         def factory() -> PlanStore:
             sources = ClaimSources(claims.effective, entities.effective, audit_path,
-                                   contradictions_path)
+                                   contradictions_path, answers, vetoes)
             return PlanStore(plan.original, plan.edited, sources, assignments.original,
                              assignments.edited, coverage_path, self._history)
 
         # The coverage report is written by step 6 next to the plan; watched so a re-plan's
         # new numbers show up. The assignments (a write, optional) are watched too, and so are
-        # the claim records' inputs that have no node of their own (audit, manual pairs).
+        # the claim records' inputs that have no node of their own (audit, manual pairs), and
+        # the files that decide which claims are withheld now.
         self._handle: StoreHandle[PlanStore] = StoreHandle(
             factory,
-            (*graph.files(*self.READS, ASSIGNMENTS_KEY), coverage_path, audit_path,
-             contradictions_path),
+            (*graph.files(*self.READS, ASSIGNMENTS_KEY, *WITHHELD_KEYS), coverage_path,
+             audit_path, contradictions_path),
             lock_paths=graph.files(*self.WRITES),
             lock_timeout=lock_timeout,
         )

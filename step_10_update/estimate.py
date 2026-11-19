@@ -21,7 +21,10 @@ Every figure is therefore rough; the estimate says what it counted.
 
 Step 4 (``run(estimate=True)``, ``step_4_entities.match_estimate``) prices its model stages
 itself, as a range: the judge and the per-claim calls (Opus) are its paid calls; the price and
-the calls given here are the upper end of the range.
+the calls given here are the upper end of the range. So does step 7a, the same-complaint check
+(``step_7_write_pages.same_complaint``, ``run(estimate=True)``): one Opus call per entity list
+whose answer is missing or stale and not in the LLM disk cache, input by characters, output at
+a low and a high figure per call (``pages.same_complaint.estimate``); the upper end is shown.
 
 ``paid_calls`` counts chat-model calls only. The cheap classifier (Jev) and the embeddings are
 priced but never stop the update: steps 1, 2 and 5 use only them and run without a flag
@@ -48,7 +51,15 @@ from step_8_review.proofreader import PROOFREAD_CONFIG
 from utils.config import section
 from utils.llm_client.settings import CLASSIFIER_CONFIG
 from utils.model_prices import ESTIMATE_CONFIG, stage_model, usd
-from utils.paths import STEP_3, STEP_4, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_8_PROOFREAD
+from utils.paths import (
+    STEP_3,
+    STEP_4,
+    STEP_6_ASSIGN,
+    STEP_7,
+    STEP_7_SAME_COMPLAINT,
+    STEP_8,
+    STEP_8_PROOFREAD,
+)
 from utils.token_counters import CharTokenCounter
 
 EMBEDDING_MODEL = section("embedding")["model"]
@@ -89,6 +100,7 @@ class Estimator:
             STEP_3: self._claims,
             STEP_4: self._entities,
             STEP_6_ASSIGN: self._assignments,
+            STEP_7_SAME_COMPLAINT: self._same_complaint,
             STEP_7: self._pages,
             STEP_8: self._review,
             STEP_8_PROOFREAD: self._proofread,
@@ -154,6 +166,22 @@ class Estimator:
             f"{plan_note}",
             "classifier tokens at a typical figure per claim; proposal calls as an upper bound "
             "at a typical size",
+        )
+
+    def _same_complaint(self, run: RunFunction, key: str) -> Estimate:
+        result = run(estimate=True)
+        calls = result["estimate"]
+        low, high = calls["usd"]
+        what = (f"{calls['calls']} model call(s) for the entity lists whose answer is missing "
+                f"or stale ({result['due']} of the {result['lists']} lists that can release a "
+                f"claim; ${low:.2f} to ${high:.2f})" if calls["calls"]
+                else f"no call: each of the {result['lists']} lists that can release a claim "
+                     "has its answer")
+        return Estimate(
+            key, calls["calls"], high, what,
+            f"{calls['input_tokens']} input tokens by characters, output at a low and a high "
+            f"figure per call{', batch price' if calls['batch'] else ''}; the upper end of the "
+            "range is shown",
         )
 
     def _pages(self, run: RunFunction, key: str) -> Estimate:

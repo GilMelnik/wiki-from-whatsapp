@@ -29,14 +29,15 @@ from utils.paths import (
     STEP_4,
     STEP_6_ASSIGN,
     STEP_7,
+    STEP_7_SAME_COMPLAINT,
     STEP_8,
     STEP_8_PROOFREAD,
     STEP_9,
 )
 from utils.step_lease import StepLease
 
-UPDATE_ORDER = [STEP_1, STEP_2, STEP_3, STEP_4, STEP_6_ASSIGN, STEP_7, STEP_8,
-                STEP_8_PROOFREAD, STEP_9]
+UPDATE_ORDER = [STEP_1, STEP_2, STEP_3, STEP_4, STEP_6_ASSIGN, STEP_7_SAME_COMPLAINT, STEP_7,
+                STEP_8, STEP_8_PROOFREAD, STEP_9]
 
 
 @pytest.fixture
@@ -94,7 +95,7 @@ def test_an_export_already_in_the_updates_folder_keeps_its_stamp(world: World) -
 
 def test_it_stops_at_every_review_point_and_goes_on_when_run_again(world: World) -> None:
     stops = run_to_the_end(world, world.export(newer_chat()), pay=PAID_STEPS)
-    assert stops == [STEP_2, STEP_3, STEP_4, STEP_6_ASSIGN, STEP_8]
+    assert stops == [STEP_2, STEP_3, STEP_4, STEP_6_ASSIGN, STEP_7_SAME_COMPLAINT, STEP_8]
     assert world.calls == UPDATE_ORDER  # no step was redone after a stop
 
 
@@ -189,7 +190,7 @@ def test_a_saved_update_stopped_at_the_removed_step_goes_on(world: World) -> Non
     update["stopped"] = {"kind": "review", "step": REMOVED_STEP, "message": "review", "at": "x"}
     world.write_json(world.paths.state, state)
     world.calls.clear()
-    assert run_to_the_end(world, pay=PAID_STEPS) == [STEP_6_ASSIGN, STEP_8]
+    assert run_to_the_end(world, pay=PAID_STEPS) == [STEP_6_ASSIGN, STEP_7_SAME_COMPLAINT, STEP_8]
     assert world.calls == UPDATE_ORDER[4:]
     assert world.state()["update"]["steps"][REMOVED_STEP]["gate_passed"] is True
 
@@ -311,5 +312,5 @@ def test_through_the_plan_step_is_refused(world: World) -> None:
 
 def test_every_review_point_names_a_served_tool_with_a_hint() -> None:
     tools = {step.spec.review_tool for step in SERVED_STEPS.steps} - {None}
-    assert tools == {"threads", "pii", "entities", "plan", "suggestions"}
+    assert tools == {"threads", "pii", "entities", "plan", "withheld", "suggestions"}
     assert tools <= {spec.name for spec in TOOL_SPECS} and tools <= set(UPDATE_CONFIG["review_hints"])

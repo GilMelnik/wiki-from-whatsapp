@@ -48,6 +48,8 @@ from utils.json_io import read_json_file, read_json_if_present, write_json_file
 from utils.paths import (
     AUDIT_PATH,
     MANUAL_CONTRADICTIONS_PATH,
+    SAME_COMPLAINT_PATH,
+    SAME_COMPLAINT_VETOES_PATH,
     resolve_claims_path,
     resolve_entities_path,
 )
@@ -71,12 +73,19 @@ Record = dict[str, Any]
 @dataclass(frozen=True)
 class ClaimSources:
     """The files one load reads. ``claims`` / ``entities`` left ``None`` resolve to the edited
-    file when present, else the original, at load time."""
+    file when present, else the original, at load time.
+
+    ``same_complaint`` and ``same_complaint_vetoes`` are not read by the loader: they are the
+    same-complaint check's answers and the owner's "keep withheld" marks, which decide with the
+    records what is withheld from the wiki now
+    (``step_7_write_pages.same_complaint_release.withheld_ids``)."""
 
     claims: Path | None = None
     entities: Path | None = None
     audit: Path = AUDIT_PATH
     contradictions: Path = MANUAL_CONTRADICTIONS_PATH
+    same_complaint: Path = SAME_COMPLAINT_PATH
+    same_complaint_vetoes: Path = SAME_COMPLAINT_VETOES_PATH
 
     def files(self) -> dict[str, Path]:
         """The files a load would read now, by role (``claims``, ``entities``, ``audit``,
@@ -116,27 +125,41 @@ def short_ids(claim_ids: Iterable[str]) -> dict[str, str]:
     return out
 
 
-def _sides(events: Iterable[tuple[str, str, str]]) -> dict[str, int]:
-    """``{supporters, opposers}`` distinct-people counts from ``(person, date, side)`` events."""
+def _latest_sides(events: Iterable[tuple[str, str, str]]) -> dict[str, bool]:
+    """``person -> True when they count as an opposer``: each person on the side of their
+    latest ``(person, date, side)`` event, the opposing side on the same date."""
 
     latest: dict[str, tuple[str, bool]] = {}
     for person, date, side in events:
         key = (date, side == "opposers")
         if person not in latest or key > latest[person]:
             latest[person] = key
-    opposers = sum(1 for _, is_opposer in latest.values() if is_opposer)
+    return {person: is_opposer for person, (_, is_opposer) in latest.items()}
+
+
+def _sides(events: Iterable[tuple[str, str, str]]) -> dict[str, int]:
+    """``{supporters, opposers}`` distinct-people counts from ``(person, date, side)`` events."""
+
+    latest = _latest_sides(events)
+    opposers = sum(1 for is_opposer in latest.values() if is_opposer)
     return {"supporters": len(latest) - opposers, "opposers": opposers}
 
 
-def people(audit_record: Mapping[str, Any]) -> dict[str, Any]:
-    """``supporter_count``, ``opposer_count`` and ``by_month`` of one claim's audit record."""
+def _events(audit_record: Mapping[str, Any]) -> list[tuple[str, str, str]]:
+    """The ``(person, date, side)`` events of one claim's audit record."""
 
-    events = [
+    return [
         (str(event["person"]), str(event.get("date") or ""), side)
         for side in _SIDES
         for event in audit_record.get(side) or []
         if event.get("person")
     ]
+
+
+def people(audit_record: Mapping[str, Any]) -> dict[str, Any]:
+    """``supporter_count``, ``opposer_count`` and ``by_month`` of one claim's audit record."""
+
+    events = _events(audit_record)
     months: dict[str, list[tuple[str, str, str]]] = {}
     for event in events:
         if event[1]:
@@ -147,6 +170,22 @@ def people(audit_record: Mapping[str, Any]) -> dict[str, Any]:
         "opposer_count": totals["opposers"],
         "by_month": {month: _sides(months[month]) for month in sorted(months)},
     }
+
+
+def claim_backers(records: Iterable[Record], audit: Path = AUDIT_PATH
+                  ) -> dict[str, frozenset[str]]:
+    """``short_id -> the people its supporter_count counts`` (the same rule, read from the
+    private audit again). These are IDENTITIES: keep them in memory, never write or show them;
+    only counts of them may leave. A claim without an audit record has no backer."""
+
+    if not audit.is_file():
+        raise FileNotFoundError(f"the backers of the claims need the private audit {audit}")
+    entries = {r["claim_id"]: r for r in read_json_file(audit).get("audit") or []}
+    backers = {}
+    for record in records:
+        sides = _latest_sides(_events(entries.get(record["claim_id"]) or {}))
+        backers[record["short_id"]] = frozenset(p for p, is_opposer in sides.items() if not is_opposer)
+    return backers
 
 
 def participant_count(audit_record: Mapping[str, Any]) -> int | None:

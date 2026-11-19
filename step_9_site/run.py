@@ -2,7 +2,8 @@
 
 Reads the effective plan, the effective written pages, the claim records (C6, joined on read
 by ``step_6_plan.claim_records``, for the references and for the check that no page cites a
-claim withheld by ``step_7_write_pages.withhold``) and the effective conversations of step 1
+claim withheld now, ``step_7_write_pages.same_complaint_release.withheld_ids``) and the
+effective conversations of step 1
 (C1: the home page says the wiki rests on messages from the month of the earliest to the month
 of the latest one), then writes:
 
@@ -45,7 +46,7 @@ from typing import Any
 import yaml
 
 from step_6_plan.claim_records import ClaimSources, load_claim_records
-from step_7_write_pages.withhold import withheld_ids
+from step_7_write_pages.same_complaint_release import withheld_ids
 from step_8_review.proofreader import PROOFREAD_CONFIG, sentence_split
 from step_9_site import agent_hook, hebrew_search
 from step_9_site.agent_pages import AgentPages
@@ -189,7 +190,7 @@ def run(
     pages = _load(pages_path or resolve_wiki_pages_path(), "written pages (step 7)")["pages"]
     claims = load_claim_records(sources)
     period = messages_period(_load(threads_path or resolve_threads_path(), "conversations (step 1)"))
-    site = Site(plan, pages, claims, period, withheld_ids(claims))
+    site = Site(plan, pages, claims, period, withheld_ids(claims, sources))
     files = {**site.files, **AgentPages(site).files(), WIKI_INDEX_FILE: index_text(site, docs_dir / WIKI_INDEX_FILE)}
     config = build_config(
         site.nav,

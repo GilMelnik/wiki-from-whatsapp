@@ -10,7 +10,8 @@ Lists (``scope``): ``page`` (the claims the page owns, then those that only ment
 first (the classifier's probability for that page / label; the top page for an unplaced
 claim), records pinned by hand last; also by last date or by supporters. For judging a
 page's scope: the claims the classifier found closest to the page that it did not put there
-(``near_claims``). Rows mark the claims the owner's rule withholds from the wiki; they do not
+(``near_claims``). Rows mark the claims withheld from the wiki now (the store's
+``withheld``: the owner's rule minus what the same-complaint check released); they do not
 count toward a page's size (``sizes``).
 """
 
@@ -27,7 +28,6 @@ from review_tool.tools.plan.views import claim_summary, redirect_map
 from step_6_plan.assign_rules import ASSIGN_CONFIG, apply_plan_edit
 from step_6_plan.model import PLAN_CONFIG, iter_nodes
 from step_6_plan.operations import PlanEdit
-from step_7_write_pages.withhold import withheld_ids
 
 REVIEW_CONFIG = PLAN_CONFIG["review"]
 FINDINGS = REVIEW_CONFIG["label_findings"]
@@ -43,10 +43,11 @@ def _matches(row: Mapping[str, Any], needle: str) -> bool:
 
 class AssignmentView:
     """The assignments of one store load, read against ``plan`` and ``claims`` (records by
-    short id; ``None``: no claim records yet, so rows have no text)."""
+    short id; ``None``: no claim records yet, so rows have no text); ``withheld``: the short
+    ids withheld from the wiki now."""
 
     def __init__(self, plan: dict[str, Any], data: Mapping[str, Any],
-                 claims: Mapping[str, dict[str, Any]] | None) -> None:
+                 claims: Mapping[str, dict[str, Any]] | None, withheld: frozenset[str]) -> None:
         self.plan = plan
         self.stored: dict[str, Record] = data["assignments"]
         self.proposals: list[dict[str, Any]] = data["proposals"]
@@ -59,7 +60,7 @@ class AssignmentView:
         self.gone = [sid for sid in self.stored if sid not in known]
         self.records = {sid: followed(self.stored[sid], plan) for sid in self.order}
         self._redirects = redirect_map(plan)
-        self.withheld = withheld_ids(claims.values()) if claims is not None else frozenset()
+        self.withheld = withheld
 
     # --- one claim ----------------------------------------------------------------
 

@@ -4,6 +4,9 @@
 // (every operation is validated there); these only shape requests and texts.
 
 export const TOOL_ID = "plan";
+// The same-complaint check's answers and the owner's "keep withheld" marks (artifact keys):
+// optional files that decide which claims the rows mark as withheld from the wiki.
+export const WITHHELD_KEYS = ["same_complaint", "withheld_vetoes"];
 export const OVERVIEW_ID = "__overview";
 export const TREE_VIEW = "tree";
 export const LABELS_VIEW = "labels";

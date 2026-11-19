@@ -18,7 +18,7 @@ from typing import Any
 
 from step_6_plan import operations
 from step_6_plan.model import find_node
-from step_6_plan.claim_records import Record
+from step_6_plan.claim_records import ClaimSources, Record
 from step_9_site.run import run
 from tests.claim_fixtures import claim_records, write_claim_inputs
 from tests.pages_fixtures import IDS
@@ -90,16 +90,19 @@ def run_site(
     pages: dict[str, dict[str, Any]],
     claims: list[Record] | None = None,
     threads: dict[str, Any] | None = None,
+    sources: ClaimSources | None = None,
 ) -> dict[str, Any]:
     """Write the inputs under ``tmp_path`` and build the site into ``tmp_path/docs``; the
-    messages run from ``FIRST_MESSAGE`` to ``LAST_MESSAGE`` unless ``threads`` says otherwise."""
+    messages run from ``FIRST_MESSAGE`` to ``LAST_MESSAGE`` unless ``threads`` says otherwise.
+    ``sources``: claim inputs already written (then ``claims`` is not used)."""
     plan_path, pages_path = tmp_path / "plan.json", tmp_path / "wiki_pages.json"
     threads_path = tmp_path / "threads.json"
     chat = make_threads(FIRST_MESSAGE, "2023-08-01T12:00:00", LAST_MESSAGE) if threads is None else threads
     threads_path.write_text(json.dumps(chat, ensure_ascii=False), encoding="utf-8")
     plan_path.write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
     pages_path.write_text(json.dumps({"pages": pages, "metadata": {}}, ensure_ascii=False), encoding="utf-8")
-    sources = write_claim_inputs(claim_records(4) if claims is None else claims, tmp_path)
+    if sources is None:
+        sources = write_claim_inputs(claim_records(4) if claims is None else claims, tmp_path)
     return run(
         plan_path=plan_path,
         pages_path=pages_path,

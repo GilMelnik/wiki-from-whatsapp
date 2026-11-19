@@ -21,6 +21,8 @@ STEP_6 = "step_6_plan"
 # The assignment step's id in the review tool's step registry; it writes into STEP_6's folder.
 STEP_6_ASSIGN = "step_6_assign"
 STEP_7 = "step_7_write_pages"
+# The same-complaint check's id in the review tool's step registry; it writes into STEP_7's folder.
+STEP_7_SAME_COMPLAINT = "step_7_same_complaint"
 STEP_8 = "step_8_review"
 # The proofreading pass's id in the review tool's step registry; it writes into STEP_8's folder
 # (its record) and into the pages' edited file.
@@ -105,6 +107,15 @@ ENTITY_MATCHES_PATH = step_path(STEP_4, "entity_matches.json")
 # ---------------------------------------------------------------- step 6 plan
 # The coverage check of the last planning run (not part of the plan itself).
 PLAN_COVERAGE_PATH = step_path(STEP_6, "coverage_report.json")
+
+# ---------------------------------------------------------- step 7 write pages
+# The same-complaint check (``step_7_write_pages.same_complaint``): per entity the fingerprint
+# of its list of negative claims and the model's groups of short ids (private: no text, no
+# person). Re-made by the check's runs only.
+SAME_COMPLAINT_PATH = step_path(STEP_7, "same_complaint.json")
+# The owner's "keep withheld" marks on the Withheld page (short ids). No run ever writes or
+# deletes it.
+SAME_COMPLAINT_VETOES_PATH = step_path(STEP_7, "same_complaint_vetoes.json")
 
 # ---------------------------------------------------------------- step 9 site
 # The published site lives in the repository, not under data_dir: step 9 owns ``docs/`` and

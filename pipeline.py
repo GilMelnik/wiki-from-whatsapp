@@ -11,6 +11,9 @@ step registry, ``review_tool.steps.STEP_SPECS`` (the review tool and the update 
     4. entities    -> canonical entities                         review: entities
     6. plan        -> the wiki plan (C7; planned once, then curated)   review: plan
     6b. assign     -> claims on pages + labels, proposals (C8)   review: plan
+    7a. same complaint -> which lone complaints about a named thing a second person's same
+                      complaint releases (one call per entity list that changed)
+                                                                  review: withheld
     7. write pages -> wiki pages (C9; one call per new or changed page)
     8. review      -> suggestions (C12; one batched call per part of the wiki that changed, plus
                       one across the pages' points)

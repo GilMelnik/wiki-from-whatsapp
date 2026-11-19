@@ -134,12 +134,14 @@ def _first_difference(given: Sequence[Record], loaded: Sequence[Record]) -> str:
 
 def clear_claim_inputs() -> None:
     """Remove every file ``load_claim_records()`` reads from the default places of the test
-    data folder (original and edited claims and entities, audit, manual pairs). A test that
-    calls ``write_claim_inputs`` without ``root`` calls this when it ends."""
+    data folder (original and edited claims and entities, audit, manual pairs), and the
+    same-complaint answers and marks. A test that calls ``write_claim_inputs`` without ``root``
+    calls this when it ends."""
 
     sources = ClaimSources()
     for path in (CLAIMS.original, CLAIMS.edited, ENTITIES.original, ENTITIES.edited,
-                 sources.audit, sources.contradictions):
+                 sources.audit, sources.contradictions, sources.same_complaint,
+                 sources.same_complaint_vetoes):
         path.unlink(missing_ok=True)
 
 
@@ -147,7 +149,8 @@ def write_claim_inputs(records: Sequence[Record], root: Path | None = None) -> C
     """Write the claims, entities and audit files ``records`` load from; returns their sources.
 
     With ``root``, the files go under it (``claims.json``, ``entities.json``, ``audit.json``;
-    no manual pairs file) and the sources name them. Without it, ``clear_claim_inputs`` runs
+    no manual pairs file) and the sources name them, with the same-complaint answers and marks
+    under it too (``same_complaint.json``, ``same_complaint_vetoes.json``; not written). Without it, ``clear_claim_inputs`` runs
     first, the files go to the default places in the test data folder and
     ``load_claim_records()`` with no argument reads them (the test cleans up with
     ``clear_claim_inputs`` when it ends). Contradictions are
@@ -189,7 +192,9 @@ def write_claim_inputs(records: Sequence[Record], root: Path | None = None) -> C
         paths = (CLAIMS.original, ENTITIES.original, sources.audit)
     else:
         paths = (root / "claims.json", root / "entities.json", root / "audit.json")
-        sources = ClaimSources(*paths, contradictions=root / "manual_contradictions.json")
+        sources = ClaimSources(*paths, contradictions=root / "manual_contradictions.json",
+                               same_complaint=root / "same_complaint.json",
+                               same_complaint_vetoes=root / "same_complaint_vetoes.json")
     claims_path, entities_path, audit_path = paths
     write_json_file({"claims": claims, "metadata": {}}, claims_path)
     write_json_file(

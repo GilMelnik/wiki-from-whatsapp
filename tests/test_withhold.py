@@ -11,7 +11,8 @@ import pytest
 
 from step_7_write_pages.checks import problems, repair, rules_for
 from step_7_write_pages.inputs import Corpus
-from step_7_write_pages.withhold import REASON, withheld_ids, withholds
+from step_7_write_pages.same_complaint_release import withheld_ids
+from step_7_write_pages.withhold import REASON, withholds
 from step_8_review.inputs import ReviewInput
 from tests.claim_fixtures import claim_record, claim_records
 from tests.pages_fixtures import IDS, FakeWriter, PagesWorkspace

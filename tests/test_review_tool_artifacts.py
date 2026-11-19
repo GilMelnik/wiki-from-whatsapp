@@ -49,7 +49,8 @@ def test_default_graph_is_the_pipeline_in_order() -> None:
     keys = [node.key for node in GRAPH.nodes]
     assert keys == [
         "export", "threads", "gold_threads", "classified", "tagged_members", "claims", "entities",
-        "plan", "assignments", "pages", "suggestions", "proofread", "site",
+        "plan", "assignments", "same_complaint", "withheld_vetoes", "pages", "suggestions",
+        "proofread", "site",
     ]  # fmt: skip
     assert (GRAPH.node("proofread").step, GRAPH.node("proofread").upstream) == (
         "step_8_proofread", ("claims", "entities", "plan", "assignments", "pages"))

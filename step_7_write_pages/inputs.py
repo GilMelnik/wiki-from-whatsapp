@@ -9,8 +9,10 @@ the participant count. A record already counts the distinct people per claim and
 with neutral reactions (a heart, praying hands) left out. A claim is referred to by its
 ``short_id`` only.
 
-Claims the owner's rule withholds (``step_7_write_pages.withhold``: a negative statement about
-a named entity that fewer than two members reported) are treated as placed on no page:
+Claims withheld from the wiki now (``same_complaint_release.withheld_ids``: the owner's rule
+of ``step_7_write_pages.withhold``, a negative statement about a named entity that fewer than
+two members reported, minus what the same-complaint check released) are treated as placed on
+no page:
 they are in no page's claims, in no other claim's ``contradicts``, in no front matter and in
 no label count. Each is accounted for in its primary page's ``left_out`` (``withheld_on``)
 and listed in the run's metadata (``withheld_list``).
@@ -41,7 +43,8 @@ from typing import Any
 from step_6_plan.assign_rules import claims_on_page
 from step_6_plan.claim_records import ClaimSources, load_claim_records
 from step_6_plan.model import find_node, validation_errors, PlanError
-from step_7_write_pages.withhold import REASON as WITHHELD, withheld_ids
+from step_7_write_pages.same_complaint_release import withheld_ids
+from step_7_write_pages.withhold import REASON as WITHHELD
 from utils.config import section
 from utils.paths import ASSIGNMENTS, PLAN, resolve
 from utils.reconcile import fingerprint
@@ -107,7 +110,7 @@ class PageContext:
 @dataclass
 class Corpus:
     """The C6 claim records (by short id), the effective C7 plan and C8 assignments of one
-    run, the claims the owner's rule withholds, and the files they were read from (by role:
+    run, the claims withheld from the wiki now, and the files they were read from (by role:
     ``claims``, ``entities``, ``audit``, ``contradictions`` when it exists, ``plan``,
     ``assignments``)."""
 
@@ -131,7 +134,7 @@ class Corpus:
         assignments = _read(assignments_path, "assignments (step 6b)")["assignments"]
         files = {**sources.files(), "plan": plan_path, "assignments": assignments_path}
         corpus = cls({claim["short_id"]: claim for claim in claims}, plan, assignments, files,
-                     withheld=withheld_ids(claims))
+                     withheld=withheld_ids(claims, sources))
         corpus.skipped = [sid for sid in corpus.claims if sid not in assignments]
         return corpus
 

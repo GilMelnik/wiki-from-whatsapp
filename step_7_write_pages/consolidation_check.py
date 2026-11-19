@@ -8,7 +8,8 @@ a retry on each. Run it only against a private copy, never the canonical data:
         --source <data dir that holds the current pages>
 
 1. Copies what the claim records are joined from (the claims, the entities, the private audit
-   and the manual contradiction pairs), the plan and the assignments (step 6) and the stored
+   and the manual contradiction pairs), what decides which claims are withheld (the
+   same-complaint check's answers and the owner's "keep withheld" marks), the plan and the assignments (step 6) and the stored
    pages (step 7, "before"), original and edited files, from ``--source`` into the current
    data dir (``WIKI_DATA_DIR``); refuses when the two are the same folder.
 2. Writes the pages (``pages.consolidation_check.pages``, or ``--pages``) in full with the
@@ -57,6 +58,8 @@ from utils.paths import (
     ENTITIES,
     MANUAL_CONTRADICTIONS_PATH,
     PLAN,
+    SAME_COMPLAINT_PATH,
+    SAME_COMPLAINT_VETOES_PATH,
     STEP_7,
     WIKI_PAGES,
     Artifact,
@@ -68,7 +71,7 @@ CHECK_CONFIG = PAGES_CONFIG["consolidation_check"]
 INPUTS = (
     *(path for artifact in (CLAIMS, ENTITIES, PLAN, ASSIGNMENTS, WIKI_PAGES)
       for path in (artifact.original, artifact.edited)),
-    AUDIT_PATH, MANUAL_CONTRADICTIONS_PATH,
+    AUDIT_PATH, MANUAL_CONTRADICTIONS_PATH, SAME_COMPLAINT_PATH, SAME_COMPLAINT_VETOES_PATH,
 )
 _YEAR = re.compile(r"(?<!\d)20\d\d(?!\d)")
 _HEADING = re.compile(r"^(#{2,6})\s*(.+)$", re.MULTILINE)
@@ -181,7 +184,9 @@ class ConsolidationCheck:
         return ClaimSources(resolve(_under(CLAIMS, self.target)),
                             resolve(_under(ENTITIES, self.target)),
                             _moved(AUDIT_PATH, self.target),
-                            _moved(MANUAL_CONTRADICTIONS_PATH, self.target))
+                            _moved(MANUAL_CONTRADICTIONS_PATH, self.target),
+                            _moved(SAME_COMPLAINT_PATH, self.target),
+                            _moved(SAME_COMPLAINT_VETOES_PATH, self.target))
 
     def compare(self) -> list[PageComparison]:
         before = _read(resolve(_under(WIKI_PAGES, self.source)))["pages"]

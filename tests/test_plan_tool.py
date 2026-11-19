@@ -26,8 +26,8 @@ MERGE = {"op": "merge", "survivor_id": "agencies", "merged_ids": ["costs"]}
 
 
 def plan_graph(root: Path) -> ArtifactGraph:
-    """The plan tool's nodes; the claims and entities files are where ``write_claim_inputs``
-    puts them under ``root``."""
+    """The plan tool's nodes; the claims and entities files (and the same-complaint answers and
+    marks) are where ``write_claim_inputs`` puts them under ``root``."""
     return ArtifactGraph([
         ArtifactNode("claims", "Claims", root / "claims.json", root / "claims_edited.json",
                      "step_3", ()),
@@ -37,6 +37,9 @@ def plan_graph(root: Path) -> ArtifactGraph:
                      ("claims", "entities"), curated=True),
         ArtifactNode("assignments", "Assignments", root / "assignments.json",
                      root / "assignments_edited.json", "step_6b", ("claims", "entities", "plan")),
+        ArtifactNode("same_complaint", "Same-complaint answers", root / "same_complaint.json",
+                     None, "step_7a", ("claims", "entities")),
+        ArtifactNode("withheld_vetoes", "Kept withheld", root / "same_complaint_vetoes.json"),
     ])
 
 
