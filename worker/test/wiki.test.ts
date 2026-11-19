@@ -42,7 +42,10 @@ describe("metadata and link graph", () => {
       { id: "agencies", title: "סוכנויות פונדקאות" },
       { id: "parental-order", title: "צו הורות וניתוק זיקה" },
     ]);
-    expect(m.labels).toEqual([{ id: "colombia", title: "קולומביה", description: "עמודים על פונדקאות בקולומביה", kind: "country" }]);
+    expect(m.labels).toEqual([
+      { id: "colombia", title: "קולומביה", description: "עמודים על פונדקאות בקולומביה", kind: "country" },
+      { id: "entity_e0007", title: "Vitalis Fertility", description: "", kind: "entity" },
+    ]);
     expect(m.related).toEqual([
       { id: "mexico", title: "מקסיקו", relation: "compare_with" },
       { id: "costs", title: "עלויות ומימון", relation: "see_also" },
@@ -85,10 +88,17 @@ describe("table of contents and labels", () => {
 
   it("counts pages per label and filters by kind", () => {
     const { labels } = wiki.listLabels() as { labels: Obj[] };
-    expect(labels).toHaveLength(7);
+    expect(labels).toHaveLength(8);
     expect(labels.find((l) => l.id === "israel")).toMatchObject({ kind: "country", pages: 1, title: "ישראל" });
     expect((wiki.listLabels("topic") as { labels: Obj[] }).labels.map((l) => l.id).sort()).toEqual(["legal", "medical", "money"]);
-    expect(() => wiki.listLabels("city")).toThrow(/Kinds: country, topic/);
+    expect(() => wiki.listLabels("city")).toThrow(/Kinds: country, topic, entity/);
+  });
+
+  it("treats an entity tag as a label of kind entity", () => {
+    const { labels } = wiki.listLabels("entity") as { labels: Obj[] };
+    expect(labels).toEqual([{ id: "entity_e0007", title: "Vitalis Fertility", description: "", kind: "entity", pages: 2 }]);
+    const flat = (wiki.listPages("flat", { label: "entity_e0007" }) as { pages: Obj[] }).pages.map((p) => p.id);
+    expect(flat).toEqual(["colombia", "egg-donation"]);
   });
 });
 

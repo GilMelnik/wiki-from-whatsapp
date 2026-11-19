@@ -120,10 +120,11 @@ export function createServer(wiki: Wiki, settings: McpSettings): McpServer {
     {
       title: "List labels",
       description:
-        "Labels are facets that cut across the table of contents (kind=country, topic, ...). Returns [{id, title, kind, " +
+        "Labels are facets that cut across the table of contents (kind=country, topic, ...; kind=entity: a provider, " +
+        "place, body or person many pages mention). Returns [{id, title, kind, " +
         "description, pages}] where pages is how many pages carry the label; use the id as label= in search or list_pages.",
       inputSchema: z.object({
-        kind: z.string().min(1).optional().describe("Only labels of this kind, e.g. country"),
+        kind: z.string().min(1).optional().describe("Only labels of this kind, e.g. country or entity"),
       }),
       annotations: { title: "List labels", ...READ_ONLY },
     },

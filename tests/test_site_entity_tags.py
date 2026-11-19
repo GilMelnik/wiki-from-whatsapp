@@ -15,11 +15,13 @@ import yaml
 from step_6_plan.claim_records import SHORT_ID_HASH_CHARS, SHORT_ID_PREFIX, Record
 from step_9_site.entity_tags import TAG, TAG_KIND, TAGS_CONFIG
 from tests.claim_fixtures import claim_record
+from tests.schema_check import schema_errors
 from tests.site_fixtures import build_html, make_page, make_site_plan, run_site
-from utils.config import section
+from utils.config import PROJECT_ROOT, section
 from utils.okf import parse_page
 
 SITE = section("site")
+SCHEMA = json.loads((PROJECT_ROOT / "worker" / "wiki_index.schema.json").read_text(encoding="utf-8"))
 MIN_CLAIMS = TAGS_CONFIG["min_claims"]
 SOL, GEO = "entity_e0001", "entity_e0002"
 HEADING = f"## {SITE['label_pages_heading']}"
@@ -95,6 +97,7 @@ def test_the_index_and_the_agents_pages_carry_the_tags_like_labels(tmp_path: Pat
     assert index["labels"][SOL] == {"title": "Clinica Sol", "description": "", "kind": TAG_KIND}
     assert {page["id"]: page["labels"] for page in index["pages"]} == {
         "agencies": ["usa", SOL], "costs": ["usa"], "clinics": ["usa", SOL]}
+    assert schema_errors(index, SCHEMA, SCHEMA) == []  # the MCP Worker reads it as it is
     agent = SITE["agent_markdown"]
     twin = (docs / agent["dir"] / "labels" / SOL / agent["twin_file"]).read_text(encoding="utf-8")
     assert twin.startswith("# Clinica Sol\n") and HEADING in twin and "כותרת clinics" in twin
