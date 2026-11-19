@@ -76,7 +76,7 @@ AGGREGATED = Artifact(
 PLAN = Artifact(
     step_path(STEP_6, "wiki_plan.json"), step_path(STEP_6, "wiki_plan_edited.json")
 )
-# Which claim groups go on which page and carry which labels (contract C8).
+# Which claims go on which page and carry which labels (contract C8).
 ASSIGNMENTS = Artifact(
     step_path(STEP_6, "assignments.json"), step_path(STEP_6, "assignments_edited.json")
 )

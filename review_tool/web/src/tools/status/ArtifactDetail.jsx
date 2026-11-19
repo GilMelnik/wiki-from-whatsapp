@@ -5,7 +5,7 @@ import { NextAction } from "./NextAction.jsx";
 // The main column: the selected artifact's state and what to do about it, the tools to
 // review it in, what it is made from and what uses it (inputs that changed are marked), its
 // step's last run, and folded away its files and metadata. For the written pages: how many
-// claim groups the withholding rule keeps off every page.
+// claims the withholding rule keeps off every page.
 
 function Section({ title, children }) {
   return (
@@ -65,7 +65,7 @@ function Withheld({ artifactKey, metadata }) {
   if (!count) return null;
   return (
     <p className="note note-plain">
-      {countText(count, "claim group")} withheld from every page: each is a negative report about a named entity from fewer
+      {countText(count, "claim")} withheld from every page: each is a negative report about a named entity from fewer
       than two people. A second person reporting it releases it.
     </p>
   );

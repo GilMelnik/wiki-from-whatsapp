@@ -1,4 +1,4 @@
-"""An update whose new messages yield no claim, no group, no plan change and no page change still
+"""An update whose new messages yield no claim, no plan change and no page change still
 rebuilds the site, and the home page's sentence moves to the month of the newest message.
 
 The driver walks every step it has not run in this update (it never skips a step because the
@@ -16,6 +16,7 @@ import pytest
 
 from review_tool.steps import Step
 from step_9_site.run import run as build_site
+from tests.claim_fixtures import write_claim_inputs
 from tests.site_fixtures import make_page, make_site_plan, make_threads
 from tests.update_support import PAID_STEPS, World, message, old_chat
 from utils.config import section
@@ -47,7 +48,7 @@ class SiteWorld(World):
         pages = {"clinics": make_page(self.plan, "clinics", "טקסט.\n")}
         self.write_json(self.site_dir / "plan.json", self.plan)
         self.write_json(self.site_dir / "pages.json", {"pages": pages, "metadata": {}})
-        self.write_json(self.site_dir / "groups.json", {"groups": [], "metadata": {}})
+        self.sources = write_claim_inputs([], self.site_dir)
         for key in UNCHANGED:  # outputs the fake steps will rewrite with the same content
             self.write_json(self.node_for(key).original, {"items": ["same"], "metadata": {}})
         self.unchanged = set(UNCHANGED)
@@ -66,7 +67,7 @@ class SiteWorld(World):
     def build(self) -> dict[str, Any]:
         return build_site(
             plan_path=self.site_dir / "plan.json", pages_path=self.site_dir / "pages.json",
-            groups_path=self.site_dir / "groups.json", threads_path=self.node("threads").original,
+            sources=self.sources, threads_path=self.node("threads").original,
             docs_dir=self.site_dir / "docs", mkdocs_path=self.site_dir / "mkdocs.yml")
 
     def home_sentence(self) -> str:

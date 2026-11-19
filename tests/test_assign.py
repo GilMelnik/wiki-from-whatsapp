@@ -206,7 +206,7 @@ def test_too_few_unplaced_claims_wait(ws: Workspace) -> None:
 
 def test_assignments_are_in_the_graph_and_the_registry() -> None:
     node = GRAPH.node("assignments")
-    assert node.upstream == ("groups", "plan")
+    assert node.upstream == ("claims", "entities", "plan")
     assert node.original.name == "assignments.json"
     assert node.edited.name == "assignments_edited.json"
     keys = [n.key for n in GRAPH.nodes]

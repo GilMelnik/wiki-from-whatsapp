@@ -1,6 +1,6 @@
-// The stance of a claim or claim group (C3 / C6), with its badge colour.
+// The stance of a claim (C3 / C6), with its badge colour.
 //
-//   const stance = stanceOf(group.stance);
+//   const stance = stanceOf(claim.stance);
 //   <span className={`badge ${stance.badge}`}>{stance.label}</span>
 
 export const STANCES = {
