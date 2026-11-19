@@ -1,6 +1,6 @@
 /**
  * Shape of `wiki_index.json` (contract C11), mirrored by `worker/wiki_index.schema.json`.
- * The site generator (step 9) writes it next to the built pages; the Worker only reads it.
+ * The site generator (step 11) writes it next to the built pages; the Worker only reads it.
  */
 
 export interface NavNode {
