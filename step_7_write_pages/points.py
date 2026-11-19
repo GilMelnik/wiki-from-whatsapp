@@ -1,16 +1,16 @@
 """A page's points: the list the writer makes before the article, and its accounting.
 
 Before the body, the writer lists the page's points: each is ONE thing the page says,
-``{kind, statement, groups}`` (``kind`` from ``pages.points.kinds``, ``statement`` one short
-Hebrew sentence, ``groups`` every ``main`` group behind it), and the main groups it leaves out,
-``{group, reason}`` (``reason`` from ``pages.points.left_out_reasons``). Both are stored with
+``{kind, statement, claims}`` (``kind`` from ``pages.points.kinds``, ``statement`` one short
+Hebrew sentence, ``claims`` the short ids of every ``main`` claim behind it), and the main
+claims it leaves out, ``{claim, reason}`` (``reason`` from ``pages.points.left_out_reasons``). Both are stored with
 the page (C9 ``points`` / ``left_out``) and are where an update starts from.
 
-Accounting (``account``): every main group of the page is in exactly one point, or left out
-once. ``mention`` groups are outside it (a brief mention with a link, as before). The body is
+Accounting (``account``): every main claim of the page is in exactly one point, or left out
+once. ``mention`` claims are outside it (a brief mention with a link, as before). The body is
 read as statements (``Statement``: a sentence that carries at least one ``[^g-…]`` mark; the
 lead is the first paragraph, before any heading): every point must be carried by a statement that
-cites one of its groups (``citing``), and ``point_report`` measures what the owner cares
+cites one of its claims (``citing``), and ``point_report`` measures what the owner cares
 about: how many points of which kind, what was left out and why, how many statements and
 marks, points told more than once and points no statement carries.
 """
@@ -34,7 +34,7 @@ LeftOut = dict[str, str]
 
 @dataclass(frozen=True)
 class Statement:
-    """One sentence of a body that cites groups: its text, the distinct ids it cites and
+    """One sentence of a body that cites claims: its text, the distinct ids it cites and
     whether it is in the lead (the first paragraph, before any heading)."""
 
     text: str
@@ -44,29 +44,29 @@ class Statement:
 
 @dataclass(frozen=True)
 class Accounting:
-    """What is wrong with a points list against the page's main groups."""
+    """What is wrong with a points list against the page's main claims."""
 
-    missing: tuple[str, ...]    # main groups in no point and not left out
+    missing: tuple[str, ...]    # main claims in no point and not left out
     repeated: tuple[str, ...]   # listed more than once (in points and left_out together)
-    foreign: tuple[str, ...]    # listed, but not a main group of the page
-    empty: int                  # points without a group
+    foreign: tuple[str, ...]    # listed, but not a main claim of the page
+    empty: int                  # points without a claim
     kinds: tuple[str, ...]      # unknown kinds
     reasons: tuple[str, ...]    # unknown left-out reasons
 
     def problems(self) -> list[str]:
         found = []
         if self.missing:
-            found.append("these main groups are in no point and not in left_out; put each in the "
+            found.append("these main claims are in no point and not in left_out; put each in the "
                          "point it supports (or make it a point of its own) or leave it out with "
                          f"a reason: {', '.join(self.missing)}")
         if self.repeated:
-            found.append("these groups are listed more than once (each main group belongs to "
+            found.append("these claims are listed more than once (each main claim belongs to "
                          f"exactly one point, or to left_out): {', '.join(self.repeated)}")
         if self.foreign:
-            found.append("points or left_out list ids that are not main groups of this page "
-                         f"(mention groups stay out of the points): {', '.join(self.foreign)}")
+            found.append("points or left_out list ids that are not main claims of this page "
+                         f"(mention claims stay out of the points): {', '.join(self.foreign)}")
         if self.empty:
-            found.append(f"{self.empty} point(s) have no groups; every point lists its groups")
+            found.append(f"{self.empty} point(s) have no claims; every point lists its claims")
         if self.kinds:
             found.append(f"unknown point kinds {', '.join(self.kinds)}; use one of {', '.join(KINDS)}")
         if self.reasons:
@@ -77,15 +77,15 @@ class Accounting:
 
 def account(points: Sequence[Point], left_out: Sequence[LeftOut],
             main_ids: Collection[str]) -> Accounting:
-    """Check that every main group is listed exactly once (see the module docstring)."""
-    listed = Counter([gid for point in points for gid in point["groups"]]
-                     + [entry["group"] for entry in left_out])
+    """Check that every main claim is listed exactly once (see the module docstring)."""
+    listed = Counter([sid for point in points for sid in point["claims"]]
+                     + [entry["claim"] for entry in left_out])
     mains = set(main_ids)
     return Accounting(
-        missing=tuple(gid for gid in main_ids if gid not in listed),
-        repeated=tuple(gid for gid, count in listed.items() if count > 1 and gid in mains),
-        foreign=tuple(gid for gid in listed if gid not in mains),
-        empty=sum(1 for point in points if not point["groups"]),
+        missing=tuple(sid for sid in main_ids if sid not in listed),
+        repeated=tuple(sid for sid, count in listed.items() if count > 1 and sid in mains),
+        foreign=tuple(sid for sid in listed if sid not in mains),
+        empty=sum(1 for point in points if not point["claims"]),
         kinds=tuple(dict.fromkeys(p["kind"] for p in points if p["kind"] not in KINDS)),
         reasons=tuple(dict.fromkeys(e["reason"] for e in left_out if e["reason"] not in REASONS)),
     )
@@ -93,43 +93,43 @@ def account(points: Sequence[Point], left_out: Sequence[LeftOut],
 
 @dataclass(frozen=True)
 class Tidied:
-    """A points list with only the page's main groups, each listed once."""
+    """A points list with only the page's main claims, each listed once."""
 
     points: list[Point]
     left_out: list[LeftOut]
-    emptied: list[Point]        # points that had groups and lost them all
-    dropped: list[str]          # ids taken out (not main groups, or listed again)
+    emptied: list[Point]        # points that had claims and lost them all
+    dropped: list[str]          # ids taken out (not main claims, or listed again)
 
 
 def tidy(points: Sequence[Point], left_out: Sequence[LeftOut],
          main_ids: Collection[str]) -> Tidied:
-    """Keep only main groups of the page, each at its first listing (points before
-    ``left_out``); a point left without groups is dropped. Used to repair an answer and to
-    carry stored points into an update (groups that left the page leave their point)."""
+    """Keep only main claims of the page, each at its first listing (points before
+    ``left_out``); a point left without claims is dropped. Used to repair an answer and to
+    carry stored points into an update (claims that left the page leave their point)."""
     mains, seen = set(main_ids), set()
     kept, emptied, dropped = [], [], []
     for point in points:
-        groups = [gid for gid in dict.fromkeys(point["groups"]) if gid in mains and gid not in seen]
-        dropped += [gid for gid in point["groups"] if gid not in groups]
-        seen.update(groups)
-        if groups:
-            kept.append({**point, "groups": groups})
-        elif point["groups"]:
+        claims = [sid for sid in dict.fromkeys(point["claims"]) if sid in mains and sid not in seen]
+        dropped += [sid for sid in point["claims"] if sid not in claims]
+        seen.update(claims)
+        if claims:
+            kept.append({**point, "claims": claims})
+        elif point["claims"]:
             emptied.append(point)
     left = []
     for entry in left_out:
-        if entry["group"] in mains and entry["group"] not in seen:
-            seen.add(entry["group"])
+        if entry["claim"] in mains and entry["claim"] not in seen:
+            seen.add(entry["claim"])
             left.append(dict(entry))
         else:
-            dropped.append(entry["group"])
+            dropped.append(entry["claim"])
     return Tidied(kept, left, emptied, dropped)
 
 
 def citing(point: Point, statements: Sequence[Statement]) -> list[Statement]:
-    """The statements that cite one of ``point``'s groups."""
-    groups = set(point["groups"])
-    return [statement for statement in statements if groups.intersection(statement.marks)]
+    """The statements that cite one of ``point``'s claims."""
+    claims = set(point["claims"])
+    return [statement for statement in statements if claims.intersection(statement.marks)]
 
 
 def told_cap(kind: str) -> int:

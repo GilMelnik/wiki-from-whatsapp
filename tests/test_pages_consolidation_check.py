@@ -3,29 +3,44 @@
 from __future__ import annotations
 
 import logging
+import shutil
 from pathlib import Path
 
 import pytest
 
-from step_7_write_pages.consolidation_check import ConsolidationCheck, Measures, _under, main
+from step_6_plan.claim_records import SHORT_ID_PREFIX
+from step_7_write_pages.consolidation_check import (
+    ConsolidationCheck,
+    Measures,
+    _moved,
+    _under,
+    main,
+)
 from step_7_write_pages.run import run
-from tests.pages_fixtures import FakeWriter, page_assignments, page_groups
+from tests.claim_fixtures import write_claim_inputs
+from tests.pages_fixtures import IDS, FakeWriter, page_assignments, page_claims
 from tests.plan_fixtures import make_plan
 from utils.json_io import write_json_file
-from utils.paths import AGGREGATED, ASSIGNMENTS, PLAN, WIKI_PAGES, resolve
+from utils.paths import ASSIGNMENTS, AUDIT_PATH, CLAIMS, ENTITIES, PLAN, WIKI_PAGES, resolve
 
 LOGGER = logging.getLogger("test-check")
-CHRONICLE = "בשנת 2022 חברים המליצו על כך.[^g-00000000] ובמאי 2024 נאמרה אותה המלצה.[^g-00000004]"
+CHRONICLE = f"בשנת 2022 חברים המליצו על כך.[^{IDS[0]}] ובמאי 2024 נאמרה אותה המלצה.[^{IDS[4]}]"
 
 
 def _source(root: Path) -> Path:
-    """A data dir with groups, plan, assignments and pages written the old way (a chronicle)."""
-    groups = page_groups()
-    write_json_file({"groups": groups, "metadata": {}}, _under(AGGREGATED, root).original)
+    """A data dir with the claim inputs, plan, assignments and pages written the old way (a
+    chronicle)."""
+    claims = page_claims()
+    written = write_claim_inputs(claims, root.parent / "claim_inputs")
+    for source, target in ((written.claims, _under(CLAIMS, root).original),
+                           (written.entities, _under(ENTITIES, root).original),
+                           (written.audit, _moved(AUDIT_PATH, root))):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
     write_json_file(make_plan(), _under(PLAN, root).original)
-    write_json_file(page_assignments(groups), _under(ASSIGNMENTS, root).original)
+    write_json_file(page_assignments(claims), _under(ASSIGNMENTS, root).original)
     pages = _under(WIKI_PAGES, root)
-    run(aggregated_path=_under(AGGREGATED, root).original, plan_path=_under(PLAN, root).original,
+    run(sources=written, plan_path=_under(PLAN, root).original,
         assignments_path=_under(ASSIGNMENTS, root).original, artifact=pages, llm=FakeWriter(),
         update_llm=FakeWriter("fake-update"))
     payload = resolve(pages).read_text(encoding="utf-8")
@@ -56,7 +71,8 @@ def test_the_check_writes_the_pages_in_a_copy_and_compares_them(tmp_path: Path,
     path = check.save(comparisons)
     page = path.read_text(encoding="utf-8")
     assert path.parent == tmp_path / "scratch" / "step_7_write_pages"
-    assert "Synthetic claim number 8" in page and "<sup>00000004</sup>" in page
+    assert "Synthetic claim number 8" in page
+    assert f"<sup>{IDS[4].removeprefix(SHORT_ID_PREFIX)}</sup>" in page
     assert page.count("<section>") == 2 and "prefers-color-scheme: dark" in page
 
 

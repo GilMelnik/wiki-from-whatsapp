@@ -78,6 +78,19 @@ class ClaimSources:
     audit: Path = AUDIT_PATH
     contradictions: Path = MANUAL_CONTRADICTIONS_PATH
 
+    def files(self) -> dict[str, Path]:
+        """The files a load would read now, by role (``claims``, ``entities``, ``audit``,
+        ``contradictions``), only those that exist: for a step's "an input is newer than my
+        output" check and its metadata."""
+
+        files = {
+            "claims": self.claims or resolve_claims_path(),
+            "entities": self.entities or resolve_entities_path(),
+            "audit": self.audit,
+            "contradictions": self.contradictions,
+        }
+        return {role: path for role, path in files.items() if path.is_file()}
+
 
 def allocate_short_id(claim_id: str, used: Collection[str]) -> str:
     """The short id of ``claim_id`` that is not in ``used`` (see the module docstring)."""

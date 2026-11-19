@@ -7,18 +7,19 @@ a retry on each. Run it only against a private copy, never the canonical data:
     WIKI_DATA_DIR=<empty scratch dir> .venv/bin/python -m step_7_write_pages.consolidation_check \\
         --source <data dir that holds the current pages>
 
-1. Copies the claim groups (step 5), the plan and the assignments (step 6) and the stored
+1. Copies what the claim records are joined from (the claims, the entities, the private audit
+   and the manual contradiction pairs), the plan and the assignments (step 6) and the stored
    pages (step 7, "before"), original and edited files, from ``--source`` into the current
    data dir (``WIKI_DATA_DIR``); refuses when the two are the same folder.
 2. Writes the pages (``pages.consolidation_check.pages``, or ``--pages``) in full with the
    current prompt (step 7's own ``run(only=…, rebuild=True)``; answers are cached in the
    scratch dir, so a re-run after a crash costs nothing). ``--compare-only`` skips this.
-3. Logs per page, before / after: prose words, statements, marks, groups cited, years named
-   in the prose, links; after only: points by kind, groups left out with their reason, and
+3. Logs per page, before / after: prose words, statements, marks, claims cited, years named
+   in the prose, links; after only: points by kind, claims left out with their reason, and
    what the checks still found.
 4. Writes ``<data dir>/step_7_write_pages/<pages.consolidation_check.report_file>``: both
-   versions side by side, then the points with the text of every group behind them, then the
-   groups left out with their reason and text. It holds private text: open it locally, never
+   versions side by side, then the points with the text of every claim behind them, then the
+   claims left out with their reason and text. It holds private text: open it locally, never
    commit or share it.
 """
 
@@ -36,19 +37,40 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from step_7_write_pages.checks import cited_ids, prose_words, statements, strip_definitions
+from step_6_plan.claim_records import SHORT_ID_PREFIX, ClaimSources, load_claim_records
+from step_7_write_pages.checks import (
+    CITATION,
+    cited_ids,
+    prose_words,
+    statements,
+    strip_definitions,
+)
 from step_7_write_pages.inputs import PAGES_CONFIG
 from step_7_write_pages.run import run
 from utils.config import DATA_DIR
 from utils.llm_client import LLMClient
 from utils.logging_setup import setup_step_logging
-from utils.paths import AGGREGATED, ASSIGNMENTS, PLAN, STEP_7, WIKI_PAGES, Artifact, resolve
+from utils.paths import (
+    ASSIGNMENTS,
+    AUDIT_PATH,
+    CLAIMS,
+    ENTITIES,
+    MANUAL_CONTRADICTIONS_PATH,
+    PLAN,
+    STEP_7,
+    WIKI_PAGES,
+    Artifact,
+    resolve,
+)
 from utils.wiki_links import find_wiki_links, replace_wiki_links
 
 CHECK_CONFIG = PAGES_CONFIG["consolidation_check"]
-INPUTS = (AGGREGATED, PLAN, ASSIGNMENTS, WIKI_PAGES)
+INPUTS = (
+    *(path for artifact in (CLAIMS, ENTITIES, PLAN, ASSIGNMENTS, WIKI_PAGES)
+      for path in (artifact.original, artifact.edited)),
+    AUDIT_PATH, MANUAL_CONTRADICTIONS_PATH,
+)
 _YEAR = re.compile(r"(?<!\d)20\d\d(?!\d)")
-_MARK = re.compile(r"\[\^(g-[0-9a-f]+)\]")
 _HEADING = re.compile(r"^(#{2,6})\s*(.+)$", re.MULTILINE)
 
 
@@ -69,13 +91,13 @@ class Measures:
         prose = replace_wiki_links(strip_definitions(body), lambda link: link.text or link.target)
         return cls(words=prose_words(body), statements=len(stated),
                    marks=sum(len(s.marks) for s in stated), cited=len(cited_ids(body)),
-                   years=len(_YEAR.findall(_MARK.sub("", prose))),
+                   years=len(_YEAR.findall(CITATION.sub("", prose))),
                    links=len(find_wiki_links(body)))
 
 
 @dataclass(frozen=True)
 class PageComparison:
-    """One page before and after, with its points and the groups behind them."""
+    """One page before and after, with its points and the claims behind them."""
 
     page_id: str
     title: str
@@ -93,7 +115,7 @@ class PageComparison:
         kinds = self.report.get("points_by_kind", {})
         rows.append(f"{self.page_id}: {len(self.points)} points {kinds}; "
                     f"{len(self.left_out)} left out {self.report.get('left_out_by_reason', {})}")
-        rows += [f"{self.page_id}:   left out {e['group']} ({e['reason']})" for e in self.left_out]
+        rows += [f"{self.page_id}:   left out {e['claim']} ({e['reason']})" for e in self.left_out]
         rows.append(f"{self.page_id}: calls {self.report.get('calls')}, still wrong "
                     f"{self.report.get('final_problems')}, unaccounted "
                     f"{self.report.get('unaccounted')}, uncited disputed "
@@ -108,10 +130,14 @@ def _read(path: Path) -> dict[str, Any]:
         raise ValueError(f"cannot read {path}: {exc}") from exc
 
 
+def _moved(path: Path, root: Path) -> Path:
+    """``path`` (a file of the current data dir) in the data dir ``root``."""
+    return root / path.relative_to(DATA_DIR)
+
+
 def _under(artifact: Artifact, root: Path) -> Artifact:
-    """``artifact`` (a file of the current data dir) in the data dir ``root``."""
-    return Artifact(root / artifact.original.relative_to(DATA_DIR),
-                    root / artifact.edited.relative_to(DATA_DIR))
+    """``artifact`` (files of the current data dir) in the data dir ``root``."""
+    return Artifact(_moved(artifact.original, root), _moved(artifact.edited, root))
 
 
 class ConsolidationCheck:
@@ -128,13 +154,13 @@ class ConsolidationCheck:
                              "WIKI_DATA_DIR to an empty scratch folder, not to --source")
 
     def prepare(self) -> None:
-        """Copy the step 5-7 files (original and edited) from the source to the target."""
-        for artifact in INPUTS:
-            origin, copy = _under(artifact, self.source), _under(artifact, self.target)
-            for source, target in ((origin.original, copy.original), (origin.edited, copy.edited)):
-                if source.is_file():
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(source, target)
+        """Copy the input files of steps 6-7 and the pages (original and edited) from the
+        source to the target."""
+        for path in INPUTS:
+            source, target = _moved(path, self.source), _moved(path, self.target)
+            if source.is_file():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
         plan = _read(resolve(_under(PLAN, self.target)))
         unknown = [pid for pid in self.pages if pid not in plan["pages"]]
         if unknown:
@@ -144,11 +170,18 @@ class ConsolidationCheck:
     def write(self, llm: LLMClient | None = None,
               update_llm: LLMClient | None = None) -> dict[str, Any]:
         """Step 7 in the target, on the chosen pages only, in full, with the current prompt."""
-        return run(aggregated_path=resolve(_under(AGGREGATED, self.target)),
+        return run(sources=self.claim_sources(),
                    plan_path=resolve(_under(PLAN, self.target)),
                    assignments_path=resolve(_under(ASSIGNMENTS, self.target)),
                    artifact=_under(WIKI_PAGES, self.target), only=self.pages, rebuild=True,
                    llm=llm, update_llm=update_llm)
+
+    def claim_sources(self) -> ClaimSources:
+        """The claim records' input files in the target (effective claims and entities)."""
+        return ClaimSources(resolve(_under(CLAIMS, self.target)),
+                            resolve(_under(ENTITIES, self.target)),
+                            _moved(AUDIT_PATH, self.target),
+                            _moved(MANUAL_CONTRADICTIONS_PATH, self.target))
 
     def compare(self) -> list[PageComparison]:
         before = _read(resolve(_under(WIKI_PAGES, self.source)))["pages"]
@@ -169,8 +202,8 @@ class ConsolidationCheck:
 
     def save(self, comparisons: Sequence[PageComparison]) -> Path:
         """The side-by-side page (private text: local only)."""
-        groups = _read(resolve(_under(AGGREGATED, self.target)))["groups"]
-        texts = {group["group_id"]: group["claim_text"] for group in groups}
+        texts = {claim["short_id"]: claim["claim_text"]
+                 for claim in load_claim_records(self.claim_sources())}
         path = _under(WIKI_PAGES, self.target).original.with_name(CHECK_CONFIG["report_file"])
         path.write_text(_page(comparisons, texts), encoding="utf-8")
         self.logger.info(f"Before / after written to {path} (private: open it locally only)")
@@ -185,13 +218,13 @@ def _render(body: str) -> str:
     text = html.escape(replace_wiki_links(strip_definitions(body),
                                           lambda link: f"\x01{link.text or link.target}\x02"))
     text = _HEADING.sub(lambda m: f"<h4>{m.group(2)}</h4>", text)
-    text = _MARK.sub(lambda m: f"<sup>{m.group(1)[2:]}</sup>", text)
+    text = CITATION.sub(lambda m: f"<sup>{m.group(1).removeprefix(SHORT_ID_PREFIX)}</sup>", text)
     text = text.replace("\x01", "<u>").replace("\x02", "</u>")
     return "".join(f"<p>{part}</p>" for part in text.split("\n\n") if part.strip())
 
 
-def _groups(ids: Sequence[str], texts: Mapping[str, str]) -> str:
-    return "".join(f"<li><code>{gid}</code> {html.escape(texts.get(gid, '?'))}</li>" for gid in ids)
+def _claims(ids: Sequence[str], texts: Mapping[str, str]) -> str:
+    return "".join(f"<li><code>{sid}</code> {html.escape(texts.get(sid, '?'))}</li>" for sid in ids)
 
 
 def _section(comparison: PageComparison, texts: Mapping[str, str]) -> str:
@@ -200,10 +233,10 @@ def _section(comparison: PageComparison, texts: Mapping[str, str]) -> str:
                    for name in Measures.__dataclass_fields__)
     points = "".join(
         f"<li><b>{html.escape(p['kind'])}</b> {html.escape(p['statement'])}<details><summary>"
-        f"{len(p['groups'])} groups</summary><ul>{_groups(p['groups'], texts)}</ul></details></li>"
+        f"{len(p['claims'])} claims</summary><ul>{_claims(p['claims'], texts)}</ul></details></li>"
         for p in comparison.points)
-    left = "".join(f"<li><b>{html.escape(e['reason'])}</b> <code>{e['group']}</code> "
-                   f"{html.escape(texts.get(e['group'], '?'))}</li>" for e in comparison.left_out)
+    left = "".join(f"<li><b>{html.escape(e['reason'])}</b> <code>{e['claim']}</code> "
+                   f"{html.escape(texts.get(e['claim'], '?'))}</li>" for e in comparison.left_out)
     problems = html.escape(json.dumps(comparison.report.get("final_problems", []),
                                       ensure_ascii=False))
     return (f"<section><h2>{html.escape(comparison.title)} <code>{comparison.page_id}</code></h2>"
@@ -243,7 +276,7 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Task 27b: write a few pages with the current "
                                      "prompt into a scratch data dir and compare (PAID).")
     parser.add_argument("--source", type=Path, required=True,
-                        help="the data dir that holds the current groups, plan and pages")
+                        help="the data dir that holds the current claims, plan and pages")
     parser.add_argument("--pages", nargs="+", default=CHECK_CONFIG["pages"], metavar="PAGE_ID")
     parser.add_argument("--compare-only", action="store_true",
                         help="no model call: compare what the data dir already holds")

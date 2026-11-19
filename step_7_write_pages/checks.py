@@ -1,26 +1,27 @@
 """Guarantees enforced in code on every answer of the page writer, never trusted to the model.
 
-``AnswerRules`` says what one answer is checked against: the group ids it may cite, the page's
-``main`` groups (which its points must account for), the ids it must cite (the "both sides"
-floor: disputed or contradicted groups), the link targets (the plan's pages and labels) and,
+``AnswerRules`` says what one answer is checked against: the short ids it may cite, the page's
+``main`` claims (which its points must account for), the ids it must cite (the "both sides"
+floor: disputed or contradicted claims), the link targets (the plan's pages and labels) and,
 for an update, the sentences of the current body (kept text is not held to the statement
 rules it may predate). ``problems`` lists what is wrong in words the model can act on (the
 writer sends them back in its one retry):
-- the body: only the page's groups cited, valid links, every disputed / contradicted group
-  cited, no sentence resting on a withheld group (``step_7_write_pages.withhold``; an update
+- the body: only the page's claims cited, valid links, every disputed / contradicted claim
+  cited, no sentence resting on a withheld claim (``step_7_write_pages.withhold``; an update
   of a text written before the rule);
-- the points (``step_7_write_pages.points``): every main group in exactly one point or left
-  out with a reason; no mark on a group that was left out; every point carried by a statement
-  that cites one of its groups (a statement may carry any number of marks);
+- the points (``step_7_write_pages.points``): every main claim in exactly one point or left
+  out with a reason; no mark on a claim that was left out; every point carried by a statement
+  that cites one of its claims (a statement may carry any number of marks);
   a point told in at most ``pages.max_statements_per_point`` statements after the lead (that
   cap is per point kind: a dispute and a change may take more than the default).
 The retry is for what code cannot fix. ``repair`` fixes what code can fix: a sentence that
-cites a withheld group is deleted whole (its statement is never kept without its mark), an
+cites a withheld claim is deleted whole (its statement is never kept without its mark), an
 unknown citation is removed, an unknown or malformed link becomes its plain text (``utils.wiki_links``), a front-matter block, a ``#`` heading and
 any footnote definition the model wrote are taken out, ``related`` keeps only planned pages,
-the points keep only the page's main groups, each once. A missing citation or an unaccounted
-group cannot be repaired; it is recorded. A page body holds the marks only: step 9 renders the
-references from the groups. ``strip_definitions`` takes the definitions out of a body stored
+the points keep only the page's main claims, each once. A missing citation or an unaccounted
+claim cannot be repaired; it is recorded. A page body holds the marks only: step 9 renders the
+references from the claims. A mark is ``[^<short id>]``, the short id's prefix from the
+``claim_records`` section of ``config.json``. ``strip_definitions`` takes the definitions out of a body stored
 before that change.
 """
 
@@ -31,6 +32,7 @@ from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from step_6_plan.claim_records import SHORT_ID_PREFIX
 from step_7_write_pages.inputs import MAIN, PAGES_CONFIG, Record
 from step_7_write_pages.points import (
     Statement,
@@ -40,10 +42,9 @@ from step_7_write_pages.points import (
     tidy,
     told_cap,
 )
-from utils.config import section
 from utils.wiki_links import WikiLink, find_wiki_links, replace_wiki_links
 
-_PREFIX = re.escape(section("aggregate")["group_id_prefix"])
+_PREFIX = re.escape(SHORT_ID_PREFIX)
 CITATION = re.compile(rf"\[\^({_PREFIX}[0-9a-f]+)\](?!:)")
 _ANY_MARK = re.compile(r"\[\^([^\]\s]+)\](?!:)")
 _DEFINITION = re.compile(r"^\[\^[^\]\s]+\]:.*(?:\n|$)", re.MULTILINE)
@@ -61,7 +62,7 @@ _QUOTED = 80  # characters of a statement quoted in a problem
 
 
 def cited_ids(body: str) -> list[str]:
-    """Group ids cited in ``body``, in order of first citation."""
+    """Short ids cited in ``body``, in order of first citation."""
     return list(dict.fromkeys(CITATION.findall(body)))
 
 
@@ -89,7 +90,7 @@ def sentences(body: str) -> list[str]:
 
 
 def statements(body: str) -> list[Statement]:
-    """The body's sentences that cite at least one group (see ``points.Statement``)."""
+    """The body's sentences that cite at least one claim (see ``points.Statement``)."""
     body = strip_definitions(body).lstrip()
     ends = [match.start() for match in (_HEADING.search(body), _PARAGRAPH_END.search(body)) if match]
     lead_end = min(ends, default=len(body))
@@ -135,9 +136,9 @@ def _malformed_spans(body: str) -> list[str]:
 
 
 def uncited_required(body: str, rules: AnswerRules) -> list[str]:
-    """Disputed or contradicted groups the body does not cite."""
+    """Disputed or contradicted claims the body does not cite."""
     cited = set(cited_ids(body))
-    return [gid for gid in rules.required_ids if gid not in cited]
+    return [sid for sid in rules.required_ids if sid not in cited]
 
 
 def _quote(text: str) -> str:
@@ -149,13 +150,13 @@ def _body_problems(body: str, rules: AnswerRules) -> list[str]:
     marks = list(dict.fromkeys(_ANY_MARK.findall(body)))
     withheld = [mark for mark in marks if mark in rules.withheld]
     if withheld:
-        found.append(f"cites groups that may appear on no page: {', '.join(withheld)}; delete "
+        found.append(f"cites claims that may appear on no page: {', '.join(withheld)}; delete "
                      "every sentence that rests on them, and do not say what they said in any "
                      "other words")
     unknown = [mark for mark in marks if mark not in rules.allowed_ids and mark not in rules.withheld]
     if unknown:
-        found.append(f"cites ids that are not groups of this page: {', '.join(unknown)}; "
-                     "mark only ids from <groups>")
+        found.append(f"cites ids that are not claims of this page: {', '.join(unknown)}; "
+                     "mark only ids from <claims>")
     bad_links = [f"[[{'label:' if link.kind == 'label' else ''}{link.target}|...]]"
                  for link in find_wiki_links(body) if not rules.valid_link(link)]
     if bad_links:
@@ -167,7 +168,7 @@ def _body_problems(body: str, rules: AnswerRules) -> list[str]:
                      "write [[page_id|text]] or [[label:label_id|text]]")
     uncited = uncited_required(body, rules)
     if uncited:
-        found.append("these groups are disputed or contradicted but not cited; present both "
+        found.append("these claims are disputed or contradicted but not cited; present both "
                      f"sides and cite them: {', '.join(uncited)}")
     return found
 
@@ -177,15 +178,15 @@ def _point_problems(answer: Mapping[str, Any], rules: AnswerRules) -> list[str]:
     found = account(points, left_out, rules.main_ids).problems()
     stated = statements(body)
     cited = set(cited_ids(body))
-    marked = [entry["group"] for entry in left_out if entry["group"] in cited]
+    marked = [entry["claim"] for entry in left_out if entry["claim"] in cited]
     if marked:
-        found.append("the body cites groups listed in left_out; put each in the point its "
+        found.append("the body cites claims listed in left_out; put each in the point its "
                      f"sentence says, or take its mark out: {', '.join(marked)}")
-    uncarried = [f"{_quote(p['statement'])} ({', '.join(p['groups'])})"
-                 for p in points if p["groups"] and not citing(p, stated)]
+    uncarried = [f"{_quote(p['statement'])} ({', '.join(p['claims'])})"
+                 for p in points if p["claims"] and not citing(p, stated)]
     if uncarried:
         found.append("these points are carried by no statement; say each in the article, citing "
-                     "one or more of its groups (or fold it into the point it belongs to): "
+                     "one or more of its claims (or fold it into the point it belongs to): "
                      + "; ".join(uncarried))
     told = retold(points, stated, rules.frozen)
     for cap in dict.fromkeys(told_cap(p["kind"]) for p, _ in told):
@@ -277,7 +278,7 @@ def repair(answer: Mapping[str, Any], rules: AnswerRules) -> tuple[dict[str, Any
         cited = rules.withheld.intersection(_ANY_MARK.findall(match.group(0)))
         if not cited:
             return match.group(0)
-        repairs.append(f"deleted a sentence resting on withheld group(s) {', '.join(sorted(cited))}")
+        repairs.append(f"deleted a sentence resting on withheld claim(s) {', '.join(sorted(cited))}")
         return ""
 
     body = _SENTENCE.sub(drop_withheld, body)
@@ -285,7 +286,7 @@ def repair(answer: Mapping[str, Any], rules: AnswerRules) -> tuple[dict[str, Any
     body = _clean_links(body, rules, repairs)
     tidied = tidy(answer["points"], answer["left_out"], rules.main_ids)
     if tidied.dropped:
-        repairs.append(f"took out of the points ids that are not main groups or were listed "
+        repairs.append(f"took out of the points ids that are not main claims or were listed "
                        f"again: {', '.join(dict.fromkeys(tidied.dropped))}")
     fixed = {
         "points": tidied.points,
@@ -301,8 +302,8 @@ def repair(answer: Mapping[str, Any], rules: AnswerRules) -> tuple[dict[str, Any
 def rules_for(page_id: str, records: Sequence[Record], plan: Mapping[str, Any], *,
               required: Collection[str], frozen: Collection[str] = (),
               withheld: Collection[str] = ()) -> AnswerRules:
-    """The rules of one answer about ``records`` (the page's groups now); ``frozen``: the
-    sentences of the current body when updating; ``withheld``: the groups no page may rest
+    """The rules of one answer about ``records`` (the page's claims now); ``frozen``: the
+    sentences of the current body when updating; ``withheld``: the claims no page may rest
     on."""
     return AnswerRules(
         page_id=page_id,

@@ -75,7 +75,6 @@ from utils.paths import (
     Artifact,
     resolve,
     resolve_claims_path,
-    resolve_entities_path,
 )
 from utils.reconcile import diff_inputs, fingerprint, guarded_write
 from utils.timestamps import utc_now
@@ -339,15 +338,6 @@ class AssignmentRun:
         }
 
 
-def _claim_files(sources: ClaimSources) -> list[Path]:
-    """The files the claim records are joined from that exist (the manual contradictions are
-    optional)."""
-
-    files = (sources.claims or resolve_claims_path(), sources.entities or resolve_entities_path(),
-             sources.audit, sources.contradictions)
-    return [path for path in files if path.is_file()]
-
-
 def _unchanged(payload: Mapping[str, Any], before: Mapping[str, Any], original: Path,
                inputs: Sequence[Path]) -> bool:
     """Nothing to write: same content as before, and the output is not older than its inputs
@@ -407,7 +397,7 @@ def run(
     payload = job.payload(source, plan_source, classifier)
     result = {**job.stats, "summary": payload["metadata"]["summary"], "backup": None}
     if not rebuild and _unchanged(payload, before, artifact.original,
-                                  (*_claim_files(sources), plan_source)):
+                                  (*sources.files().values(), plan_source)):
         logger.info(f"Assignments unchanged ({len(job.records)} claims); nothing written")
         return {**result, "written": False}
     backup = guarded_write(artifact.edited, payload, backup=True)
