@@ -3,7 +3,7 @@
 //   const stance = stanceOf(claim.stance);
 //   <span className={`badge ${stance.badge}`}>{stance.label}</span>
 
-export const STANCES = {
+const STANCES = {
   positive: { label: "Positive", badge: "badge-emerald" },
   negative: { label: "Negative", badge: "badge-rose" },
   neutral: { label: "Neutral", badge: "badge-slate" },

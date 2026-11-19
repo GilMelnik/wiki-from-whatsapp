@@ -16,8 +16,8 @@ update mode), and loses an id when that claim leaves the output. It is a derived
 when a later dissent adds a link to it.
 
 ``participant_count`` is the number of distinct people who wrote in the claim's thread (not
-people who only reacted); the private audit keeps who they were (``participants``), so step 5
-can count distinct people across a group's threads.
+people who only reacted); the private audit keeps who they were (``participants``), and the
+claim records (``step_6_plan.claim_records``) count them from there.
 
 ``ThreadClaims`` works on one thread whose messages already carry quotes, reactions and tags
 (``utils.threads_io.with_export``).

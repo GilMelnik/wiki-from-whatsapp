@@ -2,8 +2,8 @@
 
 Claims carry free-text ``entities`` where one real entity shows up as many variants
 (``תמוז`` / ``tamuz`` / ``Tammuz``, ``כללית`` / ``קופת חולים כללית``). This step groups them
-into suggested canonical entities that the owner reviews in the entity reviewer, and tells
-step 5 which canonical entities every claim mentions (``claim_entities``).
+into suggested canonical entities that the owner reviews in the entity reviewer, and records
+which canonical entities every claim mentions (``claim_entities``).
 
 Inputs: only ``claim_id``, ``thread_id``, ``claim_text`` and ``entities`` of each claim (plus
 the redaction trail for contacts). Nothing else about a claim is read.

@@ -1,5 +1,5 @@
 """Entity review edits through the API: what each one changes in the saved entities file and
-what step 5 reads from it (``claim_entities``, ids, deleted claims / names). Synthetic data;
+what later steps read from it (``claim_entities``, ids, deleted claims / names). Synthetic data;
 the meaning of the old store tests is kept here."""
 
 from __future__ import annotations

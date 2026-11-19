@@ -1,7 +1,7 @@
 """The claim records steps 6 to 10 and the review site read (contract C6): one record per claim,
 joined on every call from the files people edit, never stored.
 
-Inputs, as step 5 read them:
+Inputs:
 - the claims (C3; ``claims_edited.json`` when present, the copy the Privacy page edits);
 - the entities (``entities_edited.json`` when present). Claims listed in its
   ``deleted_claims`` are dropped. A claim's canonical entities are recomputed from the entity
@@ -21,9 +21,9 @@ A record holds exactly ``RECORD_KEYS``:
   review tool's own lookups and must NEVER reach a prompt, a page or the site.
 - ``entity_ids`` (canonical ids, sorted) and ``entity_names`` (``canonical_name`` per id, the
   id when it has none). There is deliberately no key ``entities``: on a C3 claim it holds
-  free-text names, on the old step-5 group it held canonical ids.
+  free-text names, not entity ids.
 - ``supporter_count``, ``opposer_count`` and ``by_month`` (``{"YYYY-MM": {supporters,
-  opposers}}``) follow step 5's rule, the owner's choice: a person counts once, on the side of
+  opposers}}``) follow the owner's rule: a person counts once, on the side of
   their latest event (they changed their mind); on the same date the opposing side wins, so a
   dispute is never hidden. ``by_month`` applies the rule inside each month of the event dates.
 - ``participant_count``: the distinct people who wrote in the claim's conversation (the audit's

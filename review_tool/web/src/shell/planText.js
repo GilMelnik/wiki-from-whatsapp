@@ -16,7 +16,7 @@ export const PERMANENT_ID_NOTE =
   "The id is the page's address in the wiki and the key every claim is assigned to, so it is permanent: it can only be replaced by a new id that the old one redirects to.";
 
 /** Content inside an English string, in a first-strong isolate (its own direction). */
-export function isolate(text) {
+function isolate(text) {
   return `\u2068${text}\u2069`;
 }
 
