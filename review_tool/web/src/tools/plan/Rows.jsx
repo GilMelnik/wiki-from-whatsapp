@@ -4,7 +4,7 @@ import { ChangeBadge } from "./bits.jsx";
 import { warningsFor } from "./plan.js";
 
 // Rows of the list column: the tree (indented by depth, with the assignment lists on top and,
-// under the proposals, each proposal still to decide) and the labels (grouped by kind). A row
+// under the proposals, each proposal still to decide, then the entity tags) and the labels (grouped by kind). A row
 // carries only what calls for a look: "New" / "Edited", a mark when a warning names it, the
 // size of a to-do list. Ids are in the tooltip.
 
@@ -57,8 +57,22 @@ function WarningMark({ overview, id }) {
   );
 }
 
+function EntityTagsRow({ item }) {
+  return (
+    <span className="flex items-center gap-2 text-slate-700">
+      <span>Entity tags</span>
+      {item.waiting > 0 && (
+        <span className="badge badge-amber ms-auto" title="Entities waiting for a decision">
+          {formatCount(item.waiting)}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function TreeRow({ overview, item }) {
   if (ASSIGNMENT_ROWS[item.kind]) return <AssignmentRow overview={overview} item={item} />;
+  if (item.kind === "entity_tags") return <EntityTagsRow item={item} />;
   if (item.kind === "proposal") return <ProposalRow item={item} />;
   if (item.kind === "overview") return <span className="font-semibold">Plan overview</span>;
   const isPage = item.kind === "page";

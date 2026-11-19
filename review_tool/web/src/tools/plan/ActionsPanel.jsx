@@ -1,5 +1,6 @@
 import { ActionButton, Bidi, Kbd, kindOf, nodeById, Panel } from "@shell";
 import { DETAILS_TAB, CLAIMS_TAB, isAssignmentRow } from "./assign.js";
+import { ENTITY_TAGS_ID } from "./entityTags.js";
 import { reorderOp } from "./plan.js";
 
 // Side column: what can be done with the selected item, each with its key; for a proposal of
@@ -90,6 +91,7 @@ export function ActionsPanel({ overview, selectedId, proposal, labelsView, savin
   const kind = kindOf(overview, selectedId);
   const node = nodeById(overview, selectedId);
   const special = !labelsView && isAssignmentRow(selectedId) && !proposal;
+  const tagsRow = !labelsView && selectedId === ENTITY_TAGS_ID;
   const itemClaims = (kind === "page" || kind === "label") && tab === CLAIMS_TAB;
   return (
     <Panel
@@ -118,7 +120,13 @@ export function ActionsPanel({ overview, selectedId, proposal, labelsView, savin
         {kind === "label" && <LabelActions id={selectedId} overview={overview} saving={saving} on={on} />}
         {node && <Reorder node={node} saving={saving} on={on} />}
         {(special || itemClaims) && <MoveHelp />}
-        {!kind && !special && !proposal && (
+        {tagsRow && (
+          <p className="text-slate-500">
+            Decide on each entity in the main column. A decision is saved at once; the site uses it at its next build
+            (step 9).
+          </p>
+        )}
+        {!kind && !special && !proposal && !tagsRow && (
           <p className="text-slate-500">
             Select a page, category or label in the list (<Kbd>j</Kbd> / <Kbd>k</Kbd>). Text changes are saved at once;
             changes to the structure or a scope open a window that first shows what will disappear, what will be redirected
