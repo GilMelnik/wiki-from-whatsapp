@@ -19,12 +19,12 @@ A stored suggestion::
   survivor_id, merged_ids}``, ``{"op": "add_page", page_id, parent_id, title_he, description,
   scope}``, ``{"op": "add_label", label_id, title_he, description, kind}``. New ids are the
   model's suggestion; the owner may correct them.
-- ``contradiction``: ``{groups_a, groups_b, pages, clash, correction}``: the groups on each
-  side, every page that must show both sides, one sentence on what clashes, and how the pages
-  should present it (Hebrew instruction to the page writer).
-- ``mistake``: ``{page_id, sentence, group_ids, correction}``: the sentence as it stands in the
-  page, the groups that show the mistake (on this page or, for text that belongs elsewhere,
-  on the page that owns it), and the correction as an instruction.
+- ``contradiction``: ``{claims_a, claims_b, pages, clash, correction}``: the claims on each
+  side (short ids), every page that must show both sides, one sentence on what clashes, and
+  how the pages should present it (Hebrew instruction to the page writer).
+- ``mistake``: ``{page_id, sentence, claims, correction}``: the sentence as it stands in the
+  page, the claims that show the mistake (short ids; on this page or, for text that belongs
+  elsewhere, on the page that owns it), and the correction as an instruction.
 """
 
 from __future__ import annotations
@@ -60,8 +60,8 @@ ANSWER_FIELDS: dict[str, dict[str, Any]] = {
     "page_id": _TEXT, "new_page_id": _TEXT, "survivor_id": _TEXT, "merged_ids": _IDS,
     "parent_id": _TEXT, "label_id": _TEXT, "label_kind": _TEXT, "title_he": _TEXT,
     "description": _TEXT, "scope": _TEXT, "original_scope": _TEXT,
-    "groups_a": _IDS, "groups_b": _IDS, "clash": _TEXT,
-    "sentence": _TEXT, "group_ids": _IDS, "correction": _TEXT,
+    "claims_a": _IDS, "claims_b": _IDS, "clash": _TEXT,
+    "sentence": _TEXT, "claims": _IDS, "correction": _TEXT,
 }
 
 
@@ -83,11 +83,11 @@ def answer_schema(kinds: Sequence[str]) -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class Scope:
-    """What one review pass may name: the pages and groups it was shown, the kinds it may
-    raise, and how many suggestions it may keep."""
+    """What one review pass may name: the pages and claims (short ids) it was shown, the
+    kinds it may raise, and how many suggestions it may keep."""
 
     pages: frozenset[str]
-    groups: frozenset[str]
+    claims: frozenset[str]
     kinds: tuple[str, ...]
     cap: int
 
@@ -99,9 +99,9 @@ class Scope:
         pages = sorted({*suggestion_pages(kind, proposal, named), *named} - self.pages)
         if pages:
             found.append(f"names pages this review pass did not see: {pages}")
-        groups = sorted(set(named_groups(kind, proposal)) - self.groups)
-        if groups:
-            found.append(f"names groups this review pass did not see: {groups}")
+        claims = sorted(set(named_claims(kind, proposal)) - self.claims)
+        if claims:
+            found.append(f"names claims this review pass did not see: {claims}")
         return found
 
 _MARK = re.compile(r"\[\^[^\]\s]+\](?!:)")
@@ -143,11 +143,11 @@ def proposal_from_answer(kind: str, answer: Mapping[str, Any]) -> dict[str, Any]
         return {"op": "add_label", "label_id": text["label_id"], "title_he": text["title_he"],
                 "description": text["description"], "kind": text["label_kind"]}
     if kind == CONTRADICTION:
-        return {"groups_a": _ids(answer.get("groups_a")), "groups_b": _ids(answer.get("groups_b")),
+        return {"claims_a": _ids(answer.get("claims_a")), "claims_b": _ids(answer.get("claims_b")),
                 "pages": _ids(answer.get("pages")), "clash": text["clash"],
                 "correction": text["correction"]}
     return {"page_id": text["page_id"], "sentence": str(answer.get("sentence") or "").strip(),
-            "group_ids": _ids(answer.get("group_ids")), "correction": text["correction"]}
+            "claims": _ids(answer.get("claims")), "correction": text["correction"]}
 
 
 def suggestion_pages(kind: str, proposal: Mapping[str, Any], named: Sequence[str]) -> list[str]:
@@ -161,12 +161,12 @@ def suggestion_pages(kind: str, proposal: Mapping[str, Any], named: Sequence[str
     return list(dict.fromkeys(named))
 
 
-def named_groups(kind: str, proposal: Mapping[str, Any]) -> list[str]:
-    """The groups a suggestion names (a contradiction's sides, a mistake's evidence)."""
+def named_claims(kind: str, proposal: Mapping[str, Any]) -> list[str]:
+    """The claims a suggestion names (a contradiction's sides, a mistake's evidence)."""
     if kind == CONTRADICTION:
-        return [*proposal.get("groups_a", []), *proposal.get("groups_b", [])]
+        return [*proposal.get("claims_a", []), *proposal.get("claims_b", [])]
     if kind == MISTAKE:
-        return list(proposal.get("group_ids", []))
+        return list(proposal.get("claims", []))
     return []
 
 
@@ -197,30 +197,30 @@ def problems(kind: str, proposal: Mapping[str, Any], review: ReviewInput) -> lis
             return list(exc.errors)
         return []
     if kind == MISTAKE:
-        found = _missing(proposal, ("page_id", "sentence", "group_ids", "correction"))
+        found = _missing(proposal, ("page_id", "sentence", "claims", "correction"))
         page = review.pages.get(proposal.get("page_id", ""))
         if page is None:
             return [*found, f"page {proposal.get('page_id')!r} is not a written page of the plan"]
         if proposal.get("sentence") and plain_text(proposal["sentence"]) not in plain_text(page.body):
             found.append(f"the sentence is not in page {page.page_id}: {proposal['sentence']!r}")
-        unknown = [gid for gid in proposal.get("group_ids") or [] if gid not in review.corpus.groups]
+        unknown = [sid for sid in proposal.get("claims") or [] if sid not in review.corpus.claims]
         if unknown:
-            found.append(f"unknown groups: {unknown}")
+            found.append(f"unknown claims: {unknown}")
         return found
-    found = _missing(proposal, ("groups_a", "groups_b", "pages", "clash", "correction"))
-    side_a, side_b = set(proposal.get("groups_a") or []), set(proposal.get("groups_b") or [])
+    found = _missing(proposal, ("claims_a", "claims_b", "pages", "clash", "correction"))
+    side_a, side_b = set(proposal.get("claims_a") or []), set(proposal.get("claims_b") or [])
     if side_a & side_b:
-        found.append(f"groups on both sides: {sorted(side_a & side_b)}")
+        found.append(f"claims on both sides: {sorted(side_a & side_b)}")
     unknown_pages = [pid for pid in proposal.get("pages") or [] if pid not in review.pages]
     if unknown_pages:
         found.append(f"pages that are not written pages of the plan: {unknown_pages}")
-    on_pages = {gid for pid in proposal.get("pages") or [] if pid in review.pages
-                for gid in review.pages[pid].group_ids}
-    stray = sorted(gid for gid in side_a | side_b if gid not in on_pages)
+    on_pages = {sid for pid in proposal.get("pages") or [] if pid in review.pages
+                for sid in review.pages[pid].claim_ids}
+    stray = sorted(sid for sid in side_a | side_b if sid not in on_pages)
     if stray:
-        found.append(f"groups on none of the suggestion's pages: {stray}")
+        found.append(f"claims on none of the suggestion's pages: {stray}")
     if len(side_a) * len(side_b) > REVIEW_CONFIG["apply"]["max_link_pairs"]:
-        found.append(f"{len(side_a)} x {len(side_b)} group pairs; at most "
+        found.append(f"{len(side_a)} x {len(side_b)} claim pairs; at most "
                      f"{REVIEW_CONFIG['apply']['max_link_pairs']} links per suggestion")
     return found
 
@@ -235,8 +235,8 @@ def signatures(kind: str, proposal: Mapping[str, Any]) -> set[tuple[str, ...]]:
     if kind == MISTAKE:
         return {(kind, proposal.get("page_id", ""), plain_text(proposal.get("sentence", "")))}
     if kind == CONTRADICTION:
-        groups = sorted({*proposal.get("groups_a", []), *proposal.get("groups_b", [])})
-        return {(kind, *groups)}
+        claims = sorted({*proposal.get("claims_a", []), *proposal.get("claims_b", [])})
+        return {(kind, *claims)}
     if kind == "split":
         return {(kind, proposal.get("page_id", ""))}
     if kind == "merge":

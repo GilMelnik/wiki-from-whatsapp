@@ -7,8 +7,8 @@ titles. Ids are given by the caller (a Latin slug, ``plan.slug_pattern``) and mu
 id in use, merged away or deleted is refused.
 
 What disappears is reported so task 24 can react: ``removed_pages`` / ``removed_labels``
-(their groups need a new home), ``redirects`` (merged-away id -> surviving id; groups and
-links follow it) and ``reassign`` (pages whose current groups should be classified again,
+(their claims need a new home), ``redirects`` (merged-away id -> surviving id; claims and
+links follow it) and ``reassign`` (pages whose current claims should be classified again,
 e.g. after a split or a scope change).
 """
 
@@ -30,7 +30,7 @@ from step_6_plan.model import (
 )
 
 EDITABLE_FIELDS = {
-    "page": ("description", "scope", "aliases", "example_group_ids"),
+    "page": ("description", "scope", "aliases", "example_claims"),
     "node": ("description",),
     "label": ("description", "kind"),
 }
@@ -129,7 +129,7 @@ def add_page(
         "scope": scope,
         "path": [],
         "aliases": {k: list(v) for k, v in aliases.items()} if aliases else _empty_aliases(),
-        "example_group_ids": [],
+        "example_claims": [],
     }
     node = {"id": page_id, "title_he": title_he, "description": description, "children": []}
     _insert(_siblings_under(new, parent_id), node, position)
@@ -163,7 +163,7 @@ def rename(plan: dict[str, Any], item_id: str, title_he: str) -> PlanEdit:
 def edit(plan: dict[str, Any], item_id: str, changes: Mapping[str, Any]) -> PlanEdit:
     """Set fields other than the title: ``EDITABLE_FIELDS[kind]`` (e.g. a page's scope or
     aliases ``{"he": [...], "en": [...]}``, a label's kind). A scope change asks task 24 to
-    classify the page's groups again (``reassign``)."""
+    classify the page's claims again (``reassign``)."""
 
     new = copy.deepcopy(plan)
     kind = kind_of(new, item_id)
@@ -212,7 +212,7 @@ def merge(plan: dict[str, Any], survivor_id: str, merged_ids: Collection[str]) -
 
     Each merged item disappears; its id (and anything it had absorbed before) is recorded in
     the survivor's ``merged_from`` so old links and assignments can be redirected. A merged
-    page's title and aliases become aliases of the survivor and its example groups join the
+    page's title and aliases become aliases of the survivor and its example claims join the
     survivor's.
     """
 
@@ -242,8 +242,8 @@ def merge(plan: dict[str, Any], survivor_id: str, merged_ids: Collection[str]) -
                              gone["aliases"][lang])
                 for lang in ALIAS_LANGUAGES
             }
-            survivor["example_group_ids"] = _union(survivor["example_group_ids"],
-                                                   gone["example_group_ids"])
+            survivor["example_claims"] = _union(survivor["example_claims"],
+                                                gone["example_claims"])
     return _done(
         new,
         removed_pages=tuple(others) if kind == "page" else (),
@@ -265,7 +265,7 @@ def split_page(
     original_scope: str | None = None,
 ) -> PlanEdit:
     """Carve a new page out of ``page_id``. The new page goes right after the original (or at
-    the end of category ``parent_id``); the original keeps its id, and its groups must be
+    the end of category ``parent_id``); the original keeps its id, and its claims must be
     classified again between the two (``reassign``). ``original_scope`` narrows the
     original's scope in the same edit (else narrow it with ``edit`` afterwards)."""
 
@@ -289,7 +289,7 @@ def split_page(
 def change_id(plan: dict[str, Any], item_id: str, new_id: str) -> PlanEdit:
     """Give a page, category or label a better id: the item keeps everything else (place,
     texts, examples) under ``new_id``, and the old id is retired for good. For a page or a
-    label the old id joins its ``merged_from``, so groups and links follow the redirect
+    label the old id joins its ``merged_from``, so claims and links follow the redirect
     (nothing needs classifying again); a category's old id goes to ``retired_ids``."""
 
     new = copy.deepcopy(plan)

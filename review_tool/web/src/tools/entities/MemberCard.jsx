@@ -129,7 +129,6 @@ export function MemberCard({ entityId, member, picked, saving, reads, on }) {
             onOpenEntity={on.open}
             onExclude={() => on.exclude(name, [claim.claim_id])}
             onDelete={() => on.deleteClaim(claim)}
-            onShowAggregation={() => on.showAggregation(claim.aggregation)}
           />
         ))}
         {claims.claims.length === 0 && <li className="p-2 text-xs text-slate-500">No active claims for this name.</li>}

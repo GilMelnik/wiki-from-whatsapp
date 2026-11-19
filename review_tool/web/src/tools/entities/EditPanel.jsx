@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { countText, Kbd, Panel, PanelState } from "@shell";
+import { Kbd, Panel, PanelState } from "@shell";
 import { ContactsForm } from "./Contacts.jsx";
 
 // The side column: the decisions on the selected entity, only those that fit it, each with
 // its key (accept, or back to suggested; merge into another entity; split a grouping of
-// several names; combine picked claims; delete), then its canonical name and the contacts
+// several names; delete), then its canonical name and the contacts
 // edited by hand. Every change is saved at once.
 
 function ActionButton({ label, keyName, primary = false, danger = false, disabled, onClick }) {
@@ -45,7 +45,7 @@ function NameForm({ entity, saving, nameRef, onRename }) {
   );
 }
 
-function Decisions({ entity, saving, pickedCount, on }) {
+function Decisions({ entity, saving, on }) {
   const accepted = entity.status === "accepted";
   return (
     <div className="space-y-2">
@@ -58,26 +58,23 @@ function Decisions({ entity, saving, pickedCount, on }) {
       {entity.member_count > 1 && (
         <ActionButton label="Split into one entity per name…" keyName="x" disabled={saving} onClick={on.reject} />
       )}
-      {pickedCount >= 2 && (
-        <ActionButton label={`Combine the ${countText(pickedCount, "picked claim")}…`} keyName="g" disabled={saving} onClick={on.aggregate} />
-      )}
       <ActionButton label="Delete the entity…" keyName="Del" danger disabled={saving} onClick={on.remove} />
     </div>
   );
 }
 
-export function EditPanel({ detail, saving, nameRef, pickedCount, on }) {
+export function EditPanel({ detail, saving, nameRef, on }) {
   const entity = detail.data?.entity;
   return (
     <Panel title="Decide">
       <PanelState empty={!entity} emptyText="No entity selected">
         {entity && (
           <div className="space-y-6 p-4 text-sm">
-            <Decisions entity={entity} saving={saving} pickedCount={pickedCount} on={on} />
+            <Decisions entity={entity} saving={saving} on={on} />
             <NameForm entity={entity} saving={saving} nameRef={nameRef} onRename={on.rename} />
             <ContactsForm entity={entity} saving={saving} onSave={on.saveContacts} />
             <p className="text-xs text-slate-500">
-              Pick claims (their check box) to copy, move, mark as unrelated or combine them. “Move name” moves one name with its
+              Pick claims (their check box) to copy, move or mark them as unrelated. “Move name” moves one name with its
               claims to another entity.
             </p>
           </div>

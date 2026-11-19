@@ -1,7 +1,7 @@
 """What step 9 publishes, computed in memory from the plan (C7), the written pages (C9), the
-claim groups (C6) and the period of the chat messages (``utils.threads_io.messages_period``).
+claim records (C6) and the period of the chat messages (``utils.threads_io.messages_period``).
 
-``Site(plan, pages, groups, period)`` decides which planned pages are published (those that have a written
+``Site(plan, pages, claims, period)`` decides which planned pages are published (those that have a written
 page), builds the navigation from the plan's tree, renders every generated markdown file
 (pages with their OKF front matter, label pages, the home page, redirect stubs for merged
 ids) and collects the problems found on the way in ``issues``. Nothing here touches the disk.
@@ -9,9 +9,9 @@ ids) and collects the problems found on the way in ``issues``. Nothing here touc
 Wiki links in page bodies are resolved here: ``[[page_id|text]]`` becomes a relative markdown
 link to that page, ``[[label:label_id|text]]`` a link to the label's page; a link to a merged
 id goes to the survivor; a link to anything not published becomes its plain text. The
-references under a page are rendered from the groups (``step_9_site.references``).
+references under a page are rendered from the claim records (``step_9_site.references``).
 
-A page that cites a withheld group (``withheld``: a negative statement about a named entity
+A page that cites a withheld claim (``withheld``: a negative statement about a named entity
 that fewer than two members reported, ``step_7_write_pages.withhold``) is an issue of kind
 ``withheld_reference``: a page written before the rule, or edited by hand, that step 7 must
 write again before the site is published.
@@ -86,7 +86,7 @@ class Site:
         self,
         plan: dict[str, Any],
         pages: dict[str, dict[str, Any]],
-        groups: list[dict[str, Any]],
+        claims: list[dict[str, Any]],
         period: tuple[str, str],
         withheld: Collection[str] = (),
     ) -> None:
@@ -115,7 +115,7 @@ class Site:
             if label_id not in carried:
                 self._issue("label_not_carried", "", label_id)
         self.related = {page_id: self._resolve_related(page_id) for page_id in self.order}
-        self.references = References(groups)
+        self.references = References(claims)
         self.withheld = frozenset(withheld)
         self.bodies = {page_id: self._resolve_marks(page_id) for page_id in self.order}
         self.nav = self._nav()
@@ -175,13 +175,13 @@ class Site:
         return related
 
     def _resolve_marks(self, page_id: str) -> str:
-        """The page's body without stored definitions, its marks following merged groups."""
+        """The page's body without stored definitions and without marks of unknown claims."""
         resolved = self.references.resolve(self.pages[page_id]["body_md"])
-        for kind, group_id in resolved.problems:
-            self._issue(kind, page_id, group_id)
-        for group_id in cited_ids(resolved.body):
-            if group_id in self.withheld:
-                self._issue(WITHHELD_REFERENCE, page_id, group_id)
+        for kind, short_id in resolved.problems:
+            self._issue(kind, page_id, short_id)
+        for short_id in cited_ids(resolved.body):
+            if short_id in self.withheld:
+                self._issue(WITHHELD_REFERENCE, page_id, short_id)
         return resolved.body
 
     def resolve_links(self, page_id: str, href: Callable[[str], str], *, report: bool = True) -> str:

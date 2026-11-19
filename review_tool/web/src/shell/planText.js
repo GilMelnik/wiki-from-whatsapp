@@ -1,7 +1,7 @@
 // Pure helpers about a wiki plan (no React), shared by every tool that shows or edits a plan
 // operation (the plan tool, the suggestions tool): titles and places of plan items, ids as
 // the owner types them, counts in words, and the English wording of what an operation means downstream for the
-// plan (`consequenceLines`, from the server's `edit`) and for the claim groups at the next
+// plan (`consequenceLines`, from the server's `edit`) and for the claims at the next
 // assignment run (`assignmentLines`, from a preview's `assignments`). The server decides what
 // is allowed; these only shape requests and texts. Functions that write numbers take the
 // shell's `formatCount` as `format` (tests run them without the shell). A Hebrew title inside
@@ -16,7 +16,7 @@ export const PERMANENT_ID_NOTE =
   "The id is the page's address in the wiki and the key every claim is assigned to, so it is permanent: it can only be replaced by a new id that the old one redirects to.";
 
 /** Content inside an English string, in a first-strong isolate (its own direction). */
-export function isolate(text) {
+function isolate(text) {
   return `\u2068${text}\u2069`;
 }
 
@@ -147,20 +147,20 @@ export function consequenceLines(edit, overview) {
 }
 
 
-/** "1 group" / "12 groups". */
-export function groupCount(count, format = String) {
-  return countText(count, "group", format);
+/** "1 claim" / "12 claims". */
+export function claimCount(count, format = String) {
+  return countText(count, "claim", format);
 }
 
 
 /**
- * What a plan change does to the claim groups at the next assignment run, as English lines
+ * What a plan change does to the claims at the next assignment run, as English lines
  * `{tone, text}`, from the preview's `assignments` (null before step 6b has run).
  */
 export function assignmentLines(effect, overview, format = String) {
   if (!effect) return [];
   const lines = [];
-  const count = (n) => groupCount(n, format);
+  const count = (n) => claimCount(n, format);
   if (effect.redirected > 0) {
     lines.push({ tone: "info", text: `The assignment of ${count(effect.redirected)} will move to the new target at the next assignment run, without asking again.` });
   }
@@ -168,10 +168,10 @@ export function assignmentLines(effect, overview, format = String) {
     lines.push({ tone: "warning", text: `At the next assignment run the classifier will decide the page of ${count(effect.reask)} again (paid).` });
   }
   if (effect.screen_pages.length > 0) {
-    lines.push({ tone: "info", text: `For the other groups the classifier will ask a cheap yes/no question: do they belong on ${names(overview, effect.screen_pages)}?` });
+    lines.push({ tone: "info", text: `For the other claims the classifier will ask a cheap yes/no question: do they belong on ${names(overview, effect.screen_pages)}?` });
   }
   if (effect.asked_labels.length > 0) {
-    lines.push({ tone: "info", text: `The classifier will ask of every group whether the label ${names(overview, effect.asked_labels)} fits it.` });
+    lines.push({ tone: "info", text: `The classifier will ask of every claim whether the label ${names(overview, effect.asked_labels)} fits it.` });
   }
   if (effect.pages_cleared > 0) {
     lines.push({ tone: "warning", text: `The deleted page will be taken off the assignment of ${count(effect.pages_cleared)}.` });

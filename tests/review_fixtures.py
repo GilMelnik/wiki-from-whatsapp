@@ -2,7 +2,7 @@
 pages, a plan pair, a suggestions pair, a fake review model and a fake page corrector.
 
 Pages (plan ``agencies`` / ``costs`` under ``before`` > ``choosing``, ``clinics`` / ``hospital``
-under ``during`` > ``medical``): every group of a page gets two sentences of its own, so a
+under ``during`` > ``medical``): every claim of a page gets two sentences of its own, so a
 one-sentence correction keeps most of the page word for word. The review cuts this wiki into
 the parts ``before`` and ``during`` plus the ``cross`` pass (every page has stored points).
 Nothing here comes from real data.
@@ -17,14 +17,15 @@ from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
 from typing import Any
 
-from review_tool.tools.suggestions.apply import Applier, GroupLinker
+from review_tool.tools.suggestions.apply import Applier
 from review_tool.tools.suggestions.store import SuggestionsStore
 from step_8_review.proposals import ANSWER_FIELDS
 from step_8_review.run import run
 from tests.pages_fixtures import (
+    IDS,
     FakeWriter,
     PagesWorkspace,
-    group_ids_in,
+    claim_ids_in,
     main_ids_in,
     page_id_in,
     points_of,
@@ -35,18 +36,18 @@ from utils.paths import Artifact, resolve
 _BODY = re.compile(r"<body>\n(.*?)\n</body>", re.DOTALL)
 
 
-def sentence_a(group_id: str) -> str:
-    return f"הקבוצה {group_id} מספרת על הניסיון הראשון.[^{group_id}]"
+def sentence_a(short_id: str) -> str:
+    return f"הטענה {short_id} מספרת על הניסיון הראשון.[^{short_id}]"
 
 
 def long_article(system: Any, user: Any, task: str) -> dict[str, Any]:
-    """A write answer: a lead, then two sentences per group and a sentence with links."""
+    """A write answer: a lead, then two sentences per claim and a sentence with links."""
     page_id = page_id_in(user)
-    ids = group_ids_in(user)
+    ids = claim_ids_in(user)
     other = "costs" if page_id != "costs" else "agencies"
     lines = [f"פתיח קצר על הדף {page_id}.[^{ids[0]}]", "", "## חלק ראשון", ""]
-    for gid in ids:
-        lines.append(f"{sentence_a(gid)} עוד פרט על {gid} מאותה שיחה.[^{gid}]")
+    for sid in ids:
+        lines.append(f"{sentence_a(sid)} עוד פרט על {sid} מאותה שיחה.[^{sid}]")
     lines.append(f"ראו גם [[{other}|דף אחר]] ו[[label:usa|ארה\"ב]].[^{ids[0]}]")
     answer = {**points_of(main_ids_in(user)), "body": "\n".join(lines),
               "summary": f"תקציר {page_id}", "questions": ["שאלה?"],
@@ -133,47 +134,30 @@ def count_tokens(system: str, user: str) -> int:
     return (len(system) + len(user)) // 4
 
 
-class FakeLinker:
-    """Stands in for the groups tool's store: records the links and writes a file."""
-
-    def __init__(self, edited: Path) -> None:
-        self.edited = edited
-        self.links: list[tuple[str, str, bool]] = []
-
-    def set_contradiction(self, group_id: str, other_id: str, linked: bool) -> dict[str, Any]:
-        self.links.append((group_id, other_id, linked))
-        self.edited.write_text(json.dumps({"links": self.links}), encoding="utf-8")
-        return {}
-
-
 class ReviewWorkspace(PagesWorkspace):
-    """The step-7 workspace with its pages written, plus the step-8 files."""
+    """The step-7 workspace with its pages written, plus the step-8 files. An applied
+    contradiction goes to ``sources.contradictions`` (no such file at the start)."""
 
     def __init__(self, root: Path) -> None:
         super().__init__(root)
         self.plan_artifact = Artifact(self.plan_path, root / "plan_edited.json")
         self.suggestions = Artifact(root / "suggestions.json", root / "suggestions_edited.json")
-        self.linker = FakeLinker(root / "groups_links.json")
         self.run(llm=FakeWriter(respond=long_article))
 
     def review(self, llm: FakeReviewer, **kwargs: Any) -> dict[str, Any]:
         return run(artifact=self.suggestions, pages_artifact=self.artifact,
-                   aggregated_path=self.groups_path, plan_path=resolve(self.plan_artifact),
+                   sources=self.sources, plan_path=resolve(self.plan_artifact),
                    assignments_path=self.assignments_path, llm=llm,
                    count_tokens=kwargs.pop("count_tokens", count_tokens), **kwargs)
 
-    def applier(self, llm: FakeWriter | None = None,
-                linker: Callable[[], GroupLinker] | None = None) -> Applier:
+    def applier(self, llm: FakeWriter | None = None) -> Applier:
         return Applier(pages_artifact=self.artifact, plan_artifact=self.plan_artifact,
-                       aggregated_path=self.groups_path, assignments_path=self.assignments_path,
-                       llm=llm or FakeWriter("fake-apply"),
-                       linker=linker or (lambda: self.linker))
+                       sources=self.sources, assignments_path=self.assignments_path,
+                       llm=llm or FakeWriter("fake-apply"))
 
-    def store(self, llm: FakeWriter | None = None,
-              linker: Callable[[], GroupLinker] | None = None) -> SuggestionsStore:
+    def store(self, llm: FakeWriter | None = None) -> SuggestionsStore:
         return SuggestionsStore(self.suggestions, pages_artifact=self.artifact,
-                                plan_artifact=self.plan_artifact,
-                                applier=self.applier(llm, linker))
+                                plan_artifact=self.plan_artifact, applier=self.applier(llm))
 
     def suggestions_payload(self, edited: bool = False) -> dict[str, Any]:
         path = self.suggestions.edited if edited else self.suggestions.original
@@ -187,16 +171,17 @@ class ReviewWorkspace(PagesWorkspace):
         """The bytes of every file an apply could write (``None``: no file)."""
         paths = [self.artifact.original, self.artifact.edited, self.plan_artifact.original,
                  self.plan_artifact.edited, self.suggestions.original, self.suggestions.edited,
-                 self.groups_path, self.assignments_path, self.linker.edited]
+                 self.sources.claims, self.sources.entities, self.sources.audit,
+                 self.sources.contradictions, self.assignments_path]
         return {str(p): p.read_bytes() if p.is_file() else None for p in paths}
 
 
 def valid_answers() -> list[dict[str, Any]]:
     """One valid suggestion of every kind for the synthetic wiki."""
     return [
-        flat("mistake", page_id="agencies", sentence=sentence_a("g-00000004"),
-             group_ids=["g-00000004"], correction="לתקן: הניסיון היה השני"),
-        flat("contradiction", groups_a=["g-00000000"], groups_b=["g-00000002"],
+        flat("mistake", page_id="agencies", sentence=sentence_a(IDS[4]),
+             claims=[IDS[4]], correction="לתקן: הניסיון היה השני"),
+        flat("contradiction", claims_a=[IDS[0]], claims_b=[IDS[2]],
              pages=["agencies", "clinics"], clash="סותרות", correction="להציג את שני הצדדים"),
         flat("split", page_id="clinics", new_page_id="clinic-prices", title_he="מחירי מרפאות",
              description="תיאור", scope="תחום", original_scope="תחום מצומצם"),

@@ -1,7 +1,7 @@
-"""Assignment rules (contract C8): the questions asked about a claim group, how the answers
+"""Assignment rules (contract C8): the questions asked about a claim, how the answers
 become pages and labels, and how a plan change moves existing assignments.
 
-An assignment record (one per group in C8 ``assignments``)::
+An assignment record (one per claim in C8 ``assignments``, keyed by short id)::
 
     {"pages": [page_id], "labels": [label_id], "p": {page_id: prob},
      "label_p": {label_id: prob}, "manual"?: true}
@@ -15,7 +15,7 @@ followed through merges and cleared of deleted ids.
 Questions (classifier stage ``assign.stage``): the coverage check's page question
 (``coverage.page_question``: one choice over the page ids + "none", from titles and scopes)
 and one yes/no question per label from its title and description, in the same request. After
-a new page or a scope change, a yes/no "screen" question per changed page finds the groups
+a new page or a scope change, a yes/no "screen" question per changed page finds the claims
 that might move to it, so only those are asked the page question again.
 
 Decision rules (thresholds chosen on the dev corpus, task 24's report). With ``p1 >= p2`` the
@@ -23,7 +23,7 @@ two most probable pages:
 - two pages ``[top, second]`` when the classifier splits between them: ``p2 >=
   second_page.min_probability`` and ``p1 + p2 >= second_page.min_pair_probability``;
 - else one page when ``p1 >= confident_probability``;
-- else unplaced (the group becomes a candidate for a proposal).
+- else unplaced (the claim becomes a candidate for a proposal).
 A label applies when its probability is at least ``label_probability``.
 """
 
@@ -83,7 +83,7 @@ def kept(probabilities: Mapping[str, float], allowed: Collection[str]) -> dict[s
 
 
 def decide_pages(p: Mapping[str, float]) -> list[str]:
-    """The pages a group goes on (primary first) from its page probabilities; see the module."""
+    """The pages a claim goes on (primary first) from its page probabilities; see the module."""
 
     ranked = sorted(((pid, v) for pid, v in p.items() if pid != NONE), key=lambda kv: -kv[1])
     if not ranked:
@@ -137,7 +137,7 @@ class PlanChanges:
 
     @property
     def screen_pages(self) -> tuple[str, ...]:
-        """New or re-scoped pages: other groups are screened for them."""
+        """New or re-scoped pages: other claims are screened for them."""
         return self.created_pages + self.rescoped_pages
 
     @property
@@ -220,18 +220,18 @@ def follow(record: Record, changes: PlanChanges, plan: Mapping[str, Any]) -> tup
 
 
 def affected(assignments: Mapping[str, Record], changes: PlanChanges) -> set[str]:
-    """The automatic assignments a page change may move (before ``follow``): groups on a
-    re-scoped or deleted page, groups that gave a re-scoped page some probability, and every
-    unplaced group whenever pages were added, re-scoped or removed."""
+    """The automatic assignments a page change may move (before ``follow``): claims on a
+    re-scoped or deleted page, claims that gave a re-scoped page some probability, and every
+    unplaced claim whenever pages were added, re-scoped or removed."""
 
     touched = set(changes.rescoped_pages) | (set(changes.removed_pages) - set(changes.redirects))
     out: set[str] = set()
-    for group_id, record in assignments.items():
+    for short_id, record in assignments.items():
         if record.get("manual"):
             continue
         if (not record["pages"] and changes.pages_changed) or touched & set(record["pages"]) or \
                 any(pid in record["p"] for pid in changes.rescoped_pages):
-            out.add(group_id)
+            out.add(short_id)
     return out
 
 
@@ -246,9 +246,9 @@ def redecide(record: Record, label_ids: Iterable[str]) -> Record:
 
 @dataclass(frozen=True)
 class AssignmentEdit:
-    """``assignments`` after a plan change. ``reask``: groups whose page must be asked again
-    (in assignment order); ``screen_pages``: new / re-scoped pages every other automatic group
-    is screened for; ``cleared``: group -> deleted page / label ids taken off it."""
+    """``assignments`` after a plan change. ``reask``: claims whose page must be asked again
+    (in assignment order); ``screen_pages``: new / re-scoped pages every other automatic claim
+    is screened for; ``cleared``: short id -> deleted page / label ids taken off it."""
 
     assignments: dict[str, Record]
     reask: tuple[str, ...]
@@ -264,15 +264,15 @@ def follow_all(assignments: Mapping[str, Record], changes: PlanChanges,
     reask = affected(assignments, changes)
     out: dict[str, Record] = {}
     cleared: dict[str, list[str]] = {}
-    for group_id, record in assignments.items():
+    for short_id, record in assignments.items():
         followed, gone = follow(record, changes, plan)
         if gone:
-            cleared[group_id] = gone
+            cleared[short_id] = gone
         if followed.get("manual") and record["pages"] and not followed["pages"]:
             followed = {key: value for key, value in followed.items() if key != "manual"}
-            reask.add(group_id)
-        out[group_id] = redecide(followed, plan["labels"])
-    return AssignmentEdit(out, tuple(g for g in assignments if g in reask),
+            reask.add(short_id)
+        out[short_id] = redecide(followed, plan["labels"])
+    return AssignmentEdit(out, tuple(s for s in assignments if s in reask),
                           changes.screen_pages, cleared)
 
 
@@ -289,5 +289,5 @@ def claims_on_page(assignments: Mapping[str, Record], page_id: str, *,
     """The short ids of the claims assigned to ``page_id``, in assignment order (= the order of
     the claim records, contract C6)."""
 
-    return [gid for gid, record in assignments.items()
+    return [sid for sid, record in assignments.items()
             if page_id in (record["pages"][:1] if primary_only else record["pages"])]

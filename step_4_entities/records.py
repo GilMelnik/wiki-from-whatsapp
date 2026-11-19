@@ -230,7 +230,7 @@ def claim_entity_index(
     deleted_claims: Collection[str] = (),
     member_claims: MemberClaims = explicit_member_claims,
 ) -> dict[str, list[str]]:
-    """``claim_id -> [entity_id]``: the canonical entities each claim mentions (step 5)."""
+    """``claim_id -> [entity_id]``: the canonical entities each claim mentions (the claim records)."""
 
     deleted = set(deleted_claims)
     index: dict[str, list[str]] = {}

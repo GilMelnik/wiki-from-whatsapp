@@ -76,7 +76,6 @@ class Step:
             self.artifact.edited,
             self.claims_path,
             self.claims_path.with_name("claims_edited.json"),
-            self.claims_path.with_name("claim_aggregations.json"),
             self.analysis_path,
         )
 

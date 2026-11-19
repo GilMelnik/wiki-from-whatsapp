@@ -14,11 +14,11 @@ import yaml
 from step_9_site.info_pages import about_body, config_value
 from step_9_site.run import build_config
 from step_6_plan import operations
-from tests.site_fixtures import build_html, make_page, make_site_plan, run_site
+from tests.site_fixtures import IDS, build_html, make_page, make_site_plan, run_site
 from utils.config import PROJECT_ROOT, ROOT_CONFIG, section
 
 SITE = section("site")
-BODY = "## רקע\n\nטענה.[^g-00000001]\n\n[^g-00000001]: קבוצת טענות.\n"
+BODY = f"## רקע\n\nטענה.[^{IDS[1]}]\n\n[^{IDS[1]}]: טקסט ישן.\n"
 APPROVED_BANNER = (
     "התוכן באתר זה נוצר באופן אוטומטי בידי בינה מלאכותית, על סמך שיחות בקבוצת ווטסאפ מרובת משתתפים. "
     "הוא משקף דעות, התרשמויות וחוויות אישיות של חברי הקבוצה, שאינן בהכרח מוסכמות על כולם; "

@@ -17,7 +17,7 @@ ContactKind = Literal["email", "phone", "website"]
 
 
 class EntityNotFound(Exception):
-    """An entity, member, claim or claim group that is not (or no longer) there; ``args[0]``
+    """An entity, member or claim that is not (or no longer) there; ``args[0]``
     is a Hebrew sentence the UI shows as is."""
 
 

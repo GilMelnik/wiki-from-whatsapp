@@ -1,6 +1,5 @@
 import { Bidi, countText, Dialog, Ltr } from "@shell";
 import { api, entityPath } from "./api.js";
-import { CreateGroupDialog, GroupDialog } from "./ClaimGroupDialogs.jsx";
 import { DeletedNamesDialog } from "./DeletedNamesDialog.jsx";
 import { TargetDialog } from "./TargetDialog.jsx";
 
@@ -8,7 +7,7 @@ import { TargetDialog } from "./TargetDialog.jsx";
 // message)` saves and throws on failure (the dialog shows the error and stays open);
 // `fire(request, message)` saves and reports a failure as a toast.
 
-const ENTITY_FREE = new Set(["deleteClaim", "createGroup", "group", "deletedNames"]);
+const ENTITY_FREE = new Set(["deleteClaim", "deletedNames"]);
 
 function Danger({ title, confirmLabel, onClose, onConfirm, children }) {
   return (
@@ -116,36 +115,11 @@ export function DialogHost({ dialog, entity, view, saving, reads, close, act, fi
             {dialog.claim.claim_text}
           </Bidi>
           <p>
-            Claim <Ltr>{dialog.claim.claim_id}</Ltr> will be removed from every entity and group, and step 5
+            Claim <Ltr>{dialog.claim.claim_id}</Ltr> will be removed from every entity, and the later steps
             will skip it.
           </p>
         </Danger>
       );
-    case "createGroup":
-      return (
-        <CreateGroupDialog
-          claimIds={dialog.claimIds}
-          texts={dialog.texts}
-          onClose={close}
-          onConfirm={(representative) =>
-            act(() => api.post("/aggregations", { claim_ids: dialog.claimIds, representative }), "Claims combined")
-          }
-        />
-      );
-    case "group": {
-      const groupPath = `/aggregations/${encodeURIComponent(dialog.group.id)}`;
-      const then = (request, message) => fire(request, message).then(close);
-      return (
-        <GroupDialog
-          group={dialog.group}
-          saving={saving}
-          onClose={close}
-          onRepresentative={(claimId) => then(() => api.post(`${groupPath}/representative`, { claim_id: claimId }), "Representative claim changed")}
-          onDecouple={(claimId) => then(() => api.post(`${groupPath}/decouple`, { claim_id: claimId }), "Claim removed from the group")}
-          onDissolve={() => then(() => api.del(groupPath), "Group dissolved")}
-        />
-      );
-    }
     case "deletedNames":
       return (
         <DeletedNamesDialog

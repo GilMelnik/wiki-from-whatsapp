@@ -128,21 +128,21 @@ class ReviewPasses:
 
     def _part(self, part_id: str, pages: tuple[str, ...]) -> ReviewPass:
         cap = REVIEW_CONFIG["part"]["max_suggestions"]
-        groups = frozenset(gid for pid in pages for gid in self.review.pages[pid].group_ids)
+        claims = frozenset(sid for pid in pages for sid in self.review.pages[pid].claim_ids)
         stamp = fingerprint({
             "reviewer": self._reviewer(PART, cap),
             "pages": {pid: page_fingerprint(self.review.all_pages[pid]) for pid in pages},
             "plan": self._plan_fields(pages)})
-        return ReviewPass(part_id, PART, pages, Scope(frozenset(pages), groups, KINDS, cap), stamp)
+        return ReviewPass(part_id, PART, pages, Scope(frozenset(pages), claims, KINDS, cap), stamp)
 
     def _cross(self, pages: tuple[str, ...]) -> ReviewPass:
         cap = REVIEW_CONFIG["cross"]["max_suggestions"]
-        groups = frozenset(gid for pid in pages for point in self.review.all_pages[pid]["points"]
-                           for gid in point["groups"])
+        claims = frozenset(sid for pid in pages for point in self.review.all_pages[pid]["points"]
+                           for sid in point["claims"])
         _, user = cross_prompt(self.review, pages, [])
         stamp = fingerprint({"reviewer": self._reviewer(CROSS, cap), "input": user[0].text})
         return ReviewPass(CROSS_ID, CROSS, pages,
-                          Scope(frozenset(pages), groups, CROSS_KINDS, cap), stamp)
+                          Scope(frozenset(pages), claims, CROSS_KINDS, cap), stamp)
 
     def select(self, only: Collection[str] | None) -> list[ReviewPass]:
         """The passes named in ``only`` (every pass for ``None``); an unknown id is an error."""

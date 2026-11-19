@@ -84,7 +84,7 @@ body {
     @apply border-slate-200 bg-white text-slate-700;
   }
 
-  /* A bordered block of content (a claim group, a page, a paragraph). */
+  /* A bordered block of content (a claim, a page, a paragraph). */
   .card {
     @apply rounded-md border border-slate-200 bg-white p-3;
   }

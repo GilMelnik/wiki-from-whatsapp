@@ -1,5 +1,6 @@
-"""Applying a suggestion: each kind changes its artifact (plan, pages, groups) the way the
-existing steps expect, and a refused apply leaves every file byte-identical."""
+"""Applying a suggestion: each kind changes its artifact (plan, pages, the owner's
+contradiction pairs) the way the existing steps expect, and a refused apply leaves every file
+byte-identical."""
 
 from __future__ import annotations
 
@@ -10,10 +11,16 @@ from typing import Any
 
 import pytest
 
+import review_tool.tools.suggestions.apply as apply_module
 from review_tool.tools.suggestions.apply import ApplyRefused, kept_share, sentences
+from step_6_plan.claim_records import (
+    add_manual_contradiction,
+    load_claim_records,
+    load_manual_pairs,
+)
 from step_6_plan.model import validation_errors
 from step_8_review.inputs import REVIEW_CONFIG
-from tests.pages_fixtures import FakeWriter, Responder
+from tests.pages_fixtures import IDS, FakeWriter, Responder
 from tests.review_fixtures import (
     FakeReviewer,
     ReviewWorkspace,
@@ -24,7 +31,8 @@ from tests.review_fixtures import (
     valid_answers,
 )
 
-FIXED = "הקבוצה g-00000004 מספרת על הניסיון השני.[^g-00000004]"
+FIXED = f"הטענה {IDS[4]} מספרת על הניסיון השני.[^{IDS[4]}]"
+LINK = tuple(sorted((IDS[0], IDS[2])))  # the pair the contradiction suggestion links
 
 
 @pytest.fixture()
@@ -78,25 +86,26 @@ def test_a_refused_structural_apply_changes_nothing(ws: ReviewWorkspace) -> None
 
 
 def test_a_mistake_is_corrected_through_step_7_and_saved_to_the_edited_pages(ws: ReviewWorkspace) -> None:
-    llm = FakeWriter("fake-apply", respond=corrector(sentence_a("g-00000004"), FIXED))
+    llm = FakeWriter("fake-apply", respond=corrector(sentence_a(IDS[4]), FIXED))
     before = ws.effective_page("agencies")["body_md"]
     result = ws.applier(llm).apply(_suggestion(ws, "mistake"))
     after = ws.effective_page("agencies")
-    assert FIXED in after["body_md"] and sentence_a("g-00000004") not in after["body_md"]
-    assert "[^g-00000004]" in after["body_md"] and "]:" not in after["body_md"]  # marks only
-    untouched = [s for s in sentences(before) if "g-00000004" not in s]
+    assert FIXED in after["body_md"] and sentence_a(IDS[4]) not in after["body_md"]
+    assert f"[^{IDS[4]}]" in after["body_md"] and "]:" not in after["body_md"]  # marks only
+    untouched = [s for s in sentences(before) if IDS[4] not in s]
     assert all(s in after["body_md"] for s in untouched)
     assert result.details["pages"]["agencies"]["kept_sentence_share"] == 1.0
     assert after["front_matter"]["summary"] == "תקציר מתוקן"
-    assert [p["groups"] for p in after["points"]] == [["g-00000000"], ["g-00000004"], ["g-00000008"]]
+    assert [p["claims"] for p in after["points"]] == [[IDS[0]], [IDS[4]], [IDS[8]]]
     assert after["left_out"] == []
     prompt = "".join(segment.text for segment in llm.calls[0]["user"])
-    assert "editor request" in prompt and "<current_points>\n- fact | נקודה g-00000000" in prompt
+    assert "editor request" in prompt and f"<current_points>\n- fact | נקודה {IDS[0]}" in prompt
+    assert f"(claims {IDS[4]})" in prompt
     assert ws.pages()["pages"]["agencies"]["body_md"] == before
 
 
 def test_step_7_keeps_the_correction_as_the_pages_text(ws: ReviewWorkspace) -> None:
-    llm = FakeWriter("fake-apply", respond=corrector(sentence_a("g-00000004"), FIXED))
+    llm = FakeWriter("fake-apply", respond=corrector(sentence_a(IDS[4]), FIXED))
     ws.applier(llm).apply(_suggestion(ws, "mistake"))
     writer = FakeWriter()
     ws.run(llm=writer, update_llm=FakeWriter("fake-update"))
@@ -106,8 +115,8 @@ def test_step_7_keeps_the_correction_as_the_pages_text(ws: ReviewWorkspace) -> N
 
 @pytest.mark.parametrize("respond,expected", [
     (no_change, "no_change"),
-    (corrector("[^g-00000008]", ""), "too_much_changed"),
-    (corrector("[^g-00000000]", "[^g-00000003]"), "failed_checks"),
+    (corrector(f"[^{IDS[8]}]", ""), "too_much_changed"),
+    (corrector(f"[^{IDS[0]}]", f"[^{IDS[3]}]"), "failed_checks"),
 ])
 def test_a_refused_page_correction_changes_nothing(ws: ReviewWorkspace, respond: Responder,
                                                    expected: str) -> None:
@@ -122,7 +131,7 @@ def test_a_refused_page_correction_changes_nothing(ws: ReviewWorkspace, respond:
 def test_a_mistake_whose_sentence_is_gone_is_refused(ws: ReviewWorkspace) -> None:
     payload = ws.pages()
     payload["pages"]["agencies"]["body_md"] = payload["pages"]["agencies"]["body_md"].replace(
-        sentence_a("g-00000004"), "נוסח חדש של הבעלים.[^g-00000004]")
+        sentence_a(IDS[4]), f"נוסח חדש של הבעלים.[^{IDS[4]}]")
     ws.write_edited(payload)
     llm = FakeWriter("fake-apply")
     with pytest.raises(ApplyRefused, match="not in page agencies"):
@@ -130,34 +139,57 @@ def test_a_mistake_whose_sentence_is_gone_is_refused(ws: ReviewWorkspace) -> Non
     assert llm.calls == []
 
 
-def test_a_contradiction_links_the_groups_and_corrects_both_pages(ws: ReviewWorkspace) -> None:
+def test_a_contradiction_links_the_claims_and_corrects_both_pages(ws: ReviewWorkspace) -> None:
     def both_sides(system: Any, user: Any, task: str) -> dict[str, Any]:
         answer = corrector("פתיח קצר", "פתיח קצר, ויש בו שני צדדים")(system, user, task)
-        assert "contradicts: g-0000000" in "".join(s.text for s in user)
+        prompt = "".join(s.text for s in user)
+        assert f"contradicts: {IDS[2]}" in prompt or f"contradicts: {IDS[0]}" in prompt
+        assert f"Claims {IDS[0]} and {IDS[2]} contradict each other" in prompt
         return answer
 
     llm = FakeWriter("fake-apply", respond=both_sides)
     result = ws.applier(llm).apply(_suggestion(ws, "contradiction"))
-    assert ws.linker.links == [("g-00000000", "g-00000002", True)]
+    assert load_manual_pairs(ws.sources.contradictions) == [LINK]
+    claims = {claim["short_id"]: claim for claim in load_claim_records(ws.sources)}
+    assert IDS[2] in claims[IDS[0]]["contradicts"] and IDS[0] in claims[IDS[2]]["contradicts"]
     for page_id in ("agencies", "clinics"):
         assert "שני צדדים" in ws.effective_page(page_id)["body_md"]
     assert set(result.details["pages"]) == {"agencies", "clinics"}
-    assert result.details["links"] == [["g-00000000", "g-00000002"]]
+    assert result.details["links"] == [[IDS[0], IDS[2]]]
+    assert result.details["links_file"] == str(ws.sources.contradictions)
+    assert result.details["links_backup"] is None  # there were no manual pairs before
 
 
 def test_a_contradiction_whose_page_correction_fails_links_nothing(ws: ReviewWorkspace) -> None:
     before = ws.snapshot()
     with pytest.raises(ApplyRefused):
-        ws.applier(FakeWriter("fake-apply", respond=corrector("[^g-00000000]", "[^g-00000003]"))
+        ws.applier(FakeWriter("fake-apply", respond=corrector(f"[^{IDS[0]}]", f"[^{IDS[3]}]"))
                    ).apply(_suggestion(ws, "contradiction"))
-    assert ws.linker.links == [] and ws.snapshot() == before
+    assert not ws.sources.contradictions.exists() and ws.snapshot() == before
 
 
-def test_a_contradiction_already_shown_on_the_pages_only_links_the_groups(ws: ReviewWorkspace) -> None:
+def test_a_contradiction_whose_link_cannot_be_saved_changes_nothing(
+        ws: ReviewWorkspace, monkeypatch: pytest.MonkeyPatch) -> None:
+    add_manual_contradiction(IDS[5], IDS[9], ws.sources.contradictions)  # an earlier pair
+
+    def disk_full(a: str, b: str, path: Path) -> bool:
+        add_manual_contradiction(a, b, path)
+        raise OSError("disk full")
+
+    monkeypatch.setattr(apply_module, "add_manual_contradiction", disk_full)
+    before = ws.snapshot()
+    llm = FakeWriter("fake-apply", respond=corrector("פתיח קצר", "פתיח קצר, ויש בו שני צדדים"))
+    with pytest.raises(ApplyRefused) as refused:
+        ws.applier(llm).apply(_suggestion(ws, "contradiction"))
+    assert str(refused.value).startswith(REVIEW_CONFIG["messages"]["link_refused"].split("{")[0])
+    assert ws.snapshot() == before  # the earlier pairs are back, no page was written
+
+
+def test_a_contradiction_already_shown_on_the_pages_only_links_the_claims(ws: ReviewWorkspace) -> None:
     pages = ws.artifact.original.read_bytes()
     result = ws.applier(FakeWriter("fake-apply", respond=no_change)).apply(
         _suggestion(ws, "contradiction"))
-    assert ws.linker.links == [("g-00000000", "g-00000002", True)]
+    assert load_manual_pairs(ws.sources.contradictions) == [LINK]
     assert not ws.artifact.edited.exists() and ws.artifact.original.read_bytes() == pages
     assert result.details["pages"]["agencies"]["changed"] is False
 

@@ -5,7 +5,7 @@ top-level section with ``section(name)``; the sections are ``logging``
 (rotating-file/console tunables), ``llm_client`` (provider/model per stage,
 cache/failure paths, batch/JSON knobs), ``entities`` (entity-clustering
 thresholds and signal vocabulary), ``input`` (chat export location and cutoff
-date), ``embedding``, ``classifier``, ``threads``, ``aggregate``, ``plan``,
+date), ``embedding``, ``classifier``, ``threads``, ``plan``,
 ``pages``, ``review``, ``site`` and ``update``. ``LOGGING_CONFIG``,
 ``LLM_CONFIG`` and ``ENTITIES_CONFIG`` are shortcuts for the first three.
 

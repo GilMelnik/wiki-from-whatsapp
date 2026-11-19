@@ -13,6 +13,7 @@ import pytest
 from review_tool.toolset import TOOL_SPECS
 from step_8_review.inputs import REVIEW_CONFIG
 from step_8_review.proposals import plain_text
+from tests.pages_fixtures import IDS
 from tests.review_fixtures import FakeReviewer, flat, sentence_a
 from tests.suggestions_tool_support import ToolSetup
 from utils.config import LLM_CONFIG
@@ -26,8 +27,8 @@ def setup(tmp_path: Path) -> ToolSetup:
 
 def test_the_tool_is_registered_with_its_files() -> None:
     spec = next(spec for spec in TOOL_SPECS if spec.name == "suggestions")
-    assert spec.reads == ("plan", "assignments", "pages", "groups")
-    assert spec.writes == ("suggestions", "plan", "pages", "groups")
+    assert spec.reads == ("plan", "assignments", "pages", "claims", "entities")
+    assert spec.writes == ("suggestions", "plan", "pages")
 
 
 def test_before_step_8_has_run_the_tool_says_so(tmp_path: Path) -> None:
@@ -76,25 +77,25 @@ def test_a_page_changed_since_the_review_is_marked(setup: ToolSetup) -> None:
     assert marks["mistake"] == {"agencies": REVIEW_CONFIG["page_marks"]["changed"]}
 
 
-def test_a_mistake_shows_its_sentence_in_its_paragraph_and_its_groups(setup: ToolSetup) -> None:
+def test_a_mistake_shows_its_sentence_in_its_paragraph_and_its_claims(setup: ToolSetup) -> None:
     detail = setup.get(f"/suggestions/{setup.ids()['mistake']}")
     evidence = detail["evidence"]
     assert evidence["page"]["page_id"] == "agencies" and evidence["page"]["exists"]
-    assert evidence["page"]["groups"]["main"] > 0 and evidence["page"]["words"] > 0
+    assert evidence["page"]["claims"]["main"] > 0 and evidence["page"]["words"] > 0
     quote = evidence["quote"]
-    assert quote["text"][quote["start"]:quote["end"]] == plain_text(sentence_a("g-00000004"))
-    group = evidence["groups"][0]
-    assert group["group_id"] == "g-00000004" and group["claim_text"]
-    assert {"supporters", "opposers", "first_date", "last_date", "stance"} <= set(group)
-    assert group["said_in"][0]["page_id"] == "agencies"
-    assert "all_supporters" not in group and "entity_names" not in group
+    assert quote["text"][quote["start"]:quote["end"]] == plain_text(sentence_a(IDS[4]))
+    claim = evidence["claims"][0]
+    assert claim["short_id"] == IDS[4] and claim["claim_text"]
+    assert {"supporters", "opposers", "first_date", "last_date", "stance"} <= set(claim)
+    assert claim["said_in"][0]["page_id"] == "agencies"
+    assert "entity_names" not in claim and "SECRET" not in json.dumps(detail)
     assert detail["changes"] is None and detail["suggestion"]["paid"] is True
 
 
 def test_a_contradiction_shows_both_sides_and_where_each_is_said(setup: ToolSetup) -> None:
     evidence = setup.get(f"/suggestions/{setup.ids()['contradiction']}")["evidence"]
-    assert [g["group_id"] for g in evidence["sides"]["a"]] == ["g-00000000"]
-    assert [g["group_id"] for g in evidence["sides"]["b"]] == ["g-00000002"]
+    assert [c["short_id"] for c in evidence["sides"]["a"]] == [IDS[0]]
+    assert [c["short_id"] for c in evidence["sides"]["b"]] == [IDS[2]]
     assert evidence["sides"]["b"][0]["said_in"] and evidence["sides"]["a"][0]["claim_text"]
     assert [page["page_id"] for page in evidence["pages"]] == ["agencies", "clinics"]
 

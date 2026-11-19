@@ -19,7 +19,6 @@ from utils.paths import (
     STEP_2,
     STEP_3,
     STEP_4,
-    STEP_5,
     STEP_6_ASSIGN,
     STEP_7,
     STEP_8,
@@ -28,7 +27,7 @@ from utils.paths import (
 )
 from utils.step_lease import StepLease
 
-UPDATE_ORDER = [STEP_1, STEP_2, STEP_3, STEP_4, STEP_5, STEP_6_ASSIGN, STEP_7, STEP_8,
+UPDATE_ORDER = [STEP_1, STEP_2, STEP_3, STEP_4, STEP_6_ASSIGN, STEP_7, STEP_8,
                 STEP_8_PROOFREAD, STEP_9]
 
 
@@ -70,7 +69,6 @@ def test_stopped_before_a_paid_step_with_its_estimate(world: World) -> None:
     assert answer["counts"] == {"new": 2, "changed": 0, "missing": 0}
     assert [statuses(answer)[key] for key in UPDATE_ORDER] == [
         "done", "done", "stopped", "waiting", "waiting", "waiting", "waiting", "waiting", "waiting",
-        "waiting",
     ]
     assert answer["stopped"]["kind"] == "paid" and answer["stopped"]["review_tool"] is None
     assert f"--pay {STEP_3}" in answer["stopped"]["message"]
@@ -103,6 +101,19 @@ def test_a_failed_step(world: World) -> None:
     assert answer["failed"]["step"] == STEP_4 and answer["failed"]["error"].startswith("RuntimeError")
     assert answer["failed"]["title"] == "Step 4 · Find entities"
     assert answer["command"] == "python -m step_10_update.run"  # the next run retries the step
+
+
+def test_a_saved_update_that_names_the_removed_step_still_shows(world: World) -> None:
+    world.run(world.export(newer_chat()), pay=PAID_STEPS, no_stops=True, through=STEP_4)
+    state = world.state()  # as the old pipeline left it: the step that grouped claims waits
+    removed = "step_5_aggregate"
+    state["update"]["steps"][removed] = {"runs": 1, "gate_passed": False, "changed": True, "at": "x"}
+    state["update"]["stopped"] = {"kind": "review", "step": removed, "message": "review", "at": "x"}
+    world.write_json(world.paths.state, state)
+    answer = view(world)
+    assert [statuses(answer)[key] for key in UPDATE_ORDER[3:6]] == ["done", "next", "waiting"]
+    assert removed not in statuses(answer)
+    assert answer["stopped"]["title"] == removed and answer["stopped"]["review_tool"] is None
 
 
 def test_a_running_step_comes_from_the_lease(world: World) -> None:

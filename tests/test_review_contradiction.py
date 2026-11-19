@@ -1,62 +1,45 @@
-"""A contradiction applied through the groups tool's real store survives a step-5 re-run
-(synthetic step-5 corpus, fake embedder and fake page writer)."""
+"""A contradiction applied from the review is saved as the owner's manual pair and survives:
+the claim records join it on every load (also after the claims are written again), and step 7
+writes both sides (synthetic claim records and fake page writers)."""
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import Any
 
-import pytest
-
-from review_tool.tools.groups.store import GroupsStore
 from review_tool.tools.suggestions.apply import Applier
-from step_7_write_pages.run import run as write_pages
-from tests.groups_tool_support import GroupsSetup
-from tests.pages_fixtures import FakeWriter
-from tests.plan_fixtures import PAGE_IDS, make_plan
+from step_6_plan.claim_records import load_claim_records, load_manual_pairs
+from tests.pages_fixtures import IDS, FakeWriter, PagesWorkspace
 from tests.review_fixtures import corrector, long_article
-from utils.json_io import write_json_file
-from utils.paths import Artifact, resolve
+from utils.llm_client import _flatten
+from utils.paths import Artifact
 
 
-def _assign(groups: list[dict[str, Any]], pages: dict[str, str]) -> dict[str, Any]:
-    records = {g["group_id"]: {"pages": [pages.get(g["group_id"], PAGE_IDS[i % 4])],
-                               "labels": [], "p": {}, "label_p": {}}
-               for i, g in enumerate(groups)}
-    return {"assignments": records, "proposals": [], "metadata": {}}
-
-
-def test_a_manual_contradiction_link_survives_step_5(tmp_path: Path,
-                                                     monkeypatch: pytest.MonkeyPatch) -> None:
-    setup = GroupsSetup(tmp_path, monkeypatch)
-    d1, c1 = setup.gid("d1"), setup.gid("c1")
-    assert c1 not in setup.group_of("d1")["contradicts"]
-    plan_path, assignments_path = tmp_path / "plan.json", tmp_path / "assignments.json"
-    write_json_file(make_plan(), plan_path)
-    write_json_file(_assign(setup.payload()["groups"], {d1: "agencies", c1: "clinics"}),
-                    assignments_path)
-    pages = Artifact(tmp_path / "wiki_pages.json", tmp_path / "wiki_pages_edited.json")
-    write_pages(aggregated_path=resolve(setup.corpus.artifact), plan_path=plan_path,
-                assignments_path=assignments_path, artifact=pages,
-                llm=FakeWriter(respond=long_article), update_llm=FakeWriter("fake-update"))
-
-    def linker() -> GroupsStore:
-        return GroupsStore(setup.graph.node("groups"), setup.graph.node("claims"),
-                           setup.graph.node("entities"), tmp_path / "audit.json")
-
-    applier = Applier(pages_artifact=pages,
-                      plan_artifact=Artifact(plan_path, tmp_path / "plan_edited.json"),
-                      aggregated_path=resolve(setup.corpus.artifact),
-                      assignments_path=assignments_path,
-                      llm=FakeWriter("fake-apply", respond=corrector("פתיח קצר", "שני צדדים")),
-                      linker=linker)
+def test_a_manual_contradiction_link_survives_new_claims_and_reaches_the_writer(
+        tmp_path: Path) -> None:
+    ws = PagesWorkspace(tmp_path)
+    ws.run(llm=FakeWriter(respond=long_article))
+    before = {claim["short_id"]: claim for claim in load_claim_records(ws.sources)}
+    assert IDS[2] not in before[IDS[0]]["contradicts"]
+    applier = Applier(pages_artifact=ws.artifact,
+                      plan_artifact=Artifact(ws.plan_path, tmp_path / "plan_edited.json"),
+                      sources=ws.sources, assignments_path=ws.assignments_path,
+                      llm=FakeWriter("fake-apply", respond=corrector("פתיח קצר", "שני צדדים")))
     suggestion = {"kind": "contradiction", "proposal": {
-        "groups_a": [d1], "groups_b": [c1], "pages": ["agencies", "clinics"],
+        "claims_a": [IDS[0]], "claims_b": [IDS[2]], "pages": ["agencies", "clinics"],
         "clash": "סותרות", "correction": "להציג את שני הצדדים"}}
     applier.apply(suggestion)
-    assert setup.group_of("d1")["contradicts_manual"] == [c1]
-    assert d1 in setup.group_of("c1")["contradicts"]
-    setup.run_step()
-    assert c1 in setup.group_of("d1")["contradicts"]
-    assert setup.group_of("c1")["contradicts_manual"] == [d1]
-    assert "שני צדדים" in setup.payload(pages.edited)["pages"]["agencies"]["body_md"]
+    assert load_manual_pairs(ws.sources.contradictions) == [tuple(sorted((IDS[0], IDS[2])))]
+    assert "שני צדדים" in ws.pages(edited=True)["pages"]["agencies"]["body_md"]
+    payload = json.loads(ws.sources.claims.read_text(encoding="utf-8"))
+    payload["claims"][11]["claim_text"] = "Reworded by a later step 3 run."  # an unplaced claim
+    ws.sources.claims.write_text(json.dumps(payload), encoding="utf-8")
+    claims = {claim["short_id"]: claim for claim in load_claim_records(ws.sources)}
+    assert IDS[2] in claims[IDS[0]]["contradicts"] and IDS[0] in claims[IDS[2]]["contradicts"]
+    update = FakeWriter("fake-update")
+    ws.run(update_llm=update)
+    prompts = {call["task"]: _flatten(call["user"]) for call in update.calls}
+    assert set(prompts) == {"update:agencies", "update:clinics"}
+    line = next(line for line in prompts["update:agencies"].splitlines()
+                if line.startswith(f"changed: {IDS[0]} |"))
+    assert f"contradicts: {IDS[2]} (on clinics:" in line

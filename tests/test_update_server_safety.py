@@ -94,7 +94,7 @@ IDLE = {"jobs": [{"state": "succeeded", "title": "Step 2"}],
     (8780, {**IDLE, "jobs": [{"state": "running", "title": "Step 2"}]}, "is running Step 2"),
     (8780, {**IDLE, "suggestions/applies": {"running": {"id": "s"}, "queue": [{"id": "t"}]}},
      "2 suggestion(s)"),
-    (8780, {**IDLE, "tools": [{"name": "groups"}], "suggestions/applies": None}, None),
+    (8780, {**IDLE, "tools": [{"name": "entities"}], "suggestions/applies": None}, None),
     (8780, {**IDLE, "suggestions/applies": None}, "did not answer"),
     (8780, {}, "did not answer GET /api/jobs"),
 ])

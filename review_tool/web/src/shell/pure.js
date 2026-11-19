@@ -9,4 +9,4 @@ export { FAILED, RUNNING } from "./jobState.js";
 export { formatBytes, formatCount, formatDateTime, formatDay, formatMoment, formatMonth, formatRelative, formatSpan, formatTime } from "./format.js";
 export * from "./messageStream.js";
 export { letterTag, THREAD_COLORS, ThreadColors } from "./threadColors.js";
-export { STANCES, stanceOf } from "./stance.js";
+export { stanceOf } from "./stance.js";

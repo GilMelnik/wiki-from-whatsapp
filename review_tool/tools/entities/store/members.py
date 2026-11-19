@@ -18,8 +18,8 @@ _KEPT_FIELDS = ("attached_by",)
 
 
 class MembersMixin:
-    """Relies on ``EntityStore``: ``entities``, ``payload``, ``claims``, ``aggregations``,
-    ``deleted_claims``, ``find``, ``member_of`` and ``save``."""
+    """Relies on ``EntityStore``: ``entities``, ``payload``, ``claims``, ``deleted_claims``,
+    ``find``, ``member_of`` and ``save``."""
 
     # --- building blocks ----------------------------------------------------
 
@@ -162,8 +162,8 @@ class MembersMixin:
         return entity_id
 
     def delete_claim(self, claim_id: str) -> None:
-        """Hard-delete a claim: recorded in ``deleted_claims`` (step 5 skips it), removed from
-        every member and from its claim aggregation."""
+        """Hard-delete a claim: recorded in ``deleted_claims`` (later steps skip it) and removed
+        from every member."""
 
         if self.claims.claim(claim_id) is None:
             raise EntityNotFound(f"Claim {claim_id} does not exist")
@@ -179,6 +179,4 @@ class MembersMixin:
                     touched = True
             if touched:
                 refresh_entity(entity)
-        if self.aggregations.remove_claim(claim_id):
-            self.aggregations.save()
         self.save()

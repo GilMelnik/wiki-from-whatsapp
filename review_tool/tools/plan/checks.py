@@ -87,17 +87,17 @@ def _lonely_kinds(plan: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def _pages_without_examples(plan: dict[str, Any], group_ids: set[str] | None) -> list[dict[str, Any]]:
+def _pages_without_examples(plan: dict[str, Any], short_ids: set[str] | None) -> list[dict[str, Any]]:
     found = []
     for page_id, page in plan["pages"].items():
-        examples = page["example_group_ids"]
-        known = examples if group_ids is None else [g for g in examples if g in group_ids]
+        examples = page["example_claims"]
+        known = examples if short_ids is None else [s for s in examples if s in short_ids]
         if not known:
             found.append({
                 "code": "no_examples",
                 "ids": [page_id],
-                "text": f"The page {quote(page['title_he'])} has no example claim groups"
-                        + ("" if not examples else " that exist in the groups file")
+                "text": f"The page {quote(page['title_he'])} has no example claims"
+                        + ("" if not examples else " that still exist")
                         + ": it is hard to check whether its scope says what you meant.",
             })
     return found
@@ -127,7 +127,7 @@ _SIZE_ADVICE = {
 
 
 def _sizes(plan: dict[str, Any], sizes: Mapping[str, Mapping[str, Any]] | None) -> list[dict[str, Any]]:
-    """A page outside the size guide, by its exact count of groups (``sizes.page_sizes``)."""
+    """A page outside the size guide, by its exact count of claims (``sizes.page_sizes``)."""
 
     if sizes is None:
         return []
@@ -138,18 +138,19 @@ def _sizes(plan: dict[str, Any], sizes: Mapping[str, Mapping[str, Any]] | None) 
         tone, advice = _SIZE_ADVICE[size["flag"]]
         found.append({"code": f"{size['flag']}_page", "ids": [page_id], "tone": tone,
                       "text": f"The page {quote(plan['pages'][page_id]['title_he'])} is the main "
-                              f"page of {size['groups']} claim groups, {advice}"})
+                              f"page of {size['claims']} claims, {advice}"})
     return found
 
 
 def plan_warnings(
     plan: dict[str, Any],
     *,
-    group_ids: set[str] | None,
+    short_ids: set[str] | None,
     sizes: Mapping[str, Mapping[str, Any]] | None,
 ) -> list[dict[str, Any]]:
-    """Every warning about ``plan``. ``group_ids`` = the groups file's ids (``None`` when there
-    is no groups file); ``sizes`` = ``sizes.page_sizes`` (``None`` before step 6b has run)."""
+    """Every warning about ``plan``. ``short_ids`` = the claim records' ids (``None`` when there
+    are no claim records yet); ``sizes`` = ``sizes.page_sizes`` (``None`` before step 6b has
+    run)."""
 
     found = [
         *_budget(plan),
@@ -157,6 +158,6 @@ def plan_warnings(
         *_same_titles(plan),
         *_empty_categories(plan),
         *_lonely_kinds(plan),
-        *_pages_without_examples(plan, group_ids),
+        *_pages_without_examples(plan, short_ids),
     ]
     return [*({"tone": "warning", **warning} for warning in found), *_sizes(plan, sizes)]

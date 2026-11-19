@@ -2,9 +2,9 @@
 
 The store is built from disk in one go (a ``StoreHandle`` factory) and reads the edited
 entities when they exist, else the original; the first change creates the edited copy. It
-writes ONLY ``entities_edited.json`` and the manual claim aggregations file, and every save
-keeps what step 5 reads consistent: ``claim_entities`` (claim -> canonical entity ids), the id
-high-water mark ``metadata.last_entity_number``, ``deleted_claims`` and ``deleted_names``.
+writes ONLY ``entities_edited.json``, and every save keeps what later steps read consistent:
+``claim_entities`` (claim -> canonical entity ids), the id high-water mark
+``metadata.last_entity_number``, ``deleted_claims`` and ``deleted_names``.
 New ids come from ``records.allocate_entity_id``; entities are refreshed with
 ``records.refresh_entity``, which keeps the manual flags (``canonical_manual``,
 ``contacts_manual``, ``contacts_rejected``).
@@ -19,7 +19,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-from review_tool.tools.entities.store.aggregations import EDITOR, ClaimAggregations
 from review_tool.tools.entities.store.claims import ClaimLookup
 from review_tool.tools.entities.store.context import ContextMixin
 from review_tool.tools.entities.store.edits import EditsMixin
@@ -35,6 +34,8 @@ from step_4_entities.records import (
 from utils.json_io import write_json_file
 from utils.timestamps import local_now
 
+EDITOR = "entity_reviewer"
+
 
 class EntityStore(ViewsMixin, ContextMixin, EditsMixin, MembersMixin):
     def __init__(
@@ -43,7 +44,6 @@ class EntityStore(ViewsMixin, ContextMixin, EditsMixin, MembersMixin):
         entities_edited: Path,
         claims_original: Path,
         claims_edited: Path,
-        aggregations_path: Path,
         analysis_path: Path,
     ) -> None:
         self.edited_path = entities_edited
@@ -54,7 +54,6 @@ class EntityStore(ViewsMixin, ContextMixin, EditsMixin, MembersMixin):
         self.payload.setdefault("entities", [])
         claims_path = claims_edited if claims_edited.is_file() else claims_original
         self.claims = ClaimLookup(claims_path, claims_original, analysis_path)
-        self.aggregations = ClaimAggregations(aggregations_path)
         self.deleted_claims: set[str] = set(self.payload.get("deleted_claims") or [])
         self.deleted_names: set[str] = set(self.payload.get("deleted_names") or [])
         for entity in self.entities:
@@ -89,11 +88,8 @@ class EntityStore(ViewsMixin, ContextMixin, EditsMixin, MembersMixin):
     def text_of(self, claim_id: str) -> str:
         return (self.claims.claim(claim_id) or {}).get("claim_text", "")
 
-    def claim_usable(self, claim_id: str) -> bool:
-        return self.claims.claim(claim_id) is not None and claim_id not in self.deleted_claims
-
     def save(self) -> None:
-        """Write the edited entities with everything step 5 reads brought up to date."""
+        """Write the edited entities with everything later steps read brought up to date."""
 
         payload = self.payload
         meta = payload.setdefault("metadata", {})

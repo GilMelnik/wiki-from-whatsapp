@@ -2,14 +2,14 @@
 
 ``PageWriter.write(context)`` and ``PageWriter.update(context, current, delta)`` are the whole
 contract (tasks 26 and 50 build on ``update``). Both return a ``PageText``: the page's points
-and the groups left out (``step_7_write_pages.points``), the body with its ``[^g-…]`` marks
-and no footnote definitions (step 9 renders the references from the groups), the summary,
+and the claims left out (``step_7_write_pages.points``), the body with its ``[^g-…]`` marks
+and no footnote definitions (step 9 renders the references from the claims), the summary,
 the questions, ``related`` in the C9 form ``[{slug, relation}]``, whether the text changed,
-and a ``report`` (calls, problems found, repairs, points by kind, groups left out and why,
-statements, marks, uncited disputed groups). Each answer is checked
+and a ``report`` (calls, problems found, repairs, points by kind, claims left out and why,
+statements, marks, uncited disputed claims). Each answer is checked
 (``step_7_write_pages.checks``); a failing answer gets ONE retry that names the problems, then
 whatever is still wrong is repaired and recorded. A page leaving out more than
-``pages.max_left_out_share`` of its main groups is logged as a warning.
+``pages.max_left_out_share`` of its main claims is logged as a warning.
 """
 
 from __future__ import annotations
@@ -44,8 +44,8 @@ from utils.wiki_links import find_wiki_links
 
 
 @dataclass(frozen=True)
-class GroupDelta:
-    """What changed on a page since its text was written: group ids new to it, changed
+class ClaimDelta:
+    """What changed on a page since its text was written: short ids new to it, changed
     (record fingerprint differs) and removed, and whether its title / description / scope
     changed."""
 
@@ -94,24 +94,24 @@ class PageWriter:
         self.logger = logger
 
     def write(self, context: PageContext) -> PageText:
-        """The page in full from its groups (stage ``write``)."""
+        """The page in full from its claims (stage ``write``)."""
         rules = rules_for(context.page_id, context.records, self.plan,
                           required=context.required_ids(), withheld=context.withheld)
         system, user = write_prompt(context)
         return self._complete(self.write_llm, system, user, WRITE_SCHEMA, rules, context,
                               task=f"write:{context.page_id}", current=None)
 
-    def update(self, context: PageContext, current: Mapping[str, Any], delta: GroupDelta,
+    def update(self, context: PageContext, current: Mapping[str, Any], delta: ClaimDelta,
                request: str = "") -> PageText:
         """The page updated from ``current`` (stage ``update``).
 
         ``current``: the current EFFECTIVE page as ``current_text`` returns it (body with marks
         but no definitions, summary, questions, related as ``[{page_id, relation}]``, points,
         left_out), so the owner's edits are the starting text and the stored points the
-        starting list. ``delta``: the new / changed / removed group ids (``context`` holds the
-        page's groups now). Returns the whole updated page with the whole updated points list;
+        starting list. ``delta``: the new / changed / removed short ids (``context`` holds the
+        page's claims now). Returns the whole updated page with the whole updated points list;
         when the model answers "no change needed" the current text with ``changed=False`` and
-        the points as the model returned them (a new group that joined a point). Checks: those
+        the points as the model returned them (a new claim that joined a point). Checks: those
         of a write over the whole page, except that sentences of the current body are not held
         to the "told once" rule. ``request``: a free-text correction to carry
         out (step 8 applies an accepted review suggestion with an empty ``delta`` and a
@@ -163,13 +163,13 @@ class PageWriter:
             "uncited_required": uncited_required(body, rules),
             "links": len(find_wiki_links(body)),
             "words": prose_words(body),
-            "main_groups": sum(1 for r in context.records if r["role"] == MAIN),
-            "groups": len(context.records),
+            "main_claims": sum(1 for r in context.records if r["role"] == MAIN),
+            "claims": len(context.records),
         }
         if final:
             self.logger.warning(f"{task}: still wrong after the retry (repaired / recorded): {final}")
         if report["left_out_share"] > PAGES_CONFIG["max_left_out_share"]:
-            self.logger.warning(f"{task}: {report['left_out_share']:.0%} of the main groups were "
+            self.logger.warning(f"{task}: {report['left_out_share']:.0%} of the main claims were "
                                 f"left out ({report['left_out_by_reason']}); check the points")
         return PageText(
             body=body,
@@ -190,8 +190,8 @@ def _text_differs(fixed: Mapping[str, Any], current: Mapping[str, Any]) -> bool:
             or fixed["questions"] != current["questions"] or fixed["related"] != related)
 
 
-def changed_share(delta: GroupDelta, group_count: int) -> float:
+def changed_share(delta: ClaimDelta, claim_count: int) -> float:
     """How much of a page's material changed: (new + changed + removed) / (now + removed)."""
     touched = len(delta.new) + len(delta.changed) + len(delta.removed)
-    return touched / max(group_count + len(delta.removed), 1)
+    return touched / max(claim_count + len(delta.removed), 1)
 

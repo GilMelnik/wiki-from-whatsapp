@@ -7,14 +7,15 @@ import pytest
 from review_tool.tools.plan.checks import plan_warnings
 from step_6_plan import operations as ops
 from step_6_plan.model import PLAN_CONFIG
-from tests.plan_fixtures import make_groups, make_plan
+from tests.claim_fixtures import claim_records
+from tests.plan_fixtures import make_plan
 
-GROUP_IDS = {group["group_id"] for group in make_groups()}
+SHORT_IDS = {claim["short_id"] for claim in claim_records()}
 
 
 def codes(plan: dict) -> dict[str, list[list[str]]]:
     found: dict[str, list[list[str]]] = {}
-    for warning in plan_warnings(plan, group_ids=GROUP_IDS, sizes=None):
+    for warning in plan_warnings(plan, short_ids=SHORT_IDS, sizes=None):
         assert warning["text"]
         found.setdefault(warning["code"], []).append(warning["ids"])
     return found
@@ -42,7 +43,7 @@ def test_same_titles_empty_categories_and_lonely_kinds() -> None:
 
 def test_pages_without_known_examples() -> None:
     assert codes(make_plan())["no_examples"] == [["hospital"]]
-    assert plan_warnings(make_plan(), group_ids=set(), sizes=None)[0]["ids"] == ["agencies"]
+    assert plan_warnings(make_plan(), short_ids=set(), sizes=None)[0]["ids"] == ["agencies"]
 
 
 def test_a_full_page_budget_is_flagged(monkeypatch: pytest.MonkeyPatch) -> None:

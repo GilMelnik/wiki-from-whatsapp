@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { Bidi, countText, Dialog, formatCount, groupCount, labelItems, Ltr, pathTitles, titleOf } from "@shell";
+import { Bidi, countText, Dialog, formatCount, claimCount, labelItems, Ltr, pathTitles, titleOf } from "@shell";
 import { labelChanges, labelShare, nextLabelTarget, pageChoices } from "./assign.js";
 import { percent } from "./plan.js";
 
 // The dialogs of a bulk move: pick a page (the primary one, or a second page) and set labels.
-// `rows` are the picked groups (as the list showed them); `onConfirm(changes)` saves and
+// `rows` are the picked claims (as the list showed them); `onConfirm(changes)` saves and
 // throws on failure (the dialog shows the error and stays open).
 
 const MODES = {
@@ -43,7 +43,7 @@ export function PagePickerDialog({ overview, rows, mode, onClose, onConfirm }) {
   return (
     <Dialog
       open
-      title={`${title}: ${groupCount(rows.length, formatCount)}`}
+      title={`${title}: ${claimCount(rows.length, formatCount)}`}
       size="lg"
       confirmLabel={confirm}
       confirmDisabled={!current}
@@ -53,9 +53,9 @@ export function PagePickerDialog({ overview, rows, mode, onClose, onConfirm }) {
       <div className="space-y-3">
         <p className="text-slate-600">
           {mode === "primary"
-            ? "The chosen page becomes the groups' primary page (a second page, if any, stays)."
-            : "The chosen page is added as a second page that only mentions the groups (replacing an existing second page)."}{" "}
-          The groups will be marked as assigned by hand, and the assignment step will not change them.
+            ? "The chosen page becomes the claims' primary page (a second page, if any, stays)."
+            : "The chosen page is added as a second page that only mentions the claims (replacing an existing second page)."}{" "}
+          The claims will be marked as assigned by hand, and the assignment step will not change them.
         </p>
         <input
           dir="auto"
@@ -113,7 +113,7 @@ export function LabelsDialog({ overview, rows, onClose, onConfirm }) {
   return (
     <Dialog
       open
-      title={`Labels: ${groupCount(rows.length, formatCount)}`}
+      title={`Labels: ${claimCount(rows.length, formatCount)}`}
       size="lg"
       confirmLabel={changes.length ? `Save ${countText(changes.length, "change", formatCount)}` : "Save"}
       confirmDisabled={changes.length === 0}
@@ -122,7 +122,7 @@ export function LabelsDialog({ overview, rows, onClose, onConfirm }) {
     >
       <div className="space-y-3">
         <p className="text-slate-600">
-          Checking adds the label to every picked group, and unchecking removes it from all of them. A
+          Checking adds the label to every picked claim, and unchecking removes it from all of them. A
           half-checked box: only some of them have the label, and it stays so unless you click it.
         </p>
         <ul className="max-h-80 space-y-0.5 overflow-y-auto">

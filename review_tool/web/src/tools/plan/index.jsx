@@ -5,7 +5,7 @@ import { api } from "./api.js";
 import {
   assignmentRows,
   DETAILS_TAB,
-  GROUPS_TAB,
+  CLAIMS_TAB,
   isAssignmentRow,
   isProposalRow,
   nextProposalRow,
@@ -15,7 +15,7 @@ import {
   UNPLACED_ID,
   WAITING_ID,
 } from "./assign.js";
-import { GroupsPanel } from "./AssignmentViews.jsx";
+import { ClaimsPanel } from "./AssignmentViews.jsx";
 import { DialogHost } from "./Dialogs.jsx";
 import { CategoryView, LabelView } from "./ItemViews.jsx";
 import { Overview } from "./Overview.jsx";
@@ -26,14 +26,14 @@ import { LabelRow, TreeRow } from "./Rows.jsx";
 import { Toolbar } from "./Toolbar.jsx";
 
 // The wiki plan: the page tree the planning model proposed, made the owner's, and (once step
-// 6b has run) where the classifier put every claim group. The list is the tree (phases →
-// categories → pages, with the groups on no page and the step's proposals, each to decide,
+// 6b has run) where the classifier put every claim. The list is the tree (phases →
+// categories → pages, with the claims on no page and the step's proposals, each to decide,
 // on top) or the labels by kind; the main column shows the selected item (the overview: what
-// there is to do; a page: its scope next to a sample of its groups, the closest groups it did
-// not get and its exact size, or all its claim groups; a proposal: its groups and dry run);
+// there is to do; a page: its scope next to a sample of its claims, the closest claims it did
+// not get and its exact size, or all its claims; a proposal: its claims and dry run);
 // the side column holds the actions, or the decision on a proposal.
 // Every plan change is one validated operation on the server, previewed in a dialog first
-// when it changes the structure or a scope; group moves pin the groups; the last changes of
+// when it changes the structure or a scope; claim moves pin the claims; the last changes of
 // both kinds can be undone. A re-plan or an assignment run underneath shows up without a
 // reload.
 
@@ -129,12 +129,12 @@ function PlanTool({ tool }) {
       toast.error(error);
       throw error;
     });
-  const editGroups = (groupIds, changes) =>
+  const editClaims = (claimIds, changes) =>
     saveWith(async () => {
-      const result = await api.post("/assignments/edit", { group_ids: groupIds, changes });
+      const result = await api.post("/assignments/edit", { claims: claimIds, changes });
       plan.setData(result.overview);
       if (result.changed > 0) toast.success(result.label);
-      else toast.info("Nothing to change: the groups are already like that.");
+      else toast.info("Nothing to change: the claims are already like that.");
       return result;
     });
   // After a decision on the shown proposal, the next one to decide is shown (else the list).
@@ -212,11 +212,11 @@ function PlanTool({ tool }) {
     { keys: "l", label: "Switch between the page tree and the labels", run: () => setView(labelsView ? TREE_VIEW : LABELS_VIEW) },
     {
       keys: "g",
-      label: "Switch between the page / label details and its claim groups",
-      run: () => (kind === "page" || kind === "label") && setTab(tab === GROUPS_TAB ? DETAILS_TAB : GROUPS_TAB),
+      label: "Switch between the page / label details and its claims",
+      run: () => (kind === "page" || kind === "label") && setTab(tab === CLAIMS_TAB ? DETAILS_TAB : CLAIMS_TAB),
     },
   ]);
-  // The decision on the shown proposal (bound only then: a and x pick and remove in a group list).
+  // The decision on the shown proposal (bound only then: a and x pick and remove in a claim list).
   useShortcuts(
     [
       { keys: "a", label: "Accept the proposal (opens it to correct first)", run: () => can && proposal && !(proposal.kind === "scope" && !proposal.target.page_id) && on.openAccept(proposal) },
@@ -244,21 +244,21 @@ function PlanTool({ tool }) {
     </PanelState>
   );
 
-  const groups = { overview, watch, locked, saving, editGroups };
+  const claims = { overview, watch, locked, saving, editClaims };
   let main = null;
   if (overview?.unreadable) main = <PanelState error={{ message: `The file ${overview.file} does not have the shape of a plan (C7).` }} />;
   else if (!ready) main = <PanelState loading={plan.loading} error={plan.error} onRetry={plan.reload} />;
   else if (!labelsView && selectedId === OVERVIEW_ID) main = <Overview overview={overview} reads={watch} on={on} />;
   else if (!labelsView && (selectedId === UNPLACED_ID || selectedId === WAITING_ID)) {
-    main = <GroupsPanel {...groups} scope={selectedId === UNPLACED_ID ? "unplaced" : "waiting"} />;
+    main = <ClaimsPanel {...claims} scope={selectedId === UNPLACED_ID ? "unplaced" : "waiting"} />;
   } else if (!labelsView && selectedId === PROPOSALS_ID) {
     main = <ProposalsView overview={overview} proposals={proposals} busy={saving || locked} offer={offer} on={on} />;
   } else if (proposal) {
     main = <ProposalDetail proposal={proposal} overview={overview} offer={offer} on={on} />;
   } else if (kind === "page") {
-    main = <PageView overview={overview} pageId={selectedId} saving={saving} reads={watch} scopeRef={scopeRef} tab={tab} groups={groups} on={on} />;
+    main = <PageView overview={overview} pageId={selectedId} saving={saving} reads={watch} scopeRef={scopeRef} tab={tab} claims={claims} on={on} />;
   } else if (kind === "category") main = <CategoryView overview={overview} nodeId={selectedId} saving={saving} on={on} />;
-  else if (kind === "label") main = <LabelView overview={overview} labelId={selectedId} saving={saving} tab={tab} groups={groups} on={on} />;
+  else if (kind === "label") main = <LabelView overview={overview} labelId={selectedId} saving={saving} tab={tab} claims={claims} on={on} />;
   else main = <PanelState empty emptyText="Select an item in the list" />;
 
   return (

@@ -1,14 +1,14 @@
 """Step 9: publish the wiki: ``docs/`` and ``mkdocs.yml`` from the plan (C7) and the pages (C9).
 
-Reads the effective plan, the effective written pages and the effective claim groups (C6, for
-the references and for the check that no page cites a group withheld by
-``step_7_write_pages.withhold``), and the effective conversations of step 1 (C1: the home page
-says the wiki rests on messages from the month of the earliest to the month of the latest
-one), then writes:
+Reads the effective plan, the effective written pages, the claim records (C6, joined on read
+by ``step_6_plan.claim_records``, for the references and for the check that no page cites a
+claim withheld by ``step_7_write_pages.withhold``) and the effective conversations of step 1
+(C1: the home page says the wiki rests on messages from the month of the earliest to the month
+of the latest one), then writes:
 
 - ``docs/<page_id>.md``: each planned page that has a written page, OKF front matter (hidden by
-  mkdocs) + body with its wiki links resolved and its references (group id, when, how many
-  people took part) rendered as footnotes from the groups;
+  mkdocs) + body with its wiki links resolved and its references (short id, when, how many
+  people took part) rendered as footnotes from the claim records;
 - ``docs/<labels_dir>/<label_id>.md``: one page per label that a published page carries;
 - ``docs/index.md``: the home page, an intro with the months of the first and the last message,
   then the plan's tree with each page's one-line description;
@@ -26,7 +26,7 @@ The step owns ``docs/``: files it did not write are removed, except the top-leve
 ``site.keep``. A file whose content is unchanged is not rewritten, so a re-run on unchanged
 inputs changes nothing. Problems (a planned page nobody wrote, a link to a page that is not
 published, a label nobody carries...) are logged and returned under ``issues``; a page citing a
-withheld group (``withheld_reference``) is logged as an error: re-run step 7 before publishing.
+withheld claim (``withheld_reference``) is logged as an error: re-run step 7 before publishing.
 A published page holding text that was never proofread (``step_8_review.proofread``) is named
 in a warning and in ``unproofread``; the site is built anyway (the owner may publish it).
 """
@@ -44,6 +44,7 @@ from typing import Any
 
 import yaml
 
+from step_6_plan.claim_records import ClaimSources, load_claim_records
 from step_7_write_pages.withhold import withheld_ids
 from step_8_review.proofreader import PROOFREAD_CONFIG, sentence_split
 from step_9_site import agent_hook, hebrew_search
@@ -59,7 +60,6 @@ from utils.paths import (
     MKDOCS_PATH,
     STEP_9,
     WIKI_INDEX_FILE,
-    resolve_aggregated_path,
     resolve_plan_path,
     resolve_threads_path,
     resolve_wiki_pages_path,
@@ -174,7 +174,7 @@ def run(
     *,
     plan_path: Path | None = None,
     pages_path: Path | None = None,
-    groups_path: Path | None = None,
+    sources: ClaimSources = ClaimSources(),
     threads_path: Path | None = None,
     docs_dir: Path = DOCS_DIR,
     mkdocs_path: Path = MKDOCS_PATH,
@@ -187,10 +187,9 @@ def run(
     """
     plan = _load(plan_path or resolve_plan_path(), "plan (step 6)")
     pages = _load(pages_path or resolve_wiki_pages_path(), "written pages (step 7)")["pages"]
-    groups = _load(groups_path or resolve_aggregated_path(), "claim groups (step 5)")["groups"]
+    claims = load_claim_records(sources)
     period = messages_period(_load(threads_path or resolve_threads_path(), "conversations (step 1)"))
-    withheld = withheld_ids(groups)
-    site = Site(plan, pages, groups, period, withheld)
+    site = Site(plan, pages, claims, period, withheld_ids(claims))
     files = {**site.files, **AgentPages(site).files(), WIKI_INDEX_FILE: index_text(site, docs_dir / WIKI_INDEX_FILE)}
     config = build_config(
         site.nav,

@@ -3,7 +3,8 @@
 The plan is ``plan_fixtures.make_plan`` (phases ``before`` / ``during``, categories
 ``choosing`` / ``medical``, pages agencies, costs, clinics, hospital, country labels usa and
 georgia) plus an empty category and a category whose only page is never written. The claim
-groups (C6, for the references) are ``plan_fixtures.make_groups`` unless a test passes its own.
+records (C6, for the references) are ``claim_fixtures.claim_records(4)`` unless a test passes its
+own; ``IDS[n]`` (``pages_fixtures.IDS``) is the short id of record ``n``.
 """
 
 from __future__ import annotations
@@ -17,13 +18,17 @@ from typing import Any
 
 from step_6_plan import operations
 from step_6_plan.model import find_node
+from step_6_plan.claim_records import Record
 from step_9_site.run import run
-from tests.plan_fixtures import make_groups, make_plan
-from utils.config import PROJECT_ROOT
+from tests.claim_fixtures import claim_records, write_claim_inputs
+from tests.pages_fixtures import IDS
+from tests.plan_fixtures import make_plan
+from utils.config import PROJECT_ROOT, section
 from utils.okf import build_front_matter
 
 GENERATED_AT = "2026-11-01T10:00:00Z"
 FIRST_MESSAGE, LAST_MESSAGE = "2023-01-15T09:30:00", "2024-06-20T21:05:00"
+SOURCE_RESOURCE_PREFIX = section("pages")["source_resource_prefix"]
 
 
 def make_site_plan() -> dict[str, Any]:
@@ -52,7 +57,7 @@ def make_page(
         tags=[],
         generated_by="wiki-from-whatsapp/test-model",
         generated_at=GENERATED_AT,
-        sources=[{"id": "g-00000001", "resource": "claim-group:g-00000001", "usage_count": 2}],
+        sources=[{"id": IDS[1], "resource": f"{SOURCE_RESOURCE_PREFIX}{IDS[1]}", "usage_count": 2}],
         aliases=page["aliases"],
         entities=["Entity1"],
         claims={
@@ -83,7 +88,7 @@ def run_site(
     tmp_path: Path,
     plan: dict[str, Any],
     pages: dict[str, dict[str, Any]],
-    groups: list[dict[str, Any]] | None = None,
+    claims: list[Record] | None = None,
     threads: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Write the inputs under ``tmp_path`` and build the site into ``tmp_path/docs``; the
@@ -92,15 +97,13 @@ def run_site(
     threads_path = tmp_path / "threads.json"
     chat = make_threads(FIRST_MESSAGE, "2023-08-01T12:00:00", LAST_MESSAGE) if threads is None else threads
     threads_path.write_text(json.dumps(chat, ensure_ascii=False), encoding="utf-8")
-    groups_path = tmp_path / "claims_aggregated.json"
     plan_path.write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
     pages_path.write_text(json.dumps({"pages": pages, "metadata": {}}, ensure_ascii=False), encoding="utf-8")
-    payload = {"groups": make_groups(4) if groups is None else groups, "metadata": {}}
-    groups_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    sources = write_claim_inputs(claim_records(4) if claims is None else claims, tmp_path)
     return run(
         plan_path=plan_path,
         pages_path=pages_path,
-        groups_path=groups_path,
+        sources=sources,
         threads_path=threads_path,
         docs_dir=tmp_path / "docs",
         mkdocs_path=tmp_path / "mkdocs.yml",

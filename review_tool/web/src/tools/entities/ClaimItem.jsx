@@ -36,7 +36,7 @@ function EntityChips({ label, entities, tagged, onOpenEntity }) {
   );
 }
 
-export function ClaimItem({ claim, memberIndex, picked, saving, onTogglePick, onOpenEntity, onExclude, onDelete, onShowAggregation }) {
+export function ClaimItem({ claim, memberIndex, picked, saving, onTogglePick, onOpenEntity, onExclude, onDelete }) {
   return (
     <li className="flex items-start gap-2 rounded bg-white/80 p-2" title={claimTip(claim)}>
       <input
@@ -58,11 +58,6 @@ export function ClaimItem({ claim, memberIndex, picked, saving, onTogglePick, on
             <span className="badge badge-sky" title="The claim is not tagged with this name; the name only appears in its text">
               Text mention only
             </span>
-          )}
-          {claim.aggregation && (
-            <button type="button" className="badge badge-sky hover:bg-sky-200" onClick={onShowAggregation}>
-              Combines {claim.aggregation.count} claims
-            </button>
           )}
           <EntityChips label="Other entities:" entities={claim.other_entities} onOpenEntity={onOpenEntity} />
           <EntityChips label="Tagged without a mention:" entities={claim.related_entities} tagged onOpenEntity={onOpenEntity} />

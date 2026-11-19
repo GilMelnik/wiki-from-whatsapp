@@ -104,8 +104,7 @@ def test_a_seed_alias_with_two_meanings_is_divided_per_claim(tmp_path: Path) -> 
     assert sense["name"] == "Dana" and sense["unclear"] == ["t7-a"] and not sense["failed"]
     # the Entities page links each of the two to the other, and shows the name in both
     store = EntityStore(step.artifact.original, step.artifact.edited, step.claims_path,
-                        step.claims_path.with_name("claims_edited.json"),
-                        step.claims_path.with_name("claim_aggregations.json"), step.analysis_path)
+                        step.claims_path.with_name("claims_edited.json"), step.analysis_path)
     detail = store.detail(lawyer["entity_id"], EntityView())
     assert [c["entity_id"] for c in detail["entity"]["conflicts"]] == [insurer["entity_id"]]
 

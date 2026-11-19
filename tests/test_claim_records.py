@@ -169,7 +169,7 @@ def test_the_edited_files_win_and_entities_follow_a_hand_edit(default_place: Non
 
 
 def test_people_are_distinct_and_on_the_side_of_their_latest_event() -> None:
-    # The case of step 5's test, its two member claims folded into one claim.
+    # Overlapping people over three months, some of them on both sides.
     audit = {
         "supporters": _events(
             ("p1", "2024-01-05"),

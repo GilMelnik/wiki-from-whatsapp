@@ -17,7 +17,6 @@ STEP_1 = "step_1_threads_split"
 STEP_2 = "step_2_classify"
 STEP_3 = "step_3_extract"
 STEP_4 = "step_4_entities"
-STEP_5 = "step_5_aggregate"
 STEP_6 = "step_6_plan"
 # The assignment step's id in the review tool's step registry; it writes into STEP_6's folder.
 STEP_6_ASSIGN = "step_6_assign"
@@ -69,14 +68,10 @@ CLAIMS = Artifact(
 ENTITIES = Artifact(
     step_path(STEP_4, "entities.json"), step_path(STEP_4, "entities_edited.json")
 )
-AGGREGATED = Artifact(
-    step_path(STEP_5, "claims_aggregated.json"),
-    step_path(STEP_5, "claims_aggregated_edited.json"),
-)
 PLAN = Artifact(
     step_path(STEP_6, "wiki_plan.json"), step_path(STEP_6, "wiki_plan_edited.json")
 )
-# Which claim groups go on which page and carry which labels (contract C8).
+# Which claims go on which page and carry which labels (contract C8).
 ASSIGNMENTS = Artifact(
     step_path(STEP_6, "assignments.json"), step_path(STEP_6, "assignments_edited.json")
 )
@@ -106,13 +101,6 @@ TAGGED_MEMBERS_PATH = step_path(STEP_3, "tagged_members.json")
 ENTITIES_SEED_PATH = step_path(STEP_4, "entities_seed.json")
 ENTITY_ANALYSIS_PATH = step_path(STEP_4, "entity_claim_analysis.json")
 ENTITY_MATCHES_PATH = step_path(STEP_4, "entity_matches.json")
-# Manual claim aggregations created in the entity reviewer (no pipeline original);
-# step 5 treats each one as a must-link: its claims end up in one group.
-MANUAL_AGGREGATIONS_PATH = step_path(STEP_4, "claim_aggregations.json")
-
-# ------------------------------------------------------------ step 5 aggregate
-# The measurement's private working folder (``python -m step_5_aggregate.evaluate``).
-AGGREGATE_EVAL_DIR = step_path(STEP_5, "eval")
 
 # ---------------------------------------------------------------- step 6 plan
 # The coverage check of the last planning run (not part of the plan itself).
@@ -173,10 +161,6 @@ def resolve_claims_path() -> Path:
 
 def resolve_entities_path() -> Path:
     return resolve(ENTITIES)
-
-
-def resolve_aggregated_path() -> Path:
-    return resolve(AGGREGATED)
 
 
 def resolve_plan_path() -> Path:

@@ -27,7 +27,6 @@ from utils.paths import (
     STEP_2,
     STEP_3,
     STEP_4,
-    STEP_5,
     STEP_6_ASSIGN,
     STEP_7,
     STEP_8,
@@ -36,7 +35,7 @@ from utils.paths import (
 )
 from utils.step_lease import StepLease
 
-UPDATE_ORDER = [STEP_1, STEP_2, STEP_3, STEP_4, STEP_5, STEP_6_ASSIGN, STEP_7, STEP_8,
+UPDATE_ORDER = [STEP_1, STEP_2, STEP_3, STEP_4, STEP_6_ASSIGN, STEP_7, STEP_8,
                 STEP_8_PROOFREAD, STEP_9]
 
 
@@ -95,7 +94,7 @@ def test_an_export_already_in_the_updates_folder_keeps_its_stamp(world: World) -
 
 def test_it_stops_at_every_review_point_and_goes_on_when_run_again(world: World) -> None:
     stops = run_to_the_end(world, world.export(newer_chat()), pay=PAID_STEPS)
-    assert stops == [STEP_2, STEP_3, STEP_4, STEP_5, STEP_6_ASSIGN, STEP_8]
+    assert stops == [STEP_2, STEP_3, STEP_4, STEP_6_ASSIGN, STEP_8]
     assert world.calls == UPDATE_ORDER  # no step was redone after a stop
 
 
@@ -107,11 +106,11 @@ def test_a_review_point_whose_output_did_not_change_does_not_stop(world: World) 
 
 
 def test_through_runs_without_review_stops_up_to_the_step(world: World) -> None:
-    outcome = world.run(world.export(newer_chat()), pay=PAID_STEPS, through=STEP_5)
-    assert outcome.status == STOPPED and world.calls == UPDATE_ORDER[:5]
+    outcome = world.run(world.export(newer_chat()), pay=PAID_STEPS, through=STEP_4)
+    assert outcome.status == STOPPED and world.calls == UPDATE_ORDER[:4]
     assert world.state()["update"]["stopped"]["kind"] == "through"
-    assert world.run(pay=PAID_STEPS, through=STEP_5).status == STOPPED
-    assert world.calls == UPDATE_ORDER[:5]
+    assert world.run(pay=PAID_STEPS, through=STEP_4).status == STOPPED
+    assert world.calls == UPDATE_ORDER[:4]
 
 
 def test_a_paid_step_stops_with_its_estimate_until_it_is_allowed(world: World) -> None:
@@ -173,6 +172,39 @@ def test_a_failing_later_step_is_retried_alone(world: World) -> None:
     world.calls.clear()
     assert world.run(pay=PAID_STEPS, no_stops=True).status == COMPLETED
     assert world.calls == UPDATE_ORDER[3:] and world.state()["update"]["failed"] is None
+
+
+# The step that grouped claims was removed from the pipeline; an update saved before that names it.
+REMOVED_STEP = "step_5_aggregate"
+
+
+def test_a_saved_update_stopped_at_the_removed_step_goes_on(world: World) -> None:
+    world.run(world.export(newer_chat()), pay=PAID_STEPS)
+    while world.state()["update"]["stopped"]["step"] != STEP_4:
+        world.run(pay=PAID_STEPS)
+    state = world.state()  # as the old pipeline left it: step 5 ran and waits for its review
+    update = state["update"]
+    update["steps"][STEP_4]["gate_passed"] = True
+    update["steps"][REMOVED_STEP] = {"runs": 1, "gate_passed": False, "changed": True, "at": "x"}
+    update["stopped"] = {"kind": "review", "step": REMOVED_STEP, "message": "review", "at": "x"}
+    world.write_json(world.paths.state, state)
+    world.calls.clear()
+    assert run_to_the_end(world, pay=PAID_STEPS) == [STEP_6_ASSIGN, STEP_8]
+    assert world.calls == UPDATE_ORDER[4:]
+    assert world.state()["update"]["steps"][REMOVED_STEP]["gate_passed"] is True
+
+
+def test_a_saved_update_that_failed_at_the_removed_step_goes_on(world: World) -> None:
+    world.failing = {STEP_6_ASSIGN}
+    with pytest.raises(StepFailed):
+        world.run(world.export(newer_chat()), pay=PAID_STEPS, no_stops=True)
+    state = world.state()
+    state["update"]["failed"] = {"step": REMOVED_STEP, "error": "RuntimeError()", "at": "x"}
+    world.write_json(world.paths.state, state)
+    world.failing = set()
+    world.calls.clear()
+    assert world.run(pay=PAID_STEPS, no_stops=True).status == COMPLETED
+    assert world.calls == UPDATE_ORDER[4:] and world.state()["update"]["failed"] is None
 
 
 def test_a_busy_review_server_or_another_update_refuses_to_start(world: World) -> None:
@@ -279,5 +311,5 @@ def test_through_the_plan_step_is_refused(world: World) -> None:
 
 def test_every_review_point_names_a_served_tool_with_a_hint() -> None:
     tools = {step.spec.review_tool for step in SERVED_STEPS.steps} - {None}
-    assert tools == {"threads", "pii", "entities", "groups", "plan", "suggestions"}
+    assert tools == {"threads", "pii", "entities", "plan", "suggestions"}
     assert tools <= {spec.name for spec in TOOL_SPECS} and tools <= set(UPDATE_CONFIG["review_hints"])
