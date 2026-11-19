@@ -7,8 +7,6 @@ scipy==1.15.3
 # torch: the venv holds the CUDA 12.6 build (2.12.0+cu126), which this pin also matches.
 torch==2.12.0
 transformers==5.10.2
-# only utils.embedding_ab (local models in the embedding A/B check)
-sentence-transformers==5.5.1
 
 # Wiki generation pipeline
 python-dotenv==1.2.2

@@ -133,14 +133,6 @@
       "similarity": "task: sentence similarity | query: {text}",
       "query": "task: search result | query: {text}",
       "document": "title: none | text: {text}"
-    },
-    "ab": {
-      "backup_dir": "/mnt/SSD/coding/backup_data_wiki_from_whatsapp/2026_11_07_data",
-      "models": ["gemini-embedding-001", "gemini-embedding-2"],
-      "pairs": 500,
-      "seed": 0,
-      "recall_target": 0.9,
-      "local_text_prefix": {"e5": "query: "}
     }
   },
   "classifier": {
@@ -261,42 +253,6 @@
   "claim_records": {
     "short_id_prefix": "g-",
     "short_id_hash_chars": 8
-  },
-  "aggregate": {
-    "embedding_kind": "similarity",
-    "merge_threshold": {"shared_entity": 0.95, "no_shared_entity": 0.96},
-    "contradiction_threshold": 0.9,
-    "opposing_stances": ["positive", "negative"],
-    "group_id_prefix": "g-",
-    "group_id_hash_chars": 8,
-    "review": {
-      "suggestion_band": 0.04,
-      "similarity_block_rows": 1024,
-      "max_page_size": 200,
-      "partner_suggestions": 5
-    },
-    "eval": {
-      "backup_dir": "/mnt/SSD/coding/backup_data_wiki_from_whatsapp/2026_11_07_data",
-      "pair_labels": "step_5_aggregate/eval/pair_labels.json",
-      "bands": [0.9, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97],
-      "settings": [
-        {"name": "embedding 0.93", "shared": 0.93, "other": 0.93, "number_guard": false},
-        {"name": "embedding 0.94", "shared": 0.94, "other": 0.94, "number_guard": false},
-        {"name": "embedding 0.95", "shared": 0.95, "other": 0.95, "number_guard": false},
-        {"name": "embedding 0.96", "shared": 0.96, "other": 0.96, "number_guard": false},
-        {"name": "embedding 0.97", "shared": 0.97, "other": 0.97, "number_guard": false},
-        {"name": "entity 0.92/0.95", "shared": 0.92, "other": 0.95, "number_guard": false},
-        {"name": "entity 0.93/0.96", "shared": 0.93, "other": 0.96, "number_guard": false},
-        {"name": "entity 0.94/0.96", "shared": 0.94, "other": 0.96, "number_guard": false},
-        {"name": "entity 0.95/0.96", "shared": 0.95, "other": 0.96, "number_guard": false},
-        {"name": "entity+numbers 0.93/0.96", "shared": 0.93, "other": 0.96, "number_guard": true},
-        {"name": "entity+numbers 0.94/0.96", "shared": 0.94, "other": 0.96, "number_guard": true},
-        {"name": "entity+numbers 0.95/0.96", "shared": 0.95, "other": 0.96, "number_guard": true},
-        {"name": "numbers 0.96", "shared": 0.96, "other": 0.96, "number_guard": true}
-      ],
-      "base_fraction": 0.8,
-      "edit_suffix": " (נערך)"
-    }
   },
   "plan": {
     "prompt_version": 3,
@@ -818,7 +774,6 @@
       "threads": "the new and changed conversations (the split, and whether each carries knowledge)",
       "pii": "the new claims (privacy: names, phone numbers, details about people)",
       "entities": "the new entities (people, providers, places)",
-      "groups": "the new claim groups (merges and splits)",
       "plan": "the pending proposals for new pages and labels",
       "suggestions": "the review's suggestions (accept or reject, then apply the accepted ones)"
     },

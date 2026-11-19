@@ -20,7 +20,6 @@ from pathlib import Path
 
 from review_tool.fs import FileStamp, stamp
 from utils.paths import (
-    AGGREGATED,
     ASSIGNMENTS,
     CHAT_ANDROID_PATH,
     CLAIMS,
@@ -28,14 +27,12 @@ from utils.paths import (
     DOCS_DIR,
     ENTITIES,
     GOLD_THREADS_PATH,
-    MANUAL_AGGREGATIONS_PATH,
     PLAN,
     PROOFREAD_RECORD,
     STEP_1,
     STEP_2,
     STEP_3,
     STEP_4,
-    STEP_5,
     STEP_6,
     STEP_6_ASSIGN,
     STEP_7,
@@ -203,17 +200,8 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
             "claims", "Claims", CLAIMS, STEP_3, ("threads", "classified", "tagged_members")
         ),
         ArtifactNode.from_pair("entities", "Entities", ENTITIES, STEP_4, ("claims",)),
-        # Near-duplicate claims the owner groups by hand in the entity reviewer: no step.
-        ArtifactNode("claim_aggregations", "Claims merged by hand", MANUAL_AGGREGATIONS_PATH),
-        ArtifactNode.from_pair(
-            "groups",
-            "Claim groups",
-            AGGREGATED,
-            STEP_5,
-            ("claims", "entities", "claim_aggregations"),
-        ),
         # Steps 6 to 9 read the claim records, joined on read from the claims and the entities
-        # (``step_6_plan.claim_records``): they depend on those two nodes, not on the groups.
+        # (``step_6_plan.claim_records``): they depend on those two nodes.
         # Curated: a normal step-6 run keeps the owner's plan as is, so new claims never make
         # it stale; the assignment step places them.
         ArtifactNode.from_pair("plan", "Wiki plan", PLAN, STEP_6, ("claims", "entities"), curated=True),

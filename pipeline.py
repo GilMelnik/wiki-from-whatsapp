@@ -9,7 +9,6 @@ step registry, ``review_tool.steps.STEP_SPECS`` (the review tool and the update 
                       and the labels, corrected by hand)
     3. extract     -> claims (C3) + the private audit             review: pii
     4. entities    -> canonical entities                         review: entities
-    5. aggregate   -> claim groups (C6)                          review: groups
     6. plan        -> the wiki plan (C7; planned once, then curated)   review: plan
     6b. assign     -> claims on pages + labels, proposals (C8)   review: plan
     7. write pages -> wiki pages (C9; one call per new or changed page)

@@ -49,8 +49,7 @@ def test_default_graph_is_the_pipeline_in_order() -> None:
     keys = [node.key for node in GRAPH.nodes]
     assert keys == [
         "export", "threads", "gold_threads", "classified", "tagged_members", "claims", "entities",
-        "claim_aggregations", "groups", "plan", "assignments", "pages", "suggestions",
-        "proofread", "site",
+        "plan", "assignments", "pages", "suggestions", "proofread", "site",
     ]  # fmt: skip
     assert (GRAPH.node("proofread").step, GRAPH.node("proofread").upstream) == (
         "step_8_proofread", ("claims", "entities", "plan", "assignments", "pages"))
@@ -59,11 +58,6 @@ def test_default_graph_is_the_pipeline_in_order() -> None:
     assert GRAPH.node("site").edited is None
     assert GRAPH.node("export").edited is None
     assert (GRAPH.node("gold_threads").step, GRAPH.node("gold_threads").upstream) == (None, ())
-    assert (GRAPH.node("claim_aggregations").step, GRAPH.node("claim_aggregations").edited) == (
-        None,
-        None,
-    )
-    assert GRAPH.node("groups").upstream == ("claims", "entities", "claim_aggregations")
     assert GRAPH.node("claims").upstream == ("threads", "classified", "tagged_members")
     assert (GRAPH.node("tagged_members").step, GRAPH.node("tagged_members").edited) == (None, None)
     assert GRAPH.node("claims").original.name == "claims.json"
@@ -72,7 +66,7 @@ def test_default_graph_is_the_pipeline_in_order() -> None:
 
 def test_the_site_is_out_of_date_when_step_1_placed_newer_messages(tmp_path: Path) -> None:
     graph = rooted_graph(tmp_path)
-    for key in ("threads", "plan", "pages", "groups", "site"):
+    for key in ("threads", "claims", "entities", "plan", "pages", "site"):
         node = graph.node(key)
         node.original.parent.mkdir(parents=True, exist_ok=True)
         write_file(node.original, {}, mtime=2000)

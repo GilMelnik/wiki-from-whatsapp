@@ -62,10 +62,6 @@ STEP_SPECS: tuple[StepSpec, ...] = (
         paid=True, review_tool="entities",
     ),
     StepSpec(
-        "groups", "Step 5 · Group claims", "step_5_aggregate.run", incremental_safe=True,
-        review_tool="groups",
-    ),
-    StepSpec(
         "plan", "Step 6 · Plan the wiki", "step_6_plan.run", incremental_safe=True, paid=True,
         review_tool="plan",
     ),
