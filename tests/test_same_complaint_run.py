@@ -12,7 +12,7 @@ import pytest
 from step_6_plan.claim_records import load_claim_records
 from step_7_write_pages import same_complaint
 from step_7_write_pages.same_complaint import SCHEMA, SYSTEM, main, parse_answer, run
-from step_7_write_pages.same_complaint_release import released_ids
+from step_7_write_pages.same_complaint_release import Check
 from tests.same_complaint_support import FakeModel, World, same_text
 from utils.json_io import read_json_file
 from utils.model_prices import ESTIMATE_CONFIG, usd
@@ -26,20 +26,17 @@ class Setup:
     def __init__(self, root: Path) -> None:
         self.world = World(root)
         self.answers = root / "same_complaint.json"
-        self.vetoes = root / "vetoes.json"
         self.model = FakeModel(same_text(LABELS))
 
     def run(self, **kwargs: Any) -> dict[str, Any]:
         self.sources = self.world.write()
-        return run(sources=self.sources, answers_path=self.answers, vetoes_path=self.vetoes,
-                   llm=self.model, **kwargs)  # type: ignore[arg-type]  # a fake client
+        return run(sources=self.sources, llm=self.model, **kwargs)  # type: ignore[arg-type]
 
     def stored(self) -> dict[str, Any]:
         return read_json_file(self.answers)
 
     def released(self) -> frozenset[str]:
-        return released_ids(load_claim_records(self.sources), audit=self.sources.audit,
-                            answers=self.answers, vetoes=self.vetoes)
+        return frozenset(Check.load(load_claim_records(self.sources), self.sources).released)
 
 
 @pytest.fixture

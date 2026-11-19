@@ -15,7 +15,7 @@ when a second person made the SAME complaint, and a model judges "same", entity 
   about every list again (the LLM disk cache answers repeats); ``--only`` asks about the given
   entities only and leaves every other stored answer as it is. A list longer than
   ``max_claims_per_call`` stops the run before any call (a list is never cut).
-- The answers are stored in ``SAME_COMPLAINT_PATH`` as short ids (shape: see
+- The answers are stored in ``ClaimSources.same_complaint`` (``SAME_COMPLAINT_PATH``) as short ids (shape: see
   ``same_complaint_release``), with the run's metadata (model, prompt version, config, git
   commit). An answer that does not fit its list is stored with its ``problem`` and releases
   nothing; a call without an answer stores nothing (the next run asks again).
@@ -25,7 +25,10 @@ when a second person made the SAME complaint, and a model judges "same", entity 
   (``estimate.output_tokens_per_call``), at ``update.estimate.batch_discount`` when the calls go
   as a batch. No model call, nothing written.
 
-What the answers release is computed on every read (``same_complaint_release.released_ids``).
+What the answers release, and so what is withheld now, is computed on every read
+(``same_complaint_release.withheld_ids``). In the pipeline the check runs after the assignment
+of claims to pages and before the pages (``review_tool.steps``); the update run stops after it
+for the owner's look at the Withheld page when its answers changed.
 """
 
 from __future__ import annotations
@@ -34,7 +37,6 @@ import argparse
 import logging
 import math
 from collections.abc import Collection, Mapping, Sequence
-from pathlib import Path
 from typing import Any
 
 from step_4_entities.match_judge import CALL_ERRORS
@@ -53,7 +55,7 @@ from utils.llm_client import BatchRequest, LLMClient
 from utils.llm_client.ask import ask_json
 from utils.logging_setup import git_commit, setup_step_logging
 from utils.model_prices import ESTIMATE_CONFIG, stage_model, usd
-from utils.paths import SAME_COMPLAINT_PATH, SAME_COMPLAINT_VETOES_PATH, STEP_7
+from utils.paths import STEP_7
 from utils.timestamps import utc_now
 
 CONFIG = section("pages")["same_complaint"]
@@ -185,10 +187,10 @@ def estimate_calls(llm: LLMClient, requests: Sequence[BatchRequest], *, batch: b
 class SameComplaintRun:
     """One run of the check over the current claim records (see the module docstring)."""
 
-    def __init__(self, sources: ClaimSources, answers_path: Path, vetoes_path: Path,
-                 llm: LLMClient | None, logger: logging.Logger) -> None:
-        self.answers_path = answers_path
-        self.vetoes_path = vetoes_path
+    def __init__(self, sources: ClaimSources, llm: LLMClient | None,
+                 logger: logging.Logger) -> None:
+        self.answers_path = sources.same_complaint
+        self.vetoes_path = sources.same_complaint_vetoes
         self.logger = logger
         self.llm = llm or LLMClient.for_stage(CONFIG["stage"], logger=logger,
                                               max_tokens=CONFIG["max_output_tokens"])
@@ -262,13 +264,12 @@ class SameComplaintRun:
 
 
 def run(*, rebuild: bool = False, only: Collection[str] | None = None, estimate: bool = False,
-        sources: ClaimSources = ClaimSources(), answers_path: Path = SAME_COMPLAINT_PATH,
-        vetoes_path: Path = SAME_COMPLAINT_VETOES_PATH, llm: LLMClient | None = None
+        sources: ClaimSources = ClaimSources(), llm: LLMClient | None = None
         ) -> dict[str, Any]:
     logger = setup_step_logging(STEP_7)
     logger.info(f"Same-complaint check (commit {git_commit()}; config {CONFIG}; "
                 f"rebuild={rebuild}, only={only}, estimate={estimate})")
-    return SameComplaintRun(sources, answers_path, vetoes_path, llm, logger).run(
+    return SameComplaintRun(sources, llm, logger).run(
         rebuild=rebuild, only=only, estimate=estimate)
 
 

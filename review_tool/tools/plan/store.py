@@ -56,6 +56,7 @@ from step_6_plan.model import (
 )
 from step_6_plan.operation_requests import Delete, Merge, Operation, quote, title_of
 from step_6_plan.operations import PlanEdit, kind_of
+from step_7_write_pages.same_complaint_release import withheld_ids
 from utils.json_io import read_json_file, write_json_file
 from utils.reconcile import backup_file
 from utils.timestamps import utc_now
@@ -123,6 +124,9 @@ class PlanStore:
         self.plan: dict[str, Any] = read_json_file(self.source)
         self.proposal = read_json_file(plan_original) if plan_original.is_file() else None
         self.claims = _claims_by_id(sources)
+        # Once per load: the rule, minus what the same-complaint check released.
+        self.withheld = (withheld_ids(list(self.claims.values()), sources)
+                         if self.claims is not None else frozenset())
         self.coverage_report = read_json_file(coverage_path) if coverage_path.is_file() else None
         self.assignments = AssignmentsFile(assignments_original, assignments_edited)
         self.history = history
@@ -140,7 +144,8 @@ class PlanStore:
 
         self.assignments.require()
         if self._view is None:
-            self._view = AssignmentView(self.plan, self.assignments.data, self.claims)
+            self._view = AssignmentView(self.plan, self.assignments.data, self.claims,
+                                        self.withheld)
         return self._view
 
     def overview(self) -> dict[str, Any]:

@@ -1,11 +1,18 @@
 """The same-complaint check, read side: which withheld claims a second person's same complaint
-releases. Recomputed on every read; nothing derived is stored.
+releases, and so what is withheld from the wiki now. Recomputed on every read; nothing derived
+is stored.
 
-The rule (``pages.withhold``): a claim record (C6) whose stance is ``negative``, that names at
-least one entity and is backed by fewer than ``min_supporters`` (2) different people is
-withheld from every page (``withheld_by_rule``). The check (``step_7_write_pages.same_complaint``)
-asks a model, entity by entity, which of the negative claims naming the entity make the same
-complaint, and stores its groups (``SAME_COMPLAINT_PATH``).
+The rule (``step_7_write_pages.withhold.withholds``, ``pages.withhold``): a claim record (C6)
+whose stance is ``negative``, that names at least one entity and is backed by fewer than
+``min_supporters`` (2) different people is withheld from every page. The check
+(``step_7_write_pages.same_complaint``) asks a model, entity by entity, which of the negative
+claims naming the entity make the same complaint, and stores its groups (``SAME_COMPLAINT_PATH``).
+
+``withheld_ids(records, sources)`` is THE answer to "what is withheld now": the rule, minus what
+the check releases, with the owner's "keep withheld" marks applied. Every reader calls it once
+per load of the records (step 7's ``Corpus``, step 9, the Plan page); the Withheld page, which
+shows the check's details, reads the same ``Check.withheld``. With no answers file (the check
+never ran) nothing is released and neither the audit nor the marks are read.
 
 A claim the rule withholds is RELEASED when, in at least one entity's list, a usable stored
 answer put it in a group whose claims are backed by at least ``min_supporters`` different
@@ -39,32 +46,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from step_6_plan.claim_records import Record, claim_backers
-from utils.config import section
+from step_6_plan.claim_records import ClaimSources, Record, claim_backers
+from step_7_write_pages.withhold import MIN_SUPPORTERS, WITHHOLD_CONFIG, withholds
 from utils.json_io import read_json_if_present, write_json_file
-from utils.paths import AUDIT_PATH, SAME_COMPLAINT_PATH, SAME_COMPLAINT_VETOES_PATH
+from utils.paths import SAME_COMPLAINT_PATH, SAME_COMPLAINT_VETOES_PATH
 from utils.reconcile import fingerprint
 from utils.timestamps import utc_now
 
 logger = logging.getLogger(__name__)
-
-WITHHOLD_CONFIG = section("pages")["withhold"]
-MIN_SUPPORTERS = int(WITHHOLD_CONFIG["min_supporters"])
 
 # The state of an entity's list (``Check.state``).
 NO_CALL = "no_call"  # nothing to release: no withheld claim, or fewer than two people in all
 WAITING = "waiting"  # the check has no answer for today's list (never asked, or the list changed)
 UNUSABLE = "unusable"  # the stored answer does not fit the list: nothing released
 ANSWERED = "answered"
-
-
-def withheld_by_rule(record: Mapping[str, Any]) -> bool:
-    """The rule of ``pages.withhold`` on a claim record: a negative claim that names an entity
-    and is backed by fewer than ``min_supporters`` people."""
-
-    return (record["stance"] == WITHHOLD_CONFIG["stance"]
-            and bool(record["entity_ids"])
-            and (record["supporter_count"] or 0) < MIN_SUPPORTERS)
 
 
 def entity_lists(records: Iterable[Record]) -> dict[str, list[Record]]:
@@ -101,7 +96,7 @@ def needs_call(claims: Sequence[Record], backers: Mapping[str, frozenset[str]]) 
     """An answer about this list could release something: it holds a claim the rule withholds
     and its claims are backed by at least ``min_supporters`` people in all."""
 
-    return (any(withheld_by_rule(claim) for claim in claims)
+    return (any(withholds(claim) for claim in claims)
             and len(people_of((c["short_id"] for c in claims), backers)) >= MIN_SUPPORTERS)
 
 
@@ -197,13 +192,16 @@ class Check:
         for group in self.groups:
             for short_id in group.released:
                 self.released.setdefault(short_id, []).append(group)
+        # What is withheld now: the rule, minus what the check released.
+        self.withheld = frozenset(short_id for short_id, record in self.records.items()
+                                  if withholds(record) and short_id not in self.released)
 
     @classmethod
-    def load(cls, records: Sequence[Record], *, audit: Path = AUDIT_PATH,
-             answers: Path = SAME_COMPLAINT_PATH,
-             vetoes: Path = SAME_COMPLAINT_VETOES_PATH) -> Check:
-        return cls(records, claim_backers(records, audit), load_answers(answers),
-                   load_vetoes(vetoes))
+    def load(cls, records: Sequence[Record], sources: ClaimSources = ClaimSources()) -> Check:
+        """The check over ``records`` with the audit, the answers and the marks of ``sources``."""
+
+        return cls(records, claim_backers(records, sources.audit),
+                   load_answers(sources.same_complaint), load_vetoes(sources.same_complaint_vetoes))
 
     def asked(self) -> dict[str, list[Record]]:
         """The lists an answer could release something from (the ones the check asks about)."""
@@ -226,17 +224,23 @@ class Check:
             members = tuple(sorted(raw["claims"], key=order.__getitem__))
             kept = [short_id for short_id in members if short_id not in self.vetoes]
             people = len(people_of(kept, self.backers))
-            released = tuple(s for s in kept if withheld_by_rule(self.records[s])
+            released = tuple(s for s in kept if withholds(self.records[s])
                              ) if people >= MIN_SUPPORTERS else ()
             self.groups.append(Group(entity_id, raw["label"], members, people,
                                      len(people_of(members, self.backers)), released))
         return ANSWERED
 
 
-def released_ids(records: Sequence[Record], *, audit: Path = AUDIT_PATH,
-                 answers: Path = SAME_COMPLAINT_PATH,
-                 vetoes: Path = SAME_COMPLAINT_VETOES_PATH) -> frozenset[str]:
-    """The short ids of the claims the rule withholds that the check releases today (the
-    owner's "keep withheld" marks applied). Part of what ``withhold`` decides."""
+def withheld_ids(records: Sequence[Record], sources: ClaimSources = ClaimSources()
+                 ) -> frozenset[str]:
+    """The short ids of the claims withheld from the wiki now: the ones the rule withholds,
+    minus the ones the check releases today (the owner's "keep withheld" marks applied).
+    ``sources`` names the audit, the answers and the marks (the ones ``records`` were loaded
+    with). Call it once per load of the records."""
 
-    return frozenset(Check.load(records, audit=audit, answers=answers, vetoes=vetoes).released)
+    by_rule = frozenset(record["short_id"] for record in records if withholds(record))
+    answers = load_answers(sources.same_complaint) if by_rule else {}
+    if not answers:  # the check never ran (or has nothing to say): nothing is released
+        return by_rule
+    return Check(records, claim_backers(records, sources.audit), answers,
+                 load_vetoes(sources.same_complaint_vetoes)).withheld

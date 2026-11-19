@@ -1,18 +1,24 @@
-"""A lone negative report about a named entity never reaches the wiki.
+"""A lone negative report about a named entity never reaches the wiki: the rule.
 
 The owner's rule: a negative statement about anything named (a doctor, a lawyer, a clinic, an
-agency, a place) is published only when at least two different members reported it; otherwise
-it is withheld from every page, and never retold without the name. Two bad reports, no matter
-what is named.
+agency, a place, a public body) is published only when at least two different members reported
+it; otherwise it is withheld from every page, and never retold without the name.
 
-``withholds`` decides it per claim record (C6, ``step_6_plan.claim_records``), with
+``withholds`` is the rule, per claim record (C6, ``step_6_plan.claim_records``), with
 ``pages.withhold`` of ``config.json``: a claim is withheld when its ``stance`` is ``negative``,
 it names at least one entity (its ``entity_ids`` list is not empty) and its
 ``supporter_count`` (distinct people who stated or backed it, counted from the private audit)
 is below ``min_supporters`` (2). A negative claim that names no entity is published as before.
-Counts are never added up across claims: two lone complaints stay withheld, even when they say
-the same thing. The record's keys are read with ``[...]``: a record of another shape raises
-``KeyError`` instead of letting a lone complaint through as "names nothing".
+The record's keys are read with ``[...]``: a record of another shape raises ``KeyError``
+instead of letting a lone complaint through as "names nothing".
+
+The one way out for a claim the rule withholds is the same-complaint check
+(``step_7_write_pages.same_complaint``): a model found a second person making the SAME
+complaint about the same entity, and the owner did not mark the claim "keep withheld" on the
+Withheld page. What is withheld NOW (the rule, minus what the check released) is
+``step_7_write_pages.same_complaint_release.withheld_ids``: every reader (step 7, step 9, the
+Plan page, the Withheld page) uses that one function, once per load of the records. Without the
+check's answers file nothing is released.
 
 Step 7's ``Corpus`` treats a withheld claim as placed on no page (it never reaches the writer,
 another claim's ``contradicts``, the front matter or step 8's claim lines) and accounts for it
@@ -22,13 +28,14 @@ page that still cites one.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from typing import Any
 
 from utils.config import section
 
 WITHHOLD_CONFIG = section("pages")["withhold"]
 REASON = WITHHOLD_CONFIG["reason"]
+MIN_SUPPORTERS = int(WITHHOLD_CONFIG["min_supporters"])
 
 
 def withholds(claim: Mapping[str, Any]) -> bool:
@@ -38,11 +45,4 @@ def withholds(claim: Mapping[str, Any]) -> bool:
     its stance."""
 
     stance, entity_ids, supporters = claim["stance"], claim["entity_ids"], claim["supporter_count"]
-    return (stance == WITHHOLD_CONFIG["stance"] and bool(entity_ids)
-            and supporters < WITHHOLD_CONFIG["min_supporters"])
-
-
-def withheld_ids(claims: Iterable[Mapping[str, Any]]) -> frozenset[str]:
-    """The short ids of the withheld claims."""
-
-    return frozenset(claim["short_id"] for claim in claims if withholds(claim))
+    return stance == WITHHOLD_CONFIG["stance"] and bool(entity_ids) and supporters < MIN_SUPPORTERS

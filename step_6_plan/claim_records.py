@@ -48,6 +48,8 @@ from utils.json_io import read_json_file, read_json_if_present, write_json_file
 from utils.paths import (
     AUDIT_PATH,
     MANUAL_CONTRADICTIONS_PATH,
+    SAME_COMPLAINT_PATH,
+    SAME_COMPLAINT_VETOES_PATH,
     resolve_claims_path,
     resolve_entities_path,
 )
@@ -71,12 +73,19 @@ Record = dict[str, Any]
 @dataclass(frozen=True)
 class ClaimSources:
     """The files one load reads. ``claims`` / ``entities`` left ``None`` resolve to the edited
-    file when present, else the original, at load time."""
+    file when present, else the original, at load time.
+
+    ``same_complaint`` and ``same_complaint_vetoes`` are not read by the loader: they are the
+    same-complaint check's answers and the owner's "keep withheld" marks, which decide with the
+    records what is withheld from the wiki now
+    (``step_7_write_pages.same_complaint_release.withheld_ids``)."""
 
     claims: Path | None = None
     entities: Path | None = None
     audit: Path = AUDIT_PATH
     contradictions: Path = MANUAL_CONTRADICTIONS_PATH
+    same_complaint: Path = SAME_COMPLAINT_PATH
+    same_complaint_vetoes: Path = SAME_COMPLAINT_VETOES_PATH
 
     def files(self) -> dict[str, Path]:
         """The files a load would read now, by role (``claims``, ``entities``, ``audit``,

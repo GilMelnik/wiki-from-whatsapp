@@ -29,6 +29,22 @@ def person(k: int) -> str:
     return f"p-SECRET-person-{k}"
 
 
+def set_backers(sources: ClaimSources, people: Mapping[str, Sequence[str]]) -> None:
+    """Rewrite step 3's private audit so that each claim of ``people`` (claim id -> person ids)
+    is backed by exactly those people (on the claim's last date; its other events stay)."""
+
+    audit = read_json_file(sources.audit)
+    dates = {r["claim_id"]: r["last_date"] for r in load_claim_records(sources)}
+    for entry in audit["audit"]:
+        if entry["claim_id"] in people:
+            entry["supporters"] = [
+                {"person": p, "date": dates[entry["claim_id"]], "via": "message",
+                 "message_id": "m-SECRET"}
+                for p in people[entry["claim_id"]]
+            ]
+    write_json_file(audit, sources.audit)
+
+
 class World:
     """Claims with chosen entities and backers, written as the loader's input files."""
 
@@ -55,14 +71,7 @@ class World:
         """Write claims, entities and an audit with the chosen people; check they load back."""
 
         sources = write_claim_inputs(self.records, self.root)
-        audit = read_json_file(sources.audit)
-        for entry, record in zip(audit["audit"], self.records):
-            entry["supporters"] = [
-                {"person": p, "date": record["last_date"], "via": "message",
-                 "message_id": "m-SECRET"}
-                for p in self.people[record["short_id"]]
-            ]
-        write_json_file(audit, sources.audit)
+        set_backers(sources, {r["claim_id"]: self.people[r["short_id"]] for r in self.records})
         assert load_claim_records(sources) == self.records
         return sources
 

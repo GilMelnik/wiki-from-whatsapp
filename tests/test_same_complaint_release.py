@@ -20,21 +20,21 @@ from step_7_write_pages.same_complaint_release import (
     list_fingerprint,
     load_answers,
     load_vetoes,
-    released_ids,
     save_vetoes,
-    withheld_by_rule,
 )
+from step_7_write_pages.withhold import withholds
 from tests.same_complaint_support import World, person
 from utils.json_io import read_json_file, write_json_file
 
 
 class Setup:
-    """A world of claims plus the answers and vetoes files of the check, under ``root``."""
+    """A world of claims plus the answers and vetoes files of the check, under ``root`` (where
+    the world's ``ClaimSources`` name them)."""
 
     def __init__(self, root: Path) -> None:
         self.world = World(root)
         self.answers = root / "same_complaint.json"
-        self.vetoes = root / "vetoes.json"
+        self.vetoes = root / "same_complaint_vetoes.json"
 
     def records(self) -> list[dict[str, Any]]:
         self.sources = self.world.write()
@@ -54,13 +54,10 @@ class Setup:
         write_json_file({"entities": stored, "metadata": {}}, self.answers)
 
     def check(self) -> Check:
-        records = load_claim_records(self.sources)
-        return Check.load(records, audit=self.sources.audit, answers=self.answers,
-                          vetoes=self.vetoes)
+        return Check.load(load_claim_records(self.sources), self.sources)
 
     def released(self) -> frozenset[str]:
-        return released_ids(load_claim_records(self.sources), audit=self.sources.audit,
-                            answers=self.answers, vetoes=self.vetoes)
+        return frozenset(self.check().released)
 
 
 @pytest.fixture
@@ -94,7 +91,7 @@ def test_the_lists_hold_the_negative_claims_of_an_entity_in_file_order(setup: Se
     lists = entity_lists(records)
     assert {e: [r["short_id"] for r in claims] for e, claims in lists.items()} == {
         "e0001": [a, c], "e0002": [a]}
-    assert [withheld_by_rule(r) for r in records] == [True, False, False, False]
+    assert [withholds(r) for r in records] == [True, False, False, False]
     assert d not in {r["short_id"] for claims in lists.values() for r in claims}
     check = setup.check()
     # e0001: a is withheld and two other people back c; e0002: one person in all

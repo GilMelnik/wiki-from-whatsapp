@@ -37,7 +37,7 @@ from review_tool.registry import ToolSpec
 from review_tool.stores import StoreHandle
 from review_tool.tools.withheld.overview import ClaimsData, WithheldView
 from review_tool.tools.withheld.store import VetoTable
-from step_7_write_pages.same_complaint_release import withheld_by_rule
+from step_7_write_pages.withhold import withholds
 from utils.paths import AUDIT_PATH
 
 CLAIMS_KEY = "claims"
@@ -93,7 +93,7 @@ class WithheldTool:
         record = next((r for r in self._data.get().records if r["short_id"] == short_id), None)
         if record is None:
             raise HTTPException(status_code=404, detail=f"No claim {short_id} (any more); reload the page.")
-        if not withheld_by_rule(record):
+        if not withholds(record):
             raise HTTPException(
                 status_code=409,
                 detail="Two or more people back this claim (or it names nothing, or it is not "
