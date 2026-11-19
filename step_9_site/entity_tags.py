@@ -370,7 +370,7 @@ SOURCE_NOTES = {
 
 
 def report_lines(source: str, result: EntityTags) -> Iterator[str]:
-    """The report the owner reads (English; entity ids, never names)."""
+    """The report the owner reads (English; numbers only, no entity name)."""
     yield "Entities named by at least N claims:"
     for row in result.table():
         yield f"  N = {row['min_claims']:>4}: {row['entities']} entities"
