@@ -1,11 +1,11 @@
 """What the review reads, and the page fingerprints its suggestions keep.
 
 The review reads the EFFECTIVE pages (C9; the owner's edits included) and, as each page's
-evidence, the very group lines step 7's writer read for that page: step 7's own ``Corpus``
-(effective groups, plan and assignments) builds the records and ``group_line`` renders them
-(id, role, stance, support, last backed, disputed, when said, entities, contradictions, claim
-text; nothing about people). The page body is sent without its footnote definitions: the
-group lines say more (counts, dates) than a definition does.
+evidence, the very claim lines step 7's writer read for that page: step 7's own ``Corpus``
+(claim records, effective plan and assignments) builds the records and ``claim_line`` renders
+them (short id, role, stance, support, last backed, disputed, when said, entities,
+contradictions, claim text; nothing about people). The page body is sent without its footnote
+definitions: the claim lines say more (counts, dates) than a definition does.
 
 Fingerprints (contract C14): one per page (its title and effective body, language edits not
 counted: ``page_fingerprint``); the review passes
@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from step_6_plan.claim_records import ClaimSources
 from step_6_plan.model import PLAN_CONFIG, iter_nodes, retired_ids
 from step_7_write_pages.checks import strip_definitions
 from step_7_write_pages.inputs import (
@@ -82,10 +83,11 @@ class ReviewPage:
     page_id: str
     title: str
     body: str                     # with its citation marks and links, without definitions
-    records: tuple[Record, ...]   # the group lines' records, C6 order
+    records: tuple[Record, ...]   # the claim lines' records, C6 order
 
     @property
-    def group_ids(self) -> set[str]:
+    def claim_ids(self) -> set[str]:
+        """The short ids of the page's claims (main and mention)."""
         return {record["id"] for record in self.records}
 
 
@@ -108,16 +110,17 @@ class ReviewInput:
                                                  context.records)
 
     @classmethod
-    def load(cls, pages_artifact: Artifact = WIKI_PAGES, aggregated_path: Path | None = None,
+    def load(cls, pages_artifact: Artifact = WIKI_PAGES, sources: ClaimSources = ClaimSources(),
              plan_path: Path | None = None, assignments_path: Path | None = None) -> ReviewInput:
         payload, path = effective_pages(pages_artifact)
-        corpus = Corpus.load(aggregated_path, plan_path, assignments_path)
+        corpus = Corpus.load(sources, plan_path, assignments_path)
         return cls(corpus, payload.get("pages") or {}, path)
 
     @property
-    def sources(self) -> tuple[Path, ...]:
-        """Every file the review reads (for the "an input is newer" check)."""
-        return (*self.corpus.sources, self.pages_path)
+    def sources(self) -> dict[str, Path]:
+        """Every file the review reads, by role (for the "an input is newer" check and the
+        metadata): step 7's inputs and the pages."""
+        return {**self.corpus.sources, "pages": self.pages_path}
 
     def page_fingerprints(self) -> dict[str, str]:
         return {page_id: page_fingerprint(self.all_pages[page_id]) for page_id in self.pages}
@@ -150,7 +153,7 @@ class ReviewInput:
         ])
 
     def outdated_pages(self) -> list[str]:
-        """Pages whose stored ``input_fingerprint`` no longer matches their groups and plan
+        """Pages whose stored ``input_fingerprint`` no longer matches their claims and plan
         fields (step 7 has not caught up with an upstream change)."""
         model = LLM_CONFIG["stages"][PAGES_CONFIG["write"]["stage"]]["model"]
         writer = writer_fingerprint(model)
@@ -171,6 +174,6 @@ class ReviewInput:
             logger.warning(f"{len(unwritten)} planned pages have no text yet and are not "
                            f"reviewed: {unwritten}")
         if outdated:
-            logger.warning(f"{len(outdated)} pages are older than their groups or plan fields "
+            logger.warning(f"{len(outdated)} pages are older than their claims or plan fields "
                            f"(run step 7 first for a review of current pages): {outdated}")
         return {"unwritten": unwritten, "outdated": outdated}

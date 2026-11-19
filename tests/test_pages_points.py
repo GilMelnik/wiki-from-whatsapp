@@ -2,7 +2,7 @@
 
 The owner's own example (2026-11-11: a paragraph that tells the same recommendation again and
 again, and the reduction they asked for) is the test case of the "told once" check. Every
-other group is synthetic (``pages_fixtures``).
+other claim is synthetic (``pages_fixtures``).
 """
 
 from __future__ import annotations
@@ -24,22 +24,19 @@ from step_7_write_pages.prompts import (
     write_prompt,
 )
 from step_7_write_pages.writer import PageWriter
-from tests.pages_fixtures import FakeWriter, PagesWorkspace
+from tests.claim_fixtures import claim_record
+from tests.pages_fixtures import IDS, FakeWriter, PagesWorkspace
 from utils.llm_client import _flatten
 
 LOGGER = logging.getLogger("test-points")
 LEAD = "פתיח קצר על הדף.\n\n## מתי להגיע ליעד לפני הלידה\n\n"
 
 
-def _g(number: int) -> str:
-    return f"g-{number:08x}"
-
-
 def _m(*numbers: int) -> str:
-    return "".join(f"[^{_g(n)}]" for n in numbers)
+    return "".join(f"[^{IDS[n]}]" for n in numbers)
 
 
-# The owner's paragraph (task 27b's brief), its footnotes 1-9 as marks of groups 1-9.
+# The owner's paragraph (task 27b's brief), its footnotes 1-9 as marks of claims 1-9.
 LONG = LEAD + (
     "ההמלצה הנפוצה בקבוצה היא להגיע ליעד סביב שבועות 36–37 להריון. בשנת 2022 חברים המליצו "
     f"להגיע כשלושה שבועות לפני התאריך המשוער{_m(1)}, ובמאי 2024 נאמרה אותה המלצה, עם הערה "
@@ -66,15 +63,15 @@ SHORT = LEAD + (
 )
 POINTS = [
     {"kind": "common_view", "statement": "להגיע סביב שבועות 36–37",
-     "groups": [_g(8), _g(7), _g(1), _g(2), _g(5)]},
-    {"kind": "condition", "statement": "המועד תלוי בסוג ההיריון ובסיבוכים", "groups": [_g(4)]},
-    {"kind": "number", "statement": "בתאומים מוקדם יותר, עד שבוע 35", "groups": [_g(6), _g(3)]},
-    {"kind": "warning", "statement": "לא לתכנן טיולים מורכבים לפני התאריך", "groups": [_g(9)]},
+     "claims": [IDS[8], IDS[7], IDS[1], IDS[2], IDS[5]]},
+    {"kind": "condition", "statement": "המועד תלוי בסוג ההיריון ובסיבוכים", "claims": [IDS[4]]},
+    {"kind": "number", "statement": "בתאומים מוקדם יותר, עד שבוע 35", "claims": [IDS[6], IDS[3]]},
+    {"kind": "warning", "statement": "לא לתכנן טיולים מורכבים לפני התאריך", "claims": [IDS[9]]},
 ]
 
 
 def _context(ws: PagesWorkspace, page_id: str) -> tuple[Corpus, PageContext]:
-    corpus = Corpus.load(ws.groups_path, ws.plan_path, ws.assignments_path)
+    corpus = Corpus.load(ws.sources, ws.plan_path, ws.assignments_path)
     return corpus, corpus.context(page_id, corpus.catalogue())
 
 
@@ -86,26 +83,23 @@ def _answer(body: str, points: list[dict[str, Any]],
 
 @pytest.fixture()
 def example(tmp_path: Path) -> tuple[Corpus, PageContext]:
-    """Groups 1-9 (no disputes) are the main groups of ``hospital``."""
+    """Claims 1-9 (no disputes) are the main claims of ``hospital``."""
     ws = PagesWorkspace(tmp_path)
-    groups = ws.groups()
-    for group in groups:
-        group["opposer_count"], group["contradicts"] = 0, []
-    ws.write_groups(groups)
+    ws.write_claims([claim_record(n, opposer_count=0) for n in range(len(IDS))])
     payload = ws.assignments()
-    for index, group in enumerate(groups):
-        payload["assignments"][group["group_id"]]["pages"] = ["hospital"] if 1 <= index <= 9 else []
+    for index, short_id in enumerate(IDS):
+        payload["assignments"][short_id]["pages"] = ["hospital"] if 1 <= index <= 9 else []
     ws.write_assignments(payload)
     return _context(ws, "hospital")
 
 
 @pytest.fixture()
 def disputes(tmp_path: Path) -> tuple[Corpus, PageContext]:
-    """``hospital``: groups 3 and 6 contradict each other (a linked pair), 7 is disputed by
-    one member with no answering group (a bare count)."""
+    """``hospital``: claims 3 and 6 contradict each other (a linked pair), 7 is disputed by
+    one member with no answering claim (a bare count)."""
     ws = PagesWorkspace(tmp_path)
     payload = ws.assignments()
-    payload["assignments"][_g(6)]["pages"] = ["hospital"]
+    payload["assignments"][IDS[6]]["pages"] = ["hospital"]
     ws.write_assignments(payload)
     return _context(ws, "hospital")
 
@@ -124,7 +118,7 @@ def test_the_answer_lists_the_points_before_the_body() -> None:
     assert list(UPDATE_SCHEMA["properties"]) == ["points", "left_out", "no_change", "body",
                                                  "summary", "questions", "related"]
     point = WRITE_SCHEMA["properties"]["points"]["items"]
-    assert point["required"] == ["kind", "statement", "groups"]
+    assert point["required"] == ["kind", "statement", "claims"]
     assert point["properties"]["kind"]["enum"] == list(PAGES_CONFIG["points"]["kinds"]) == list(KINDS)
     reason = WRITE_SCHEMA["properties"]["left_out"]["items"]["properties"]["reason"]
     assert reason["enum"] == list(REASONS) == ["repeats", "trivial", "off_scope"]
@@ -149,7 +143,7 @@ def test_the_owners_paragraph_fails_and_their_reduction_passes(example: tuple[Co
                                                                 ) -> None:
     corpus, context = example
     rules = _rules(corpus, context)
-    assert context.main_ids == [_g(n) for n in range(1, 10)]
+    assert context.main_ids == [IDS[n] for n in range(1, 10)]
     found = problems(_answer(LONG, POINTS), rules)
     assert len(found) == 1 and "told in more than 2 statements" in found[0]
     assert "«להגיע סביב שבועות 36–37» (4 statements)" in found[0]
@@ -178,20 +172,20 @@ def test_the_retry_names_the_retold_point_and_the_reduction_is_kept(
 # ------------------------------------------------------------------ each check
 
 
-def test_accounting_names_missing_repeated_and_foreign_groups(example: tuple[Corpus, PageContext]
+def test_accounting_names_missing_repeated_and_foreign_claims(example: tuple[Corpus, PageContext]
                                                               ) -> None:
     corpus, context = example
     rules = _rules(corpus, context)
-    points = [{**POINTS[0], "groups": [_g(8), _g(7), _g(1), _g(2), "g-deadbeef"]},
-              {**POINTS[1], "groups": [_g(4), _g(7)]}, {**POINTS[2], "groups": []}, POINTS[3]]
-    found = problems(_answer(SHORT, points, [{"group": _g(3), "reason": "trivial"}]), rules)
-    assert any("in no point" in p and _g(5) in p and _g(6) in p for p in found)
-    assert any("more than once" in p and _g(7) in p for p in found)
-    assert any("not main groups" in p and "g-deadbeef" in p for p in found)
-    assert any("have no groups" in p for p in found)
-    assert any("cites groups listed in left_out" in p and _g(3) in p for p in found)
-    accounting = account(points, [{"group": _g(3), "reason": "bored"}], context.main_ids)
-    assert accounting.reasons == ("bored",) and accounting.missing == (_g(5), _g(6))
+    points = [{**POINTS[0], "claims": [IDS[8], IDS[7], IDS[1], IDS[2], "g-deadbeef"]},
+              {**POINTS[1], "claims": [IDS[4], IDS[7]]}, {**POINTS[2], "claims": []}, POINTS[3]]
+    found = problems(_answer(SHORT, points, [{"claim": IDS[3], "reason": "trivial"}]), rules)
+    assert any("in no point" in p and IDS[5] in p and IDS[6] in p for p in found)
+    assert any("more than once" in p and IDS[7] in p for p in found)
+    assert any("not main claims" in p and "g-deadbeef" in p for p in found)
+    assert any("have no claims" in p for p in found)
+    assert any("cites claims listed in left_out" in p and IDS[3] in p for p in found)
+    accounting = account(points, [{"claim": IDS[3], "reason": "bored"}], context.main_ids)
+    assert accounting.reasons == ("bored",) and accounting.missing == (IDS[5], IDS[6])
 
 
 def test_a_point_the_body_never_says_and_a_statement_with_many_marks(
@@ -203,7 +197,7 @@ def test_a_point_the_body_never_says_and_a_statement_with_many_marks(
     silent = SHORT.replace(_m(9), "")
     found = problems(_answer(silent, POINTS), rules)
     assert len(found) == 1 and "carried by no statement" in found[0]
-    assert "«לא לתכנן טיולים מורכבים לפני התאריך» (g-00000009)" in found[0]
+    assert f"«לא לתכנן טיולים מורכבים לפני התאריך» ({IDS[9]})" in found[0]
 
 
 def test_kept_sentences_of_an_update_are_not_held_to_the_new_rules(
@@ -218,12 +212,12 @@ def test_kept_sentences_of_an_update_are_not_held_to_the_new_rules(
     assert len(found) == 1 and "«להגיע סביב שבועות 36–37» (4 statements)" in found[0]
 
 
-def test_left_out_groups_are_reported_and_a_large_share_is_warned_about(
+def test_left_out_claims_are_reported_and_a_large_share_is_warned_about(
         example: tuple[Corpus, PageContext], caplog: pytest.LogCaptureFixture) -> None:
     corpus, context = example
-    left = [{"group": _g(n), "reason": "trivial"} for n in (1, 2, 5, 7)]
+    left = [{"claim": IDS[n], "reason": "trivial"} for n in (1, 2, 5, 7)]
     left[0]["reason"] = "repeats"
-    points = [{**POINTS[0], "groups": [_g(8)]}, *POINTS[1:]]
+    points = [{**POINTS[0], "claims": [IDS[8]]}, *POINTS[1:]]
     body = SHORT.replace(_m(8, 7, 1), _m(8))
     llm = FakeWriter(respond=lambda system, user, task: _answer(body, points, left))
     with caplog.at_level(logging.WARNING):
@@ -231,19 +225,19 @@ def test_left_out_groups_are_reported_and_a_large_share_is_warned_about(
     assert text.report["final_problems"] == [] and text.left_out == left
     assert text.report["left_out_by_reason"] == {"repeats": 1, "trivial": 3}
     assert text.report["left_out_share"] == 0.444
-    assert "44% of the main groups were left out" in caplog.text
+    assert "44% of the main claims were left out" in caplog.text
 
 
-def test_repair_keeps_only_main_groups_each_once(example: tuple[Corpus, PageContext]) -> None:
+def test_repair_keeps_only_main_claims_each_once(example: tuple[Corpus, PageContext]) -> None:
     corpus, context = example
-    points = [{**POINTS[0], "groups": [*POINTS[0]["groups"], "g-deadbeef", _g(8)]}, *POINTS[1:],
-              {"kind": "fact", "statement": "ריקה", "groups": ["g-deadbeef"]}]
-    fixed, repairs = repair(_answer(SHORT, points, [{"group": _g(9), "reason": "trivial"}]),
+    points = [{**POINTS[0], "claims": [*POINTS[0]["claims"], "g-deadbeef", IDS[8]]}, *POINTS[1:],
+              {"kind": "fact", "statement": "ריקה", "claims": ["g-deadbeef"]}]
+    fixed, repairs = repair(_answer(SHORT, points, [{"claim": IDS[9], "reason": "trivial"}]),
                             _rules(corpus, context))
-    assert fixed["points"][0]["groups"] == POINTS[0]["groups"]
+    assert fixed["points"][0]["claims"] == POINTS[0]["claims"]
     assert fixed["points"][1:] == POINTS[1:] and fixed["left_out"] == []
-    assert any("g-deadbeef" in r and _g(9) in r for r in repairs)
-    tidied = tidy(POINTS, [], [_g(n) for n in range(1, 9)])
+    assert any("g-deadbeef" in r and IDS[9] in r for r in repairs)
+    tidied = tidy(POINTS, [], [IDS[n] for n in range(1, 9)])
     assert tidied.emptied == [POINTS[3]] and len(tidied.points) == 3
 
 
@@ -254,18 +248,18 @@ def test_a_linked_dispute_is_one_point_and_both_sides_are_cited(
         disputes: tuple[Corpus, PageContext]) -> None:
     corpus, context = disputes
     rules = _rules(corpus, context)
-    assert context.main_ids == [_g(3), _g(6), _g(7)]
-    assert context.required_ids() == [_g(3), _g(6), _g(7)]
-    points = [{"kind": "dispute", "statement": "שני צדדים", "groups": [_g(3), _g(6)]},
-              {"kind": "common_view", "statement": "המלצה", "groups": [_g(7)]}]
+    assert context.main_ids == [IDS[3], IDS[6], IDS[7]]
+    assert context.required_ids() == [IDS[3], IDS[6], IDS[7]]
+    points = [{"kind": "dispute", "statement": "שני צדדים", "claims": [IDS[3], IDS[6]]},
+              {"kind": "common_view", "statement": "המלצה", "claims": [IDS[7]]}]
     body = (f"פתיח.\n\n## א\n\nחבר המליץ על הדרך.{_m(3)} חבר אחר השיב שהיא נכשלה אצלו.{_m(6)} "
             f"רוב החברים ממליצים על המרפאה.{_m(7)}\n")
     assert problems(_answer(body, points), rules) == []
     one_side = body.replace(f" חבר אחר השיב שהיא נכשלה אצלו.{_m(6)}", "")
     found = problems(_answer(one_side, points), rules)
-    assert any("disputed or contradicted but not cited" in p and _g(6) in p for p in found)
-    bare = body.replace(_m(7), "")  # a group with one opposer and no answering group
+    assert any("disputed or contradicted but not cited" in p and IDS[6] in p for p in found)
+    bare = body.replace(_m(7), "")  # a claim with one opposer and no answering claim
     found = problems(_answer(bare, points), rules)
-    assert any("disputed or contradicted but not cited" in p and _g(7) in p for p in found)
+    assert any("disputed or contradicted but not cited" in p and IDS[7] in p for p in found)
     user = _flatten(write_prompt(context)[1])
-    assert f"{_g(3)} | main |" in user and f"contradicts: {_g(6)}" in user
+    assert f"{IDS[3]} | main |" in user and f"contradicts: {IDS[6]}" in user

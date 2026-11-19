@@ -28,7 +28,7 @@ const summary = (counts, pending = 0, findings = []) => ({
   proposals: { pending, accepted: 0, rejected: 0 },
   label_findings: findings,
 });
-const proposal = (id, status = "pending", fields = {}) => ({ id, status, kind: "page", title_he: id, groups: [], target: {}, ...fields });
+const proposal = (id, status = "pending", fields = {}) => ({ id, status, kind: "page", title_he: id, claims: [], target: {}, ...fields });
 
 test("the overview's to-dos: warnings to act on first, each opening what it names", () => {
   const overview = {
@@ -54,8 +54,8 @@ test("the overview's to-dos: warnings to act on first, each opening what it name
     ]
   );
   assert.equal(todos[0].text, "3 proposals of the assignment step to change the plan wait for a decision.");
-  assert.equal(todos[1].text, "4 groups on no page: place them by hand, or leave them off the wiki.");
-  assert.match(todos[5].text, /only 1 group:/);
+  assert.equal(todos[1].text, "4 claims on no page: place them by hand, or leave them off the wiki.");
+  assert.match(todos[5].text, /only 1 claim:/);
 });
 
 test("no to-dos when nothing waits; none from step 6b before it has run", () => {

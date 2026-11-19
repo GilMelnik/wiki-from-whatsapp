@@ -49,21 +49,15 @@ def test_default_graph_is_the_pipeline_in_order() -> None:
     keys = [node.key for node in GRAPH.nodes]
     assert keys == [
         "export", "threads", "gold_threads", "classified", "tagged_members", "claims", "entities",
-        "claim_aggregations", "groups", "plan", "assignments", "pages", "suggestions",
-        "proofread", "site",
+        "plan", "assignments", "pages", "suggestions", "proofread", "site",
     ]  # fmt: skip
     assert (GRAPH.node("proofread").step, GRAPH.node("proofread").upstream) == (
-        "step_8_proofread", ("groups", "plan", "assignments", "pages"))
+        "step_8_proofread", ("claims", "entities", "plan", "assignments", "pages"))
     assert (GRAPH.node("site").step, GRAPH.node("site").upstream) == (
-        "step_9_site", ("plan", "pages", "groups", "threads"))
+        "step_9_site", ("plan", "pages", "claims", "entities", "threads"))
     assert GRAPH.node("site").edited is None
     assert GRAPH.node("export").edited is None
     assert (GRAPH.node("gold_threads").step, GRAPH.node("gold_threads").upstream) == (None, ())
-    assert (GRAPH.node("claim_aggregations").step, GRAPH.node("claim_aggregations").edited) == (
-        None,
-        None,
-    )
-    assert GRAPH.node("groups").upstream == ("claims", "entities", "claim_aggregations")
     assert GRAPH.node("claims").upstream == ("threads", "classified", "tagged_members")
     assert (GRAPH.node("tagged_members").step, GRAPH.node("tagged_members").edited) == (None, None)
     assert GRAPH.node("claims").original.name == "claims.json"
@@ -72,7 +66,7 @@ def test_default_graph_is_the_pipeline_in_order() -> None:
 
 def test_the_site_is_out_of_date_when_step_1_placed_newer_messages(tmp_path: Path) -> None:
     graph = rooted_graph(tmp_path)
-    for key in ("threads", "plan", "pages", "groups", "site"):
+    for key in ("threads", "claims", "entities", "plan", "pages", "site"):
         node = graph.node(key)
         node.original.parent.mkdir(parents=True, exist_ok=True)
         write_file(node.original, {}, mtime=2000)
@@ -121,26 +115,26 @@ def test_editing_the_upstream_copy_makes_downstream_stale(tmp_path: Path) -> Non
 
 
 def test_a_curated_artifact_is_never_stale_but_its_downstream_is(tmp_path: Path) -> None:
-    """The plan: new groups do not make it stale (a step-6 run would keep it as is), they
+    """The plan: new claims do not make it stale (a step-6 run would keep it as is), they
     make the assignments stale (the assignment step places them)."""
     graph = ArtifactGraph([
-        ArtifactNode("groups", "Groups", tmp_path / "groups.json", step="step_5"),
-        ArtifactNode("plan", "Plan", tmp_path / "plan.json", step="step_6", upstream=("groups",),
+        ArtifactNode("claims", "Claims", tmp_path / "claims.json", step="step_3"),
+        ArtifactNode("plan", "Plan", tmp_path / "plan.json", step="step_6", upstream=("claims",),
                      curated=True),
         ArtifactNode("assignments", "Assignments", tmp_path / "assignments.json",
-                     step="step_6b", upstream=("groups", "plan")),
+                     step="step_6b", upstream=("claims", "plan")),
     ])
     write_file(tmp_path / "plan.json", {}, mtime=2000)
     write_file(tmp_path / "assignments.json", {}, mtime=3000)
-    write_file(tmp_path / "groups.json", {}, mtime=5000)
+    write_file(tmp_path / "claims.json", {}, mtime=5000)
     status = status_by_key(graph)
     assert status["plan"].stale_because == ()
-    assert status["assignments"].stale_because == ("groups",)
-    assert graph.node("plan").upstream == ("groups",)  # still ordered after step 5's jobs
+    assert status["assignments"].stale_because == ("claims",)
+    assert graph.node("plan").upstream == ("claims",)  # still ordered after step 3's jobs
 
 
 def test_the_pipeline_plan_is_curated() -> None:
-    assert GRAPH.node("plan").curated and GRAPH.node("plan").upstream == ("groups",)
+    assert GRAPH.node("plan").curated and GRAPH.node("plan").upstream == ("claims", "entities")
     assert not any(node.curated for node in GRAPH.nodes if node.key != "plan")
 
 

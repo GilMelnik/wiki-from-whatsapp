@@ -5,7 +5,7 @@ import {
   AddPageDialog,
   Bidi,
   formatCount,
-  groupCount,
+  claimCount,
   IdField,
   kindOf,
   Ltr,
@@ -196,7 +196,7 @@ function Intro({ proposal }) {
       </p>
       <p className="mt-1 text-xs">
         Any field can be corrected before accepting. Accepting saves the change in the plan and marks
-        the proposal accepted; the assignment step places its {groupCount(proposal.groups.length, formatCount)} at
+        the proposal accepted; the assignment step places its {claimCount(proposal.claims.length, formatCount)} at
         its next run.
       </p>
     </div>

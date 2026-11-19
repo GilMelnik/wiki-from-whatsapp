@@ -138,21 +138,21 @@ class Estimator:
     def _assignments(self, run: RunFunction, key: str) -> Estimate:
         result = run(estimate=True)
         classifier_model = CLASSIFIER_CONFIG["stages"][ASSIGN_CONFIG["stage"]]["model"]
-        classifier_tokens = result["groups_asked"] * ESTIMATE_CONFIG["classifier_tokens_per_group"]
+        classifier_tokens = result["claims_asked"] * ESTIMATE_CONFIG["classifier_tokens_per_claim"]
         calls = result["proposal_calls_max"]
         proposal_cost = calls * usd(
             stage_model(PROPOSALS_CONFIG["stage"]),
             ESTIMATE_CONFIG["proposal_input_tokens"],
             ESTIMATE_CONFIG["output_tokens_per_call"]["propose"],
         )
-        plan_note = ("; the plan changed, so more groups may be asked"
+        plan_note = ("; the plan changed, so more claims may be asked"
                      if result["plan_changed"] else "")
         return Estimate(
             key, calls, usd(classifier_model, classifier_tokens) + proposal_cost,
-            f"{result['groups_asked']} groups for the classifier, at most {calls} proposal "
-            f"calls (up to {result['proposal_candidates_max']} groups could stay unplaced)"
+            f"{result['claims_asked']} claims for the classifier, at most {calls} proposal "
+            f"calls (up to {result['proposal_candidates_max']} claims could stay unplaced)"
             f"{plan_note}",
-            "classifier tokens at a typical figure per group; proposal calls as an upper bound "
+            "classifier tokens at a typical figure per claim; proposal calls as an upper bound "
             "at a typical size",
         )
 

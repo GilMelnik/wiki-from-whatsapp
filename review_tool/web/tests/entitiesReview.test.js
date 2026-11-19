@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  allPicked,
   claimTip,
   colour,
   contactRows,
@@ -33,20 +32,17 @@ test("a claim text is cut around its highlights", () => {
   assert.equal(segments(text, [self, overlapping, beyond]).map((p) => p.text).join(""), text);
 });
 
-test("picked claims belong to one entity and keep their texts", () => {
+test("picked claims belong to one entity", () => {
   let picked = togglePicked(NOTHING_PICKED, "e1", "Alpha", { claim_id: "c1", claim_text: "one" });
   picked = togglePicked(picked, "e1", "Alfa", { claim_id: "c2", claim_text: "two" });
   picked = togglePicked(picked, "e1", "Alfa", { claim_id: "c1", claim_text: "one" });
   assert.deepEqual(pickedFor(picked, "e1"), { Alpha: ["c1"], Alfa: ["c2", "c1"] });
-  assert.deepEqual(allPicked(picked, "e1"), ["c1", "c2"]);
-  assert.deepEqual(picked.texts, { c1: "one", c2: "two" });
   picked = togglePicked(picked, "e1", "Alpha", { claim_id: "c1", claim_text: "one" });
   assert.deepEqual(pickedFor(picked, "e1"), { Alfa: ["c2", "c1"] });
   assert.deepEqual(pickedFor(picked, "e2"), {});
   // Picking in another entity starts over.
   const other = togglePicked(picked, "e2", "Beta", { claim_id: "c9", claim_text: "nine" });
   assert.deepEqual(other.byName, { Beta: ["c9"] });
-  assert.deepEqual(other.texts, { c9: "nine" });
 });
 
 test("contacts go to and from one-value-per-line fields", () => {

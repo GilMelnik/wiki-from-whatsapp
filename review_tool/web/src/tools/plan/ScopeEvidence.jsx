@@ -1,10 +1,10 @@
-import { Bidi, countText, formatCount, groupCount, stanceOf, titleOf } from "@shell";
+import { Bidi, countText, formatCount, claimCount, stanceOf, titleOf } from "@shell";
 import { percent } from "./plan.js";
 
 // What a page's scope is judged by, next to the scope editor: the page's exact size against
-// the planning guide (once step 6b has run), a sample of the groups on it (least certain
-// first), the groups the classifier found closest to it that it did not put there, the
-// example groups the planning model gave, and (folded) the planning run's coverage numbers.
+// the planning guide (once step 6b has run), a sample of the claims on it (least certain
+// first), the claims the classifier found closest to it that it did not put there, the
+// example claims the planning model gave, and (folded) the planning run's coverage numbers.
 // From GET /pages/{id}. The size flag itself is one of the page's warnings, above the scope.
 
 function Section({ title, children }) {
@@ -27,12 +27,12 @@ function Where({ row, overview }) {
   );
 }
 
-/** One claim group, read only: its text, how sure the classifier was, its marks. */
-function GroupLine({ row, overview, showWhere = false }) {
-  if (row.missing) return <li className="text-xs text-slate-500">The group is no longer in the groups file.</li>;
+/** One claim, read only: its text, how sure the classifier was, its marks. */
+function ClaimLine({ row, overview, showWhere = false }) {
+  if (row.missing) return <li className="text-xs text-slate-500">The claim is no longer among the claims (deleted or re-extracted).</li>;
   const stance = stanceOf(row.stance);
   return (
-    <li className="card space-y-1 p-2" title={row.group_id}>
+    <li className="card space-y-1 p-2" title={row.short_id}>
       <Bidi as="p" className="leading-relaxed">
         {row.claim_text}
       </Bidi>
@@ -49,12 +49,12 @@ function GroupLine({ row, overview, showWhere = false }) {
   );
 }
 
-function GroupLines({ rows, overview, showWhere, empty }) {
+function ClaimLines({ rows, overview, showWhere, empty }) {
   if (rows.length === 0) return <p className="text-slate-500">{empty}</p>;
   return (
     <ul className="space-y-2">
       {rows.map((row) => (
-        <GroupLine key={row.group_id} row={row} overview={overview} showWhere={showWhere} />
+        <ClaimLine key={row.short_id} row={row} overview={overview} showWhere={showWhere} />
       ))}
     </ul>
   );
@@ -64,26 +64,26 @@ function Size({ size, coverage }) {
   if (size) {
     return (
       <p>
-        The main page of <span className="font-semibold">{groupCount(size.groups, formatCount)}</span>
-        {size.flag === null && ", inside the planning guide"}. Groups withheld from the wiki do not count.
+        The main page of <span className="font-semibold">{claimCount(size.claims, formatCount)}</span>
+        {size.flag === null && ", inside the planning guide"}. Claims withheld from the wiki do not count.
       </p>
     );
   }
   if (coverage?.measured) {
     return (
       <p className="text-slate-600">
-        About {groupCount(coverage.projected + coverage.merged_projected, formatCount)}, projected from the planning
+        About {claimCount(coverage.projected + coverage.merged_projected, formatCount)}, projected from the planning
         sample. The exact size comes with step 6b.
       </p>
     );
   }
-  return <p className="text-slate-500">Known once step 6b has assigned the groups.</p>;
+  return <p className="text-slate-500">Known once step 6b has assigned the claims.</p>;
 }
 
-function Examples({ examples, groupsAvailable }) {
-  if (!groupsAvailable) return <p className="text-slate-500">The claim groups file was not found, so there is no text to show.</p>;
-  if (examples.length === 0) return <p className="text-slate-500">The model gave no example groups for the page.</p>;
-  return <GroupLines rows={examples} empty="" />;
+function Examples({ examples, claimsAvailable }) {
+  if (!claimsAvailable) return <p className="text-slate-500">The claims could not be loaded (no claims or no audit file yet), so there is no text to show.</p>;
+  if (examples.length === 0) return <p className="text-slate-500">The model gave no example claims for the page.</p>;
+  return <ClaimLines rows={examples} empty="" />;
 }
 
 function Coverage({ coverage, report }) {
@@ -92,7 +92,7 @@ function Coverage({ coverage, report }) {
   return (
     <div className="space-y-1 text-slate-600">
       <p>
-        {formatCount(coverage.count + coverage.merged_count)} of the {groupCount(report.sample_size, formatCount)} in the
+        {formatCount(coverage.count + coverage.merged_count)} of the {claimCount(report.sample_size, formatCount)} in the
         sample were assigned to the page
         {coverage.merged_count > 0 && ` (with ${formatCount(coverage.merged_count)} of pages merged into it)`}.
       </p>
@@ -101,7 +101,7 @@ function Coverage({ coverage, report }) {
   );
 }
 
-export function ScopeEvidence({ overview, detail, onGroups }) {
+export function ScopeEvidence({ overview, detail, onClaims }) {
   const data = detail.data;
   const assigned = data.size !== null;
   return (
@@ -112,15 +112,15 @@ export function ScopeEvidence({ overview, detail, onGroups }) {
       {assigned && (
         <>
           <Section title="On the page, least certain first">
-            <GroupLines rows={data.sample} overview={overview} empty="No group has the page as its main page." />
-            {data.size.groups > data.sample.length && (
-              <button type="button" className="btn btn-sm mt-2" onClick={onGroups}>
-                All its groups
+            <ClaimLines rows={data.sample} overview={overview} empty="No claim has the page as its main page." />
+            {data.size.claims > data.sample.length && (
+              <button type="button" className="btn btn-sm mt-2" onClick={onClaims}>
+                All its claims
               </button>
             )}
           </Section>
-          <Section title="The closest groups it did not get">
-            <GroupLines rows={data.near} overview={overview} showWhere empty="The classifier gave the page to no other group." />
+          <Section title="The closest claims it did not get">
+            <ClaimLines rows={data.near} overview={overview} showWhere empty="The classifier gave the page to no other claim." />
           </Section>
         </>
       )}
@@ -128,12 +128,12 @@ export function ScopeEvidence({ overview, detail, onGroups }) {
         <details>
           <summary className="cursor-pointer text-xs font-semibold text-slate-500">Examples the planning model gave</summary>
           <div className="mt-2">
-            <Examples examples={data.examples} groupsAvailable={overview.groups_available} />
+            <Examples examples={data.examples} claimsAvailable={overview.claims_available} />
           </div>
         </details>
       ) : (
         <Section title="Examples the planning model gave">
-          <Examples examples={data.examples} groupsAvailable={overview.groups_available} />
+          <Examples examples={data.examples} claimsAvailable={overview.claims_available} />
         </Section>
       )}
       <details>

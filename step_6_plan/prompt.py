@@ -1,10 +1,11 @@
 """What the planning model reads and returns: the prompt, the response schema, and the
 conversion of its flat answer into a C7 plan (``step_6_plan.model``).
 
-The model sees every claim group as one compact line (id, stance, distinct supporters and
-opposers, first and last month, thread count, entity names, representative claim text) and
-nothing about the people behind it; when the list does not fit ``plan.max_input_tokens`` it sees
-a sample (``step_6_plan.fit``), with a note and the size guide scaled to the sample.
+The model sees every claim record (``step_6_plan.claim_records``) as one compact line (short
+id, stance, distinct supporters and opposers, first and last month, entity names, claim text)
+and nothing about the people or the conversation behind it; when the list does not fit
+``plan.max_input_tokens`` it sees a sample (``step_6_plan.fit``), with a note and the size
+guide scaled to the sample.
 Structured output cannot express a recursive tree, so the model returns flat lists of category
 nodes and pages that point at their parent; the tree is built here.
 """
@@ -18,13 +19,13 @@ from typing import Any
 from step_3_extract.scrub import FORBIDDEN_TERM_INSTRUCTION
 from step_6_plan.model import PLAN_CONFIG, iter_nodes, sync_pages, validation_errors
 
-_EXAMPLES = PLAN_CONFIG["example_group_ids"]
-_GUIDE = PLAN_CONFIG["page_groups"]
+_EXAMPLES = PLAN_CONFIG["example_claims"]
+_GUIDE = PLAN_CONFIG["page_claims"]
 
 
 def scaled_guide(shown: int, total: int) -> dict[str, int]:
-    """The size guide ``plan.page_groups`` in groups of a list that shows ``shown`` of ``total``
-    groups: each number times shown / total, rounded, never below 1 (unchanged for a full list)."""
+    """The size guide ``plan.page_claims`` in claims of a list that shows ``shown`` of ``total``
+    claims: each number times shown / total, rounded, never below 1 (unchanged for a full list)."""
 
     if shown == total:
         return dict(_GUIDE)
@@ -32,36 +33,36 @@ def scaled_guide(shown: int, total: int) -> dict[str, int]:
 
 
 def plan_system(shown: int, total: int) -> str:
-    """The planning instructions for a list of ``shown`` of ``total`` claim groups.
+    """The planning instructions for a list of ``shown`` of ``total`` claims.
 
-    For a full list this is the prompt planning has always had. For a sample it says that the
-    list is a sample and gives the size guide in groups of the list (``scaled_guide``), so the
-    pages come out the size they would from the full list."""
+    For a sample it says that the list is a sample and gives the size guide in claims of the
+    list (``scaled_guide``), so the pages come out the size they would from the full list."""
 
     guide = scaled_guide(shown, total)
     listed = (
-        "every claim group, one per line, before the request." if shown == total else
-        "a sample of the claim groups, one per line, before the request; a note before the list "
-        "says how many groups there are in all and how the sample was chosen."
+        "every claim, one per line, before the request." if shown == total else
+        "a sample of the claims, one per line, before the request; a note before the list "
+        "says how many claims there are in all and how the sample was chosen."
     )
     scaled = "" if shown == total else (
-        f" These numbers count groups of the list, which shows {shown} of all {total} groups: "
+        f" These numbers count claims of the list, which shows {shown} of all {total} claims: "
         f"they are the guide for the whole corpus (roughly {_GUIDE['typical_min']} to "
-        f"{_GUIDE['typical_max']} groups, split above {_GUIDE['split_above']}, fold below "
+        f"{_GUIDE['typical_max']} claims, split above {_GUIDE['split_above']}, fold below "
         f"{_GUIDE['fold_below']}) scaled by that share, so that a page sized by the list comes "
-        "out the right size for all the groups."
+        "out the right size for all the claims."
     )
     return f"""\
 You are designing the structure of a Hebrew wiki for an Israeli WhatsApp community of gay \
 couples and gay men who are going through surrogacy abroad or considering it. Over several \
 years members asked questions and shared experience, recommendations and warnings. Their \
-statements were extracted as claims, and claims that say the same thing were grouped. The \
-user message lists {listed}
+statements were extracted as claims, each taken from one conversation, so the same thing may \
+be said by several claims from different conversations, which is normal. The user message \
+lists {listed}
 
 Your job is to propose the wiki's structure: a tree of content whose leaves are the wiki \
 pages, plus labels that cut across pages. You do not write the pages. The owner of the wiki \
 will review and edit your proposal by hand; then a fast, fairly literal classifier will read \
-only the page titles and scopes you wrote and assign every claim group to a page and to the \
+only the page titles and scopes you wrote and assign every claim to a page and to the \
 labels that match it. So the structure must come from what the members actually talk about, \
 weighted by how much they talk about it, not from a generic table of contents.
 
@@ -77,13 +78,13 @@ one more level of sub-categories and then pages. Pages are always leaves.
 - Pages: size each page by its material and let the number of pages follow from that; there \
 is no target number of pages. A page is one coherent subject a member would look up and expect \
 to read in one place, and it rests on roughly {guide["typical_min"]} to \
-{guide["typical_max"]} claim groups (count the groups of the list that belong to it; the \
+{guide["typical_max"]} claims (count the claims of the list that belong to it; the \
 support counts show how much the community cares). A subject with more than about \
-{guide["split_above"]} groups is too much for one page: split it by sub-subject into pages \
-of their own. A subject with fewer than about {guide["fold_below"]} groups is not a page: \
+{guide["split_above"]} claims is too much for one page: split it by sub-subject into pages \
+of their own. A subject with fewer than about {guide["fold_below"]} claims is not a page: \
 make it a section of the neighbouring page it belongs with. So no few long pages that each \
-cover many subjects, and no thin page for a subject that only a handful of groups touch.{scaled}
-- Well defined and self-contained: define each page so that every claim group fits one page \
+cover many subjects, and no thin page for a subject that only a handful of claims touch.{scaled}
+- Well defined and self-contained: define each page so that every claim fits one page \
 easily and obviously. Pages must not overlap; where a subject could sit in two places, decide \
 where it goes and say so in both scopes. Together the pages must leave no common kind of \
 claim without a home.
@@ -102,7 +103,7 @@ not, naming the page that takes each neighbouring subject. The classifier and th
 where a claim goes from this text alone, so make it concrete (the kinds of questions and \
 statements it covers), not abstract.
 - aliases_he, aliases_en: other names a reader might search for (a few each; may be empty).
-- example_group_ids: {_EXAMPLES["min"]} to {_EXAMPLES["max"]} ids of groups from the list that \
+- example_claims: {_EXAMPLES["min"]} to {_EXAMPLES["max"]} ids of claims from the list that \
 clearly belong on the page.
 
 ## Category nodes (every node that is not a page, the top level included)
@@ -114,24 +115,24 @@ should meet them (for phases of the process: chronologically).
 Labels are facets that cut across pages and are not pages, so that a reader can find, for \
 example, everything about one country on whichever pages it appears. The owner's example: by \
 country. Propose the label kinds the claims support (for example country, stage of the \
-process, type of provider; your call) and, for each kind, the labels that enough groups would \
+process, type of provider; your call) and, for each kind, the labels that enough claims would \
 carry. A label describes a facet of the subject (a country, a stage, a kind of provider, a \
 family situation) and never exists to find private or contact details: no label for phone \
 numbers, contact details or who to call. A label is one value of a kind: kind "country", \
 label "usa" titled "ארצות הברית". Each \
 label has an id (slug), a kind (slug), a title_he, and a description: one Hebrew sentence \
-precise enough to decide yes or no for a single claim. Skip labels that only a few groups \
+precise enough to decide yes or no for a single claim. Skip labels that only a few claims \
 would carry. A label must not duplicate a page or the tree's top level. Labels are not part \
 of the tree.
 
 ## The input
-Each line is one claim group: id | stance | support | month or first..last month | threads \
-| [entity names] | the claim as worded by its representative member claim. Stance: \
+Each line is one claim, taken from one conversation: id | stance | support | month or \
+first..last month | [entity names] | the claim. Stance: \
 positive (recommends), negative (warns against), neutral or factual. Support: +N \
-distinct members backed it, -M disputed it (left out when none). Threads appears only when \
-the claim came up in more than one conversation, entity names only when it names any. Support \
-shows how much the community cares; dates show what is current. Lines are in order of first \
-appearance.
+distinct members backed it, -M disputed it (left out when none). Entity names appear only \
+when it names any. Support \
+shows how much the community cares; dates show what is current. Lines are in the order of \
+the conversations they come from, which is roughly the order of first appearance.
 
 ## Rules
 - Write titles, descriptions and scopes in Hebrew. {FORBIDDEN_TERM_INSTRUCTION}
@@ -167,7 +168,7 @@ PROPOSAL_SCHEMA: dict[str, Any] = _object({
         "scope": _TEXT,
         "aliases_he": _TEXTS,
         "aliases_en": _TEXTS,
-        "example_group_ids": _TEXTS,
+        "example_claims": _TEXTS,
     })},
     "labels": {"type": "array", "items": _object({
         "id": _TEXT,
@@ -182,33 +183,32 @@ def _one_line(text: str) -> str:
     return " ".join(str(text).split())
 
 
-def group_line(group: dict[str, Any]) -> str:
-    """One claim group as the model reads it. Only group-level fields: no people, no messages.
+def claim_line(claim: dict[str, Any]) -> str:
+    """One claim record as the model reads it: its short id, never the claim or thread id
+    (they hold WhatsApp message ids); no people, no messages.
 
     Compact on purpose (the whole corpus goes into one prompt): optional parts are left out
-    when they carry nothing (no opposers, one month, one thread, no entities)."""
+    when they carry nothing (no opposers, one month, no entities)."""
 
-    first, last = group["first_date"][:7], group["last_date"][:7]
-    support = f"+{group['supporter_count']}"
-    if group["opposer_count"]:
-        support += f" -{group['opposer_count']}"
-    parts = [group["group_id"], group["stance"], support, first if first == last else f"{first}..{last}"]
-    if group["thread_count"] > 1:
-        parts.append(f"{group['thread_count']} threads")
-    if group.get("entity_names"):
-        parts.append(f"[{'; '.join(_one_line(name) for name in group['entity_names'])}]")
-    parts.append(_one_line(group["claim_text"]))
+    first, last = claim["first_date"][:7], claim["last_date"][:7]
+    support = f"+{claim['supporter_count']}"
+    if claim["opposer_count"]:
+        support += f" -{claim['opposer_count']}"
+    parts = [claim["short_id"], claim["stance"], support, first if first == last else f"{first}..{last}"]
+    if claim["entity_names"]:
+        parts.append(f"[{'; '.join(_one_line(name) for name in claim['entity_names'])}]")
+    parts.append(_one_line(claim["claim_text"]))
     return " | ".join(parts)
 
 
-def groups_block(groups: Sequence[dict[str, Any]]) -> str:
-    """Every group, one line each, for the start of the user message.
+def claims_block(claims: Sequence[dict[str, Any]]) -> str:
+    """Every claim, one line each, for the start of the user message.
 
     Not in the (cached) system prompt on purpose: a planning call takes longer than the
     prompt cache lives (5 minutes), so a cache write would cost more and never be read."""
 
-    lines = "\n".join(group_line(group) for group in groups)
-    return f'<claim_groups count="{len(groups)}">\n{lines}\n</claim_groups>'
+    lines = "\n".join(claim_line(claim) for claim in claims)
+    return f'<claims count="{len(claims)}">\n{lines}\n</claims>'
 
 
 def _part(shown: int, total: int) -> str:
@@ -216,25 +216,25 @@ def _part(shown: int, total: int) -> str:
 
 
 def sample_note(shown_many: int, many: int, shown_rest: int, rest: int) -> str:
-    """The note before a sampled list: how many groups there are, how many are shown, and how
-    they were chosen (``many`` groups that more than one member backs, ``rest`` the others)."""
+    """The note before a sampled list: how many claims there are, how many are shown, and how
+    they were chosen (``many`` claims that more than one member backs, ``rest`` the others)."""
 
     total = many + rest
     return (
-        "Not every claim group fits in this request, so the list below is a sample: it shows "
-        f"{shown_many + shown_rest} of all {total} claim groups, namely "
-        f"{_part(shown_many, many)} groups that more than one member backs and "
-        f"{_part(shown_rest, rest)} groups that fewer than two members back. Where a part is not "
-        "shown whole, its groups were chosen at random but evenly over time, so that no period "
-        "of the chat is missing. The groups not shown resemble the shown ones in subject and in "
-        f"proportion: plan the wiki for all {total} groups as if the list held every one of them."
+        "Not every claim fits in this request, so the list below is a sample: it shows "
+        f"{shown_many + shown_rest} of all {total} claims, namely "
+        f"{_part(shown_many, many)} claims that more than one member backs and "
+        f"{_part(shown_rest, rest)} claims that fewer than two members back. Where a part is not "
+        "shown whole, its claims were chosen at random but evenly over time, so that no period "
+        "of the chat is missing. The claims not shown resemble the shown ones in subject and in "
+        f"proportion: plan the wiki for all {total} claims as if the list held every one of them."
     )
 
 
 def initial_request(shown: int, total: int) -> str:
     if shown == total:
-        return f"Propose the wiki structure for the {total} claim groups above."
-    return f"Propose the wiki structure for all {total} claim groups, of which the {shown} above are a sample."
+        return f"Propose the wiki structure for the {total} claims above."
+    return f"Propose the wiki structure for all {total} claims, of which the {shown} above are a sample."
 
 
 def retry_request(shown: int, total: int, answer: Any, errors: Sequence[str]) -> str:
@@ -250,21 +250,21 @@ def revision_request(
     plan: dict[str, Any], sample_size: int, findings: Sequence[str],
     unlisted: Sequence[dict[str, Any]],
 ) -> str:
-    """The revision call's request; ``unlisted`` are the groups the findings name that a sampled
+    """The revision call's request; ``unlisted`` are the claims the findings name that a sampled
     list does not show (their lines are added so the model can read them)."""
 
     found = "\n".join(f"- {finding}" for finding in findings)
-    unlisted_lines = "".join(f"{group_line(group)}\n" for group in unlisted)
+    unlisted_lines = "".join(f"{claim_line(claim)}\n" for claim in unlisted)
     if unlisted_lines:
-        unlisted_lines = f"\nThe groups named here that the list does not show:\n{unlisted_lines}"
+        unlisted_lines = f"\nThe claims named here that the list does not show:\n{unlisted_lines}"
     return (
         f"This is the structure you proposed:\n"
         f"{json.dumps(proposal_from_plan(plan), ensure_ascii=False)}\n\n"
-        f"A classifier then placed a random sample of {sample_size} claim groups, reading only "
+        f"A classifier then placed a random sample of {sample_size} claims, reading only "
         f"the page titles and scopes. What it found:\n{found}\n{unlisted_lines}\n"
         "Revise the structure where these problems are real: sharpen scopes that overlap or "
         "are vague, split overloaded pages, fold pages that attract almost nothing into their "
-        "neighbours, and give a home to the kinds of groups that fit nowhere. Keep the ids of "
+        "neighbours, and give a home to the kinds of claims that fit nowhere. Keep the ids of "
         "the pages you keep; when you merge pages, keep the id that best names the merged "
         "subject. Return the complete revised answer."
     )
@@ -287,7 +287,7 @@ def proposal_from_plan(plan: dict[str, Any]) -> dict[str, Any]:
             "id": node["id"], "parent_id": parent, "title_he": page["title_he"],
             "description": page["description"], "scope": page["scope"],
             "aliases_he": page["aliases"]["he"], "aliases_en": page["aliases"]["en"],
-            "example_group_ids": page["example_group_ids"],
+            "example_claims": page["example_claims"],
         })
     return {
         "top_level_rationale": plan["metadata"].get("top_level_rationale", ""),
@@ -329,12 +329,12 @@ def _attach(raw: dict[str, Any]) -> tuple[list[dict[str, Any]], list[str]]:
 
 
 def plan_from_proposal(
-    raw: dict[str, Any], group_ids: set[str]
+    raw: dict[str, Any], short_ids: set[str]
 ) -> tuple[dict[str, Any], list[str]]:
     """Turn the model's answer into a C7 plan; returns ``(plan, errors)``.
 
-    ``errors`` holds every structural and validation problem (empty = usable). Example group
-    ids that are not real groups are dropped silently: they are hints, not structure.
+    ``errors`` holds every structural and validation problem (empty = usable). Example claims
+    whose short ids are not real claims are dropped silently: they are hints, not structure.
     """
 
     tree, errors = _attach(raw)
@@ -345,7 +345,7 @@ def plan_from_proposal(
             "scope": page["scope"],
             "path": [],
             "aliases": {"he": page["aliases_he"], "en": page["aliases_en"]},
-            "example_group_ids": [g for g in page["example_group_ids"] if g in group_ids],
+            "example_claims": [c for c in page["example_claims"] if c in short_ids],
         }
         for page in raw["pages"]
     }

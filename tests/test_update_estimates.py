@@ -17,7 +17,7 @@ from step_3_extract.split_experiment.units import build_units
 from step_3_extract.split_experiment.usage import estimate as experiment_estimate
 from step_10_update.estimate import Estimator, embedding_usd
 from tests.assign_fixtures import FakeClassifier, Workspace
-from tests.plan_fixtures import make_groups
+from tests.claim_fixtures import claim_records
 from tests.review_fixtures import FakeReviewer, ReviewWorkspace, valid_answers
 from tests.split_experiment_support import NEW_SPLIT, OLD_SPLIT, message_set, threads
 from tests.test_extract_run import Corpus, FakeLLM, _message, answer_by_text
@@ -48,11 +48,11 @@ def test_step_6b_estimate_asks_nothing_and_bounds_the_proposals(tmp_path: Path) 
     workspace = Workspace(tmp_path)
     workspace.run()
     before = workspace.artifact.original.stat().st_mtime_ns
-    workspace.write_groups(make_groups(16))
+    workspace.write_claims(claim_records(16))
     classifier = FakeClassifier()
     result = workspace.run(classifier, estimate=True)
     assert classifier.items == [] and result["written"] is False
-    assert result["groups_asked"] == 4 and result["plan_changed"] is False
+    assert result["claims_asked"] == 4 and result["plan_changed"] is False
     assert result["proposal_calls_max"] == 1 and result["proposal_candidates_max"] >= 4
     assert workspace.artifact.original.stat().st_mtime_ns == before
     assert workspace.run()["full"] == 4  # the run asks what the estimate counted
@@ -80,7 +80,7 @@ def _results() -> dict[str, dict[str, Any]]:
     return {
         STEP_3: {"model": "claude-sonnet-5-5", "model_calls": 2, "update_calls": 1,
                  "input_tokens": 1_000_000, "batch_mode": True},
-        STEP_6_ASSIGN: {"groups_asked": 10, "plan_changed": False, "proposal_candidates_max": 3,
+        STEP_6_ASSIGN: {"claims_asked": 10, "plan_changed": False, "proposal_candidates_max": 3,
                         "proposal_calls_max": 1},
         STEP_7: {"estimate": [{"page": "a", "mode": "write", "input_tokens": 500_000},
                               {"page": "b", "mode": "update", "input_tokens": 500_000}],

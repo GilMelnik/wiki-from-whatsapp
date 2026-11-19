@@ -5,7 +5,7 @@ never proposes it again); a rejected proposal can be put back to ``pending``. Ac
 the plan operation the proposal stands for, as the owner corrected it in the dialog, saved
 together with ``status: accepted``: a new page is ``add_page`` (the owner picks the parent
 and may fix the id), a new label ``add_label``, a wider scope the scope edit of the page the
-proposal names (followed if that page was merged since). The groups are not moved here: the
+proposal names (followed if that page was merged since). The claims are not moved here: the
 next assignment run asks them again against the new page / label / scope.
 """
 

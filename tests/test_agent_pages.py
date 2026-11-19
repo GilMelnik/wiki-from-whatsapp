@@ -13,15 +13,15 @@ import yaml
 from step_6_plan import operations
 from step_9_site.agent_pages import disclaimer_line, plain_admonitions, strip_marks, twin_docs_path, twin_url
 from step_9_site.run import build_config
-from tests.site_fixtures import build_html, make_page, make_site_plan
+from tests.site_fixtures import IDS, build_html, make_page, make_site_plan
 from utils.config import PROJECT_ROOT, section
 
 SITE = section("site")
 AGENT = SITE["agent_markdown"]
 BASE = SITE["url"]
 BODY = (
-    "## רקע\n\nטענה ראשונה.[^g-00000001] ראו [[clinics|המרפאות]] ו־[[costs|העלויות]] ו־[[label:usa|ארה\"ב]] "
-    "ו־[[nowhere|עמוד חסר]] [^g-00000002][^g-00000003].\n\n- פריט [^g-00000001]\n\n[^g-00000001]: ישן.\n"
+    f"## רקע\n\nטענה ראשונה.[^{IDS[1]}] ראו [[clinics|המרפאות]] ו־[[costs|העלויות]] ו־[[label:usa|ארה\"ב]] "
+    f"ו־[[nowhere|עמוד חסר]] [^{IDS[2]}][^{IDS[3]}].\n\n- פריט [^{IDS[1]}]\n\n[^{IDS[1]}]: ישן.\n"
 )
 MARK = re.compile(r"\[\^")
 # A tag name, then attributes or the end: a markdown autolink (<name@host>, <https://…>) is not one.

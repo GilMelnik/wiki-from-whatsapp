@@ -1,30 +1,30 @@
 import { useRef, useState } from "react";
-import { formatCount, groupCount, Kbd, Pager, PanelState, Select, usePicking, useResource, useShortcuts, useStoredState, useToast } from "@shell";
+import { formatCount, claimCount, Kbd, Pager, PanelState, Select, usePicking, useResource, useShortcuts, useStoredState, useToast } from "@shell";
 import { api } from "./api.js";
-import { DEFAULT_GROUP_VIEW, groupsQuery, ROLE_OPTIONS, SORT_OPTIONS } from "./assign.js";
-import { GroupRow } from "./GroupRow.jsx";
+import { DEFAULT_CLAIM_VIEW, claimsQuery, ROLE_OPTIONS, SORT_OPTIONS } from "./assign.js";
+import { ClaimRow } from "./ClaimRow.jsx";
 import { LabelsDialog, PagePickerDialog } from "./MoveDialogs.jsx";
 import { TOOL_ID } from "./plan.js";
 
-// The claim groups on a page / with a label / on no page / waiting for the assignment run,
-// least certain first, with a text filter and server paging. Groups are picked (one or many,
+// The claims on a page / with a label / on no page / waiting for the assignment run,
+// least certain first, with a text filter and server paging. Claims are picked (one or many,
 // across pages; "a" picks or drops every visible one) and moved together: another primary
 // page, a second page, off this page / label, off every page, labels, or back to automatic.
-// Every move pins the groups (the assignment step never re-decides them) and can be undone.
+// Every move pins the claims (the assignment step never re-decides them) and can be undone.
 // Render it with `key` = the list (scope + id), so a new list starts on page one, unpicked.
 
 const EMPTY_TEXTS = {
-  page: "No groups on this page.",
-  label: "No groups with this label.",
-  unplaced: "Every group is placed on a page.",
-  waiting: "No groups are waiting for the assignment run.",
+  page: "No claims on this page.",
+  label: "No claims with this label.",
+  unplaced: "Every claim is placed on a page.",
+  waiting: "No claims are waiting for the assignment run.",
 };
 
 function ActionBar({ scope, count, busy, locked, act, open, clear }) {
   const removeLabel = scope === "label" ? "Remove this label" : "Remove from this page";
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-blue-200 bg-blue-50 px-3 py-2 text-xs">
-      <span className="font-medium text-blue-900">Picked: {groupCount(count, formatCount)}</span>
+      <span className="font-medium text-blue-900">Picked: {claimCount(count, formatCount)}</span>
       <button type="button" className="btn btn-sm" onClick={clear}>Clear</button>
       <span className="flex-1" />
       <button type="button" className="btn btn-sm btn-primary" disabled={busy} onClick={() => open("primary")}>
@@ -52,23 +52,23 @@ function ActionBar({ scope, count, busy, locked, act, open, clear }) {
   );
 }
 
-export function GroupTable({ overview, scope, itemId = null, watch, locked, saving, editGroups }) {
+export function ClaimTable({ overview, scope, itemId = null, watch, locked, saving, editClaims }) {
   const toast = useToast();
-  const [view, setView] = useStoredState(TOOL_ID, "groupView", DEFAULT_GROUP_VIEW);
+  const [view, setView] = useStoredState(TOOL_ID, "claimView", DEFAULT_CLAIM_VIEW);
   const [offset, setOffset] = useState(0);
   const [dialog, setDialog] = useState(null);
   const searchRef = useRef(null);
   const seen = useRef(new Map());
   const picking = usePicking(`${scope}:${itemId}`);
   const list = useResource(
-    () => api.get("/assignments/groups", groupsQuery(scope, itemId, view, offset)),
+    () => api.get("/assignments/claims", claimsQuery(scope, itemId, view, offset)),
     [scope, itemId, view.sort, view.role, view.q, offset],
     { watch, keepPrevious: true }
   );
   const data = list.data;
   const rows = data?.items ?? [];
-  for (const row of rows) seen.current.set(row.group_id, row);
-  const visible = rows.filter((row) => row.record).map((row) => row.group_id);
+  for (const row of rows) seen.current.set(row.short_id, row);
+  const visible = rows.filter((row) => row.record).map((row) => row.short_id);
   const shown = picking.stateOf(visible);
   const pickedRows = picking.picked.map((id) => seen.current.get(id)).filter(Boolean);
   const busy = saving || locked;
@@ -79,7 +79,7 @@ export function GroupTable({ overview, scope, itemId = null, watch, locked, savi
     setOffset(0);
   };
   const run = async (changes) => {
-    const result = await editGroups(picking.picked, changes);
+    const result = await editClaims(picking.picked, changes);
     picking.clear();
     list.reload();
     return result;
@@ -91,20 +91,20 @@ export function GroupTable({ overview, scope, itemId = null, watch, locked, savi
   };
   const open = (kind) => can && setDialog(kind);
   useShortcuts([
-    { keys: "a", label: "Pick every shown group, or unpick them", run: () => picking.setMany(visible, shown !== "all") },
-    { keys: "p", label: "Move the picked groups to another page", run: () => open("primary") },
-    { keys: "2", label: "Add a second page to the picked groups", run: () => open("second") },
-    { keys: "x", label: "Remove the picked groups from the shown page / label", run: () => can && (scope === "page" || scope === "label") && act.removeHere() },
-    { keys: "o", label: "Take the picked groups off every page", run: () => can && act.run([{ action: "unplace" }]) },
-    { keys: "b", label: "Labels of the picked groups", run: () => open("labels") },
-    { keys: "r", label: "Put the picked groups back to automatic assignment", run: () => can && act.run([{ action: "unpin" }]) },
-    { keys: "f", label: "Search the groups", run: () => searchRef.current?.focus() },
+    { keys: "a", label: "Pick every shown claim, or unpick them", run: () => picking.setMany(visible, shown !== "all") },
+    { keys: "p", label: "Move the picked claims to another page", run: () => open("primary") },
+    { keys: "2", label: "Add a second page to the picked claims", run: () => open("second") },
+    { keys: "x", label: "Remove the picked claims from the shown page / label", run: () => can && (scope === "page" || scope === "label") && act.removeHere() },
+    { keys: "o", label: "Take the picked claims off every page", run: () => can && act.run([{ action: "unplace" }]) },
+    { keys: "b", label: "Labels of the picked claims", run: () => open("labels") },
+    { keys: "r", label: "Put the picked claims back to automatic assignment", run: () => can && act.run([{ action: "unpin" }]) },
+    { keys: "f", label: "Search the claims", run: () => searchRef.current?.focus() },
   ]);
 
   return (
     <div className="flex min-h-0 flex-col rounded border border-slate-200 bg-white">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-3 py-2 text-xs text-slate-600">
-        <label className="flex items-center gap-1" title="Pick every shown group (a)">
+        <label className="flex items-center gap-1" title="Pick every shown claim (a)">
           <input
             type="checkbox"
             checked={shown === "all"}
@@ -132,7 +132,7 @@ export function GroupTable({ overview, scope, itemId = null, watch, locked, savi
           />
         )}
         <span>
-          {groupCount(data?.total ?? 0, formatCount)}{data?.manual ? ` · ${formatCount(data.manual)} manual` : ""}
+          {claimCount(data?.total ?? 0, formatCount)}{data?.manual ? ` · ${formatCount(data.manual)} manual` : ""}
         </span>
         {data && <Pager offset={data.offset} limit={data.limit} total={data.total} onChange={setOffset} />}
       </div>
@@ -145,18 +145,18 @@ export function GroupTable({ overview, scope, itemId = null, watch, locked, savi
         hasData={Boolean(data)}
         onRetry={list.reload}
         empty={Boolean(data) && rows.length === 0}
-        emptyText={view.q.trim() ? "No groups match the filter." : EMPTY_TEXTS[scope]}
+        emptyText={view.q.trim() ? "No claims match the filter." : EMPTY_TEXTS[scope]}
       >
         <ul className={`divide-y divide-slate-100 ${list.loading ? "opacity-60" : ""}`}>
           {rows.map((row) => (
-            <GroupRow
-              key={row.group_id}
+            <ClaimRow
+              key={row.short_id}
               row={row}
               overview={overview}
               scope={scope}
               itemId={itemId}
-              picked={picking.has(row.group_id)}
-              onToggle={() => picking.toggle(row.group_id)}
+              picked={picking.has(row.short_id)}
+              onToggle={() => picking.toggle(row.short_id)}
             />
           ))}
         </ul>

@@ -14,20 +14,20 @@ from step_6_plan import coverage
 from step_6_plan.model import PLAN_CONFIG, check_plan, validation_errors
 from step_6_plan.prompt import plan_system
 from step_6_plan.run import run
-from tests.plan_fixtures import PAGE_IDS, FakeClassifier, FakeLLM, make_groups, make_plan, make_proposal
-from utils.json_io import write_json_file
+from tests.claim_fixtures import claim_records, write_claim_inputs
+from tests.plan_fixtures import PAGE_IDS, FakeClassifier, FakeLLM, make_plan, make_proposal
 from utils.paths import Artifact
 
-GUIDE = PLAN_CONFIG["page_groups"]
+GUIDE = PLAN_CONFIG["page_claims"]
 PLAN_SYSTEM = plan_system(100, 100)  # the instructions for a full list
 
 
 def test_prompt_carries_the_guide_from_config_and_no_page_count() -> None:
     pages_rule = next(line for line in PLAN_SYSTEM.split("\n- ") if line.startswith("Pages:"))
     pages_rule = " ".join(pages_rule.split())
-    assert f"roughly {GUIDE['typical_min']} to {GUIDE['typical_max']} claim groups" in pages_rule
-    assert f"more than about {GUIDE['split_above']} groups" in pages_rule
-    assert f"fewer than about {GUIDE['fold_below']} groups" in pages_rule
+    assert f"roughly {GUIDE['typical_min']} to {GUIDE['typical_max']} claims" in pages_rule
+    assert f"more than about {GUIDE['split_above']} claims" in pages_rule
+    assert f"fewer than about {GUIDE['fold_below']} claims" in pages_rule
     assert "no target number of pages" in pages_rule
     assert not re.search(r"at most \d+ (?:wiki )?pages", PLAN_SYSTEM)
     assert str(PLAN_CONFIG["max_pages"]) not in PLAN_SYSTEM
@@ -53,30 +53,29 @@ def test_plan_above_the_ceiling_is_refused(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_a_plan_made_under_the_30_page_config_still_loads_and_validates() -> None:
     plan = make_plan()
-    plan["metadata"] = {"model": "old", "config": {"max_pages": 30}, "planned_group_ids": []}
+    plan["metadata"] = {"model": "old", "config": {"max_pages": 30}, "planned_claims": []}
     assert check_plan(plan) is plan
 
 
 def test_a_planning_run_records_the_prompt_version(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     for key, value in {"fold_below": 2, "split_above": 8}.items():
         monkeypatch.setitem(GUIDE, key, value)
-    groups_path = tmp_path / "groups.json"
-    write_json_file({"groups": make_groups(), "metadata": {}}, groups_path)
+    sources = write_claim_inputs(claim_records(), tmp_path)
     artifact = Artifact(tmp_path / "plan.json", tmp_path / "plan_edited.json")
 
     def spread(state: str) -> dict[str, float]:
         page = PAGE_IDS[int(state.split("topic ")[1][0])]
         return {**{p: 0.0 for p in PAGE_IDS}, coverage.NONE: 0.0, page: 0.9}
 
-    run(aggregated_path=groups_path, artifact=artifact, llm=FakeLLM([make_proposal()]),
+    run(sources=sources, artifact=artifact, llm=FakeLLM([make_proposal()]),
         classifier=FakeClassifier(spread), count_tokens=lambda system, user: 1000)
     meta = json.loads(artifact.edited.read_text(encoding="utf-8"))["metadata"]
-    assert meta["prompt_version"] == PLAN_CONFIG["prompt_version"] and meta["prompt_version"] >= 2
-    assert meta["config"]["page_groups"] == GUIDE
+    assert meta["prompt_version"] == PLAN_CONFIG["prompt_version"] and meta["prompt_version"] >= 3
+    assert meta["config"]["page_claims"] == GUIDE
 
 
 def _report(projected: dict[str, int]) -> dict[str, Any]:
-    """The coverage numbers when the "sample" is every group: ``projected`` groups per page."""
+    """The coverage numbers when the "sample" is every claim: ``projected`` claims per page."""
 
     zero = {**{p: 0.0 for p in PAGE_IDS}, coverage.NONE: 0.0}
     picks = [(f"{pid}{i}", {**zero, pid: 0.9}) for pid, size in projected.items() for i in range(size)]

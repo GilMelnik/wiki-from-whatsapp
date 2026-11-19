@@ -125,7 +125,6 @@ class IncrementalExperiment:
             self.artifact.edited,
             self.work / "base_claims.json",
             self.work / "base_claims_edited.json",
-            self.work / "claim_aggregations.json",
             self.work / f"{self.artifact.original.stem}_analysis.json",
         )
 

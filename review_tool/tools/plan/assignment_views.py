@@ -1,16 +1,16 @@
-"""Read-only views of the assignments (C8) against today's plan and claim groups.
+"""Read-only views of the assignments (C8) against today's plan and claim records (C6).
 
 Every record is read as the next assignment run will see it (``assignments.followed``):
-groups on a page that was merged away show under the survivor, marked as waiting for the
-run; groups whose every page was deleted are in the "waiting" list, with the groups that
+claims on a page that was merged away show under the survivor, marked as waiting for the
+run; claims whose every page was deleted are in the "waiting" list, with the claims that
 have no record yet (newer than the last run). Nothing here writes.
 
-Lists (``scope``): ``page`` (the groups the page owns, then those that only mention it),
+Lists (``scope``): ``page`` (the claims the page owns, then those that only mention it),
 ``label``, ``unplaced`` (``pages == []``) and ``waiting``. Default order: least certain
 first (the classifier's probability for that page / label; the top page for an unplaced
-group), records pinned by hand last; also by last date or by supporters. For judging a
-page's scope: the groups the classifier found closest to the page that it did not put there
-(``near_groups``). Rows mark the groups the owner's rule withholds from the wiki; they do not
+claim), records pinned by hand last; also by last date or by supporters. For judging a
+page's scope: the claims the classifier found closest to the page that it did not put there
+(``near_claims``). Rows mark the claims the owner's rule withholds from the wiki; they do not
 count toward a page's size (``sizes``).
 """
 
@@ -23,7 +23,7 @@ from review_tool.tools.plan.assignments import MANUAL, followed
 from review_tool.tools.plan.history import Record
 from review_tool.tools.plan.proposals import ACCEPTED, PENDING, REJECTED, status_of
 from review_tool.tools.plan.sizes import page_sizes
-from review_tool.tools.plan.views import group_summary, redirect_map
+from review_tool.tools.plan.views import claim_summary, redirect_map
 from step_6_plan.assign_rules import ASSIGN_CONFIG, apply_plan_edit
 from step_6_plan.model import PLAN_CONFIG, iter_nodes
 from step_6_plan.operations import PlanEdit
@@ -37,52 +37,52 @@ ROLES = ("all", "primary", "mention")
 
 
 def _matches(row: Mapping[str, Any], needle: str) -> bool:
-    texts = [row.get("claim_text") or "", row["group_id"], *(row.get("entity_names") or [])]
+    texts = [row.get("claim_text") or "", row["short_id"], *(row.get("entity_names") or [])]
     return any(needle in text.casefold() for text in texts)
 
 
 class AssignmentView:
-    """The assignments of one store load, read against ``plan`` and ``groups`` (``None``:
-    no groups file, so rows have no text)."""
+    """The assignments of one store load, read against ``plan`` and ``claims`` (records by
+    short id; ``None``: no claim records yet, so rows have no text)."""
 
     def __init__(self, plan: dict[str, Any], data: Mapping[str, Any],
-                 groups: Mapping[str, dict[str, Any]] | None) -> None:
+                 claims: Mapping[str, dict[str, Any]] | None) -> None:
         self.plan = plan
         self.stored: dict[str, Record] = data["assignments"]
         self.proposals: list[dict[str, Any]] = data["proposals"]
         self.metadata: Mapping[str, Any] = data.get("metadata") or {}
-        self.groups = groups
-        order = list(groups) if groups is not None else list(self.stored)
+        self.claims = claims
+        order = list(claims) if claims is not None else list(self.stored)
         known = set(order)
-        self.order = [gid for gid in order if gid in self.stored]
-        self.new_groups = [gid for gid in order if gid not in self.stored]
-        self.gone = [gid for gid in self.stored if gid not in known]
-        self.records = {gid: followed(self.stored[gid], plan) for gid in self.order}
+        self.order = [sid for sid in order if sid in self.stored]
+        self.new_claims = [sid for sid in order if sid not in self.stored]
+        self.gone = [sid for sid in self.stored if sid not in known]
+        self.records = {sid: followed(self.stored[sid], plan) for sid in self.order}
         self._redirects = redirect_map(plan)
-        self.withheld = withheld_ids(groups.values()) if groups is not None else frozenset()
+        self.withheld = withheld_ids(claims.values()) if claims is not None else frozenset()
 
-    # --- one group ----------------------------------------------------------------
+    # --- one claim ----------------------------------------------------------------
 
-    def _changed_ids(self, gid: str) -> tuple[dict[str, str], list[str]]:
+    def _changed_ids(self, sid: str) -> tuple[dict[str, str], list[str]]:
         """Stored ids the plan no longer has: ``{merged-away: survivor}`` and deleted ones."""
 
-        stored = self.stored[gid]
+        stored = self.stored[sid]
         live = set(self.plan["pages"]) | set(self.plan["labels"])
         stale = [i for i in [*stored["pages"], *stored["labels"]] if i not in live]
         moved = {i: self._redirects[i] for i in stale if i in self._redirects}
         return moved, [i for i in stale if i not in moved]
 
-    def row(self, gid: str, certainty: float | None = None, role: str | None = None
+    def row(self, sid: str, certainty: float | None = None, role: str | None = None
             ) -> dict[str, Any]:
-        """One group as the lists show it (its text and where it is)."""
+        """One claim as the lists show it (its text and where it is)."""
 
-        group = (self.groups or {}).get(gid)
-        base = group_summary(group) if group else {"group_id": gid, "missing": self.groups is not None}
-        base["withheld"] = gid in self.withheld
-        record = self.records.get(gid)
+        claim = (self.claims or {}).get(sid)
+        base = claim_summary(claim) if claim else {"short_id": sid, "missing": self.claims is not None}
+        base["withheld"] = sid in self.withheld
+        record = self.records.get(sid)
         if record is None:
             return {**base, "record": False}
-        moved, dropped = self._changed_ids(gid)
+        moved, dropped = self._changed_ids(sid)
         return {
             **base,
             "record": True,
@@ -99,25 +99,25 @@ class AssignmentView:
     # --- lists --------------------------------------------------------------------
 
     def _members(self, scope: str, item_id: str | None) -> list[tuple[str, float | None, str | None]]:
-        """``(group_id, certainty, role)`` of every group in the list, in group order."""
+        """``(short_id, certainty, role)`` of every claim in the list, in record order."""
 
         out: list[tuple[str, float | None, str | None]] = []
         if scope == "waiting":
-            lost = [gid for gid in self.order
-                    if self.stored[gid]["pages"] and not self.records[gid]["pages"]]
-            return [(gid, None, None) for gid in [*lost, *self.new_groups]]
-        for gid in self.order:
-            record = self.records[gid]
+            lost = [sid for sid in self.order
+                    if self.stored[sid]["pages"] and not self.records[sid]["pages"]]
+            return [(sid, None, None) for sid in [*lost, *self.new_claims]]
+        for sid in self.order:
+            record = self.records[sid]
             if scope == "page" and item_id in record["pages"]:
                 role = "primary" if record["pages"][0] == item_id else "mention"
-                out.append((gid, record["p"].get(item_id, 0.0), role))
+                out.append((sid, record["p"].get(item_id, 0.0), role))
             elif scope == "label" and item_id in record["labels"]:
-                out.append((gid, record["label_p"].get(item_id, 0.0), None))
-            elif scope == "unplaced" and not record["pages"] and not self.stored[gid]["pages"]:
-                out.append((gid, max(record["p"].values(), default=0.0), None))
+                out.append((sid, record["label_p"].get(item_id, 0.0), None))
+            elif scope == "unplaced" and not record["pages"] and not self.stored[sid]["pages"]:
+                out.append((sid, max(record["p"].values(), default=0.0), None))
         return out
 
-    def groups_list(self, *, scope: str, item_id: str | None, role: str, sort: str, q: str,
+    def claims_list(self, *, scope: str, item_id: str | None, role: str, sort: str, q: str,
                     offset: int, limit: int) -> dict[str, Any]:
         """One page of a list, filtered by ``role`` (page lists) and the text ``q``."""
 
@@ -127,7 +127,7 @@ class AssignmentView:
                   "mention": sum(1 for _, _, r in members if r == "mention")}
         if role != "all":
             members = [m for m in members if m[2] == role]
-        rows = [self.row(gid, certainty, member_role) for gid, certainty, member_role in members]
+        rows = [self.row(sid, certainty, member_role) for sid, certainty, member_role in members]
         needle = q.strip().casefold()
         if needle:
             rows = [row for row in rows if _matches(row, needle)]
@@ -136,14 +136,14 @@ class AssignmentView:
                 "total": len(rows), "offset": offset, "limit": limit, "counts": counts,
                 "manual": sum(1 for row in rows if row.get("manual"))}
 
-    def near_groups(self, page_id: str, limit: int) -> list[dict[str, Any]]:
-        """The groups not on ``page_id`` to which the classifier gave it the highest
+    def near_claims(self, page_id: str, limit: int) -> list[dict[str, Any]]:
+        """The claims not on ``page_id`` to which the classifier gave it the highest
         probability, most probable first: where the page's scope ends."""
 
-        near = sorted(((record["p"].get(page_id, 0.0), gid) for gid, record in self.records.items()
+        near = sorted(((record["p"].get(page_id, 0.0), sid) for sid, record in self.records.items()
                        if page_id not in record["pages"] and record["p"].get(page_id, 0.0) > 0),
                       key=lambda item: -item[0])
-        return [self.row(gid, certainty) for certainty, gid in near[:limit]]
+        return [self.row(sid, certainty) for certainty, sid in near[:limit]]
 
     @staticmethod
     def _sorted(rows: list[dict[str, Any]], sort: str) -> list[dict[str, Any]]:
@@ -153,20 +153,20 @@ class AssignmentView:
             rows = sorted(rows, key=lambda row: -(row.get("supporter_count") or 0))
         else:
             rows = sorted(rows, key=lambda row: (bool(row.get("manual")), row.get("certainty") or 0.0))
-        # A page's own groups first, then those that only mention it (stable: order kept).
+        # A page's own claims first, then those that only mention it (stable: order kept).
         return sorted(rows, key=lambda row: row.get("role") == "mention")
 
     # --- numbers ------------------------------------------------------------------
 
     def label_findings(self, counts: Mapping[str, int]) -> list[dict[str, Any]]:
-        """Labels that attach to very few groups or to a very large share of them."""
+        """Labels that attach to very few claims or to a very large share of them."""
 
         total = len(self.order)
         found = []
         for label_id, count in counts.items():
             share = count / total if total else 0.0
             finding = ("large" if share >= FINDINGS["large_share"]
-                       else "few" if count <= FINDINGS["few_groups"] else None)
+                       else "few" if count <= FINDINGS["few_claims"] else None)
             if finding:
                 found.append({"label_id": label_id, "count": count, "share": share,
                               "finding": finding})
@@ -192,13 +192,13 @@ class AssignmentView:
             "generated_at": self.metadata.get("generated_at"),
             "classifier": self.metadata.get("classifier"),
             "counts": {
-                "groups": len(records),
+                "claims": len(records),
                 "unplaced": len(self._members("unplaced", None)),
                 "two_pages": sum(1 for r in records.values() if len(r["pages"]) > 1),
                 "manual": sum(1 for r in records.values() if r.get(MANUAL)),
                 "waiting": len(self._members("waiting", None)),
-                "new_groups": len(self.new_groups),
-                "followed": sum(1 for gid in self.order if any(self._changed_ids(gid))),
+                "new_claims": len(self.new_claims),
+                "followed": sum(1 for sid in self.order if any(self._changed_ids(sid))),
                 "gone": len(self.gone),
             },
             "pages": pages,
@@ -231,13 +231,13 @@ class AssignmentView:
         return answer
 
     def proposals_view(self, check_id: Callable[[str], dict[str, Any]]) -> dict[str, Any]:
-        """Every proposal, pending first, with its groups and what its target looks like
-        in today's plan."""
+        """Every proposal, pending first, with the rows of its claims (``claim_rows``) and
+        what its target looks like in today's plan."""
 
         ordered = sorted(self.proposals, key=lambda p: status_of(p) != PENDING)
         items = [{**proposal,
                   "status": status_of(proposal),
-                  "groups": [self.row(gid) for gid in proposal.get("group_ids") or []],
+                  "claim_rows": [self.row(sid) for sid in proposal["claims"]],
                   "target": self._target(proposal, check_id)}
                  for proposal in ordered]
         return {"items": items, "counts": self.summary()["proposals"]}
@@ -245,13 +245,13 @@ class AssignmentView:
     # --- what a plan operation means for the assignments ----------------------------
 
     def plan_edit_effect(self, edit: PlanEdit) -> dict[str, Any]:
-        """For the operation dialogs: how many groups the next assignment run redirects,
+        """For the operation dialogs: how many claims the next assignment run redirects,
         asks again or takes off a deleted page / label, and how many hand-pinned records
         lose a page (``step_6_plan.assign_rules.apply_plan_edit``)."""
 
         result = apply_plan_edit(self.stored, edit)
         moved = set(edit.redirects)
-        manual = {gid for gid, record in self.stored.items() if record.get(MANUAL)}
+        manual = {sid for sid, record in self.stored.items() if record.get(MANUAL)}
         removed_pages, removed_labels = set(edit.removed_pages), set(edit.removed_labels)
         new_labels = [i for i in edit.created
                       if i in edit.plan["labels"] and i not in edit.redirects.values()]
@@ -263,9 +263,9 @@ class AssignmentView:
             "asked_labels": new_labels,
             "pages_cleared": sum(1 for ids in result.cleared.values() if removed_pages & set(ids)),
             "labels_cleared": sum(1 for ids in result.cleared.values() if removed_labels & set(ids)),
-            "manual_lost": sum(1 for gid, ids in result.cleared.items()
-                               if gid in manual and removed_pages & set(ids)),
-            "manual_reask": sum(1 for gid in result.reask if gid in manual),
+            "manual_lost": sum(1 for sid, ids in result.cleared.items()
+                               if sid in manual and removed_pages & set(ids)),
+            "manual_reask": sum(1 for sid in result.reask if sid in manual),
         }
 
 

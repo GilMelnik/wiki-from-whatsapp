@@ -50,7 +50,7 @@ def claims_payload(extra: list[dict[str, Any]] = ()) -> dict[str, Any]:
 
 
 def build_entity_graph(root: Path) -> ArtifactGraph:
-    """claims -> entities, plus the hand-made claim aggregations file (as in the pipeline)."""
+    """claims -> entities (as in the pipeline)."""
     return ArtifactGraph(
         [
             ArtifactNode("claims", "Claims", root / "claims.json", root / "claims_edited.json", "s3"),
@@ -62,7 +62,6 @@ def build_entity_graph(root: Path) -> ArtifactGraph:
                 "s4",
                 ("claims",),
             ),
-            ArtifactNode("claim_aggregations", "Aggregations", root / "claim_aggregations.json"),
         ]
     )
 
@@ -109,7 +108,6 @@ class EntitiesSetup:
         self.claims_path = self.graph.node("claims").original
         node = self.graph.node("entities")
         self.original, self.edited = node.original, node.edited
-        self.aggregations = self.graph.node("claim_aggregations").original
         self.cache = root / "entity_claim_analysis.json"
         claims = claims_payload(extra_claims)["claims"]
         if with_claims:

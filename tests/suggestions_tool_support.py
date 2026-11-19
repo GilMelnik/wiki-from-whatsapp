@@ -1,5 +1,5 @@
 """The suggestions tool on step 8's synthetic workspace (``tests.review_fixtures``): one
-suggestion of every kind, a fake page corrector, a fake group linker, the tool hosted in the
+suggestion of every kind, a fake page corrector, the tool hosted in the
 review app with a recording event sink. Nothing here comes from real data."""
 
 from __future__ import annotations
@@ -15,24 +15,25 @@ from review_tool.artifacts import ArtifactGraph, ArtifactNode
 from review_tool.jobs import JobRunner
 from review_tool.tools.suggestions.apply_runner import APPLY_EVENT
 from review_tool.tools.suggestions.tool import SuggestionsTool
-from tests.pages_fixtures import FakeWriter
+from tests.pages_fixtures import IDS, FakeWriter
 from tests.review_fixtures import FakeReviewer, ReviewWorkspace, corrector, sentence_a, valid_answers
 from tests.review_tool_support import BASE_URL, build_app
 
-FIXED = "הקבוצה g-00000004 מספרת על הניסיון השני.[^g-00000004]"
+FIXED = f"הטענה {IDS[4]} מספרת על הניסיון השני.[^{IDS[4]}]"
 WAIT_SECONDS = 10.0
 
 
 def workspace_graph(ws: ReviewWorkspace) -> ArtifactGraph:
     """The artifact graph of the synthetic workspace (the tool watches these files)."""
     return ArtifactGraph([
-        ArtifactNode("groups", "Groups", ws.groups_path, step="step_5"),
+        ArtifactNode("claims", "Claims", ws.sources.claims, step="step_3"),
+        ArtifactNode("entities", "Entities", ws.sources.entities, step="step_4"),
         ArtifactNode("plan", "Plan", ws.plan_artifact.original, ws.plan_artifact.edited,
-                     "step_6", ("groups",)),
+                     "step_6", ("claims", "entities")),
         ArtifactNode("assignments", "Assignments", ws.assignments_path, None, "step_6b",
-                     ("groups", "plan")),
+                     ("claims", "entities", "plan")),
         ArtifactNode("pages", "Pages", ws.artifact.original, ws.artifact.edited, "step_7",
-                     ("groups", "plan", "assignments")),
+                     ("claims", "entities", "plan", "assignments")),
         ArtifactNode("suggestions", "Suggestions", ws.suggestions.original, ws.suggestions.edited,
                      "step_8", ("plan", "pages")),
     ])
@@ -66,11 +67,12 @@ class ToolSetup:
         if review:
             self.ws.review(FakeReviewer(valid_answers()))
         self.llm = FakeWriter("fake-apply",
-                              respond=respond or corrector(sentence_a("g-00000004"), FIXED))
+                              respond=respond or corrector(sentence_a(IDS[4]), FIXED))
         self.events: list[dict[str, Any]] = []
         self.graph = workspace_graph(self.ws)
         self.tool = SuggestionsTool(self.graph, store=lambda: self.ws.store(self.llm),
-                                    publish=self._record)
+                                    publish=self._record, audit_path=self.ws.sources.audit,
+                                    contradictions_path=self.ws.sources.contradictions)
         self.runner = jobs(self.graph) if jobs else None
         app = build_app(root, specs=(self.tool.spec,), graph=self.graph, jobs=self.runner)
         self.client = TestClient(app, base_url=BASE_URL)

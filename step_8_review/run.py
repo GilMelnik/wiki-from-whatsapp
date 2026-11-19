@@ -3,12 +3,12 @@
 How it works, in plain words: the wiki is cut along the plan tree into PARTS of a few related
 pages (``step_8_review.parts``). For each part the model of stage ``wiki_review.stage`` (Opus
 5.5) reads the plan of the whole wiki and the part's effective pages (the owner's edits
-included) with the group lines step 7's writer read for them; one CROSS pass reads the plan
+included) with the claim lines step 7's writer read for them; one CROSS pass reads the plan
 and the stored points of every page, to see what no part can (``prompts``). Every pass answers
 with a short list of suggestions, most valuable first: pages that contradict each other, a
 page to split, two to merge, a missing page or label, and (parts only) plain mistakes in a
 page's text, each with a structured ``proposal`` code can carry out (``proposals``). Code
-checks every proposal against the wiki and drops what names a page or group its pass did not
+checks every proposal against the wiki and drops what names a page or claim its pass did not
 see, fails a check, repeats an earlier suggestion (of any run or of another pass of this run)
 or exceeds the pass's cap. The owner then accepts, rejects or corrects each one (``store``);
 an accepted one is carried out by ``apply``.
@@ -46,6 +46,7 @@ from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from step_6_plan.claim_records import ClaimSources
 from step_8_review.inputs import REVIEW_CONFIG, ReviewInput, page_marks
 from step_8_review.parts import ReviewPass, ReviewPasses, batch_available, stored_passes
 from step_8_review.proposals import OPEN, PENDING, answer_schema, from_answer
@@ -79,7 +80,7 @@ def with_marks(suggestions: Sequence[Mapping[str, Any]], statuses: Mapping[str, 
     return out
 
 
-def _newer_input(original: Path, sources: Sequence[Path]) -> bool:
+def _newer_input(original: Path, sources: Collection[Path]) -> bool:
     newest = max(path.stat().st_mtime_ns for path in sources if path.is_file())
     return not original.is_file() or original.stat().st_mtime_ns < newest
 
@@ -164,9 +165,8 @@ class ReviewRun:
 
     def metadata(self, input_tokens: int, answered: Collection[str], run: Mapping[str, Any]
                  ) -> dict[str, Any]:
-        sources = ("groups", "plan", "assignments", "pages")
         return {
-            "sources": {name: str(path) for name, path in zip(sources, self.review.sources)},
+            "sources": {name: str(path) for name, path in self.review.sources.items()},
             "inputs": self.inputs(answered),
             "stage": REVIEW_CONFIG["stage"],
             "model": self.model,
@@ -189,7 +189,7 @@ def run(
     *,
     artifact: Artifact = SUGGESTIONS,
     pages_artifact: Artifact = WIKI_PAGES,
-    aggregated_path: Path | None = None,
+    sources: ClaimSources = ClaimSources(),
     plan_path: Path | None = None,
     assignments_path: Path | None = None,
     rebuild: bool = False,
@@ -201,7 +201,9 @@ def run(
 ) -> dict[str, Any]:
     """Review the passes whose input changed; see the module docstring.
 
-    Inputs default to the effective pages, groups, plan and assignments. ``estimate``: count
+    Inputs default to the effective pages, plan and assignments; ``sources``: the files the
+    claim records are joined from (default: the effective claims and entities, the audit and
+    the manual contradictions). ``estimate``: count
     every pass's prompt, make no review call, write nothing; returns ``passes`` (``id``,
     ``pages``, ``input_tokens``, ``due``), ``calls`` and ``input_tokens`` of the due ones and
     ``batch``. ``only``: pass ids to run (others untouched; an unknown id raises
@@ -211,7 +213,7 @@ def run(
     ``suggestions`` (total), ``backup``, the review ``note``, ``passes`` and ``failed``.
     """
     logger = setup_step_logging(STEP_8)
-    review = ReviewInput.load(pages_artifact, aggregated_path, plan_path, assignments_path)
+    review = ReviewInput.load(pages_artifact, sources, plan_path, assignments_path)
     gaps = review.warn_about_gaps(logger)
     stage = REVIEW_CONFIG["stage"]
     model = llm.model if llm is not None else LLM_CONFIG["stages"][stage]["model"]
@@ -237,7 +239,7 @@ def run(
                                 "batch": batch, "answered": 0, "passes": [],
                                 "without_points": passes.without_points, **gaps}
     if not job.due:
-        if job.unchanged and not _newer_input(artifact.original, review.sources):
+        if job.unchanged and not _newer_input(artifact.original, review.sources.values()):
             logger.info(f"Wiki unchanged since the last review ({len(job.current)} suggestions); "
                         "no call, nothing written")
             return {**result, "written": False}

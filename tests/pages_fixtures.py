@@ -1,11 +1,13 @@
-"""Synthetic step-7 inputs: groups, a plan, assignments on disk and a fake page-writing model.
+"""Synthetic step-7 inputs: claim records, a plan, assignments on disk and a fake page-writing
+model.
 
 The plan is ``plan_fixtures.make_plan`` (pages agencies / costs / clinics / hospital, labels
-usa / georgia). Group ``i`` goes to page ``PAGE_IDS[i % 4]``; group 4 also has ``costs`` as
-its second page; group 11 is unplaced. Groups carry private-looking fields (claim ids,
-identities, a reaction summary) that no prompt may show. ``FakeWriter`` answers like the
-model: one point per ``main`` group of the prompt's ``<groups>`` block, then an article with
-one sentence per group (each citing it) and links to one other page and a label.
+usa / georgia). Claim ``i`` is ``claim_fixtures.claim_record(i)`` (short id ``IDS[i]``) and goes
+to page ``PAGE_IDS[i % 4]``; claim 4 also has ``costs`` as its second page; claim 11 is
+unplaced. The claim inputs on disk hold ids that would be private in real data (claim, thread
+and person ids, each with ``SECRET``) that no prompt may show. ``FakeWriter`` answers like the
+model: one point per ``main`` claim of the prompt's ``<claims>`` block, then an article with
+one sentence per claim (each citing it) and links to one other page and a label.
 ``FakeProofreader`` stands in for the Hebrew language edit of ``step_8_review.proofread`` (no
 edits unless told). Nothing here comes from real data.
 """
@@ -19,58 +21,64 @@ from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
 from typing import Any
 
+from step_6_plan.claim_records import (
+    SHORT_ID_HASH_CHARS,
+    SHORT_ID_PREFIX,
+    Record,
+    load_claim_records,
+)
 from step_7_write_pages.run import run
-from tests.plan_fixtures import PAGE_IDS, make_groups, make_plan
+from tests.claim_fixtures import claim_record, write_claim_inputs
+from tests.plan_fixtures import PAGE_IDS, make_plan, short_id_of
 from utils.json_io import write_json_file
 from utils.llm_client import BatchRequest, _flatten
 from utils.paths import Artifact
 
-SECRET = "PRIVATE-IDENTITY"
-_GROUP_LINE = re.compile(r"^(?:new: |changed: )?(g-[0-9a-f]{8}) \|", re.MULTILINE)
-_MAIN_LINE = re.compile(r"^(g-[0-9a-f]{8}) \| main \|", re.MULTILINE)
+# The marker in every id the claim inputs hold that would be private in real data.
+SECRET = "SECRET"
+IDS = tuple(short_id_of(n) for n in range(12))
+_ID = rf"{re.escape(SHORT_ID_PREFIX)}[0-9a-f]{{{SHORT_ID_HASH_CHARS}}}"
+_CLAIM_LINE = re.compile(rf"^(?:new: |changed: )?({_ID}) \|", re.MULTILINE)
+_MAIN_LINE = re.compile(rf"^({_ID}) \| main \|", re.MULTILINE)
 _PAGE_ID = re.compile(r"^id: (\S+)$", re.MULTILINE)
 
 
-def page_groups() -> list[dict[str, Any]]:
-    """Twelve groups; group 0 has two months of backing, group 3 (hospital) contradicts group 6 (clinics); odd groups
-    are disputed (one opposer)."""
-    groups = make_groups(12)
-    for group in groups:
-        group["all_supporters"] = [SECRET]
-        group["reaction_summary"] = [{"emoji": "❤️", "count": 9, "who": SECRET}]
-    groups[0]["supporter_count"] = 4
-    groups[0]["last_date"] = "2024-06-01"
-    groups[0]["by_month"] = {"2023-01": {"supporters": 1, "opposers": 0},
-                             "2024-06": {"supporters": 3, "opposers": 0}}
-    groups[3]["contradicts"] = ["g-00000006"]
-    groups[6]["contradicts"] = ["g-00000003"]
-    return groups
+def page_claims() -> list[Record]:
+    """Twelve claim records; claim 0 has two months of backing, claim 3 (hospital) contradicts
+    claim 6 (clinics); odd claims are disputed (one opposer)."""
+    claims = [claim_record(n) for n in range(12)]
+    claims[0] = claim_record(0, supporter_count=4, last_date="2024-06-01",
+                             by_month={"2023-01": {"supporters": 1, "opposers": 0},
+                                       "2024-06": {"supporters": 3, "opposers": 0}})
+    claims[3]["contradicts"] = [IDS[6]]
+    claims[6]["contradicts"] = [IDS[3]]
+    return claims
 
 
-def page_assignments(groups: list[dict[str, Any]]) -> dict[str, Any]:
+def page_assignments(claims: list[Record]) -> dict[str, Any]:
     records = {}
-    for index, group in enumerate(groups):
+    for index, claim in enumerate(claims):
         pages = [PAGE_IDS[index % 4]]
         if index == 4:
             pages.append("costs")
         if index == 11:
             pages = []
-        records[group["group_id"]] = {"pages": pages, "labels": ["usa"] if index % 2 == 0 else [],
+        records[claim["short_id"]] = {"pages": pages, "labels": ["usa"] if index % 2 == 0 else [],
                                       "p": {}, "label_p": {}}
     return {"assignments": records, "proposals": [], "metadata": {}}
 
 
-def group_ids_in(user: Any) -> list[str]:
-    """Group ids of a prompt's ``<groups>`` block (the page's groups now)."""
+def claim_ids_in(user: Any) -> list[str]:
+    """Short ids of a prompt's ``<claims>`` block (the page's claims now)."""
     text = _flatten(user)
-    block = text[text.rindex("<groups"):]
-    return list(dict.fromkeys(_GROUP_LINE.findall(block)))
+    block = text[text.rindex("<claims"):]
+    return list(dict.fromkeys(_CLAIM_LINE.findall(block)))
 
 
 def main_ids_in(user: Any) -> list[str]:
-    """The ``main`` group ids of a prompt's ``<groups>`` block."""
+    """The short ids of the ``main`` claims of a prompt's ``<claims>`` block."""
     text = _flatten(user)
-    return _MAIN_LINE.findall(text[text.rindex("<groups"):])
+    return _MAIN_LINE.findall(text[text.rindex("<claims"):])
 
 
 def page_id_in(user: Any) -> str:
@@ -78,14 +86,14 @@ def page_id_in(user: Any) -> str:
 
 
 def points_of(ids: list[str]) -> dict[str, list[dict[str, Any]]]:
-    """``points`` (one ``fact`` per group) and an empty ``left_out``."""
-    return {"points": [{"kind": "fact", "statement": f"נקודה {gid}", "groups": [gid]} for gid in ids],
+    """``points`` (one ``fact`` per claim) and an empty ``left_out``."""
+    return {"points": [{"kind": "fact", "statement": f"נקודה {sid}", "claims": [sid]} for sid in ids],
             "left_out": []}
 
 
 def article(ids: list[str], page_id: str, extra: str = "") -> str:
     other = next(pid for pid in PAGE_IDS if pid != page_id)
-    told = " ".join(f"משפט על הקבוצה {gid}.[^{gid}]" for gid in ids)
+    told = " ".join(f"משפט על הטענה {sid}.[^{sid}]" for sid in ids)
     return (f"פתיח קצר על הדף.\n\n## חלק ראשון\n\n{told}\nטקסט עם קישור ל[[{other}|דף אחר]] "
             f"ול[[label:usa|ארה\"ב]].\n{extra}")
 
@@ -107,7 +115,7 @@ class FakeWriter:
         if self.respond is not None:
             return copy.deepcopy(self.respond(system, user, task))
         page_id = page_id_in(user)
-        answer = {**points_of(main_ids_in(user)), "body": article(group_ids_in(user), page_id),
+        answer = {**points_of(main_ids_in(user)), "body": article(claim_ids_in(user), page_id),
                   "summary": f"תקציר {page_id}", "questions": ["שאלה?"],
                   "related": [{"page_id": "clinics", "relation": "see_also"}]}
         if task.startswith("update:"):
@@ -164,23 +172,25 @@ class FakeProofreader:
 
 
 class PagesWorkspace:
-    """Groups, plan, assignments and the pages artifact in a temp folder."""
+    """The claim inputs (``sources``), plan, assignments and the pages artifact in a temp
+    folder."""
 
     def __init__(self, root: Path) -> None:
-        self.groups_path = root / "groups.json"
+        self.root = root
         self.plan_path = root / "plan.json"
         self.assignments_path = root / "assignments.json"
         self.artifact = Artifact(root / "wiki_pages.json", root / "wiki_pages_edited.json")
-        groups = page_groups()
-        self.write_groups(groups)
+        claims = page_claims()
+        self.sources = write_claim_inputs(claims, root)
         write_json_file(make_plan(), self.plan_path)
-        write_json_file(page_assignments(groups), self.assignments_path)
+        write_json_file(page_assignments(claims), self.assignments_path)
 
-    def write_groups(self, groups: list[dict[str, Any]]) -> None:
-        write_json_file({"groups": groups, "metadata": {}}, self.groups_path)
+    def write_claims(self, claims: list[Record]) -> None:
+        """Rewrite the claim inputs so that they load to ``claims``."""
+        write_claim_inputs(claims, self.root)
 
-    def groups(self) -> list[dict[str, Any]]:
-        return json.loads(self.groups_path.read_text(encoding="utf-8"))["groups"]
+    def claims(self) -> list[Record]:
+        return load_claim_records(self.sources)
 
     def plan(self) -> dict[str, Any]:
         return json.loads(self.plan_path.read_text(encoding="utf-8"))
@@ -203,7 +213,7 @@ class PagesWorkspace:
 
     def run(self, llm: FakeWriter | None = None, update_llm: FakeWriter | None = None,
             **kwargs: Any) -> dict[str, Any]:
-        return run(aggregated_path=self.groups_path, plan_path=self.plan_path,
+        return run(sources=self.sources, plan_path=self.plan_path,
                    assignments_path=self.assignments_path, artifact=self.artifact,
                    llm=llm or FakeWriter(), update_llm=update_llm or FakeWriter("fake-update"),
                    **kwargs)

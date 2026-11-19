@@ -7,17 +7,17 @@ incremental steps do the rest.
   that is not in the plan would break step 9).
 - ``mistake``: one call of the ``apply`` stage through step 7's own ``PageWriter.update`` with
   the correction as its free-text ``request``, from the page's current EFFECTIVE text. Step 7's
-  checks hold (only the page's groups cited, valid links, disputed and contradicted groups
+  checks hold (only the page's claims cited, valid links, disputed and contradicted claims
   cited; one retry, then refusal); on top, at least ``wiki_review.apply.min_kept_sentence_share``
   of the page's sentences must stay word for word. The corrected page goes to the pages'
   EDITED file, the starting text of every later update. It keeps the page's ``language_edits``
   record: the sentences the correction wrote were never proofread, and the proofreading pass
   that follows the owner's decisions (``step_8_review.proofread``) edits only those.
-- ``contradiction``: the pairs become manual contradiction links in the claim groups through
-  the groups tool's own store (``GroupsStore.set_contradiction``: step 5's ``contradicts_manual``
-  rules, ``contradicts`` re-derived at once), so they survive every re-run and rewrite; and
-  every page of the suggestion is corrected as for a mistake so both sides show now (the
-  pages are written from the groups as they will be, link included).
+- ``contradiction``: the pairs (short ids) become the owner's manual contradiction pairs
+  (``step_6_plan.claim_records.add_manual_contradiction``; the claim records join them into
+  ``contradicts`` on every load), so they survive every re-run and rewrite; and every page of
+  the suggestion is corrected as for a mistake so both sides show now (the pages are written
+  from the claims as they will be, link included).
 
 A refused apply raises ``ApplyRefused`` (Hebrew message) before any file is written. When a
 change spans two files, everything is computed and checked first; if the second write fails,
@@ -29,18 +29,17 @@ from __future__ import annotations
 import copy
 import logging
 import shutil
-from collections.abc import Callable, Collection, Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
-from review_tool.artifacts import GRAPH
-from review_tool.tools.groups.store import EditConflict, GroupNotFound, GroupsStore
+from step_6_plan.claim_records import ClaimSources, add_manual_contradiction
 from step_6_plan.model import PlanError
 from step_7_write_pages.checks import sentences, strip_definitions
 from step_7_write_pages.front_matter import LabelRule, page_front_matter
 from step_7_write_pages.inputs import PAGES_CONFIG, Corpus, PageContext
-from step_7_write_pages.writer import GroupDelta, PageText, PageWriter, current_text
+from step_7_write_pages.writer import ClaimDelta, PageText, PageWriter, current_text
 from step_8_review.inputs import REVIEW_CONFIG, ReviewInput
 from step_8_review.proposals import (
     MISTAKE,
@@ -53,7 +52,7 @@ from step_8_review.proposals import (
 from utils.config import LLM_CONFIG
 from utils.json_io import read_json_if_present
 from utils.llm_client import LLMClient
-from utils.paths import AUDIT_PATH, PLAN, WIKI_PAGES, Artifact, resolve
+from utils.paths import PLAN, WIKI_PAGES, Artifact, resolve
 from utils.reconcile import backup_file, guarded_write
 from utils.timestamps import utc_now_z
 
@@ -70,14 +69,6 @@ class ApplyRefused(Exception):
     def __init__(self, message: str, details: Sequence[str] = ()) -> None:
         super().__init__(message)
         self.details = list(details)
-
-
-class GroupLinker(Protocol):
-    """What applying a contradiction needs from the groups tool's store."""
-
-    edited: Path
-
-    def set_contradiction(self, group_id: str, other_id: str, linked: bool) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -102,9 +93,9 @@ class ApplyResult:
 def kept_share(before: str, after: str, touched: Collection[str], quoted: str = "") -> float:
     """Share of ``before``'s untouched sentences that ``after`` still has word for word.
 
-    Touched (left out): a sentence citing one of the ``touched`` groups, or the sentence the
-    correction quotes. The request may change those; everything else must stay."""
-    marks = [f"[^{gid}]" for gid in touched]
+    Touched (left out): a sentence citing one of the ``touched`` claims (short ids), or the
+    sentence the correction quotes. The request may change those; everything else must stay."""
+    marks = [f"[^{sid}]" for sid in touched]
     target = plain_text(quoted).rstrip(_END)
 
     def quoted_here(sentence: str) -> bool:
@@ -129,26 +120,19 @@ def _restore(path: Path, backup: Path | None) -> None:
         shutil.copy2(backup, path)
 
 
-def default_linker() -> GroupsStore:
-    """The groups tool's store on the pipeline's files (step 5's own rules for links)."""
-    return GroupsStore(GRAPH.node("groups"), GRAPH.node("claims"), GRAPH.node("entities"),
-                       AUDIT_PATH)
-
-
 class Applier:
-    """Carries out suggestions on the pipeline's files (defaults) or on the given ones."""
+    """Carries out suggestions on the pipeline's files (defaults) or on the given ones.
+    ``sources``: the files the claim records are joined from; an applied contradiction is
+    saved to its ``contradictions`` file."""
 
     def __init__(self, *, pages_artifact: Artifact = WIKI_PAGES, plan_artifact: Artifact = PLAN,
-                 aggregated_path: Path | None = None, assignments_path: Path | None = None,
-                 llm: LLMClient | None = None,
-                 linker: Callable[[], GroupLinker] = default_linker,
-                 logger: logging.Logger | None = None) -> None:
+                 sources: ClaimSources = ClaimSources(), assignments_path: Path | None = None,
+                 llm: LLMClient | None = None, logger: logging.Logger | None = None) -> None:
         self.pages_artifact = pages_artifact
         self.plan_artifact = plan_artifact
-        self.aggregated_path = aggregated_path
+        self.sources = sources
         self.assignments_path = assignments_path
         self._llm = llm
-        self.linker = linker
         self.logger = logger or logging.getLogger(__name__)
 
     @property
@@ -159,8 +143,8 @@ class Applier:
         return self._llm
 
     def review(self) -> ReviewInput:
-        """The wiki as it is now (effective pages, groups, plan, assignments)."""
-        return ReviewInput.load(self.pages_artifact, self.aggregated_path,
+        """The wiki as it is now (effective pages, claim records, plan, assignments)."""
+        return ReviewInput.load(self.pages_artifact, self.sources,
                                 resolve(self.plan_artifact), self.assignments_path)
 
     def apply(self, suggestion: Mapping[str, Any]) -> ApplyResult:
@@ -210,7 +194,7 @@ class Applier:
         page = review.all_pages[page_id]
         context = corpus.context(page_id, corpus.catalogue())
         writer = PageWriter(self.llm, self.llm, corpus.plan, self.logger)
-        text: PageText = writer.update(context, current_text(page), GroupDelta(), request=request)
+        text: PageText = writer.update(context, current_text(page), ClaimDelta(), request=request)
         final = text.report.get("final_problems") or []
         if final:
             raise ApplyRefused(MESSAGES["failed_checks"].format(page_id=page_id,
@@ -260,9 +244,9 @@ class Applier:
     def _mistake(self, proposal: Mapping[str, Any], review: ReviewInput) -> ApplyResult:
         page_id = proposal["page_id"]
         request = (f"In the sentence «{proposal['sentence'].strip()}»: {proposal['correction']} "
-                   f"(groups {', '.join(proposal['group_ids'])})")
+                   f"(claims {', '.join(proposal['claims'])})")
         correction, share = self._corrected(review.corpus, review, page_id, request,
-                                            proposal["group_ids"], proposal["sentence"])
+                                            proposal["claims"], proposal["sentence"])
         backup = self._save_pages(self._items(review.corpus, {page_id: correction}))
         return ApplyResult(MESSAGES["page_applied"].format(page_id=page_id, kept=_pct(share)), {
             "file": str(self.pages_artifact.edited), "backup": str(backup) if backup else None,
@@ -272,54 +256,51 @@ class Applier:
 
     @staticmethod
     def _pairs(proposal: Mapping[str, Any]) -> list[tuple[str, str]]:
-        return [(a, b) for a in proposal["groups_a"] for b in proposal["groups_b"]]
+        return [(a, b) for a in proposal["claims_a"] for b in proposal["claims_b"]]
 
     @staticmethod
     def _linked_corpus(corpus: Corpus, pairs: Sequence[tuple[str, str]]) -> Corpus:
         """The corpus as it reads once the links are saved (pages are written from it)."""
-        groups = copy.deepcopy(corpus.groups)
+        claims = copy.deepcopy(corpus.claims)
         for a, b in pairs:
             for one, other in ((a, b), (b, a)):
-                groups[one]["contradicts"] = sorted({*(groups[one].get("contradicts") or []), other})
-        return replace(corpus, groups=groups)  # withheld groups stay withheld
+                claims[one]["contradicts"] = sorted({*claims[one]["contradicts"], other})
+        return replace(corpus, claims=claims)  # withheld claims stay withheld
 
     def _contradiction(self, proposal: Mapping[str, Any], review: ReviewInput) -> ApplyResult:
         pairs = self._pairs(proposal)
         corpus = self._linked_corpus(review.corpus, pairs)
-        request = (f"Groups {', '.join(proposal['groups_a'])} and "
-                   f"{', '.join(proposal['groups_b'])} contradict each other: {proposal['clash']} "
+        request = (f"Claims {', '.join(proposal['claims_a'])} and "
+                   f"{', '.join(proposal['claims_b'])} contradict each other: {proposal['clash']} "
                    f"{proposal['correction']}")
-        touched = [*proposal["groups_a"], *proposal["groups_b"]]
-        pages = [pid for pid in proposal["pages"] if review.pages[pid].group_ids & set(touched)]
+        touched = [*proposal["claims_a"], *proposal["claims_b"]]
+        pages = [pid for pid in proposal["pages"] if review.pages[pid].claim_ids & set(touched)]
         corrected = {pid: self._corrected(corpus, review, pid, request, touched, unchanged_ok=True)
                      for pid in pages}
         items = self._items(corpus, {pid: correction for pid, (correction, _) in corrected.items()
                                      if correction is not None})
-        try:
-            linker = self.linker()
-        except (FileNotFoundError, EditConflict) as exc:
-            raise ApplyRefused(MESSAGES["groups_refused"].format(error=exc)) from exc
-        groups_backup = backup_file(linker.edited)
+        links = self.sources.contradictions
+        links_backup = backup_file(links)
         try:
             for a, b in pairs:
-                linker.set_contradiction(a, b, True)
-        except (GroupNotFound, EditConflict) as exc:
-            _restore(linker.edited, groups_backup)
-            raise ApplyRefused(MESSAGES["groups_refused"].format(error=exc)) from exc
+                add_manual_contradiction(a, b, links)
+        except (OSError, ValueError) as exc:
+            _restore(links, links_backup)
+            raise ApplyRefused(MESSAGES["link_refused"].format(error=exc)) from exc
         try:
             backup = self._save_pages(items) if items else None
         except OSError:
-            _restore(linker.edited, groups_backup)
+            _restore(links, links_backup)
             raise
-        self.logger.info(f"Linked {pairs} as contradictions in {linker.edited}; corrected "
+        self.logger.info(f"Linked {pairs} as contradictions in {links}; corrected "
                          f"{list(corrected)}")
         message = " ".join([MESSAGES["link_applied"], *(
             MESSAGES["page_applied" if pid in items else "page_unchanged"].format(
                 page_id=pid, kept=_pct(share)) for pid, (_, share) in corrected.items())])
         return ApplyResult(message, {
             "file": str(self.pages_artifact.edited), "backup": str(backup) if backup else None,
-            "groups_file": str(linker.edited),
-            "groups_backup": str(groups_backup) if groups_backup else None,
+            "links_file": str(links),
+            "links_backup": str(links_backup) if links_backup else None,
             "links": [list(pair) for pair in pairs],
             "pages": {pid: {"kept_sentence_share": round(share, 3), "changed": pid in items}
                       for pid, (_, share) in corrected.items()}})

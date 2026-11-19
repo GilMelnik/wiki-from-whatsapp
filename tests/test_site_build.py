@@ -9,12 +9,12 @@ import sys
 from pathlib import Path
 
 from step_6_plan import operations
-from tests.site_fixtures import make_page, make_site_plan, run_site
+from tests.site_fixtures import IDS, SOURCE_RESOURCE_PREFIX, make_page, make_site_plan, run_site
 from utils.config import PROJECT_ROOT, section
 
 BODY = (
-    "## רקע\n\nבקולומביה יש [[clinics|מרפאות]] ו-[[label:usa|תגית]].[^g-00000001]\n\n"
-    "[^g-00000001]: קבוצת טענות.\n"
+    f"## רקע\n\nבקולומביה יש [[clinics|מרפאות]] ו-[[label:usa|תגית]].[^{IDS[1]}]\n\n"
+    f"[^{IDS[1]}]: טקסט ישן.\n"
 )
 
 
@@ -45,13 +45,13 @@ def test_generated_site_builds_strict_with_footer_hidden_metadata_and_search_var
     for html in pages_html.values():
         assert site["coffee_url"] in html and site["coffee_text"] in html
     agencies = pages_html["agencies/index.html"]
-    for hidden in ("okf_version", "claim-group:", "סיכום-נסתר", "stale_after", "wiki-from-whatsapp/test-model"):
+    for hidden in ("okf_version", SOURCE_RESOURCE_PREFIX, "סיכום-נסתר", "stale_after", "wiki-from-whatsapp/test-model"):
         assert all(hidden not in html for html in pages_html.values()), hidden
     assert '<a href="../clinics/">מרפאות</a>' in agencies
     assert '<a href="../labels/usa/">תגית</a>' in agencies
-    assert 'class="footnote"' in agencies and 'sup id="fnref:g-00000001"' in agencies
+    assert 'class="footnote"' in agencies and f'sup id="fnref:{IDS[1]}"' in agencies
     # the body was stored with its definition (older step 7): the reference replaces it
-    assert "g-00000001 · ינואר 2023 – יוני 2024" in agencies and "קבוצת טענות" not in agencies
+    assert f"{IDS[1]} · פברואר 2023 – יוני 2024" in agencies and "טקסט ישן" not in agencies
     assert 'http-equiv="refresh" content="0; url=../agencies/"' in pages_html["costs/index.html"]
     assert (out / section("mcp")["index_file"]).is_file()
     search = json.loads((out / "search" / "search_index.json").read_text(encoding="utf-8"))

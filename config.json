@@ -133,14 +133,6 @@
       "similarity": "task: sentence similarity | query: {text}",
       "query": "task: search result | query: {text}",
       "document": "title: none | text: {text}"
-    },
-    "ab": {
-      "backup_dir": "/mnt/SSD/coding/backup_data_wiki_from_whatsapp/2026_11_07_data",
-      "models": ["gemini-embedding-001", "gemini-embedding-2"],
-      "pairs": 500,
-      "seed": 0,
-      "recall_target": 0.9,
-      "local_text_prefix": {"e5": "query: "}
     }
   },
   "classifier": {
@@ -262,46 +254,10 @@
     "short_id_prefix": "g-",
     "short_id_hash_chars": 8
   },
-  "aggregate": {
-    "embedding_kind": "similarity",
-    "merge_threshold": {"shared_entity": 0.95, "no_shared_entity": 0.96},
-    "contradiction_threshold": 0.9,
-    "opposing_stances": ["positive", "negative"],
-    "group_id_prefix": "g-",
-    "group_id_hash_chars": 8,
-    "review": {
-      "suggestion_band": 0.04,
-      "similarity_block_rows": 1024,
-      "max_page_size": 200,
-      "partner_suggestions": 5
-    },
-    "eval": {
-      "backup_dir": "/mnt/SSD/coding/backup_data_wiki_from_whatsapp/2026_11_07_data",
-      "pair_labels": "step_5_aggregate/eval/pair_labels.json",
-      "bands": [0.9, 0.92, 0.93, 0.94, 0.95, 0.96, 0.97],
-      "settings": [
-        {"name": "embedding 0.93", "shared": 0.93, "other": 0.93, "number_guard": false},
-        {"name": "embedding 0.94", "shared": 0.94, "other": 0.94, "number_guard": false},
-        {"name": "embedding 0.95", "shared": 0.95, "other": 0.95, "number_guard": false},
-        {"name": "embedding 0.96", "shared": 0.96, "other": 0.96, "number_guard": false},
-        {"name": "embedding 0.97", "shared": 0.97, "other": 0.97, "number_guard": false},
-        {"name": "entity 0.92/0.95", "shared": 0.92, "other": 0.95, "number_guard": false},
-        {"name": "entity 0.93/0.96", "shared": 0.93, "other": 0.96, "number_guard": false},
-        {"name": "entity 0.94/0.96", "shared": 0.94, "other": 0.96, "number_guard": false},
-        {"name": "entity 0.95/0.96", "shared": 0.95, "other": 0.96, "number_guard": false},
-        {"name": "entity+numbers 0.93/0.96", "shared": 0.93, "other": 0.96, "number_guard": true},
-        {"name": "entity+numbers 0.94/0.96", "shared": 0.94, "other": 0.96, "number_guard": true},
-        {"name": "entity+numbers 0.95/0.96", "shared": 0.95, "other": 0.96, "number_guard": true},
-        {"name": "numbers 0.96", "shared": 0.96, "other": 0.96, "number_guard": true}
-      ],
-      "base_fraction": 0.8,
-      "edit_suffix": " (נערך)"
-    }
-  },
   "plan": {
-    "prompt_version": 2,
+    "prompt_version": 3,
     "max_pages": 80,
-    "page_groups": {
+    "page_claims": {
       "fold_below": 15,
       "typical_min": 30,
       "typical_max": 100,
@@ -318,7 +274,7 @@
     "chars_per_token": 1.49,
     "sample_seed": 56,
     "max_model_calls": 3,
-    "example_group_ids": {"min": 3, "max": 8},
+    "example_claims": {"min": 3, "max": 8},
     "coverage": {
       "stage": "assign",
       "sample_size": 300,
@@ -330,10 +286,10 @@
     },
     "review": {
       "undo_depth": 20,
-      "groups_page_size": 50,
-      "max_groups_page_size": 200,
+      "claims_page_size": 50,
+      "max_claims_page_size": 200,
       "scope_sample": 5,
-      "label_findings": {"few_groups": 10, "large_share": 0.25}
+      "label_findings": {"few_claims": 10, "large_share": 0.25}
     }
   },
   "assign": {
@@ -347,8 +303,8 @@
     "question_prefix": {"label": "label:", "screen": "screen:"},
     "proposals": {
       "stage": "propose",
-      "min_groups": 3,
-      "max_groups_per_call": 300,
+      "min_claims": 3,
+      "max_claims_per_call": 300,
       "max_proposals": 8,
       "max_output_tokens": 16000,
       "id_prefix": "prop-",
@@ -364,8 +320,8 @@
     "default_status": "stable",
     "stale_after_days": 180,
     "generated_by": "wiki-from-whatsapp",
-    "source_resource_prefix": "claim-group:",
-    "prompt_version": 3,
+    "source_resource_prefix": "claim:",
+    "prompt_version": 4,
     "write": {"stage": "write", "max_output_tokens": 64000},
     "update": {"stage": "update", "max_output_tokens": 64000, "rewrite_changed_share": 0.5},
     "concurrency": 4,
@@ -374,7 +330,7 @@
     "withhold": {"stance": "negative", "min_supporters": 2, "reason": "withheld"},
     "points": {
       "kinds": {
-        "common_view": "what members generally recommend or report on a question (said once, however many groups repeat it)",
+        "common_view": "what members generally recommend or report on a question (said once, however many claims repeat it)",
         "condition": "a condition, an exception or an \"it depends\" that qualifies another point",
         "number": "a differing number, price, duration or date range",
         "warning": "a warning, a risk or a pitfall",
@@ -385,7 +341,7 @@
         "fact": "a fact, rule, procedure, name or contact nobody disputes"
       },
       "left_out_reasons": {
-        "repeats": "everything it says is already said by the points (a group that says the same as ONE point belongs in that point instead)",
+        "repeats": "everything it says is already said by the points (a claim that says the same as ONE point belongs in that point instead)",
         "trivial": "nothing a reader can use (thanks, a greeting, a question nobody answered, a vague remark)",
         "off_scope": "about another page's subject and adds nothing here"
       }
@@ -396,7 +352,7 @@
     },
     "max_entities": 30,
     "default_relation": "see_also",
-    "labels": {"min_groups": 3, "min_page_share": 0.2, "min_label_share": 0.2, "min_lift": 2.0},
+    "labels": {"min_claims": 3, "min_page_share": 0.2, "min_label_share": 0.2, "min_lift": 2.0},
     "hebrew_months": [
       "ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני",
       "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר"
@@ -409,7 +365,7 @@
   },
   "wiki_review": {
     "stage": "review",
-    "prompt_version": 2,
+    "prompt_version": 3,
     "max_output_tokens": 100000,
     "context_window_tokens": 1000000,
     "chars_per_token": 1.56,
@@ -460,14 +416,14 @@
       "wrong_status": "Suggestion {id} is {status}, so it cannot be {action}.",
       "bad_proposal": "The proposal is not valid: {errors}",
       "plan_refused": "The plan was not changed: the resulting plan would break its rules: {errors}",
-      "no_change": "The page writer found nothing to change on page {page_id} for this suggestion (the groups may not support the correction).",
+      "no_change": "The page writer found nothing to change on page {page_id} for this suggestion (the claims may not support the correction).",
       "failed_checks": "The correction of page {page_id} failed the checks: {problems}",
       "too_much_changed": "The correction of page {page_id} changed too much: only {kept} of the sentences stayed word for word (at least {required} is required).",
-      "groups_refused": "The contradiction link was not saved: {error}",
+      "link_refused": "The contradiction link was not saved: {error}",
       "plan_applied": "The change is saved in the plan. Run the assignment step (6b) and then step 7 so the pages follow it.",
       "page_applied": "Page {page_id} was corrected ({kept} of the sentences stayed word for word).",
       "page_unchanged": "Page {page_id} already showed both sides and was not changed.",
-      "link_applied": "The contradiction link is saved in the claim groups."
+      "link_applied": "The contradiction link is saved: the claims contradict each other from now on, in every step."
     },
     "ui": {
       "apply_outcomes_kept": 20,
@@ -594,8 +550,7 @@
         "date_range": "{first} – {last}",
         "participants_one": "משתתף אחד",
         "participants_many": "{count} משתתפים",
-        "conversations_one": "{participants} בשיחה",
-        "conversations_many": "{participants} ב־{count} שיחות"
+        "in_conversation": "{participants} בשיחה"
       },
       "about": {
         "file": "about.md",
@@ -819,7 +774,6 @@
       "threads": "the new and changed conversations (the split, and whether each carries knowledge)",
       "pii": "the new claims (privacy: names, phone numbers, details about people)",
       "entities": "the new entities (people, providers, places)",
-      "groups": "the new claim groups (merges and splits)",
       "plan": "the pending proposals for new pages and labels",
       "suggestions": "the review's suggestions (accept or reject, then apply the accepted ones)"
     },
@@ -844,7 +798,7 @@
         "entity_senses": 1800
       },
       "proposal_input_tokens": 30000,
-      "classifier_tokens_per_group": 12200,
+      "classifier_tokens_per_claim": 12200,
       "usd_per_million_tokens": {
         "claude-fable-5-2": {"input": 8.0, "output": 40.0},
         "claude-opus-5-5": {"input": 4.0, "output": 20.0},

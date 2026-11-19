@@ -1,34 +1,37 @@
-"""Step 7: write the wiki's pages (contract C9) from the plan, the claim groups and their pages.
+"""Step 7: write the wiki's pages (contract C9) from the plan, the claims and their pages.
 
 How it works, in plain words: for every page of the reviewed plan (C7) the step collects the
-claim groups assigned to it (C8, ``step_7_write_pages.inputs``) and asks the ``write`` stage
-(Sonnet 5.5) for the whole page in one call: first the page's points (each one thing the page
-says, with every group behind it, ``points``), then the article written from them, one
-statement per point: readable Hebrew prose grounded in those groups, both sides wherever
+claims assigned to it (C8; the claim records of C6, ``step_7_write_pages.inputs``) and asks
+the ``write`` stage (Sonnet 5.5) for the whole page in one call: first the page's points (each
+one thing the page says, with every claim behind it, ``points``: the same thing said in many
+conversations is one point), then the article written from them, one
+statement per point: readable Hebrew prose grounded in those claims, both sides wherever
 members disagree, dates only where they help the reader decide, and Wikipedia-style links to
 other pages and labels (``prompts``). Code then enforces what must not be left to the model
-(``checks``): only the page's own groups are cited, only planned pages and labels are linked,
-disputed groups are cited, every main group is accounted for in a point or left out with a
+(``checks``): only the page's own claims are cited, only planned pages and labels are linked,
+disputed claims are cited, every main claim is accounted for in a point or left out with a
 reason, every point is said and no point is told
 again and again (one retry that names the problems, then repair); the OKF front matter is
 written in code (``front_matter``). A negative statement about a named entity that fewer
 than two members reported never reaches the writer (``withhold``): code adds it to its page's
-``left_out`` with reason ``withheld`` and lists it in ``metadata.withheld``. The body keeps its ``[^g-…]`` marks only: step 9 renders
-the references from the groups (a body stored with definitions keeps them until its text
-changes; step 9 ignores them). The points and the groups left out are stored with the page:
+``left_out`` with reason ``withheld`` and lists it in ``metadata.withheld``. The body keeps
+its ``[^g-…]`` marks (short ids) only: step 9 renders
+the references from the claims (a body stored with definitions keeps them until its text
+changes; step 9 ignores them). The points and the claims left out are stored with the page:
 an update starts from them.
 
 Re-runs (C14) work per page. ``metadata.pages[page_id]`` keeps a fingerprint of the writer
-(model + ``pages.prompt_version``), of the page's plan fields and of every group record, and
+(model + ``pages.prompt_version``), of the page's plan fields and of every claim record (by
+short id), and
 ``input_fingerprint`` combines them:
 - unchanged page -> its text is untouched, including a manual edit in the edited file (only
   code-owned front matter such as the breadcrumb or the labels is brought up to date);
 - page not written yet, or a new writer -> full write;
-- groups or plan fields changed -> UPDATE call (stage ``update``) from the current EFFECTIVE
-  page (owner edits and stored points included) + the new / changed / removed groups; "no
-  change needed" keeps the text and ``generated.at`` (the points may still change: a new group
+- claims or plan fields changed -> UPDATE call (stage ``update``) from the current EFFECTIVE
+  page (owner edits and stored points included) + the new / changed / removed claims; "no
+  change needed" keeps the text and ``generated.at`` (the points may still change: a new claim
   joined one); above ``pages.update.rewrite_changed_share`` a full rewrite;
-- a page that left the plan, or has no groups any more, is dropped.
+- a page that left the plan, or has no claims any more, is dropped.
 The step does not proofread: the Hebrew language edit runs after the review and the owner's
 decisions (``step_8_review.proofread``) and writes into the EDITED file. An update starts from
 that effective, proofread text and carries the page's ``language_edits`` record over, so only
@@ -45,9 +48,11 @@ notice then clears).
 Output: ``wiki_pages.json`` (C9) ``{pages: {page_id: {front_matter, body_md, points,
 left_out, language_edits?, input_fingerprint}}, metadata: {sources, inputs, pages, as_of,
 models, config, git_commit, generated_at, run, summary, withheld}}``; ``points`` = ``[{kind,
-statement, groups}]``, ``left_out`` = ``[{group, reason}]``; ``language_edits`` = the last
-proofreading of the text (``step_8_review.proofreader``), carried over by an update;
-``withheld`` = ``[{group_id, page_id, entity_ids, supporter_count}]`` (ids and numbers only).
+statement, claims}]``, ``left_out`` = ``[{claim, reason}]`` (short ids); ``language_edits`` =
+the last proofreading of the text (``step_8_review.proofreader``), carried over by an update;
+``withheld`` = ``[{claim, page_id, entity_ids, supporter_count}]`` (ids and numbers only);
+``sources`` = the files read, by role (``claims``, ``entities``, ``audit``, ``contradictions``
+when present, ``plan``, ``assignments``).
 """
 
 from __future__ import annotations
@@ -63,6 +68,7 @@ from typing import Any
 
 import anthropic
 
+from step_6_plan.claim_records import ClaimSources
 from step_7_write_pages.checks import strip_definitions
 from step_7_write_pages.front_matter import LabelRule, page_front_matter
 from step_7_write_pages.inputs import (
@@ -76,7 +82,7 @@ from step_7_write_pages.inputs import (
 from step_7_write_pages.points import LeftOut, Point
 from step_7_write_pages.prompts import update_prompt, write_prompt
 from step_7_write_pages.withhold import WITHHOLD_CONFIG
-from step_7_write_pages.writer import GroupDelta, PageText, PageWriter, changed_share, current_text
+from step_7_write_pages.writer import ClaimDelta, PageText, PageWriter, changed_share, current_text
 from utils.json_io import read_json_if_present
 from utils.llm_client import LLMClient, _flatten
 from utils.logging_setup import git_commit, setup_step_logging
@@ -100,7 +106,7 @@ class Job:
     context: PageContext
     state: dict[str, Any]
     source: dict[str, Any] | None = None   # the effective page (owner edits included)
-    delta: GroupDelta | None = None
+    delta: ClaimDelta | None = None
 
 
 class PagesRun:
@@ -137,8 +143,8 @@ class PagesRun:
                 continue
             context = self.corpus.context(page_id, catalogue)
             if context is None:
-                self.stats["no_groups"] += 1
-                self.logger.info(f"{page_id}: no claim groups on this page; not written"
+                self.stats["no_claims"] += 1
+                self.logger.info(f"{page_id}: no claims on this page; not written"
                                  + (" (its old text is dropped)" if old_page else ""))
                 continue
             self.jobs.append(self._job(page_id, context, old_page))
@@ -154,14 +160,14 @@ class PagesRun:
         source = self.effective.get(page_id, old_page)
         if self.rebuild or old_page is None or old_state is None or old_state["writer"] != self.writer:
             return Job(page_id, "write", context, state)
-        if all(state[key] == old_state[key] for key in ("brief", "groups")):
+        if all(state[key] == old_state[key] for key in ("brief", "claims")):
             return Job(page_id, "keep", context, {**old_state, **state}, source or old_page)
-        diff = diff_inputs(old_state["groups"], state["groups"])
-        delta = GroupDelta(diff.new, diff.changed, diff.removed,
+        diff = diff_inputs(old_state["claims"], state["claims"])
+        delta = ClaimDelta(diff.new, diff.changed, diff.removed,
                            brief_changed=state["brief"] != old_state["brief"])
         share = changed_share(delta, len(context.records))
         if share > UPDATE_CONFIG["rewrite_changed_share"]:
-            self.logger.info(f"{page_id}: {share:.0%} of its groups changed; rewriting in full")
+            self.logger.info(f"{page_id}: {share:.0%} of its claims changed; rewriting in full")
             return Job(page_id, "write", context, state)
         if source is not None and source != old_page:
             self.logger.info(f"{page_id}: its manual edit is the starting text of this update (the "
@@ -202,10 +208,10 @@ class PagesRun:
                                              removed=job.delta.removed,
                                              brief_changed=job.delta.brief_changed)
             tokens = count_tokens(system, _flatten(user))
-            rows.append({"page": job.page_id, "mode": job.mode, "groups": len(job.context.records),
+            rows.append({"page": job.page_id, "mode": job.mode, "claims": len(job.context.records),
                          "input_tokens": tokens})
             self.logger.info(f"estimate {job.mode:6} {job.page_id}: {len(job.context.records)} "
-                             f"groups, {tokens} input tokens")
+                             f"claims, {tokens} input tokens")
         total = sum(row["input_tokens"] for row in rows)
         self.logger.info(f"estimate: {len(rows)} calls (+ retries), {total} input tokens; "
                          f"{sum(1 for job in self.jobs if job.mode == 'keep')} pages untouched")
@@ -258,7 +264,7 @@ class PagesRun:
             language_edits=old_page.get("language_edits"))
         return {**item, "body_md": old_page["body_md"]}
 
-    def payload(self, texts: Mapping[str, PageText], sources: tuple[Path, ...],
+    def payload(self, texts: Mapping[str, PageText], sources: Mapping[str, Path],
                 models: Mapping[str, str]) -> dict[str, Any]:
         pages: dict[str, Any] = dict(self.carried)
         states = {pid: self.old_states[pid] for pid in self.carried if pid in self.old_states}
@@ -284,8 +290,7 @@ class PagesRun:
         return {
             "pages": pages,
             "metadata": {
-                "sources": {name: str(path) for name, path in
-                            zip(("groups", "plan", "assignments"), sources)},
+                "sources": {name: str(path) for name, path in sources.items()},
                 "inputs": inputs,
                 "pages": states,
                 "as_of": self.corpus.as_of,
@@ -294,7 +299,7 @@ class PagesRun:
                 "git_commit": git_commit(),
                 "generated_at": utc_now_z(),
                 "run": {**self.stats, "failed": self.failed,
-                        "skipped_groups": len(self.corpus.skipped)},
+                        "skipped_claims": len(self.corpus.skipped)},
                 "summary": {
                     "pages": len(pages),
                     # a page written before task 27b keeps its old report (no points)
@@ -311,7 +316,7 @@ class PagesRun:
 
 
 def _unchanged(payload: Mapping[str, Any], before: Mapping[str, Any], original: Path,
-               inputs: tuple[Path, ...]) -> bool:
+               inputs: Collection[Path]) -> bool:
     """Same pages and per-page state as before, and the output is not older than its inputs."""
     old_meta = before.get("metadata") or {}
     newest_input = max(path.stat().st_mtime_ns for path in inputs)
@@ -322,7 +327,7 @@ def _unchanged(payload: Mapping[str, Any], before: Mapping[str, Any], original: 
 
 def run(
     *,
-    aggregated_path: Path | None = None,
+    sources: ClaimSources = ClaimSources(),
     plan_path: Path | None = None,
     assignments_path: Path | None = None,
     artifact: Artifact = WIKI_PAGES,
@@ -335,23 +340,25 @@ def run(
 ) -> dict[str, Any]:
     """Write, update or keep every planned page; see the module docstring.
 
-    Inputs default to the effective (edited) groups, plan and assignments. ``only``: work on
+    ``sources``: the files the claim records are joined from (default: the effective claims
+    and entities, the audit and the manual contradictions); the plan and the assignments
+    default to their effective (edited) files. ``only``: work on
     these page ids only (every other page stays as it is). ``rebuild``: write every page (in
     ``only``) in full; without ``only`` the edited file is backed up and replaced.
     ``estimate``: no writing call; returns the input tokens of every call the run would make.
     ``llm`` / ``update_llm`` default to the ``pages.write`` / ``pages.update`` stages. Returns
     the run counters (``write``, ``update``, ``no_change``, ``kept``, ``dropped``,
-    ``no_groups``, ``failed``, ``skipped_groups``), ``summary``, ``written`` and ``backup``.
+    ``no_claims``, ``failed``, ``skipped_claims``), ``summary``, ``written`` and ``backup``.
     """
     logger = setup_step_logging(STEP_7)
-    corpus = Corpus.load(aggregated_path, plan_path, assignments_path)
+    corpus = Corpus.load(sources, plan_path, assignments_path)
     withheld = corpus.withheld_list()
-    logger.info(f"Withheld from every page: {len(withheld)} groups (negative, about a named "
+    logger.info(f"Withheld from every page: {len(withheld)} claims (negative, about a named "
                 f"entity, fewer than {WITHHOLD_CONFIG['min_supporters']} members) on "
                 f"{len({w['page_id'] for w in withheld})} pages: "
-                f"{[w['group_id'] for w in withheld]}")
+                f"{[w['claim'] for w in withheld]}")
     if corpus.skipped:
-        logger.warning(f"{len(corpus.skipped)} claim groups have no assignment record (run the "
+        logger.warning(f"{len(corpus.skipped)} claims have no assignment record (run the "
                        "assignment step); they are on no page this run")
     llm = llm or LLMClient.for_stage(WRITE_CONFIG["stage"], logger=logger,
                                      max_tokens=WRITE_CONFIG["max_output_tokens"])
@@ -370,7 +377,8 @@ def run(
     models = {"write": llm.model, "update": update_llm.model}
     payload = job.payload(texts, corpus.sources, models)
     result = {**payload["metadata"]["run"], "summary": payload["metadata"]["summary"], "backup": None}
-    if not full_rebuild and _unchanged(payload, previous, artifact.original, corpus.sources):
+    if not full_rebuild and _unchanged(payload, previous, artifact.original,
+                                       corpus.sources.values()):
         logger.info(f"Pages unchanged ({len(payload['pages'])} pages); nothing written")
         return {**result, "written": False}
     report = write_reconciled(artifact, payload, items_key="pages", id_key=None,

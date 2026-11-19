@@ -13,7 +13,8 @@ from review_tool.steps import SERVED_STEPS
 from step_6_plan.assign_rules import ASSIGN_CONFIG, decide_labels, decide_pages, claims_on_page
 from step_6_plan.coverage import NONE
 from tests.assign_fixtures import FakeClassifier, Workspace, topic
-from tests.plan_fixtures import PAGE_IDS, FakeLLM, make_groups
+from tests.claim_fixtures import claim_records
+from tests.plan_fixtures import PAGE_IDS, FakeLLM, short_id_of
 
 CONFIDENT = ASSIGN_CONFIG["confident_probability"]
 SECOND = ASSIGN_CONFIG["second_page"]
@@ -32,7 +33,7 @@ def test_confident_page_is_primary_and_alone() -> None:
     assert decide_pages({"a": CONFIDENT, "b": 0.1}) == ["a"]
 
 
-def test_below_the_confident_probability_the_group_is_unplaced() -> None:
+def test_below_the_confident_probability_the_claim_is_unplaced() -> None:
     assert decide_pages({"a": CONFIDENT - 0.01, "b": 0.1, NONE: 0.4}) == []
     assert decide_pages({}) == []
     assert decide_pages({NONE: 1.0}) == []
@@ -60,13 +61,13 @@ def test_labels_apply_above_their_threshold_in_plan_order() -> None:
 # --------------------------------------------------------------------------- a first run
 
 
-def test_first_run_writes_c8_in_group_order(ws: Workspace) -> None:
+def test_first_run_writes_c8_in_claim_order(ws: Workspace) -> None:
     result = ws.run()
     payload = ws.edited()
     assert json.loads(ws.artifact.original.read_text(encoding="utf-8")) == payload
     assert result["written"] and result["full"] == 12
     assert set(payload) == {"assignments", "proposals", "metadata"}
-    assert list(payload["assignments"]) == [g["group_id"] for g in make_groups()]
+    assert list(payload["assignments"]) == [c["short_id"] for c in claim_records()]
     for index, (gid, record) in enumerate(payload["assignments"].items()):
         assert set(record) == {"pages", "labels", "p", "label_p"}
         assert record["pages"] == [PAGE_IDS[index % 4]]
@@ -77,11 +78,12 @@ def test_first_run_writes_c8_in_group_order(ws: Workspace) -> None:
     assert set(meta["inputs"]) == set(payload["assignments"])
     assert set(meta["plan"]) == {"pages", "labels"}
     assert meta["classifier"] == "fake/fake-jev"
+    assert "SECRET" not in ws.artifact.edited.read_text(encoding="utf-8")  # short ids only
     assert meta["summary"]["page_sizes"]["agencies"] == {"all": 3, "primary": 3}
     assert meta["summary"]["label_counts"] == {"usa": 6, "georgia": 0}
     assert payload["proposals"] == []
-    assert claims_on_page(payload["assignments"], "costs") == ["g-00000001", "g-00000005",
-                                                                "g-00000009"]
+    assert claims_on_page(payload["assignments"], "costs") == [short_id_of(1), short_id_of(5),
+                                                                short_id_of(9)]
 
 
 def test_page_and_labels_go_in_one_request(ws: Workspace) -> None:
@@ -98,7 +100,7 @@ def test_many_labels_are_split_over_requests(ws: Workspace, monkeypatch: pytest.
     clf = FakeClassifier()
     ws.run(clf)
     assert len(clf.items) == 24
-    assert ws.edited()["assignments"]["g-00000000"]["labels"] == ["usa"]
+    assert ws.edited()["assignments"][short_id_of(0)]["labels"] == ["usa"]
 
 
 def test_two_pages_when_the_classifier_splits(ws: Workspace) -> None:
@@ -110,7 +112,7 @@ def test_two_pages_when_the_classifier_splits(ws: Workspace) -> None:
     assert ws.edited()["metadata"]["summary"]["two_pages"] == 12
 
 
-def test_the_classifier_sees_group_text_and_entity_names_only(ws: Workspace) -> None:
+def test_the_classifier_sees_claim_text_and_entity_names_only(ws: Workspace) -> None:
     clf = FakeClassifier()
     ws.run(clf)
     states = "\n".join(state for state, _ in clf.items)
@@ -132,22 +134,22 @@ def _unplaced_odd(state: str, options: Any) -> dict[str, float]:
     return probs
 
 
-def _proposal(kind: str, title: str, group_ids: list[str], **fields: str) -> dict[str, Any]:
+def _proposal(kind: str, title: str, claims: list[str], **fields: str) -> dict[str, Any]:
     base = {"kind": kind, "target_id": "", "parent_id": "", "label_kind": "", "title_he": title,
             "description": f"תיאור {title}", "scope": f"תחום {title}", "reason": "סיבה",
-            "group_ids": group_ids}
+            "claims": claims}
     return {**base, **fields}
 
 
-def test_unplaced_groups_become_pending_proposals(ws: Workspace) -> None:
+def test_unplaced_claims_become_pending_proposals(ws: Workspace) -> None:
     answer = {"proposals": [
-        _proposal("page", "עמוד חדש", ["g-00000001", "g-00000003", "g-not-a-group"],
+        _proposal("page", "עמוד חדש", [short_id_of(1), short_id_of(3), "g-not-a-claim"],
                   target_id="new-page", parent_id="choosing"),
-        _proposal("label", "תווית", ["g-00000005"], target_id="usa", label_kind="Bad Kind"),
-        _proposal("scope", "הרחבה", ["g-00000007"], target_id="costs"),
-        _proposal("scope", "לעמוד שלא קיים", ["g-00000007"], target_id="nope"),
+        _proposal("label", "תווית", [short_id_of(5)], target_id="usa", label_kind="Bad Kind"),
+        _proposal("scope", "הרחבה", [short_id_of(7)], target_id="costs"),
+        _proposal("scope", "לעמוד שלא קיים", [short_id_of(7)], target_id="nope"),
         _proposal("page", "", []),
-        _proposal("page", "עמוד  חדש", ["g-00000009"]),  # same title again
+        _proposal("page", "עמוד  חדש", [short_id_of(9)]),  # same title again
     ]}
     llm = FakeLLM([answer])
     result = ws.run(FakeClassifier(page=_unplaced_odd), llm)
@@ -155,7 +157,7 @@ def test_unplaced_groups_become_pending_proposals(ws: Workspace) -> None:
     assert result["proposal_calls"] == 1 and result["proposal_candidates"] == 6
     assert [p["kind"] for p in proposals] == ["page", "label", "scope"]
     page, label, scope = proposals
-    assert page["group_ids"] == ["g-00000001", "g-00000003"]
+    assert page["claims"] == [short_id_of(1), short_id_of(3)]
     assert (page["target_id"], page["parent_id"], page["status"]) == ("new-page", "choosing", "pending")
     assert page["id"].startswith(ASSIGN_CONFIG["proposals"]["id_prefix"])
     assert (label["target_id"], label["label_kind"]) == ("", "")  # taken id, bad slug: blanked
@@ -167,22 +169,22 @@ def test_unplaced_groups_become_pending_proposals(ws: Workspace) -> None:
 
 
 def test_proposals_are_never_made_twice(ws: Workspace) -> None:
-    first = {"proposals": [_proposal("page", "עמוד חדש", ["g-00000001", "g-00000003"])]}
+    first = {"proposals": [_proposal("page", "עמוד חדש", [short_id_of(1), short_id_of(3)])]}
     ws.run(FakeClassifier(page=_unplaced_odd), FakeLLM([first]))
-    # Unchanged inputs: the remaining unplaced groups were already shown -> no call.
+    # Unchanged inputs: the remaining unplaced claims were already shown -> no call.
     assert ws.run(FakeClassifier(page=_unplaced_odd), FakeLLM([]))["proposal_calls"] == 0
     payload = ws.edited()
     payload["proposals"][0]["status"] = "rejected"
     ws.write_edited(payload)
     assert ws.run(FakeClassifier(page=_unplaced_odd), FakeLLM([]))["proposal_calls"] == 0
     assert ws.edited()["proposals"][0]["status"] == "rejected"
-    # New unplaced groups arrive: the model sees the rejected proposal and may not repeat it.
-    ws.write_groups(make_groups(18))
-    again = {"proposals": [_proposal("page", "עמוד חדש", ["g-0000000d"]),
-                           _proposal("label", "תווית אחרת", ["g-0000000d", "g-0000000f"])]}
+    # New unplaced claims arrive: the model sees the rejected proposal and may not repeat it.
+    ws.write_claims(claim_records(18))
+    again = {"proposals": [_proposal("page", "עמוד חדש", [short_id_of(13)]),
+                           _proposal("label", "תווית אחרת", [short_id_of(13), short_id_of(15)])]}
     llm = FakeLLM([again])
     result = ws.run(FakeClassifier(page=_unplaced_odd), llm)
-    assert result["proposal_candidates"] == 3  # g-0d, g-0f, g-11; not g-01 / g-03 (named)
+    assert result["proposal_candidates"] == 3  # claims 13, 15, 17; not 1 / 3 (named)
     prompt = llm.calls[0]["user"]
     assert "עמוד חדש" in prompt and "rejected" in prompt
     assert "SECRET" not in prompt and "by_month" not in prompt and "t-SECRET" not in prompt
@@ -190,7 +192,7 @@ def test_proposals_are_never_made_twice(ws: Workspace) -> None:
     assert titles == [("עמוד חדש", "rejected"), ("תווית אחרת", "pending")]
 
 
-def test_too_few_unplaced_groups_wait(ws: Workspace) -> None:
+def test_too_few_unplaced_claims_wait(ws: Workspace) -> None:
     def one_unplaced(state: str, options: Any) -> dict[str, float]:
         return _unplaced_odd(state, options) if "number 1 " in state else {"costs": 0.9}
 
@@ -204,7 +206,7 @@ def test_too_few_unplaced_groups_wait(ws: Workspace) -> None:
 
 def test_assignments_are_in_the_graph_and_the_registry() -> None:
     node = GRAPH.node("assignments")
-    assert node.upstream == ("groups", "plan")
+    assert node.upstream == ("claims", "entities", "plan")
     assert node.original.name == "assignments.json"
     assert node.edited.name == "assignments_edited.json"
     keys = [n.key for n in GRAPH.nodes]

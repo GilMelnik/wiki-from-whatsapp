@@ -8,7 +8,7 @@ from pathlib import Path
 
 from step_7_write_pages.inputs import Corpus
 from step_7_write_pages.prompts import write_prompt
-from tests.pages_fixtures import PagesWorkspace
+from tests.pages_fixtures import IDS, PagesWorkspace
 from utils.llm_client import CacheSegment, _flatten, _to_blocks
 
 EPHEMERAL = {"type": "ephemeral"}
@@ -30,7 +30,7 @@ def test_to_blocks_marks_cache_breakpoints() -> None:
 
 def test_write_prompt_layout_and_flatten(tmp_path: Path) -> None:
     ws = PagesWorkspace(tmp_path)
-    corpus = Corpus.load(ws.groups_path, ws.plan_path, ws.assignments_path)
+    corpus = Corpus.load(ws.sources, ws.plan_path, ws.assignments_path)
     catalogue = corpus.catalogue()
     first = write_prompt(corpus.context("agencies", catalogue))
     second = write_prompt(corpus.context("costs", catalogue))
@@ -40,4 +40,4 @@ def test_write_prompt_layout_and_flatten(tmp_path: Path) -> None:
     assert [s.cache for s in segments] == [True, False]
     assert first[0] == second[0] and segments[0] == second[1][0]  # identical cached prefix
     flat = _flatten(segments)
-    assert "<catalogue>" in flat and "id: agencies" in flat and "g-00000000 | main |" in flat
+    assert "<catalogue>" in flat and "id: agencies" in flat and f"{IDS[0]} | main |" in flat

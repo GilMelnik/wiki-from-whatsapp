@@ -20,7 +20,6 @@ from pathlib import Path
 
 from review_tool.fs import FileStamp, stamp
 from utils.paths import (
-    AGGREGATED,
     ASSIGNMENTS,
     CHAT_ANDROID_PATH,
     CLAIMS,
@@ -28,14 +27,12 @@ from utils.paths import (
     DOCS_DIR,
     ENTITIES,
     GOLD_THREADS_PATH,
-    MANUAL_AGGREGATIONS_PATH,
     PLAN,
     PROOFREAD_RECORD,
     STEP_1,
     STEP_2,
     STEP_3,
     STEP_4,
-    STEP_5,
     STEP_6,
     STEP_6_ASSIGN,
     STEP_7,
@@ -203,22 +200,18 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
             "claims", "Claims", CLAIMS, STEP_3, ("threads", "classified", "tagged_members")
         ),
         ArtifactNode.from_pair("entities", "Entities", ENTITIES, STEP_4, ("claims",)),
-        # Near-duplicate claims the owner groups by hand in the entity reviewer: no step.
-        ArtifactNode("claim_aggregations", "Claims merged by hand", MANUAL_AGGREGATIONS_PATH),
-        ArtifactNode.from_pair(
-            "groups",
-            "Claim groups",
-            AGGREGATED,
-            STEP_5,
-            ("claims", "entities", "claim_aggregations"),
-        ),
-        # Curated: a normal step-6 run keeps the owner's plan as is, so new groups never make
+        # Steps 6 to 9 read the claim records, joined on read from the claims and the entities
+        # (``step_6_plan.claim_records``): they depend on those two nodes.
+        # Curated: a normal step-6 run keeps the owner's plan as is, so new claims never make
         # it stale; the assignment step places them.
-        ArtifactNode.from_pair("plan", "Wiki plan", PLAN, STEP_6, ("groups",), curated=True),
+        ArtifactNode.from_pair("plan", "Wiki plan", PLAN, STEP_6, ("claims", "entities"), curated=True),
         ArtifactNode.from_pair(
-            "assignments", "Groups assigned to pages", ASSIGNMENTS, STEP_6_ASSIGN, ("groups", "plan")
+            "assignments", "Claims assigned to pages", ASSIGNMENTS, STEP_6_ASSIGN,
+            ("claims", "entities", "plan"),
         ),
-        ArtifactNode.from_pair("pages", "Wiki pages", WIKI_PAGES, STEP_7, ("groups", "plan", "assignments")),
+        ArtifactNode.from_pair(
+            "pages", "Wiki pages", WIKI_PAGES, STEP_7, ("claims", "entities", "plan", "assignments")
+        ),
         # The whole-wiki review's suggestions (a human gate: the owner decides on each one).
         ArtifactNode.from_pair(
             "suggestions", "Review suggestions", SUGGESTIONS, STEP_8, ("plan", "pages")
@@ -227,12 +220,12 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
         # file; its record stands for the pass (stale when a page changed since).
         ArtifactNode(
             "proofread", "Proofreading", PROOFREAD_RECORD, step=STEP_8_PROOFREAD,
-            upstream=("groups", "plan", "assignments", "pages"),
+            upstream=("claims", "entities", "plan", "assignments", "pages"),
         ),
         # The published site (docs/ + mkdocs.yml); its index file stands for the whole folder.
         ArtifactNode(
             "site", "Site", DOCS_DIR / WIKI_INDEX_FILE, step=STEP_9,
-            upstream=("plan", "pages", "groups", "threads"),
+            upstream=("plan", "pages", "claims", "entities", "threads"),
         ),
     )
 

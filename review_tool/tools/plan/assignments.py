@@ -1,11 +1,11 @@
 """The assignments file (contract C8) as the plan tool reads and changes it.
 
 The tool changes two things only, and only in the EDITED file (the original keeps what the
-assignment step wrote): a group's ``pages`` / ``labels`` when the owner moves it, which pins
+assignment step wrote): a claim's ``pages`` / ``labels`` when the owner moves it, which pins
 the record (``manual: true``, so the assignment step never re-decides it), and a proposal's
 ``status``. ``p``, ``label_p`` and ``metadata`` are the classifier's and are never written.
 Un-pinning deletes ``manual`` and puts back what the classifier's stored probabilities decide
-(what the next assignment run would do; that run asks the group again).
+(what the next assignment run would do; that run asks the claim again).
 
 A move starts from the record as the next assignment run will see it: page and label ids
 merged away in the plan are followed to their survivor, deleted ones dropped.
@@ -39,10 +39,10 @@ class AssignmentsConflict(Exception):
     """A change of the assignments that cannot be made (409); ``args[0]`` is English."""
 
 
-class GroupChange(BaseModel):
-    """One change applied to every selected group. ``set_primary``: the page becomes the
-    group's primary page (a second page stays; if the page was the second, the two swap);
-    ``add_page``: a second page (replaces the current second; the primary when the group had
+class ClaimChange(BaseModel):
+    """One change applied to every selected claim. ``set_primary``: the page becomes the
+    claim's primary page (a second page stays; if the page was the second, the two swap);
+    ``add_page``: a second page (replaces the current second; the primary when the claim had
     none); ``remove_page``; ``unplace``: off every page; ``add_label`` / ``remove_label``;
     ``unpin``: back to automatic."""
 
@@ -52,9 +52,11 @@ class GroupChange(BaseModel):
     label_id: str | None = None
 
 
-class GroupEdit(BaseModel):
-    group_ids: list[str] = Field(min_length=1)
-    changes: list[GroupChange] = Field(min_length=1)
+class ClaimEdit(BaseModel):
+    """The claims to change (short ids) and the changes applied to each of them."""
+
+    claims: list[str] = Field(min_length=1)
+    changes: list[ClaimChange] = Field(min_length=1)
 
 
 def followed(record: Record, plan: Mapping[str, Any]) -> Record:
@@ -64,7 +66,7 @@ def followed(record: Record, plan: Mapping[str, Any]) -> Record:
     return follow(record, PlanChanges(redirects=redirects(plan)), plan)[0]
 
 
-def _with_page(pages: list[str], change: GroupChange) -> list[str]:
+def _with_page(pages: list[str], change: ClaimChange) -> list[str]:
     page = change.page_id
     if change.action == "set_primary":
         rest = [pid for pid in pages if pid != page]
@@ -74,10 +76,10 @@ def _with_page(pages: list[str], change: GroupChange) -> list[str]:
     return [pid for pid in pages if pid != page]
 
 
-def changed_record(record: Record, changes: Sequence[GroupChange], plan: Mapping[str, Any]
+def changed_record(record: Record, changes: Sequence[ClaimChange], plan: Mapping[str, Any]
                    ) -> Record:
     """The record after ``changes`` (validated by ``check_changes``); ``p``, ``label_p`` and
-    any other field stay exactly as stored. A change that moves nothing (a label the group
+    any other field stay exactly as stored. A change that moves nothing (a label the claim
     already has) does not pin it; the record is then returned as it is."""
 
     current = followed(record, plan)
@@ -109,7 +111,7 @@ def changed_record(record: Record, changes: Sequence[GroupChange], plan: Mapping
     return out
 
 
-def check_changes(changes: Sequence[GroupChange], plan: Mapping[str, Any]) -> None:
+def check_changes(changes: Sequence[ClaimChange], plan: Mapping[str, Any]) -> None:
     """Every page / label a change names is one of the plan's live pages / labels."""
 
     for change in changes:
@@ -130,10 +132,10 @@ def _check_shape(data: Any) -> None:
     if not isinstance(data.get("proposals", []), list) or not all(
             isinstance(p, dict) for p in data.get("proposals", [])):
         raise TypeError("'proposals' is not a list of objects")
-    for group_id, record in data["assignments"].items():
+    for short_id, record in data["assignments"].items():
         if not isinstance(record, dict) or not all(
                 isinstance(record.get(key), kind) for key, kind in RECORD_FIELDS.items()):
-            raise TypeError(f"record {group_id} lacks one of {list(RECORD_FIELDS)}")
+            raise TypeError(f"record {short_id} lacks one of {list(RECORD_FIELDS)}")
 
 
 class AssignmentsFile:
@@ -184,12 +186,12 @@ class AssignmentsFile:
 
     def save(self, records: Mapping[str, Record], proposals: list[dict[str, Any]] | None = None
              ) -> AssignmentsBefore:
-        """Write ``records`` (replacing those group ids; file order kept) and, if given, the
+        """Write ``records`` (replacing those short ids; file order kept) and, if given, the
         proposals to the edited file, after backing it up; returns what they replaced. The
         caller holds the lock (``StoreHandle.mutate``)."""
 
         before = AssignmentsBefore(
-            {gid: self.records[gid] for gid in records},
+            {sid: self.records[sid] for sid in records},
             None if proposals is None else self.proposals,
         )
         payload = {**self.data, "assignments": {**self.records, **records}}
@@ -219,7 +221,7 @@ ACTION_PHRASES = {
 }
 
 
-def describe_edit(edit: GroupEdit, title: Callable[[str], str]) -> str:
+def describe_edit(edit: ClaimEdit, title: Callable[[str], str]) -> str:
     """The edit in English, for the toast, the undo button and the log."""
 
     def quoted(item_id: str | None) -> str:
@@ -228,5 +230,5 @@ def describe_edit(edit: GroupEdit, title: Callable[[str], str]) -> str:
     actions = ", ".join(ACTION_PHRASES[change.action].format(page=quoted(change.page_id),
                                                              label=quoted(change.label_id))
                         for change in edit.changes)
-    count = len(edit.group_ids)
-    return f"{actions[:1].upper()}{actions[1:]} ({'1 group' if count == 1 else f'{count} groups'})"
+    count = len(edit.claims)
+    return f"{actions[:1].upper()}{actions[1:]} ({'1 claim' if count == 1 else f'{count} claims'})"

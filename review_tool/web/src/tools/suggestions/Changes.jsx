@@ -3,7 +3,7 @@ import { Bidi, consequenceLines, formatDateTime, Ltr, useArtifactStatus, useJobs
 // What an applied suggestion changed (GET /suggestions/{id} → changes): a text correction as
 // the sentences before and after on each page; a plan change as what it does downstream, with
 // the steps that must follow offered in order (never started by themselves); a contradiction
-// also as the group pairs saved as links. A wrong apply is repaired from the backup named here.
+// also as the claim pairs saved as links. A wrong apply is repaired from the backup named here.
 
 
 /** The steps a plan change needs before the pages show it, offered in order. */
@@ -111,10 +111,10 @@ function Links({ links }) {
   return (
     <ul className="space-y-1">
       {links.map(({ a, b }) => (
-        <li key={`${a.group_id}-${b.group_id}`} className="card p-2 text-xs">
-          <Bidi as="p">{a.claim_text ?? a.group_id}</Bidi>
+        <li key={`${a.short_id}-${b.short_id}`} className="card p-2 text-xs">
+          <Bidi as="p">{a.claim_text ?? a.short_id}</Bidi>
           <p className="my-1 text-slate-500">⟷ contradicts</p>
-          <Bidi as="p">{b.claim_text ?? b.group_id}</Bidi>
+          <Bidi as="p">{b.claim_text ?? b.short_id}</Bidi>
         </li>
       ))}
     </ul>
@@ -130,16 +130,21 @@ export function Changes({ suggestion, changes, busy }) {
       {structural ? <PlanChange changes={changes} busy={busy} /> : <ul className="space-y-4">{changes.pages.map((page) => <PageChange key={page.page_id} page={page} />)}</ul>}
       {suggestion.kind === "contradiction" && changes.links?.length > 0 && (
         <section>
-          <h4 className="mb-1 text-xs font-medium text-slate-600">The contradiction links saved in the claim groups</h4>
+          <h4 className="mb-1 text-xs font-medium text-slate-600">The contradiction links saved between the claims</h4>
           <Links links={changes.links} />
         </section>
       )}
       <p className="text-xs text-slate-600">
         There is no undo button. A wrong apply is repaired from the backup of the file as it was before:{" "}
         {changes.backup ? <Ltr>{changes.backup}</Ltr> : <>there was no edited copy before, so the earlier version is the step's original; the file written: <Ltr>{changes.file}</Ltr></>}
-        {changes.groups_backup && (
+        {changes.links_backup && (
           <>
-            {" "}· claim groups: <Ltr>{changes.groups_backup}</Ltr>
+            {" "}· contradiction links: <Ltr>{changes.links_backup}</Ltr>
+          </>
+        )}
+        {changes.links_file && !changes.links_backup && (
+          <>
+            {" "}· contradiction links: there were none before; the file written: <Ltr>{changes.links_file}</Ltr>
           </>
         )}
       </p>

@@ -161,28 +161,20 @@ export function contactsChanged(contacts, form) {
   return CONTACT_KINDS.some(({ key }) => listToLines(contacts?.[key]) !== listToLines(linesToList(form[key] ?? "")));
 }
 
-// Picked claims: `{ entityId, byName: { [memberName]: [claimId, ...] }, texts: { [claimId]: text } }`.
-// They belong to one entity; any other entity's detail starts with nothing picked. The texts
-// are kept for the claims-grouping dialog (picked claims may sit on pages no longer shown).
+// Picked claims: `{ entityId, byName: { [memberName]: [claimId, ...] } }`.
+// They belong to one entity; any other entity's detail starts with nothing picked.
 
-export const NOTHING_PICKED = { entityId: null, byName: {}, texts: {} };
+export const NOTHING_PICKED = { entityId: null, byName: {} };
 
 export function pickedFor(picked, entityId) {
   return picked.entityId === entityId ? picked.byName : {};
 }
 
 export function togglePicked(picked, entityId, name, claim) {
-  const same = picked.entityId === entityId;
   const byName = { ...pickedFor(picked, entityId) };
-  const texts = { ...(same ? picked.texts : {}), [claim.claim_id]: claim.claim_text };
   const ids = byName[name] ?? [];
   const id = claim.claim_id;
   byName[name] = ids.includes(id) ? ids.filter((other) => other !== id) : [...ids, id];
   if (byName[name].length === 0) delete byName[name];
-  return { entityId, byName, texts };
-}
-
-/** Every picked claim of the entity once (a claim can be picked under two names). */
-export function allPicked(picked, entityId) {
-  return [...new Set(Object.values(pickedFor(picked, entityId)).flat())];
+  return { entityId, byName };
 }

@@ -1,8 +1,8 @@
 import { Bidi, countText, formatCount, Ltr, stanceOf, titleOf } from "@shell";
 import { percent } from "./plan.js";
 
-// One claim group in an assignment list: its text, stance, support, last date, labels, the
-// classifier's probability for this page / label, where else it is, a mark for groups the
+// One claim in an assignment list: its text, stance, support, last date, labels, the
+// classifier's probability for this page / label, where else it is, a mark for claims the
 // owner pinned by hand and for ids the next assignment run will change. A probability under
 // the step's own bar (its decision rules, from the server) is marked. Clicking the row (or its
 // box) picks it for a bulk move.
@@ -31,7 +31,7 @@ function Waiting({ row }) {
   const moved = Object.entries(row.redirected ?? {});
   const dropped = row.dropped ?? [];
   if (moved.length === 0 && dropped.length === 0) return null;
-  const title = "These ids are no longer in the plan; the next assignment run will update the group";
+  const title = "These ids are no longer in the plan; the next assignment run will update the claim";
   return (
     <span className="badge badge-amber" title={title}>
       Waiting for the assignment run:{" "}
@@ -45,25 +45,25 @@ function Waiting({ row }) {
   );
 }
 
-export function GroupRow({ row, overview, scope, itemId, picked, onToggle }) {
+export function ClaimRow({ row, overview, scope, itemId, picked, onToggle }) {
   const stance = stanceOf(row.stance);
   const thresholds = overview.assignments?.thresholds ?? {};
   const bar = scope === "label" ? thresholds.label : thresholds.page;
   const labels = (row.labels ?? []).filter((id) => !(scope === "label" && id === itemId));
   const pickable = Boolean(row.record);
   return (
-    <li className={`flex gap-3 px-3 py-2 ${picked ? "bg-blue-50" : "hover:bg-slate-50"}`} title={row.group_id}>
+    <li className={`flex gap-3 px-3 py-2 ${picked ? "bg-blue-50" : "hover:bg-slate-50"}`} title={row.short_id}>
       <input
         type="checkbox"
         className="mt-1 shrink-0"
         checked={picked}
         disabled={!pickable}
-        aria-label={`Pick group ${row.group_id}`}
+        aria-label={`Pick claim ${row.short_id}`}
         onChange={onToggle}
       />
       <div className={`min-w-0 flex-1 ${pickable ? "cursor-pointer" : ""}`} onClick={pickable ? onToggle : undefined}>
         {row.missing ? (
-          <p className="text-slate-400">The group is no longer in the groups file; the next assignment run will remove it.</p>
+          <p className="text-slate-400">The claim is no longer among the claims (deleted or re-extracted); the next assignment run will remove it.</p>
         ) : (
           <Bidi as="p" className="leading-relaxed">{row.claim_text}</Bidi>
         )}
@@ -83,7 +83,6 @@ export function GroupRow({ row, overview, scope, itemId, picked, onToggle }) {
             </span>
           )}
           {row.last_date && <span>until <Ltr>{row.last_date}</Ltr></span>}
-          {row.claim_count > 1 && <span>{countText(row.claim_count, "claim", formatCount)}</span>}
           {row.manual && <span className="badge badge-sky" title="Assigned by hand: the assignment step will not decide it again">Manual</span>}
           {row.withheld && (
             <span className="badge badge-amber" title="A negative statement that names an entity, reported by too few members: kept off every page, and not counted in the page's size">

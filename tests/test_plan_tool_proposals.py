@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from step_6_plan.operation_requests import quote
-from tests.plan_fixtures import FakeLLM
+from tests.plan_fixtures import FakeLLM, short_id_of
 from tests.test_plan_tool_assignments import (
     NEW_PAGE,
     UNPLACED,
@@ -34,12 +34,13 @@ def both(setup: AssignSetup) -> list[bytes | None]:
 # ------------------------------------------------------------------ reading
 
 
-def test_proposals_come_pending_first_with_groups_and_targets(setup: AssignSetup) -> None:
+def test_proposals_come_pending_first_with_claims_and_targets(setup: AssignSetup) -> None:
     listing = setup.get("/proposals")
     assert listing["counts"] == {"pending": 3, "accepted": 0, "rejected": 0}
     page, label, scope = listing["items"]
     assert [p["kind"] for p in listing["items"]] == ["page", "label", "scope"]
-    assert ids({"items": page["groups"]}) == UNPLACED and page["groups"][0]["claim_text"]
+    assert ids({"items": page["claim_rows"]}) == UNPLACED and page["claim_rows"][0]["claim_text"]
+    assert page["claims"] == UNPLACED
     assert page["target_id"] == "" and page["target"] == {"id_check": None, "parent_ok": True}
     assert label["target"]["id_check"]["ok"] is True and label["target"]["kind_known"] is True
     assert scope["target"] == {"page_id": "hospital", "title_he": "כותרת hospital",
@@ -52,7 +53,7 @@ def test_proposals_come_pending_first_with_groups_and_targets(setup: AssignSetup
 # ------------------------------------------------------------------ deciding
 
 
-def test_accepting_a_page_proposal_saves_both_files_and_the_run_places_its_groups(
+def test_accepting_a_page_proposal_saves_both_files_and_the_run_places_its_claims(
         setup: AssignSetup) -> None:
     proposal = setup.proposal("page")
     answer = setup.accept(proposal["id"], add_page_op())
@@ -64,9 +65,9 @@ def test_accepting_a_page_proposal_saves_both_files_and_the_run_places_its_group
     assert all(records[g]["pages"] == [] for g in UNPLACED)  # not moved by hand
     assert list(BACKUPS_DIR.glob("assignments_edited_*.json"))
     assert answer["overview"]["assignments"]["proposals"]["accepted"] == 1
-    setup.run_step()  # the offered step-6b run asks the groups against the new page
-    assert ids(setup.groups(scope="page", id=NEW_PAGE)) == UNPLACED
-    assert setup.groups(scope="unplaced")["total"] == 0
+    setup.run_step()  # the offered step-6b run asks the claims against the new page
+    assert ids(setup.claims(scope="page", id=NEW_PAGE)) == UNPLACED
+    assert setup.claims(scope="unplaced")["total"] == 0
 
 
 def test_accepting_label_and_scope_proposals(setup: AssignSetup) -> None:
@@ -131,11 +132,11 @@ def test_undo_puts_back_both_files_of_an_accepted_proposal(setup: AssignSetup) -
 
 def test_undo_of_moves_one_at_a_time(setup: AssignSetup) -> None:
     first = setup.assignments()["assignments"]
-    setup.edit(["g-00000000"], {"action": "unplace"})
-    setup.edit(["g-00000000", "g-00000004"], {"action": "set_primary", "page_id": "hospital"})
+    setup.edit([short_id_of(0)], {"action": "unplace"})
+    setup.edit([short_id_of(0), short_id_of(4)], {"action": "set_primary", "page_id": "hospital"})
     setup.post("/undo")
-    assert setup.assignments()["assignments"]["g-00000000"]["pages"] == []
-    assert setup.assignments()["assignments"]["g-00000004"] == first["g-00000004"]
+    assert setup.assignments()["assignments"][short_id_of(0)]["pages"] == []
+    assert setup.assignments()["assignments"][short_id_of(4)] == first[short_id_of(4)]
     setup.post("/undo")
     assert setup.assignments()["assignments"] == first
     setup.post("/undo", status=409)
@@ -143,7 +144,7 @@ def test_undo_of_moves_one_at_a_time(setup: AssignSetup) -> None:
 
 def test_undo_is_refused_after_the_assignments_changed_outside(setup: AssignSetup) -> None:
     setup.apply({"op": "rename", "item_id": "costs", "title_he": "עלויות"})
-    setup.edit(["g-00000000"], {"action": "unplace"})
+    setup.edit([short_id_of(0)], {"action": "unplace"})
     payload = setup.assignments()
     payload["metadata"]["note"] = "an assignment run wrote this"
     write_json_file(payload, setup.artifact.edited)
@@ -155,7 +156,7 @@ def test_undo_is_refused_after_the_assignments_changed_outside(setup: AssignSetu
 def test_a_plan_change_cannot_be_undone_after_an_assignment_run(setup: AssignSetup) -> None:
     proposal_id = setup.proposal("page")["id"]
     setup.accept(proposal_id, add_page_op())
-    setup.run_step()  # groups landed on the new page: undoing the page would orphan them
+    setup.run_step()  # claims landed on the new page: undoing the page would orphan them
     setup.post("/undo", status=409)
     assert NEW_PAGE in setup.saved()["pages"]
 
@@ -167,7 +168,7 @@ def test_previews_say_what_the_next_assignment_run_does(setup: AssignSetup) -> N
     merge = setup.post("/operations/preview", {"op": "merge", "survivor_id": "clinics",
                                                "merged_ids": ["agencies"]})["assignments"]
     assert merge["redirected"] == 6 and merge["reask"] == 3  # the unplaced are asked again
-    setup.edit(["g-00000002"], {"action": "set_primary", "page_id": "hospital"})
+    setup.edit([short_id_of(2)], {"action": "set_primary", "page_id": "hospital"})
     delete = setup.post("/operations/preview", {"op": "delete", "item_id": "hospital"})["assignments"]
     assert delete["pages_cleared"] == 1 and delete["manual_lost"] == 1
     assert delete["manual_reask"] == 1

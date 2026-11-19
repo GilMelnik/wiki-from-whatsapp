@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Bidi, countText, EditableText, formatCount, KindField, Ltr, nodeById, Panel, pathTitles, titleOf } from "@shell";
-import { GROUPS_TAB } from "./assign.js";
-import { ItemGroups, ItemTabs } from "./AssignmentViews.jsx";
+import { CLAIMS_TAB } from "./assign.js";
+import { ItemClaims, ItemTabs } from "./AssignmentViews.jsx";
 import { ChangeBadge, MergedFrom, Warnings } from "./bits.jsx";
 
 // Main column for a category (its texts and what it holds) and for a label (its texts and
-// kind, or in the second tab the claim groups that carry it). Titles and descriptions save at
-// once; moving groups pins them (see GroupTable).
+// kind, or in the second tab the claims that carry it). Titles and descriptions save at
+// once; moving claims pins them (see ClaimTable).
 
 export function CategoryView({ overview, nodeId, saving, on }) {
   const node = nodeById(overview, nodeId);
@@ -106,7 +106,7 @@ function KindEditor({ overview, label, saving, onSave }) {
   );
 }
 
-export function LabelView({ overview, labelId, saving, tab, groups, on }) {
+export function LabelView({ overview, labelId, saving, tab, claims, on }) {
   const label = overview.labels[labelId];
   const count = overview.assignments?.labels?.[labelId];
   return (
@@ -123,8 +123,8 @@ export function LabelView({ overview, labelId, saving, tab, groups, on }) {
     >
       <div className="space-y-6 p-4 text-sm">
         <ItemTabs count={count} tab={tab} onChange={on.showTab} />
-        {tab === GROUPS_TAB ? (
-          <ItemGroups scope="label" itemId={labelId} groups={groups} />
+        {tab === CLAIMS_TAB ? (
+          <ItemClaims scope="label" itemId={labelId} claims={claims} />
         ) : (
           <LabelDetails overview={overview} label={label} labelId={labelId} saving={saving} on={on} />
         )}

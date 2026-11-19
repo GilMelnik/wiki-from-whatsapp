@@ -15,7 +15,7 @@ from review_tool.artifacts import GRAPH
 from review_tool.steps import SERVED_STEPS
 from step_8_review.inputs import REVIEW_CONFIG
 from step_8_review.proposals import KINDS, answer_schema
-from tests.pages_fixtures import SECRET
+from tests.pages_fixtures import IDS, SECRET
 from tests.review_fixtures import FakeReviewer, ReviewWorkspace, flat, sentence_a, valid_answers
 
 
@@ -44,9 +44,9 @@ def test_first_run_writes_c12_with_one_suggestion_per_kind(ws: ReviewWorkspace) 
         assert suggestion["page_marks"] == {}
     kinds = _by_kind(payload)
     assert kinds["mistake"]["proposal"] == {
-        "page_id": "agencies", "sentence": sentence_a("g-00000004"),
-        "group_ids": ["g-00000004"], "correction": "לתקן: הניסיון היה השני"}
-    assert kinds["contradiction"]["proposal"]["groups_a"] == ["g-00000000"]
+        "page_id": "agencies", "sentence": sentence_a(IDS[4]),
+        "claims": [IDS[4]], "correction": "לתקן: הניסיון היה השני"}
+    assert kinds["contradiction"]["proposal"]["claims_a"] == [IDS[0]]
     assert kinds["contradiction"]["pages"] == ["agencies", "clinics"]
     assert kinds["split"]["proposal"] == {
         "op": "split", "page_id": "clinics", "new_page_id": "clinic-prices",
@@ -85,13 +85,13 @@ def test_the_same_answer_gives_the_same_ids(tmp_path: Path) -> None:
 
 def test_unusable_and_repeated_proposals_are_dropped(ws: ReviewWorkspace) -> None:
     bad = [
-        flat("mistake", page_id="agencies", sentence="משפט שאינו בדף.", group_ids=["g-00000000"],
+        flat("mistake", page_id="agencies", sentence="משפט שאינו בדף.", claims=[IDS[0]],
              correction="x"),
-        flat("mistake", page_id="agencies", sentence=sentence_a("g-00000000"),
-             group_ids=["g-ffffffff"], correction="x"),
+        flat("mistake", page_id="agencies", sentence=sentence_a(IDS[0]),
+             claims=["g-ffffffff"], correction="x"),
         flat("add_page", page_id="agencies", parent_id="choosing", title_he="דף", description="d",
              scope="s"),
-        flat("contradiction", groups_a=["g-00000000"], groups_b=["g-00000000"], pages=["agencies"],
+        flat("contradiction", claims_a=[IDS[0]], claims_b=[IDS[0]], pages=["agencies"],
              clash="c", correction="c"),
         flat("merge", survivor_id="agencies", merged_ids=["no-such-page"]),
         valid_answers()[0], valid_answers()[0],
@@ -100,7 +100,7 @@ def test_unusable_and_repeated_proposals_are_dropped(ws: ReviewWorkspace) -> Non
     assert result["raised"] == 1
     reasons = " ".join(result["dropped"])
     for expected in ("not in page agencies", "did not see: ['g-ffffffff']", "is used 2 times",
-                     "groups on both sides", "did not see: ['no-such-page']", "already raised"):
+                     "claims on both sides", "did not see: ['no-such-page']", "already raised"):
         assert expected in reasons
     assert len(result["dropped"]) == 6
 
@@ -117,12 +117,13 @@ def test_the_prompt_never_carries_identities_and_the_schema_is_strict(ws: Review
     reviewer = FakeReviewer([])
     ws.review(reviewer)
     assert reviewer.passes() == ["before", "during", "cross"]
+    assert SECRET not in ws.suggestions.original.read_text(encoding="utf-8")
     for call in reviewer.calls:
         prompt = call["system"] + call["user"]
         assert SECRET not in prompt and "t-SECRET" not in prompt and "reaction" not in prompt
         assert "<already_raised count=\"0\">" in prompt
     assert '<page id="agencies"' in reviewer.calls[0]["user"]
-    assert "g-00000004 | mention -> agencies" in reviewer.calls[0]["user"]
+    assert f"{IDS[4]} | mention -> agencies" in reviewer.calls[0]["user"]
     item = answer_schema(KINDS)["properties"]["suggestions"]["items"]
     assert item["additionalProperties"] is False and set(item["required"]) == set(item["properties"])
     assert reviewer.calls[0]["schema"] == answer_schema(KINDS)

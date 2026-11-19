@@ -4,7 +4,7 @@ A plan is a JSON object::
 
     {"tree": [{id, title_he, description, children: [...]}],
      "pages": {page_id: {title_he, description, scope, path: [node ids], aliases: {he, en},
-                         example_group_ids: [group_id], merged_from?: [page_id]}},
+                         example_claims: [short_id], merged_from?: [page_id]}},
      "labels": {label_id: {title_he, description, kind, merged_from?: [label_id]}},
      "metadata": {..., retired_ids?: [id]}}
 
@@ -23,7 +23,7 @@ assignment can never silently point at something new.
 
 Depth counts levels from the top (a top-level node has depth 1); every page sits at a depth
 between ``plan.min_depth`` and ``plan.max_depth``. ``plan.max_pages`` is only a safety ceiling on
-the page count: the planning prompt sizes pages by ``plan.page_groups``, not by a page count.
+the page count: the planning prompt sizes pages by ``plan.page_claims``, not by a page count.
 """
 
 from __future__ import annotations
@@ -208,8 +208,8 @@ def validation_errors(plan: Any) -> list[str]:
         errors += _text_errors(where, page, ("title_he", "description", "scope"))
         if isinstance(page, dict):
             errors += _alias_errors(where, page.get("aliases"))
-            if not isinstance(page.get("example_group_ids"), list):
-                errors.append(f"{where} needs an 'example_group_ids' list")
+            if not isinstance(page.get("example_claims"), list):
+                errors.append(f"{where} needs an 'example_claims' list")
     for label_id, label in plan["labels"].items():
         where = f"label {label_id!r}"
         errors += _text_errors(where, label, ("title_he", "description", "kind"))

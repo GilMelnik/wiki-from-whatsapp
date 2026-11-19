@@ -8,7 +8,7 @@ import pytest
 
 from step_6_plan import operations as ops
 from step_6_plan.model import PlanError, check_plan, find_node
-from tests.plan_fixtures import make_plan
+from tests.plan_fixtures import make_plan, short_id_of
 
 
 @pytest.fixture
@@ -123,7 +123,7 @@ def test_merge_pages_redirects_and_keeps_aliases(plan: dict) -> None:
     survivor = first.plan["pages"]["agencies"]
     assert survivor["merged_from"] == ["costs"]
     assert "כותרת costs" in survivor["aliases"]["he"] and "costs" in survivor["aliases"]["en"]
-    assert survivor["example_group_ids"] == ["g-00000000", "g-00000001"]
+    assert survivor["example_claims"] == [short_id_of(0), short_id_of(1)]
     second = ops.merge(first.plan, "clinics", ["agencies"])
     assert second.redirects == {"agencies": "clinics", "costs": "clinics"}
     assert second.plan["pages"]["clinics"]["merged_from"] == ["agencies", "costs"]
@@ -175,7 +175,7 @@ def test_change_id_keeps_the_page_and_redirects_the_old_id(plan: dict) -> None:
     page = edit.plan["pages"]["providers"]
     assert page["merged_from"] == ["costs", "agencies"]
     assert page["title_he"] == merged["pages"]["agencies"]["title_he"]
-    assert page["example_group_ids"] == merged["pages"]["agencies"]["example_group_ids"]
+    assert page["example_claims"] == merged["pages"]["agencies"]["example_claims"]
     assert list(edit.plan["pages"]) == ["providers", "clinics", "hospital"]  # same order
     assert _children(edit.plan, "choosing") == ["providers"]
     with pytest.raises(PlanError, match="retired"):

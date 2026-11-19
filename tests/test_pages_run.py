@@ -14,7 +14,7 @@ from review_tool.steps import SERVED_STEPS
 from step_6_plan import operations
 from step_7_write_pages.checks import cited_ids
 from step_9_site.content import Site
-from tests.pages_fixtures import FakeWriter, PagesWorkspace, main_ids_in, points_of
+from tests.pages_fixtures import IDS, SECRET, FakeWriter, PagesWorkspace, main_ids_in, points_of
 from utils.llm_client import _flatten
 from utils.okf import validate_front_matter
 
@@ -29,10 +29,10 @@ def ws(tmp_path: Path) -> PagesWorkspace:
 
 
 def _bump(ws: PagesWorkspace, *indexes: int) -> None:
-    groups = ws.groups()
+    claims = ws.claims()
     for index in indexes:
-        groups[index]["supporter_count"] += 1
-    ws.write_groups(groups)
+        claims[index]["supporter_count"] += 1
+    ws.write_claims(claims)
 
 
 def _edit(ws: PagesWorkspace, page_id: str, text: str) -> None:
@@ -45,10 +45,10 @@ def _edit(ws: PagesWorkspace, page_id: str, text: str) -> None:
 def _make_newer(ws: PagesWorkspace) -> None:
     """The output older than an input (as after an upstream run that changed nothing)."""
     stamp = ws.artifact.original.stat().st_mtime_ns + 10**9
-    os.utime(ws.groups_path, ns=(stamp, stamp))
+    os.utime(ws.sources.claims, ns=(stamp, stamp))
 
 
-def test_first_run_writes_c9_pages_that_step_9_accepts(ws: PagesWorkspace) -> None:
+def test_first_run_writes_c9_pages(ws: PagesWorkspace) -> None:
     payload = ws.pages()
     assert list(payload["pages"]) == PAGES
     for page_id, page in payload["pages"].items():
@@ -59,28 +59,35 @@ def test_first_run_writes_c9_pages_that_step_9_accepts(ws: PagesWorkspace) -> No
         cited = cited_ids(page["body_md"])
         report = payload["metadata"]["pages"][page_id]["report"]
         assert report["unaccounted"] == [] and report["final_problems"] == []
-        assert [gid for point in page["points"] for gid in point["groups"]] == [
-            gid for gid in cited if ws.assignments()["assignments"][gid]["pages"][0] == page_id]
+        assert [sid for point in page["points"] for sid in point["claims"]] == [
+            sid for sid in cited if ws.assignments()["assignments"][sid]["pages"][0] == page_id]
         assert cited and [s["id"] for s in page["front_matter"]["sources"]] == cited
         assert payload["metadata"]["inputs"][page_id] == page["input_fingerprint"]
         assert "report" in payload["metadata"]["pages"][page_id]
     assert not ws.artifact.edited.exists()  # reconcile creates no edited copy
-    site = Site(ws.plan(), payload["pages"], ws.groups(), ("2024-01-01T10:00:00", "2024-03-01T10:00:00"))
-    assert not [i for i in site.issues if i["issue"].startswith("broken")]
-    assert not [i for i in site.issues if i["issue"].endswith("_reference")]
+    assert SECRET not in ws.artifact.original.read_text(encoding="utf-8")  # no claim / thread id
     assert payload["metadata"]["run"]["write"] == 4
     assert all("]:" not in page["body_md"] for page in payload["pages"].values())
+    assert set(payload["metadata"]["sources"]) == {"claims", "entities", "audit", "plan",
+                                                   "assignments"}
+
+
+def test_step_9_accepts_the_written_pages(ws: PagesWorkspace) -> None:
+    payload = ws.pages()
+    site = Site(ws.plan(), payload["pages"], ws.claims(), ("2024-01-01T10:00:00", "2024-03-01T10:00:00"))
+    assert not [i for i in site.issues if i["issue"].startswith("broken")]
+    assert not [i for i in site.issues if i["issue"].endswith("_reference")]
 
 
 def test_participant_counts_and_baked_definitions_change_no_page(ws: PagesWorkspace) -> None:
     payload = ws.pages()
     for page in payload["pages"].values():  # pages as an older step 7 stored them
-        page["body_md"] += "".join(f"\n[^{gid}]: טענה (נאמר במאי 2024)" for gid in cited_ids(page["body_md"]))
+        page["body_md"] += "".join(f"\n[^{sid}]: טענה (נאמר במאי 2024)" for sid in cited_ids(page["body_md"]))
     ws.artifact.original.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    groups = ws.groups()
-    for group in groups:
-        group["participant_count"] = 5
-    ws.write_groups(groups)
+    claims = ws.claims()
+    for claim in claims:
+        claim["participant_count"] = 5
+    ws.write_claims(claims)
     llm, update = FakeWriter(), FakeWriter("fake-update")
     result = ws.run(llm, update)
     assert llm.calls == [] and update.calls == []
@@ -97,15 +104,15 @@ def test_second_run_makes_no_call_and_writes_nothing(ws: PagesWorkspace) -> None
     assert result["written"] and llm.calls == [] and update.calls == []  # stale notice clears
 
 
-def test_one_group_changed_updates_only_its_page_through_the_update_prompt(ws: PagesWorkspace) -> None:
+def test_one_claim_changed_updates_only_its_page_through_the_update_prompt(ws: PagesWorkspace) -> None:
     before = ws.pages()["pages"]
     llm, update = FakeWriter(), FakeWriter("fake-update")
     result = ws.run(llm, update)
     assert result["written"] is False
-    _bump(ws, 8)  # group 8 is on agencies only
+    _bump(ws, 8)  # claim 8 is on agencies only
     result = ws.run(llm, update)
     assert llm.calls == [] and update.tasks() == ["update:agencies"]
-    assert "changed: g-00000008 |" in _flatten(update.calls[0]["user"])
+    assert f"changed: {IDS[8]} |" in _flatten(update.calls[0]["user"])
     after = ws.pages()["pages"]
     assert {pid for pid in PAGES if after[pid] != before[pid]} == {"agencies"}
     assert result["update"] == 1
@@ -142,7 +149,7 @@ def test_no_change_keeps_generated_at_and_records_the_new_fingerprint(ws: PagesW
 
 
 def test_large_change_rewrites_the_page_in_full(ws: PagesWorkspace) -> None:
-    _bump(ws, 0, 4, 8)  # every group on agencies
+    _bump(ws, 0, 4, 8)  # every claim on agencies
     llm, update = FakeWriter(), FakeWriter("fake-update")
     ws.run(llm, update)
     assert llm.tasks() == ["write:agencies"] and "update:costs" in update.tasks()
@@ -154,7 +161,7 @@ def test_a_new_writer_rewrites_every_page(ws: PagesWorkspace) -> None:
     assert sorted(llm.tasks()) == sorted(f"write:{pid}" for pid in PAGES)
 
 
-def test_page_left_the_plan_or_without_groups_is_dropped(ws: PagesWorkspace) -> None:
+def test_page_left_the_plan_or_without_claims_is_dropped(ws: PagesWorkspace) -> None:
     ws.write_plan(operations.delete(ws.plan(), "hospital").plan)
     payload = ws.assignments()
     for record in payload["assignments"].values():
@@ -163,7 +170,7 @@ def test_page_left_the_plan_or_without_groups_is_dropped(ws: PagesWorkspace) -> 
     llm = FakeWriter()
     result = ws.run(llm)
     assert list(ws.pages()["pages"]) == ["agencies", "costs"]
-    assert llm.calls == [] and result["dropped"] == 1 and result["no_groups"] == 1
+    assert llm.calls == [] and result["dropped"] == 1 and result["no_claims"] == 1
 
 
 def test_front_matter_follows_a_renamed_category_without_a_call(ws: PagesWorkspace) -> None:
@@ -178,7 +185,7 @@ def test_front_matter_follows_a_renamed_category_without_a_call(ws: PagesWorkspa
 
 
 def test_only_restricts_the_run(ws: PagesWorkspace) -> None:
-    _bump(ws, 4)  # group 4: agencies first, costs second
+    _bump(ws, 4)  # claim 4: agencies first, costs second
     update = FakeWriter("fake-update")
     ws.run(FakeWriter(), update, only=["costs"])
     assert update.tasks() == ["update:costs"]
@@ -227,7 +234,7 @@ def test_a_failed_page_keeps_its_old_text(ws: PagesWorkspace) -> None:
 
 def test_pages_node_and_step_row() -> None:
     node = GRAPH.node("pages")
-    assert node.upstream == ("groups", "plan", "assignments")
+    assert node.upstream == ("claims", "entities", "plan", "assignments")
     step = SERVED_STEPS.step(node.step)
     assert step.spec.incremental_safe and step.spec.paid
     assert step.command()[1:] == ["-m", "step_7_write_pages.run"]

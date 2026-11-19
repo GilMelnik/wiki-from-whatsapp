@@ -61,7 +61,7 @@ def queue_section(status: str, flagged: bool, member_count: int) -> str:
 
 
 class ViewsMixin:
-    """Relies on ``EntityStore``: ``entities``, ``claims``, ``aggregations``, ``annotator``,
+    """Relies on ``EntityStore``: ``entities``, ``claims``, ``annotator``,
     ``deleted_claims``, ``deleted_names``, ``source``, ``edited_path``, ``find``,
     ``member_of`` and ``text_of``."""
 
@@ -150,7 +150,6 @@ class ViewsMixin:
             ),
             "deleted_names": len(self.deleted_names),
             "deleted_claims": len(self.deleted_claims),
-            "aggregations": len(self.aggregations.groups),
             "analysis": self.claims.analysis_counts,
         }
 
@@ -161,9 +160,7 @@ class ViewsMixin:
         return [
             c
             for c in member.get("claim_ids") or []
-            if c not in excluded
-            and c not in self.deleted_claims
-            and not self.aggregations.is_hidden(c)
+            if c not in excluded and c not in self.deleted_claims
         ]
 
     def _claims_page(
@@ -175,7 +172,6 @@ class ViewsMixin:
         for claim_id in ids[offset : offset + limit]:
             view = self.annotator.annotate(claim_id, member["name"], entity["entity_id"], own)
             if view is not None:
-                view["aggregation"] = self.aggregations.view(claim_id, self.text_of)
                 claims.append(view)
         return {"count": len(ids), "offset": offset, "limit": limit, "claims": claims}
 
