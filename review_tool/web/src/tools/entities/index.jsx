@@ -4,7 +4,6 @@ import { api, entityPath } from "./api.js";
 import { DialogHost } from "./Dialogs.jsx";
 import { EditPanel } from "./EditPanel.jsx";
 import {
-  allPicked,
   DEFAULT_VIEW,
   NOTHING_PICKED,
   PAGE_SIZE,
@@ -110,7 +109,6 @@ function EntitiesTool({ tool }) {
     });
 
   const path = entity ? entityPath(entity.entity_id) : null;
-  const pickedIds = entity ? allPicked(picked, entity.entity_id) : [];
   const post = (suffix, body, message) => fire(() => api.post(`${path}${suffix}`, body), message);
   const on = {
     open: setSelectedId,
@@ -128,14 +126,10 @@ function EntitiesTool({ tool }) {
     moveMember: (name) => setDialog({ kind: "moveMember", name }),
     claims: (mode, name, claimIds) => setDialog({ kind: "claims", mode, name, claimIds }),
     deleteClaim: (claim) => setDialog({ kind: "deleteClaim", claim }),
-    showAggregation: (group) => setDialog({ kind: "group", group }),
     merge: () => setDialog({ kind: "merge" }),
     mergeInto: (targetId) => setDialog({ kind: "merge", targetId }),
     reject: () => setDialog({ kind: "reject" }),
     remove: () => setDialog({ kind: "remove" }),
-    aggregate: () => {
-      if (pickedIds.length >= 2) setDialog({ kind: "createGroup", claimIds: pickedIds, texts: picked.texts });
-    },
   };
 
   const ready = Boolean(entity) && !saving;
@@ -143,7 +137,6 @@ function EntitiesTool({ tool }) {
     { keys: "a", label: "Accept the entity", run: () => ready && entity.status !== "accepted" && on.setStatus("accepted") },
     { keys: "m", label: "Merge into another entity", run: () => ready && on.merge() },
     { keys: "x", label: "Split into one entity per name", run: () => ready && entity.member_count > 1 && on.reject() },
-    { keys: "g", label: "Combine the picked claims", run: () => ready && on.aggregate() },
     { keys: "delete", label: "Delete the entity", run: () => ready && on.remove() },
     { keys: "e", label: "Edit the canonical name", run: () => nameRef.current?.focus() },
     { keys: "f", label: "Search entities", run: () => searchRef.current?.focus() },
@@ -190,7 +183,7 @@ function EntitiesTool({ tool }) {
         }
         list={listPanel}
         main={<EntityDetail detail={detail} selectedId={selectedId} picked={picked} saving={saving} reads={tool.reads} on={on} />}
-        side={<EditPanel detail={detail} saving={saving} nameRef={nameRef} pickedCount={pickedIds.length} on={on} />}
+        side={<EditPanel detail={detail} saving={saving} nameRef={nameRef} on={on} />}
         listWidth={{ initial: 320 }}
       />
       <DialogHost

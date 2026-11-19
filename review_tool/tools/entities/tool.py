@@ -2,8 +2,8 @@
 
 The owner checks how step 4 grouped the spellings of agencies, clinics, countries and
 services: merges, splits, renames, accepts or rejects them, fixes contacts, excludes or moves
-claims, deletes claims and groups near-duplicate claims for step 5. Endpoints, under
-``/api/entities`` (view = ``status, flag, q, sort, order``; see ``store.helpers``):
+claims and deletes claims. Endpoints, under ``/api/entities`` (view = ``status, flag, q, sort,
+order``; see ``store.helpers``):
 
 - ``GET  /summary``                              counters, the file read, analysis coverage
 - ``GET  /entities?<view>&offset&limit``         one page of the list
@@ -16,12 +16,10 @@ claims, deletes claims and groups near-duplicate claims for step 5. Endpoints, u
   · ``/claims/exclude`` · ``/claims/include``
 - ``DELETE /entities/{id}?<view>`` · ``DELETE /claims/{claim_id}``
 - ``POST /deleted-names/restore`` ``{name}``
-- ``POST /aggregations`` · ``POST /aggregations/{id}/representative`` ·
-  ``POST /aggregations/{id}/decouple`` · ``DELETE /aggregations/{id}``
 
-Every change answers ``{entity_id, summary}`` (the entity to show next) or, for claim
-aggregations, ``{aggregation, summary}``. Unknown entity / member / claim → 404; a change that
-does not fit the current state → 409; a missing file → 409; a file locked by a step → 423.
+Every change answers ``{entity_id, summary}`` (the entity to show next). Unknown entity /
+member / claim → 404; a change that does not fit the current state → 409; a missing file →
+409; a file locked by a step → 423.
 """
 
 from __future__ import annotations
@@ -52,7 +50,6 @@ from utils.paths import ENTITY_ANALYSIS_PATH
 
 CLAIMS_KEY = "claims"
 ENTITIES_KEY = "entities"
-AGGREGATIONS_KEY = "claim_aggregations"
 
 
 class ViewBody(BaseModel):
@@ -120,22 +117,11 @@ class MoveClaimsRequest(ClaimsRequest):
     target_entity_id: str | None = None  # None = a new entity
 
 
-class AggregationRequest(BaseModel):
-    claim_ids: list[str]
-    representative: str
-
-
-class ClaimRequest(BaseModel):
-    claim_id: str
-
-
 class EntitiesTool:
     NAME = "entities"
     TITLE = "Entities"
     READS = (CLAIMS_KEY, ENTITIES_KEY)
-    # The claim aggregations file is the tool's own (created by the first claim group), so it
-    # is not a read the frame reports as missing; the store still loads and follows it.
-    WRITES = (ENTITIES_KEY, AGGREGATIONS_KEY)
+    WRITES = (ENTITIES_KEY,)
 
     def __init__(
         self,
@@ -151,13 +137,12 @@ class EntitiesTool:
             entities.edited,
             claims.original,
             claims.edited,
-            graph.node(AGGREGATIONS_KEY).original,
             analysis_path,
         )
         # The analysis cache is watched too: a step-4 run that re-analyzed claims is picked up.
         self._handle: StoreHandle[EntityStore] = StoreHandle(
             factory,
-            (*graph.files(*self.READS, AGGREGATIONS_KEY), analysis_path),
+            (*graph.files(*self.READS), analysis_path),
             lock_paths=graph.files(*self.WRITES),
             lock_timeout=lock_timeout,
         )
@@ -184,16 +169,10 @@ class EntitiesTool:
             ("/entities/{entity_id}/claims/exclude", self.exclude_claims),
             ("/entities/{entity_id}/claims/include", self.include_claims),
             ("/deleted-names/restore", self.restore_name),
-            ("/aggregations", self.create_aggregation),
-            ("/aggregations/{group_id}/representative", self.set_representative),
-            ("/aggregations/{group_id}/decouple", self.decouple_claim),
         ):
             router.add_api_route(path, endpoint, methods=["POST"])
         router.add_api_route("/entities/{entity_id}", self.delete_entity, methods=["DELETE"])
         router.add_api_route("/claims/{claim_id}", self.delete_claim, methods=["DELETE"])
-        router.add_api_route(
-            "/aggregations/{group_id}", self.delete_aggregation, methods=["DELETE"]
-        )
         self.spec = ToolSpec(
             name=self.NAME, title=self.TITLE, router=router, reads=self.READS, writes=self.WRITES
         )
@@ -308,28 +287,6 @@ class EntitiesTool:
     def restore_name(self, body: MemberRequest) -> dict[str, Any]:
         with self._change() as store:
             return self._answer(store, store.restore_name(body.name))
-
-    def create_aggregation(self, body: AggregationRequest) -> dict[str, Any]:
-        with self._change() as store:
-            group = store.aggregations.create(
-                body.claim_ids, body.representative, store.claim_usable
-            )
-            return {"aggregation": group, "summary": store.summary()}
-
-    def set_representative(self, group_id: str, body: ClaimRequest) -> dict[str, Any]:
-        with self._change() as store:
-            group = store.aggregations.set_representative(group_id, body.claim_id)
-            return {"aggregation": group, "summary": store.summary()}
-
-    def decouple_claim(self, group_id: str, body: ClaimRequest) -> dict[str, Any]:
-        with self._change() as store:
-            group = store.aggregations.decouple(group_id, body.claim_id)
-            return {"aggregation": group, "summary": store.summary()}
-
-    def delete_aggregation(self, group_id: str) -> dict[str, Any]:
-        with self._change() as store:
-            store.aggregations.delete(group_id)
-            return {"aggregation": None, "summary": store.summary()}
 
 
 @contextmanager

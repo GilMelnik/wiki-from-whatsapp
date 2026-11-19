@@ -187,44 +187,15 @@ def test_delete_entity_records_names_and_can_be_undone(tool: EntitiesSetup) -> N
 
 
 def test_delete_claim_removes_it_everywhere(tool: EntitiesSetup) -> None:
-    tool.post("/aggregations", {"claim_ids": [DS1, DS2], "representative": DS1})
     answer = tool.delete(f"/claims/{DS2}")
-    assert answer["summary"]["deleted_claims"] == 1 and answer["summary"]["aggregations"] == 0
+    assert answer["summary"]["deleted_claims"] == 1
     assert DS2 not in tool.shown_claims("e0000", "David Shield")
     assert DS2 not in tool.shown_claims("e0001", "ORM")
     saved = tool.saved()
     consistent(saved)
     assert saved["deleted_claims"] == [DS2] and DS2 not in saved["claim_entities"]
-    aggregations = json.loads(tool.aggregations.read_text(encoding="utf-8"))
-    assert aggregations["aggregations"] == []  # a group left with one claim dissolves
     tool.delete(f"/claims/{DS2}", expect=409)
     tool.delete("/claims/does-not-exist", expect=404)
-
-
-def test_manual_aggregation_folds_claims_and_can_be_edited(tool: EntitiesSetup) -> None:
-    tool.post("/aggregations", {"claim_ids": [DS1], "representative": DS1}, expect=409)
-    tool.post("/aggregations", {"claim_ids": [DS1, DS2], "representative": DS5}, expect=409)
-    created = tool.post("/aggregations", {"claim_ids": [DS1, DS2, DS6], "representative": DS2})
-    group = created["aggregation"]
-    assert tool.shown_claims("e0000", "David Shield") == [DS2, DS5]
-    rep = next(
-        c for c in tool.member("e0000", "David Shield")["claims"]["claims"] if c["claim_id"] == DS2
-    )
-    assert rep["aggregation"]["count"] == 3
-    tool.post("/aggregations", {"claim_ids": [DS1, DS5], "representative": DS1}, expect=409)
-
-    tool.post(f"/aggregations/{group['id']}/decouple", {"claim_id": DS6})
-    assert tool.shown_claims("e0000", "David Shield") == [DS2, DS5, DS6]
-    tool.post(f"/aggregations/{group['id']}/representative", {"claim_id": DS1})
-    assert tool.shown_claims("e0000", "David Shield") == [DS1, DS5, DS6]
-    answer = tool.post(f"/aggregations/{group['id']}/decouple", {"claim_id": DS2})
-    assert answer["aggregation"] is None  # one claim left: dissolved
-    assert tool.shown_claims("e0000", "David Shield") == [DS1, DS2, DS5, DS6]
-    saved = json.loads(tool.aggregations.read_text(encoding="utf-8"))
-    assert saved["aggregations"] == [] and saved["metadata"]["count"] == 0
-    second = tool.post("/aggregations", {"claim_ids": [DS3, DS4], "representative": DS4})
-    tool.delete(f"/aggregations/{second['aggregation']['id']}")
-    tool.delete(f"/aggregations/{second['aggregation']['id']}", expect=404)
 
 
 def test_old_members_without_claim_lists_are_made_explicit(tmp_path: Path) -> None:

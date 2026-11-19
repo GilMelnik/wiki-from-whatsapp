@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from review_tool.artifacts import GRAPH
 from review_tool.toolset import TOOL_SPECS
 from step_4_entities.mentions import SimpleAnalyzer
 from step_4_entities.run import run
@@ -36,15 +35,14 @@ def tool(tmp_path: Path) -> EntitiesSetup:
 def test_tool_is_hosted_by_the_server() -> None:
     spec = next(spec for spec in TOOL_SPECS if spec.name == "entities")
     assert spec.reads == ("claims", "entities")
-    assert spec.writes == ("entities", "claim_aggregations")
-    assert GRAPH.node("claim_aggregations").original.name == "claim_aggregations.json"
+    assert spec.writes == ("entities",)
 
 
 def test_missing_files_still_register_and_answer_409(tmp_path: Path) -> None:
     setup = EntitiesSetup(tmp_path, with_claims=False, with_entities=False, with_cache=False)
     tools = setup.client.get("/api/tools").json()
     assert tools[0]["name"] == "entities" and tools[0]["title"] == "Entities"
-    assert tools[0]["missing"] == ["claims", "entities"]  # the aggregations file is optional
+    assert tools[0]["missing"] == ["claims", "entities"]
     for path in ("/summary", "/entities?limit=5", "/entities/e0000", "/deleted-names"):
         response = setup.client.get(f"/api/entities{path}")
         assert response.status_code == 409, path
@@ -58,7 +56,7 @@ def test_reads_never_create_the_edited_file(tool: EntitiesSetup) -> None:
     tool.get("/entities/e0000")
     tool.get("/entities/e0000/claims", name="David Shield")
     tool.get("/deleted-names")
-    assert not tool.edited.exists() and not tool.aggregations.exists()
+    assert not tool.edited.exists()
     assert tool.get("/summary")["file"] == "entities.json"
 
 

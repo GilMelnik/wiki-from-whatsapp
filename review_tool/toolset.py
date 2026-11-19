@@ -12,7 +12,6 @@ from review_tool.artifacts import GRAPH
 from review_tool.registry import ToolSpec
 from review_tool.steps import SERVED_STEPS
 from review_tool.tools.entities.tool import EntitiesTool
-from review_tool.tools.groups.tool import GroupsTool
 from review_tool.tools.pii.tool import PiiTool
 from review_tool.tools.plan.tool import PlanTool
 from review_tool.tools.status.tool import StatusTool
@@ -31,7 +30,6 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
     TaggedTool(GRAPH).spec,
     PiiTool(GRAPH).spec,
     EntitiesTool(GRAPH).spec,
-    GroupsTool(GRAPH).spec,
     PlanTool(GRAPH).spec,
     SuggestionsTool(GRAPH).spec,
 )
