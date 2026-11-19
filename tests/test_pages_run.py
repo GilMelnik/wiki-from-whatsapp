@@ -14,7 +14,7 @@ from review_tool.steps import SERVED_STEPS
 from step_6_plan import operations
 from step_7_write_pages.checks import cited_ids
 from step_9_site.content import Site
-from tests.pages_fixtures import IDS, FakeWriter, PagesWorkspace, main_ids_in, points_of
+from tests.pages_fixtures import IDS, SECRET, FakeWriter, PagesWorkspace, main_ids_in, points_of
 from utils.llm_client import _flatten
 from utils.okf import validate_front_matter
 
@@ -48,7 +48,7 @@ def _make_newer(ws: PagesWorkspace) -> None:
     os.utime(ws.sources.claims, ns=(stamp, stamp))
 
 
-def test_first_run_writes_c9_pages_that_step_9_accepts(ws: PagesWorkspace) -> None:
+def test_first_run_writes_c9_pages(ws: PagesWorkspace) -> None:
     payload = ws.pages()
     assert list(payload["pages"]) == PAGES
     for page_id, page in payload["pages"].items():
@@ -65,11 +65,18 @@ def test_first_run_writes_c9_pages_that_step_9_accepts(ws: PagesWorkspace) -> No
         assert payload["metadata"]["inputs"][page_id] == page["input_fingerprint"]
         assert "report" in payload["metadata"]["pages"][page_id]
     assert not ws.artifact.edited.exists()  # reconcile creates no edited copy
+    assert SECRET not in ws.artifact.original.read_text(encoding="utf-8")  # no claim / thread id
+    assert payload["metadata"]["run"]["write"] == 4
+    assert all("]:" not in page["body_md"] for page in payload["pages"].values())
+    assert set(payload["metadata"]["sources"]) == {"claims", "entities", "audit", "plan",
+                                                   "assignments"}
+
+
+def test_step_9_accepts_the_written_pages(ws: PagesWorkspace) -> None:
+    payload = ws.pages()
     site = Site(ws.plan(), payload["pages"], ws.claims(), ("2024-01-01T10:00:00", "2024-03-01T10:00:00"))
     assert not [i for i in site.issues if i["issue"].startswith("broken")]
     assert not [i for i in site.issues if i["issue"].endswith("_reference")]
-    assert payload["metadata"]["run"]["write"] == 4
-    assert all("]:" not in page["body_md"] for page in payload["pages"].values())
 
 
 def test_participant_counts_and_baked_definitions_change_no_page(ws: PagesWorkspace) -> None:

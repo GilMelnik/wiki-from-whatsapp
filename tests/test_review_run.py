@@ -117,6 +117,7 @@ def test_the_prompt_never_carries_identities_and_the_schema_is_strict(ws: Review
     reviewer = FakeReviewer([])
     ws.review(reviewer)
     assert reviewer.passes() == ["before", "during", "cross"]
+    assert SECRET not in ws.suggestions.original.read_text(encoding="utf-8")
     for call in reviewer.calls:
         prompt = call["system"] + call["user"]
         assert SECRET not in prompt and "t-SECRET" not in prompt and "reaction" not in prompt
