@@ -97,16 +97,16 @@ def _rules(**changes: Any) -> AnswerRules:
 
 
 ANSWER = {"body": "פתיח.\n\nאחד.[^g-00000001][^g-00000002] שניים.[^g-00000003][^g-00000004]\n",
-          "points": [{"kind": "fact", "statement": f"נקודה {gid}", "groups": [gid]} for gid in IDS],
+          "points": [{"kind": "fact", "statement": f"נקודה {sid}", "claims": [sid]} for sid in IDS],
           "left_out": []}
 
 
 def test_edits_that_break_a_check_send_the_body_back() -> None:
     told = {"body": "פתיח.\n\nאחד.[^g-00000001] שניים[^g-00000002] וגם שלושה[^g-00000001]. "
                     "ארבע.[^g-00000003] חמש.[^g-00000004]\n",
-            "points": [{"kind": "fact", "statement": "נקודה", "groups": IDS[:2]},
-                       {"kind": "fact", "statement": "עוד", "groups": IDS[2:3]},
-                       {"kind": "fact", "statement": "ועוד", "groups": IDS[3:]}],
+            "points": [{"kind": "fact", "statement": "נקודה", "claims": IDS[:2]},
+                       {"kind": "fact", "statement": "עוד", "claims": IDS[2:3]},
+                       {"kind": "fact", "statement": "ועוד", "claims": IDS[3:]}],
             "left_out": []}
     assert problems(told, _rules()) == []
     split = edit("שניים[^g-00000002] וגם שלושה", "שניים[^g-00000002]. וגם שלושה")

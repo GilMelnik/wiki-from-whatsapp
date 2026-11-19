@@ -239,14 +239,15 @@ def build_front_matter(
       generated {by: ``producer/model``, at} (``at`` = last content change, so keep it
       unchanged when the page is regenerated from identical input);
       verified [{by: ``human:<id>``|``process:<id>``, at}] (optional, review tool);
-      sources [{id: C6 ``group_id``, resource: ``claim-group:<group_id>``, usage_count:
-      distinct participants who voiced the claim = C6 supporter_count + opposer_count,
-      last_modified: C6 ``last_date``, title?}]; usage_window {from, to} (optional; chat span);
+      sources [{id: C6 ``short_id``, resource: ``pages.source_resource_prefix`` + the short
+      id (``claim:<short_id>``), usage_count: distinct participants who voiced the claim = C6
+      supporter_count + opposer_count, last_modified: C6 ``last_date``, title?}];
+      usage_window {from, to} (optional; chat span);
       stale_after (default: ``generated.at`` + ``pages.stale_after_days``).
     Extension keys (our own, no personal data; day values are ``YYYY-MM-DD``):
       aliases {he, en}: other names for retrieval (C7 ``pages[id].aliases``);
-      entities: canonical entity names (union of C6 ``entities``; never people);
-      claims {total: number of claim groups, supporting / opposing: sums of C6
+      entities: canonical entity names (union of C6 ``entity_names``; never people);
+      claims {total: number of claims, supporting / opposing: sums of C6
       supporter_count / opposer_count, first_claim_at / last_claim_at: min first_date /
       max last_date} - time coverage and disagreement level (opposing share);
       related [{slug: page_id, relation: snake_case}] and path [{id, title}]: place in the

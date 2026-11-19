@@ -30,7 +30,7 @@ def make_fm(**overrides: Any) -> dict[str, Any]:
         "sources": [
             {
                 "id": "g-1a2b3c4d",
-                "resource": "claim-group:g-1a2b3c4d",
+                "resource": "claim:g-1a2b3c4d",
                 "usage_count": 14,
                 "last_modified": "2026-10-02",
             }
@@ -124,7 +124,7 @@ def test_validate_allows_unknown_keys_and_render_preserves_them() -> None:
 
 
 def test_make_fm_does_not_alias_inputs() -> None:
-    sources = [{"id": "g-1", "resource": "claim-group:g-1"}]
+    sources = [{"id": "g-1", "resource": "claim:g-1"}]
     fm = make_fm(sources=sources)
     fm["sources"][0]["id"] = "changed"
     assert sources[0]["id"] == "g-1"
@@ -275,7 +275,7 @@ def test_mkdocs_strict_build_renders_none_of_the_front_matter(tmp_path: Path) ->
         {"index.md": render_page(fm, body), "page.md": render_page(make_fm(title="עמוד שני"), "# שני\n\nעוד\n")},
     )
     hidden = [
-        "okf_version", "wiki-page", "סיכום-סודי-למכונות", "שאלה-סודית", "ישות-סודית", "claim-group:",
+        "okf_version", "wiki-page", "סיכום-סודי-למכונות", "שאלה-סודית", "ישות-סודית", "claim:g-1a2b3c4d",
         "g-1a2b3c4d", "wiki-from-whatsapp/test-model", "stale_after", "usage_window", "2027-05-09",
         "sibling", "first_claim_at",
     ]  # fmt: skip

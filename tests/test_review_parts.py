@@ -15,7 +15,7 @@ from step_6_plan.model import iter_nodes
 from step_8_review.inputs import REVIEW_CONFIG
 from step_8_review.parts import CROSS_KINDS, cut
 from step_8_review.proposals import answer_schema
-from tests.pages_fixtures import SECRET
+from tests.pages_fixtures import IDS, SECRET
 from tests.review_fixtures import FakeReviewer, ReviewWorkspace, flat, sentence_a, valid_answers
 from utils.paths import resolve
 
@@ -71,17 +71,17 @@ def test_a_part_reads_its_pages_with_their_evidence_and_the_whole_plan(
     ws.review(reviewer)
     before = reviewer.calls[0]["user"]
     assert '<part id="before" pages="agencies, costs">' in before
-    assert sentence_a("g-00000000") in before and sentence_a("g-00000002") not in before
+    assert sentence_a(IDS[0]) in before and sentence_a(IDS[2]) not in before
     assert '<page id="clinics"' not in before and "- page clinics |" in before  # the plan only
-    assert "g-00000004 | mention -> agencies (full line on that page)" in before
+    assert f"{IDS[4]} | mention -> agencies (full line on that page)" in before
     assert "Synthetic claim number 0 " in before and "Synthetic claim number 2 " not in before
     assert "ONE PART" in reviewer.calls[0]["system"]
-    # Alone, costs gets the full line of the group whose main page is outside its part.
+    # Alone, costs gets the full line of the claim whose main page is outside its part.
     monkeypatch.setitem(REVIEW_CONFIG["part"], "max_input_tokens", 1)
     reviewer = FakeReviewer([])
     ws.review(reviewer)
     costs = next(call["user"] for call in reviewer.calls if call["pass_id"] == "costs")
-    assert "g-00000004 | mention -> agencies | " in costs and "full line on that page" not in costs
+    assert f"{IDS[4]} | mention -> agencies | " in costs and "full line on that page" not in costs
 
 
 def test_the_cross_pass_reads_points_not_bodies(ws: ReviewWorkspace) -> None:
@@ -90,8 +90,8 @@ def test_the_cross_pass_reads_points_not_bodies(ws: ReviewWorkspace) -> None:
     cross = next(call for call in reviewer.calls if call["pass_id"] == "cross")
     user = cross["user"]
     assert '<page id="agencies" title=' in user and 'labels="' in user
-    assert "- fact | נקודה g-00000000 | g-00000000" in user and "- page clinics |" in user
-    assert "<body>" not in user and "<groups" not in user and "Synthetic claim" not in user
+    assert f"- fact | נקודה {IDS[0]} | {IDS[0]}" in user and "- page clinics |" in user
+    assert "<body>" not in user and "<claims" not in user and "Synthetic claim" not in user
     assert SECRET not in user and "never propose a `mistake`" in cross["system"]
     assert cross["schema"] == answer_schema(CROSS_KINDS) and "mistake" not in CROSS_KINDS
 
@@ -120,7 +120,7 @@ def test_pages_without_points_are_left_out_of_the_cross_pass_and_listed(ws: Revi
 
 def test_a_cross_pass_never_keeps_a_mistake_and_no_pass_names_what_it_did_not_see(
         ws: ReviewWorkspace) -> None:
-    outside = flat("contradiction", groups_a=["g-00000000"], groups_b=["g-00000002"],
+    outside = flat("contradiction", claims_a=[IDS[0]], claims_b=[IDS[2]],
                    pages=["agencies", "clinics"], clash="סותרות", correction="שני הצדדים")
     result = ws.review(FakeReviewer([], by_pass={"cross": [valid_answers()[0]],
                                                  "before": [outside]}))

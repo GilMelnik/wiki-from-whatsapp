@@ -46,6 +46,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from step_6_plan.claim_records import ClaimSources
 from step_7_write_pages.checks import strip_definitions
 from step_7_write_pages.inputs import Corpus, PageContext
 from step_8_review.inputs import REVIEW_FINGERPRINT, effective_pages, page_fingerprint
@@ -133,14 +134,14 @@ class ProofreadPass:
                 continue
             context = corpus.context(page_id, catalogue)
             if context is None:
-                logger.warning(f"{page_id}: no claim groups on this page any more (run step 7); "
+                logger.warning(f"{page_id}: no claims on this page any more (run step 7); "
                                "not proofread")
                 continue
             self.due.append(DuePage(page_id, pages[page_id], context, done, len(new)))
 
     @property
     def sources(self) -> tuple[Path, ...]:
-        return (*self.corpus.sources, self.pages_path)
+        return (*self.corpus.sources.values(), self.pages_path)
 
     def estimate(self) -> list[dict[str, Any]]:
         return [{"page": due.page_id, "chars": prompt_chars(len(due.body)),
@@ -200,7 +201,7 @@ def run(
     *,
     pages_artifact: Artifact = WIKI_PAGES,
     record_path: Path = PROOFREAD_RECORD,
-    aggregated_path: Path | None = None,
+    sources: ClaimSources = ClaimSources(),
     plan_path: Path | None = None,
     assignments_path: Path | None = None,
     only: Collection[str] | None = None,
@@ -210,7 +211,9 @@ def run(
 ) -> dict[str, Any]:
     """Proofread every page holding text that was never proofread; see the module docstring.
 
-    Inputs default to the effective pages, groups, plan and assignments. ``estimate``: no call,
+    Inputs default to the effective pages, plan and assignments; ``sources``: the files the
+    claim records are joined from (default: the effective claims and entities, the audit and
+    the manual contradictions). ``estimate``: no call,
     nothing written; returns ``estimate`` (``page``, ``chars`` of the prompt, ``new_sentences``)
     and ``calls``. ``only``: page ids (an unknown one raises ``ValueError``). ``use_batch=False``
     (``--sync``): one call per page. ``llm`` defaults to the ``proofread`` stage client.
@@ -222,7 +225,7 @@ def run(
     if not PROOFREAD_CONFIG["enabled"]:
         logger.info("Proofreading is off (proofread.enabled: false); nothing to do")
         return {"enabled": False, "calls": 0, "written": False}
-    corpus = Corpus.load(aggregated_path, plan_path, assignments_path)
+    corpus = Corpus.load(sources, plan_path, assignments_path)
     job = ProofreadPass(corpus, pages_artifact, only, logger)
     stage = PROOFREAD_CONFIG["stage"]
     batch = use_batch and (llm.supports_batch() if llm is not None else batch_available(stage))

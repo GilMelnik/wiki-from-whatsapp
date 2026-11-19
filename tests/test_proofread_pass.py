@@ -15,7 +15,7 @@ from step_7_write_pages.checks import sentences
 from step_8_review.proofread import MOVED, run
 from step_8_review.proofreader import PROOFREAD_CONFIG, prompt_chars
 from step_10_update.estimate import Estimator
-from tests.pages_fixtures import FakeProofreader, FakeWriter, main_ids_in, points_of
+from tests.pages_fixtures import IDS, FakeProofreader, FakeWriter, main_ids_in, points_of
 from tests.review_fixtures import (
     FakeReviewer,
     ReviewWorkspace,
@@ -62,13 +62,13 @@ def ws(tmp_path: Path) -> ReviewWorkspace:
 
 
 def record_path(ws: ReviewWorkspace) -> Path:
-    return ws.groups_path.parent / "proofread.json"
+    return ws.root / "proofread.json"
 
 
 def proofread(ws: ReviewWorkspace, llm: FakeProofreader | None = None, **kwargs: Any
               ) -> dict[str, Any]:
     return run(pages_artifact=ws.artifact, record_path=record_path(ws),
-               aggregated_path=ws.groups_path, plan_path=resolve(ws.plan_artifact),
+               sources=ws.sources, plan_path=resolve(ws.plan_artifact),
                assignments_path=ws.assignments_path, llm=llm or FakeProofreader(), **kwargs)
 
 
@@ -182,9 +182,9 @@ def test_step_7_keeps_the_proofread_text_and_an_update_sends_only_its_new_senten
     assert ws.run(llm=writer)["written"] is False and writer.calls == []
     assert ws.run(estimate=True, count_tokens=count_tokens)["estimate"] == []
     assert ws.pages(edited=True)["pages"]["costs"]["body_md"].startswith(proofread_lead("costs"))
-    groups = ws.groups()
-    groups[0]["supporter_count"] += 1  # agencies changes: an update
-    ws.write_groups(groups)
+    claims = ws.claims()
+    claims[0]["supporter_count"] += 1  # agencies changes: an update
+    ws.write_claims(claims)
     assert ws.run(update_llm=FakeWriter("fake-update", respond=adds(NEW)))["update"] == 1
     agencies = ws.pages()["pages"]["agencies"]
     assert agencies["body_md"].startswith(proofread_lead("agencies"))  # from the effective text
@@ -213,14 +213,14 @@ def test_the_review_does_not_become_due_and_marks_nothing(ws: ReviewWorkspace) -
     assert ws.review(FakeReviewer([]), estimate=True)["calls"] == 1
 
 
-FIXED = "הקבוצה g-00000004 מספרת על הניסיון השני.[^g-00000004]"
+FIXED = f"הטענה {IDS[4]} מספרת על הניסיון השני.[^{IDS[4]}]"
 
 
 def test_an_apply_after_proofreading_works_on_the_proofread_text(ws: ReviewWorkspace) -> None:
     ws.review(FakeReviewer(valid_answers()))
     proofread(ws, FakeProofreader(lead_edit))
     mistake = next(s for s in ws.suggestions_payload()["suggestions"] if s["kind"] == "mistake")
-    ws.applier(FakeWriter("fake-apply", respond=corrector(sentence_a("g-00000004"), FIXED))
+    ws.applier(FakeWriter("fake-apply", respond=corrector(sentence_a(IDS[4]), FIXED))
                ).apply(mistake)
     page = ws.effective_page("agencies")
     assert page["body_md"].startswith(proofread_lead("agencies")) and FIXED in page["body_md"]
@@ -230,7 +230,7 @@ def test_an_apply_after_proofreading_works_on_the_proofread_text(ws: ReviewWorks
     proofread(ws, fake)
     assert fake.batches == [["agencies"]]
     page = ws.effective_page("agencies")
-    assert "מספרת על ניסיונה השני.[^g-00000004]" in page["body_md"]
+    assert f"מספרת על ניסיונה השני.[^{IDS[4]}]" in page["body_md"]
     assert page["language_edits"]["dropped"] == {"frozen": 1}
 
 
