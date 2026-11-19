@@ -67,7 +67,7 @@ of what is added), description (one Hebrew sentence) and scope (the complete new
 
 Rules:
 - Few and concrete: at most {PROPOSALS_CONFIG["max_proposals"]} proposals, each backed by the \
-claims it would house (claims: their ids, from the list only). A subject that two or more \
+claims it would house (their ids, in "claims", from the list only). A subject that two or more \
 claims share is worth a proposal; a single claim rarely is. Prefer "scope" over a new page \
 when an existing page is the natural home. Claims that are too vague or off-topic, or that clearly fit \
 a page as its scope is written (the classifier was only unsure), need no proposal.

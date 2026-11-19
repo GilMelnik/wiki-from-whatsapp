@@ -3,8 +3,9 @@ conversion of its flat answer into a C7 plan (``step_6_plan.model``).
 
 The model sees every claim record (``step_6_plan.claim_records``) as one compact line (short
 id, stance, distinct supporters and opposers, first and last month, entity names, claim text)
-and nothing about the people or the conversation behind it; when the list does not fit ``plan.max_input_tokens`` it sees
-a sample (``step_6_plan.fit``), with a note and the size guide scaled to the sample.
+and nothing about the people or the conversation behind it; when the list does not fit
+``plan.max_input_tokens`` it sees a sample (``step_6_plan.fit``), with a note and the size
+guide scaled to the sample.
 Structured output cannot express a recursive tree, so the model returns flat lists of category
 nodes and pages that point at their parent; the tree is built here.
 """
