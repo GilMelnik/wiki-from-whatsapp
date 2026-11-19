@@ -10,7 +10,7 @@ import pytest
 
 from review_tool.artifacts import GRAPH
 from review_tool.steps import SERVED_STEPS
-from step_6_plan.assign_rules import ASSIGN_CONFIG, decide_labels, decide_pages, groups_on_page
+from step_6_plan.assign_rules import ASSIGN_CONFIG, decide_labels, decide_pages, claims_on_page
 from step_6_plan.coverage import NONE
 from tests.assign_fixtures import FakeClassifier, Workspace, topic
 from tests.plan_fixtures import PAGE_IDS, FakeLLM, make_groups
@@ -80,7 +80,7 @@ def test_first_run_writes_c8_in_group_order(ws: Workspace) -> None:
     assert meta["summary"]["page_sizes"]["agencies"] == {"all": 3, "primary": 3}
     assert meta["summary"]["label_counts"] == {"usa": 6, "georgia": 0}
     assert payload["proposals"] == []
-    assert groups_on_page(payload["assignments"], "costs") == ["g-00000001", "g-00000005",
+    assert claims_on_page(payload["assignments"], "costs") == ["g-00000001", "g-00000005",
                                                                 "g-00000009"]
 
 

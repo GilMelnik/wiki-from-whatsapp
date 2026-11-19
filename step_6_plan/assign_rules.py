@@ -284,9 +284,10 @@ def apply_plan_edit(assignments: Mapping[str, Record], plan_edit: PlanEdit) -> A
     return follow_all(assignments, changes_from_edit(plan_edit), plan_edit.plan)
 
 
-def groups_on_page(assignments: Mapping[str, Record], page_id: str, *,
+def claims_on_page(assignments: Mapping[str, Record], page_id: str, *,
                    primary_only: bool = False) -> list[str]:
-    """The groups assigned to ``page_id``, in assignment order (= the C6 group order)."""
+    """The short ids of the claims assigned to ``page_id``, in assignment order (= the order of
+    the claim records, contract C6)."""
 
     return [gid for gid, record in assignments.items()
             if page_id in (record["pages"][:1] if primary_only else record["pages"])]
