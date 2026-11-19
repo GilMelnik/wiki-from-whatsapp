@@ -1,5 +1,5 @@
 """The owner's rule: a negative statement about a named entity that fewer than two members
-reported is withheld from every page, accounted for and reported. Synthetic groups and a fake
+reported is withheld from every page, accounted for and reported. Synthetic claims and a fake
 writer only (no paid call), and no entities file anywhere."""
 
 from __future__ import annotations
@@ -11,8 +11,9 @@ import pytest
 
 from step_7_write_pages.checks import problems, repair, rules_for
 from step_7_write_pages.inputs import Corpus
-from step_7_write_pages.withhold import REASON, withholds
+from step_7_write_pages.withhold import REASON, withheld_ids, withholds
 from step_8_review.inputs import ReviewInput
+from tests.claim_fixtures import claim_record
 from tests.pages_fixtures import FakeWriter, PagesWorkspace
 from tests.plan_fixtures import make_groups
 from tests.site_fixtures import issues_of, make_page, make_site_plan, run_site
@@ -22,30 +23,54 @@ AGENCY, CLINIC = "g-00000004", "g-00000006"   # lone complaints that name an ent
 TWO_REPORTS = "g-00000001"                     # a complaint two members made: published
 
 
-def _group(stance: str = "negative", supporters: int = 1, entities: tuple[str, ...] = ("e1",)
+def _claim(stance: str = "negative", supporters: int = 1, entities: tuple[str, ...] = ("e0001",)
            ) -> dict[str, Any]:
-    return {"group_id": "g-1", "stance": stance, "supporter_count": supporters,
-            "entities": list(entities)}
+    return claim_record(1, stance=stance, supporter_count=supporters, entity_ids=list(entities),
+                        entity_names=[f"Entity {e}" for e in entities])
 
 
-@pytest.mark.parametrize(("group", "withheld"), [
-    (_group(), True),
-    (_group(supporters=0), True),
-    (_group(supporters=1, entities=("e1", "e2")), True),
-    (_group(supporters=2), False),
-    (_group(supporters=7), False),
-    (_group(stance="positive"), False),
-    (_group(stance="neutral"), False),
-    (_group(stance="factual"), False),
-    (_group(entities=()), False),                    # nobody named: not covered
-    (_group(supporters=0, entities=()), False),
-    ({**_group(), "supporter_count": None}, True),   # no count counts as 0
-    ({**_group(), "supporter_count": None, "entities": None}, False),
-    ({"group_id": "g-1", "stance": "negative", "entities": ["e1"]}, True),
-    ({"group_id": "g-1", "stance": None, "entities": ["e1"]}, False),
+@pytest.mark.parametrize(("claim", "withheld"), [
+    (_claim(), True),
+    (_claim(supporters=0), True),
+    (_claim(supporters=1, entities=("e0001", "e0002")), True),
+    (_claim(supporters=2), False),
+    (_claim(supporters=7), False),
+    (_claim(stance="positive"), False),
+    (_claim(stance="neutral"), False),
+    (_claim(stance="factual"), False),
+    (_claim(entities=()), False),                    # nobody named: not covered
+    (_claim(supporters=0, entities=()), False),
 ])
-def test_the_rule(group: dict[str, Any], withheld: bool) -> None:
-    assert withholds(group) is withheld
+def test_the_rule(claim: dict[str, Any], withheld: bool) -> None:
+    assert withholds(claim) is withheld
+
+
+def test_the_ids_are_the_short_ids_of_the_withheld_claims() -> None:
+    lone, backed = _claim(), claim_record(5, supporter_count=2)
+    assert withheld_ids([lone, backed]) == {lone["short_id"]}
+
+
+@pytest.mark.parametrize("key", ["entity_ids", "stance", "supporter_count"])
+@pytest.mark.parametrize("stance", ["negative", "positive"])
+def test_a_record_without_a_key_of_the_rule_raises(key: str, stance: str) -> None:
+    claim = _claim(stance=stance)
+    del claim[key]
+    with pytest.raises(KeyError):
+        withholds(claim)
+
+
+def test_the_old_entities_key_raises_instead_of_releasing_a_lone_complaint() -> None:
+    claim = _claim()
+    claim["entities"] = claim.pop("entity_ids")
+    with pytest.raises(KeyError):
+        withholds(claim)
+
+
+def test_withheld_ids_needs_the_short_id() -> None:
+    claim = _claim()
+    del claim["short_id"]
+    with pytest.raises(KeyError):
+        withheld_ids([claim])
 
 
 @pytest.fixture()
