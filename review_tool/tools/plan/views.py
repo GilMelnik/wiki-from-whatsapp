@@ -1,5 +1,5 @@
 """Read-only shapes the plan tool shows: the tree as a flat list, branches, labels by kind,
-what changed since the model's proposal, the coverage numbers and claim-group summaries.
+what changed since the model's proposal, the coverage numbers and claim summaries.
 
 Nothing here edits a plan; every change goes through ``step_6_plan.operations``.
 """
@@ -19,9 +19,10 @@ COMPARED_FIELDS = {
     CATEGORY: ("title_he", "description", "parent_id"),
     "label": ("title_he", "description", "kind"),
 }
-GROUP_FIELDS = (
-    "group_id", "claim_text", "stance", "supporter_count", "opposer_count", "thread_count",
-    "entity_names", "first_date", "last_date",
+# What a claim row shows (C6 record keys); never ``claim_id`` / ``thread_id`` (message ids).
+CLAIM_FIELDS = (
+    "short_id", "claim_text", "stance", "supporter_count", "opposer_count", "entity_names",
+    "first_date", "last_date",
 )
 
 
@@ -144,14 +145,14 @@ def coverage_view(
 
     The report measured the proposal as the model made it, so each page says whether its
     numbers still describe it: ``measured`` (the page existed then), ``scope_changed`` (its
-    scope differs from the measured one) and ``merged_count`` (sample groups of pages merged
+    scope differs from the measured one) and ``merged_count`` (sample claims of pages merged
     into it since). The report's size flags, projected from the sample, are not shown: the
     exact sizes from the assignments replace them (``sizes``)."""
 
     if report is None:
         return None
     counts = report.get("page_counts") or {}
-    projected = report.get("projected_groups") or {}
+    projected = report.get("projected_claims") or {}
     measured_scopes = {pid: page["scope"] for pid, page in (proposal or {}).get("pages", {}).items()}
     pages = {}
     for page_id, page in plan["pages"].items():
@@ -164,21 +165,18 @@ def coverage_view(
             "merged_projected": sum(projected.get(old, 0) for old in absorbed),
             "scope_changed": page_id in measured_scopes and measured_scopes[page_id] != page["scope"],
         }
-    keys = ("sample_size", "total_groups", "confident_share", "none_share", "unsure_share",
+    keys = ("sample_size", "total_claims", "confident_share", "none_share", "unsure_share",
             "findings")
     return {
         **{key: report.get(key) for key in keys},
         "generated_at": (report.get("metadata") or {}).get("generated_at"),
-        "none_count": len(report.get("none_group_ids") or []),
-        "unsure_count": len(report.get("unsure_group_ids") or []),
+        "none_count": len(report.get("none_claims") or []),
+        "unsure_count": len(report.get("unsure_claims") or []),
         "pages": pages,
     }
 
 
-def group_summary(group: Mapping[str, Any]) -> dict[str, Any]:
-    """What the tool shows of one claim group (C6)."""
+def claim_summary(claim: Mapping[str, Any]) -> dict[str, Any]:
+    """What the tool shows of one claim record (C6)."""
 
-    return {
-        **{key: group.get(key) for key in GROUP_FIELDS},
-        "claim_count": len(group.get("member_claim_ids") or []),
-    }
+    return {key: claim[key] for key in CLAIM_FIELDS}

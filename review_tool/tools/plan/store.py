@@ -1,10 +1,11 @@
 """The plan tool's store: a thin layer over ``step_6_plan.operations`` and the assignments.
 
 It reads the effective plan (edited copy, else the original the planning step wrote), the
-effective claim groups (for the texts), the coverage report of the planning run and, when
-step 6b has run, the effective assignments (``assignments.AssignmentsFile``). A plan change
-runs one operation; the operation validates the whole new plan, so an invalid plan is never
-written. A group move or a proposal decision changes the assignments. Every change is
+claim records (C6, ``step_6_plan.claim_records``, for the texts), the coverage report of the
+planning run and, when step 6b has run, the effective assignments
+(``assignments.AssignmentsFile``). A plan change runs one operation; the operation validates
+the whole new plan, so an invalid plan is never written. A claim move or a proposal decision
+changes the assignments. Every change is
 written to the edited files only, after backing up the previous edited file
 (``guarded_write`` semantics; the caller already holds the locks). The original files are
 never touched: the plan's keeps the model's proposal, which the views compare against, the
@@ -28,7 +29,7 @@ from review_tool.tools.plan.assignment_views import REVIEW_CONFIG, AssignmentVie
 from review_tool.tools.plan.assignments import (
     AssignmentsConflict,
     AssignmentsFile,
-    GroupEdit,
+    ClaimEdit,
     changed_record,
     check_changes,
     describe_edit,
@@ -39,11 +40,12 @@ from review_tool.tools.plan.views import (
     branches,
     budget,
     changes,
+    claim_summary,
     coverage_view,
     flat_tree,
-    group_summary,
     labels_by_kind,
 )
+from step_6_plan.claim_records import ClaimSources, Record, load_claim_records
 from step_6_plan.model import (
     PLAN_CONFIG,
     PlanError,
@@ -62,7 +64,7 @@ logger = logging.getLogger(__name__)
 
 EDITED_BY = "plan_tool"
 KIND_NAMES = {"page": "page", "node": "category", "label": "label"}
-METADATA_SHOWN = ("top_level_rationale", "model", "generated_at", "group_count", "edited_at")
+METADATA_SHOWN = ("top_level_rationale", "model", "generated_at", "claim_count", "edited_at")
 # What a plan file that is not a walkable C7 plan raises while the views are built.
 _UNREADABLE = (KeyError, TypeError, AttributeError, StopIteration)
 
@@ -74,6 +76,17 @@ class PlanConflict(Exception):
 
 class ItemNotFound(Exception):
     """An id the plan does not have (404)."""
+
+
+def _claims_by_id(sources: ClaimSources) -> dict[str, Record] | None:
+    """The claim records by short id, ``None`` while an input they need (the claims or step
+    3's audit) does not exist yet: the tool then shows ids without text."""
+
+    try:
+        return {claim["short_id"]: claim for claim in load_claim_records(sources)}
+    except FileNotFoundError as exc:
+        logger.warning(f"Plan tool: no claim records yet, so no claim text: {exc}")
+        return None
 
 
 def _conflict(lead: str, error: PlanError) -> PlanConflict:
@@ -95,8 +108,7 @@ class PlanStore:
         self,
         plan_original: Path,
         plan_edited: Path,
-        groups_original: Path,
-        groups_edited: Path,
+        sources: ClaimSources,
         assignments_original: Path,
         assignments_edited: Path,
         coverage_path: Path,
@@ -110,11 +122,7 @@ class PlanStore:
             )
         self.plan: dict[str, Any] = read_json_file(self.source)
         self.proposal = read_json_file(plan_original) if plan_original.is_file() else None
-        groups_path = groups_edited if groups_edited.is_file() else groups_original
-        self.groups: dict[str, dict[str, Any]] | None = (
-            {group["group_id"]: group for group in read_json_file(groups_path)["groups"]}
-            if groups_path.is_file() else None
-        )
+        self.claims = _claims_by_id(sources)
         self.coverage_report = read_json_file(coverage_path) if coverage_path.is_file() else None
         self.assignments = AssignmentsFile(assignments_original, assignments_edited)
         self.history = history
@@ -132,12 +140,12 @@ class PlanStore:
 
         self.assignments.require()
         if self._view is None:
-            self._view = AssignmentView(self.plan, self.assignments.data, self.groups)
+            self._view = AssignmentView(self.plan, self.assignments.data, self.claims)
         return self._view
 
     def overview(self) -> dict[str, Any]:
         """Everything the tool shows about the plan except the example texts and the lists
-        of groups."""
+        of claims."""
 
         plan = self.plan
         latest = self._latest()
@@ -146,7 +154,7 @@ class PlanStore:
             "edited_exists": self.plan_edited.is_file(),
             "errors": validation_errors(plan),
             "undo": {"label": latest.label, "at": latest.at} if latest else None,
-            "groups_available": self.groups is not None,
+            "claims_available": self.claims is not None,
         }
         try:
             coverage = self._coverage()
@@ -164,10 +172,10 @@ class PlanStore:
                 "coverage": coverage,
                 "warnings": plan_warnings(
                     plan,
-                    group_ids=set(self.groups) if self.groups is not None else None,
+                    short_ids=set(self.claims) if self.claims is not None else None,
                     sizes=self.view.summary()["sizes"] if self.assignments.usable else None,
                 ),
-                "newer_groups": self._newer_groups(),
+                "newer_claims": self._newer_claims(),
                 "assignments": self._assignments_overview(),
             }
         except _UNREADABLE as exc:
@@ -182,17 +190,17 @@ class PlanStore:
                   "edited_exists": files.edited.is_file(), "problem": files.problem}
         return {**answer, **self.view.summary()} if files.usable else answer
 
-    def _newer_groups(self) -> dict[str, int] | None:
-        """Groups the planning model never saw (newer than the plan) and how many of them the
+    def _newer_claims(self) -> dict[str, int] | None:
+        """Claims the planning model never saw (newer than the plan) and how many of them the
         assignment step has placed already; ``None`` when the plan does not say."""
 
-        planned = self.plan["metadata"].get("planned_group_ids")
-        if planned is None or self.groups is None:
+        planned = self.plan["metadata"].get("planned_claims")
+        if planned is None or self.claims is None:
             return None
         planned_ids = set(planned)
-        newer = [gid for gid in self.groups if gid not in planned_ids]
+        newer = [sid for sid in self.claims if sid not in planned_ids]
         records = self.assignments.records if self.assignments.usable else {}
-        return {"count": len(newer), "assigned": sum(1 for gid in newer if gid in records)}
+        return {"count": len(newer), "assigned": sum(1 for sid in newer if sid in records)}
 
     def _readable_proposal(self) -> dict[str, Any] | None:
         if self.proposal is None or validation_errors(self.proposal):
@@ -204,8 +212,8 @@ class PlanStore:
 
     def page_detail(self, page_id: str) -> dict[str, Any]:
         """What judging a page's scope needs: once step 6b has run, its exact size, a sample of
-        its groups (least certain first) and the closest groups it did not get; the model's
-        example groups with their claim text, and the coverage numbers of the planning run."""
+        its claims (least certain first) and the closest claims it did not get; the model's
+        example claims with their text, and the coverage numbers of the planning run."""
 
         page = self.plan["pages"].get(page_id)
         if page is None:
@@ -213,7 +221,7 @@ class PlanStore:
         coverage = self._coverage()
         answer = {
             "page_id": page_id,
-            "examples": self._summaries(page["example_group_ids"]),
+            "examples": self._summaries(page["example_claims"]),
             "coverage": coverage["pages"][page_id] if coverage else None,
             "size": None,
             "sample": None,
@@ -222,37 +230,37 @@ class PlanStore:
         if not self.assignments.usable:
             return answer
         limit = REVIEW_CONFIG["scope_sample"]
-        sample = self.view.groups_list(scope="page", item_id=page_id, role="primary",
+        sample = self.view.claims_list(scope="page", item_id=page_id, role="primary",
                                        sort="uncertain", q="", offset=0, limit=limit)
         return {**answer, "size": self.view.summary()["sizes"][page_id],
-                "sample": sample["items"], "near": self.view.near_groups(page_id, limit)}
+                "sample": sample["items"], "near": self.view.near_claims(page_id, limit)}
 
-    def _summaries(self, group_ids: list[str]) -> list[dict[str, Any]]:
-        groups = self.groups or {}
+    def _summaries(self, short_ids: list[str]) -> list[dict[str, Any]]:
+        claims = self.claims or {}
         return [
-            group_summary(groups[gid]) if gid in groups else {"group_id": gid, "missing": True}
-            for gid in group_ids
+            claim_summary(claims[sid]) if sid in claims else {"short_id": sid, "missing": True}
+            for sid in short_ids
         ]
 
     def unplaced(self) -> dict[str, Any]:
-        """The sampled groups the coverage check could not place confidently, with text."""
+        """The sampled claims the coverage check could not place confidently, with text."""
 
         report = self.coverage_report or {}
         return {
-            "none": self._summaries(report.get("none_group_ids") or []),
-            "unsure": self._summaries(report.get("unsure_group_ids") or []),
+            "none": self._summaries(report.get("none_claims") or []),
+            "unsure": self._summaries(report.get("unsure_claims") or []),
         }
 
-    def groups_list(self, *, scope: str, item_id: str | None, role: str, sort: str, q: str,
+    def claims_list(self, *, scope: str, item_id: str | None, role: str, sort: str, q: str,
                     offset: int, limit: int) -> dict[str, Any]:
-        """One page of the groups on a page / with a label / on no page / waiting."""
+        """One page of the claims on a page / with a label / on no page / waiting."""
 
         view = self.view
         if scope in ("page", "label"):
             items = self.plan["pages"] if scope == "page" else self.plan["labels"]
             if item_id not in items:
                 raise ItemNotFound(f"The plan has no {scope} with the id {item_id}.")
-        return view.groups_list(scope=scope, item_id=item_id, role=role, sort=sort, q=q,
+        return view.claims_list(scope=scope, item_id=item_id, role=role, sort=sort, q=q,
                                 offset=offset, limit=limit)
 
     def proposals(self) -> dict[str, Any]:
@@ -344,24 +352,24 @@ class PlanStore:
                                       plan_before=plan_before, assignments_before=before))
         logger.info(f"Plan tool: {label}; saved {self.assignments.edited}")
 
-    def edit_groups(self, edit: GroupEdit) -> dict[str, Any]:
-        """Move the given groups (pins them, see ``assignments``); answers the new overview,
+    def edit_claims(self, edit: ClaimEdit) -> dict[str, Any]:
+        """Move the given claims (pins them, see ``assignments``); answers the new overview,
         the change in words and how many records changed (0: nothing to save)."""
 
         self.view  # noqa: B018 - requires a usable assignments file
         check_changes(edit.changes, self.plan)
         records = self.assignments.records
-        unknown = [gid for gid in edit.group_ids if gid not in records]
+        unknown = [sid for sid in edit.claims if sid not in records]
         if unknown:
             raise AssignmentsConflict(
-                "These groups have no assignment yet (they are new since the last assignment run, "
-                f"or no longer in the groups file); run the assignment step: {', '.join(unknown)}"
+                "These claims have no assignment yet (they are new since the last assignment run, "
+                f"or no longer among the claims); run the assignment step: {', '.join(unknown)}"
             )
         changed = {}
-        for gid in dict.fromkeys(edit.group_ids):
-            record = changed_record(records[gid], edit.changes, self.plan)
-            if record != records[gid]:
-                changed[gid] = record
+        for sid in dict.fromkeys(edit.claims):
+            record = changed_record(records[sid], edit.changes, self.plan)
+            if record != records[sid]:
+                changed[sid] = record
         label = describe_edit(edit, lambda item_id: title_of(self.plan, item_id))
         if changed:
             self._save_assignments(label, changed)

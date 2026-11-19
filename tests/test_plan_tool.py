@@ -15,7 +15,8 @@ from review_tool.toolset import TOOL_SPECS
 from step_6_plan import operations as ops
 from step_6_plan.model import PLAN_CONFIG
 from step_6_plan.operation_requests import quote
-from tests.plan_fixtures import make_groups, make_plan
+from tests.claim_fixtures import claim_records, write_claim_inputs
+from tests.plan_fixtures import make_plan, short_id_of
 from tests.review_tool_support import BASE_URL, build_app, locked_elsewhere
 from utils.json_io import write_json_file
 from utils.paths import BACKUPS_DIR
@@ -25,25 +26,29 @@ MERGE = {"op": "merge", "survivor_id": "agencies", "merged_ids": ["costs"]}
 
 
 def plan_graph(root: Path) -> ArtifactGraph:
+    """The plan tool's nodes; the claims and entities files are where ``write_claim_inputs``
+    puts them under ``root``."""
     return ArtifactGraph([
-        ArtifactNode("groups", "Groups", root / "groups.json", root / "groups_edited.json",
-                     "step_5", ()),
+        ArtifactNode("claims", "Claims", root / "claims.json", root / "claims_edited.json",
+                     "step_3", ()),
+        ArtifactNode("entities", "Entities", root / "entities.json",
+                     root / "entities_edited.json", "step_4", ("claims",)),
         ArtifactNode("plan", "Plan", root / "plan.json", root / "plan_edited.json", "step_6",
-                     ("groups",), curated=True),
+                     ("claims", "entities"), curated=True),
         ArtifactNode("assignments", "Assignments", root / "assignments.json",
-                     root / "assignments_edited.json", "step_6b", ("groups", "plan")),
+                     root / "assignments_edited.json", "step_6b", ("claims", "entities", "plan")),
     ])
 
 
 def coverage_report() -> dict[str, Any]:
     return {
-        "sample_size": 10, "total_groups": 100, "confident_share": 0.8, "none_share": 0.1,
+        "sample_size": 10, "total_claims": 100, "confident_share": 0.8, "none_share": 0.1,
         "unsure_share": 0.1,
         "page_counts": {"agencies": 5, "costs": 3, "clinics": 2, "hospital": 0},
-        "projected_groups": {"agencies": 50, "costs": 30, "clinics": 20, "hospital": 0},
+        "projected_claims": {"agencies": 50, "costs": 30, "clinics": 20, "hospital": 0},
         "small_pages": ["hospital"], "large_pages": ["agencies"],
-        "none_group_ids": ["g-00000003"], "unsure_group_ids": ["g-00000004", "g-gone"],
-        "findings": ["Page 'hospital' attracted only 0 of 10 sampled groups."],
+        "none_claims": [short_id_of(3)], "unsure_claims": [short_id_of(4), "g-gone"],
+        "findings": ["Page 'hospital' attracted only 0 of 10 sampled claims."],
         "metadata": {"generated_at": "2026-01-01T00:00:00+00:00"},
     }
 
@@ -55,14 +60,16 @@ class PlanSetup:
         node = self.graph.node("plan")
         self.original, self.edited = node.original, node.edited
         self.coverage = root / "coverage_report.json"
-        write_json_file({"groups": make_groups(), "metadata": {}}, root / "groups.json")
+        self.sources = write_claim_inputs(claim_records(), root)
         if with_plan:
             write_json_file(make_plan(), self.original)
         self.client = self.new_client()
 
     def new_client(self) -> TestClient:
         """A fresh tool (new store handle, empty history) on the same files, as after a restart."""
-        tool = PlanTool(self.graph, coverage_path=self.coverage, lock_timeout=SHORT_LOCK_TIMEOUT)
+        tool = PlanTool(self.graph, coverage_path=self.coverage, audit_path=self.sources.audit,
+                        contradictions_path=self.sources.contradictions,
+                        lock_timeout=SHORT_LOCK_TIMEOUT)
         app = build_app(self.root, specs=(tool.spec,), graph=self.graph)
         return TestClient(app, base_url=BASE_URL)
 
@@ -97,7 +104,7 @@ def children(overview: dict[str, Any], node_id: str) -> list[str]:
 
 def test_tool_is_hosted_by_the_server() -> None:
     spec = next(spec for spec in TOOL_SPECS if spec.name == "plan")
-    assert spec.reads == ("plan", "groups") and spec.writes == ("plan", "assignments")
+    assert spec.reads == ("plan", "claims", "entities") and spec.writes == ("plan", "assignments")
 
 
 def test_missing_plan_still_registers_and_answers_409(tmp_path: Path) -> None:
@@ -136,7 +143,7 @@ def test_overview_shows_tree_budget_labels_and_no_changes(setup: PlanSetup) -> N
     assert overview["label_kinds"] == [{"kind": "country", "label_ids": ["usa", "georgia"]}]
     assert overview["pages"]["costs"]["scope"] == "מה שייך לעמוד costs ומה לא."
     assert overview["changes"] == {"items": {}, "removed": []}
-    assert overview["groups_available"] is True
+    assert overview["claims_available"] is True
     codes = {w["code"]: w["ids"] for w in overview["warnings"]}
     assert codes == {"no_examples": ["hospital"]}
 
@@ -145,9 +152,10 @@ def test_page_detail_has_example_texts_and_coverage(setup: PlanSetup) -> None:
     detail = setup.get("/pages/agencies")
     assert detail["coverage"] is None
     assert (detail["size"], detail["sample"], detail["near"]) == (None, None, None)  # no 6b yet
-    assert [e["group_id"] for e in detail["examples"]] == ["g-00000000"]
+    assert [e["short_id"] for e in detail["examples"]] == [short_id_of(0)]
     assert detail["examples"][0]["claim_text"].startswith("Synthetic claim number 0")
-    assert detail["examples"][0]["claim_count"] == 1
+    assert "claim_count" not in detail["examples"][0]
+    assert "SECRET" not in json.dumps(detail)  # no claim or thread id reaches the page
     write_json_file(coverage_report(), setup.coverage)
     detail = setup.get("/pages/agencies")
     assert detail["coverage"] == {"measured": True, "count": 5, "projected": 50,
@@ -170,8 +178,29 @@ def test_coverage_is_read_against_todays_plan(setup: PlanSetup) -> None:
     codes = {w["code"] for w in setup.get("/plan")["warnings"]}
     assert not codes & {"small_page", "large_page", "fold_page", "split_page"}
     unplaced = setup.get("/coverage/unplaced")
-    assert [g["group_id"] for g in unplaced["none"]] == ["g-00000003"]
-    assert unplaced["unsure"][1] == {"group_id": "g-gone", "missing": True}
+    assert [c["short_id"] for c in unplaced["none"]] == [short_id_of(3)]
+    assert unplaced["unsure"][1] == {"short_id": "g-gone", "missing": True}
+
+
+def test_the_claim_texts_follow_every_input_of_the_claim_records(setup: PlanSetup) -> None:
+    """A Privacy edit (the edited claims file), an Entities edit and a missing audit are seen
+    at the next read, without a restart."""
+
+    def example(page_id: str = "agencies") -> dict[str, Any]:
+        return setup.get(f"/pages/{page_id}")["examples"][0]
+
+    assert example()["entity_names"] == []
+    claims = claim_records()
+    claims[0] = {**claims[0], "claim_text": "Scrubbed text.", "entity_ids": ["e0009"],
+                 "entity_names": ["Entity9"]}
+    edited = write_claim_inputs(claims, setup.root / "edited")
+    edited.claims.replace(setup.root / "claims_edited.json")
+    edited.entities.replace(setup.root / "entities_edited.json")
+    assert (example()["claim_text"], example()["entity_names"]) == ("Scrubbed text.", ["Entity9"])
+    setup.sources.audit.unlink()
+    overview = setup.get("/plan")
+    assert overview["claims_available"] is False and example() == {
+        "short_id": short_id_of(0), "missing": True}
 
 
 @pytest.mark.parametrize(
