@@ -5,8 +5,8 @@ The shape is the Worker's (``worker/wiki_index.schema.json``; field sources in
 with, which ``get_page`` puts before every page body), every plan label, then every published page in navigation
 order with its front-matter metadata, its resolved labels / related pages / out-links (only
 published pages) and its body as written, wiki links and ``[^g-…]`` marks kept, without
-references (a definition stored by an older step 7 is left out; marks of merged groups follow
-the group that holds them).
+references (a definition stored by an older step 7 is left out, and so is a mark of a claim
+that exists nowhere).
 """
 
 from __future__ import annotations

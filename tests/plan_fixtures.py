@@ -4,9 +4,6 @@ and fake model / classifier.
 The proposal is a 3-level tree: two top-level phases, one category under each, and pages
 under the categories, plus two labels of kind "country". Its example claims are the short ids
 of claim records 0, 1 and 2 (and one id no record has). Nothing here comes from real data.
-
-``make_groups`` (old step-5 groups) is kept only while tests of steps 7 to 9 still read groups
-(task 71b parts 2 and 3 switch them to claim records and then delete it).
 """
 
 from __future__ import annotations
@@ -20,31 +17,6 @@ from tests.claim_fixtures import claim_record, claim_records
 from utils.llm_client import Answer, Question
 
 PAGE_IDS = ("agencies", "costs", "clinics", "hospital")
-
-
-def make_groups(count: int = 12) -> list[dict[str, Any]]:
-    """``count`` C6 groups with synthetic English text and fields the prompt must not show.
-    Every negative group has two supporters at least, so the withhold rule leaves them all."""
-
-    return [
-        {
-            "group_id": f"g-{index:08x}",
-            "claim_text": f"Synthetic claim number {index} about topic {index % 4}.",
-            "representative_claim_id": f"t-SECRET{index}-abcd1234",
-            "stance": ("positive", "negative", "neutral", "factual")[index % 4],
-            "member_claim_ids": [f"t-SECRET{index}-abcd1234"],
-            "entities": [f"e{index:04d}"],
-            "entity_names": [f"Entity{index}"] if index % 2 else [],
-            "supporter_count": max(index % 5, 2) if index % 4 == 1 else index % 5,
-            "opposer_count": index % 2,
-            "first_date": "2023-01-05",
-            "last_date": "2024-06-01" if index % 3 else "2023-01-20",
-            "by_month": {"2023-01": {"supporters": 1, "opposers": 0}},
-            "thread_count": 1 + index % 2,
-            "contradicts": [],
-        }
-        for index in range(count)
-    ]
 
 
 def short_id_of(n: int) -> str:

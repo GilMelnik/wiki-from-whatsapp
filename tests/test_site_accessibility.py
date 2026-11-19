@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 from step_6_plan import operations
-from tests.site_fixtures import build_html, make_page, make_site_plan
+from tests.site_fixtures import IDS, build_html, make_page, make_site_plan
 from utils.config import PROJECT_ROOT, section
 
 SITE = section("site")
@@ -25,7 +25,7 @@ WHITE, BLACK = "#ffffff", "#000000"
 SLATE_BACKGROUND = "#1e2129"  # Material's dark page: hsla(232, 15%, 14%)
 TEXT_RATIO = 4.5
 BODY = (
-    "## רקע\n\nטענה.[^g-00000001] ראו [[clinics|המרפאות]].\n\n"
+    f"## רקע\n\nטענה.[^{IDS[1]}] ראו [[clinics|המרפאות]].\n\n"
     "| עמודה | עמודה שנייה |\n| --- | --- |\n| א | ב |\n"
 )
 

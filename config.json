@@ -594,8 +594,7 @@
         "date_range": "{first} – {last}",
         "participants_one": "משתתף אחד",
         "participants_many": "{count} משתתפים",
-        "conversations_one": "{participants} בשיחה",
-        "conversations_many": "{participants} ב־{count} שיחות"
+        "in_conversation": "{participants} בשיחה"
       },
       "about": {
         "file": "about.md",

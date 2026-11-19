@@ -248,7 +248,7 @@ def test_the_estimate_prices_proofreading_as_its_own_step(ws: ReviewWorkspace) -
 def test_the_site_names_the_pages_holding_text_never_proofread(
         tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
     plan = make_site_plan()
-    body = "פתיח.\n\nמשפט אחד.[^g-00000001]\n"
+    body = f"פתיח.\n\nמשפט אחד.[^{IDS[1]}]\n"
     done = make_page(plan, "costs", body)
     done["language_edits"] = {"model": "m", "applied": [], "dropped": {},
                               "sentences": sorted(fingerprint(s) for s in sentences(body))}

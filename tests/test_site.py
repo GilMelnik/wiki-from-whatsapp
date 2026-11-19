@@ -13,7 +13,8 @@ from step_6_plan import operations
 from step_9_site.agent_pages import twin_docs_path, twin_url
 from step_9_site.hebrew_search import prefix_variants
 from step_9_site.run import run, sync_docs
-from tests.site_fixtures import FIRST_MESSAGE, issues_of, make_page, make_site_plan, make_threads, run_site
+from tests.claim_fixtures import claim_records, write_claim_inputs
+from tests.site_fixtures import FIRST_MESSAGE, IDS, issues_of, make_page, make_site_plan, make_threads, run_site
 from utils.paths import Artifact
 from utils.threads_io import messages_period
 from utils.config import PROJECT_ROOT, section
@@ -22,7 +23,7 @@ from utils.okf import parse_page
 AGENCIES_BODY = (
     "## רקע\n\nראו [[costs|עלויות]], [[clinics]] ו-[[hospital|בית חולים]] וגם [[nowhere]].\n\n"
     'תגיות: [[label:usa|ארה"ב]] ו-[[label:georgia]]. קישור עצמי: [[agencies|כאן]].\n\n'
-    "קוד: `[[costs]]`\n\n```\n[[clinics]]\n```\n\nמקור.[^g-00000001]\n\n[^g-00000001]: קבוצה.\n"
+    f"קוד: `[[costs]]`\n\n```\n[[clinics]]\n```\n\nמקור.[^{IDS[1]}]\n\n[^{IDS[1]}]: טענה.\n"
 )
 
 
@@ -91,8 +92,8 @@ def test_wiki_links_are_resolved_outside_code(built: tuple[Path, dict[str, Any]]
     assert "[כאן](agencies.md)" in body
     assert "`[[costs]]`" in body and "```\n[[clinics]]\n```" in body
     # a body stored with its definition (older step 7): the stored text gives way to the reference
-    reference = f"[^g-00000001]: {section('site')['references']['start_mark']}g-00000001 · "
-    assert reference in body and "קבוצה." not in body
+    reference = f"[^{IDS[1]}]: {section('site')['references']['start_mark']}{IDS[1]} · "
+    assert reference in body and "טענה." not in body
 
 
 def test_front_matter_round_trips_unchanged(built: tuple[Path, dict[str, Any]]) -> None:
@@ -120,7 +121,7 @@ def test_home_page_presents_the_tree(built: tuple[Path, dict[str, Any]]) -> None
     assert meta["okf_version"] == section("pages")["okf_version"]
     assert meta["title"] == section("site")["mkdocs"]["site_name"]
     site = section("site")
-    # one plain paragraph (no box): the groups' dates (fixture group g-00000001), then the about link
+    # one plain paragraph (no box): the months of the first and the last message, then the about link
     intro = site["home"]["intro"].format(first="ינואר 2023", last="יוני 2024")
     assert body.split("\n\n")[0] == f"{intro} [{site['about']['home_link_text']}](about.md)."
     assert "!!!" not in body
@@ -150,7 +151,7 @@ def _home_sentence(first: str, last: str, about_href: str) -> str:
 
 
 def test_home_dates_are_those_of_the_first_and_the_last_message_not_of_the_claims(tmp_path: Path) -> None:
-    """The groups (claims) all end in 2024; the chat runs on to 2026: the sentence follows the chat, in the
+    """The claims all end in 2024; the chat runs on to 2026: the sentence follows the chat, in the
     markdown of the page and in its twin alike."""
     plan = make_site_plan()
     threads = make_threads("2026-08-31T23:59:00", "2022-10-08T20:49:00", "2025-01-02T10:00:00")
@@ -171,8 +172,8 @@ def test_home_dates_follow_the_edited_threads_file_when_there_is_one(
     original.parent.mkdir()
     original.write_text(json.dumps(make_threads("2020-01-01T10:00:00", "2020-02-01T10:00:00")), encoding="utf-8")
     monkeypatch.setattr("utils.paths.THREADS", Artifact(original, edited))
-    inputs = {name: tmp_path / file for name, file in
-              {"plan_path": "plan.json", "pages_path": "wiki_pages.json", "groups_path": "claims_aggregated.json"}.items()}
+    inputs = {"plan_path": tmp_path / "plan.json", "pages_path": tmp_path / "wiki_pages.json",
+              "sources": write_claim_inputs(claim_records(4), tmp_path)}
     run(**inputs, docs_dir=tmp_path / "docs", mkdocs_path=tmp_path / "mkdocs.yml")
     assert _read(tmp_path / "docs", "index.md")[1].split("\n\n")[0] == _home_sentence("ינואר 2020", "פברואר 2020", "about.md")
     edited.write_text(json.dumps(make_threads("2021-03-01T10:00:00", "2021-04-01T10:00:00")), encoding="utf-8")
@@ -187,7 +188,7 @@ def test_a_missing_conversations_file_stops_step_9_and_names_step_1(tmp_path: Pa
     run_site(inputs, plan, _pages(plan))
     with pytest.raises(FileNotFoundError, match=r"conversations \(step 1\)"):
         run(plan_path=inputs / "plan.json", pages_path=inputs / "wiki_pages.json",
-            groups_path=inputs / "claims_aggregated.json", threads_path=inputs / "absent.json",
+            sources=write_claim_inputs(claim_records(4), inputs), threads_path=inputs / "absent.json",
             docs_dir=tmp_path / "docs", mkdocs_path=tmp_path / "mkdocs.yml")
     assert not (tmp_path / "docs").exists() and not (tmp_path / "mkdocs.yml").exists()
 
@@ -233,7 +234,7 @@ def test_rerun_on_unchanged_inputs_writes_nothing(tmp_path: Path) -> None:
     stamps = {path: path.stat().st_mtime_ns for path in files}
     second = run_site(tmp_path, plan, _pages(plan))
     assert (second["written"], second["removed"]) == ([], [])
-    inputs = ("plan.json", "wiki_pages.json", "claims_aggregated.json", "threads.json")
+    inputs = ("plan.json", "wiki_pages.json", "claims.json", "entities.json", "audit.json", "threads.json")
     changed = [path for path in files if path.name not in inputs]
     assert all(path.stat().st_mtime_ns == stamps[path] for path in changed)
 

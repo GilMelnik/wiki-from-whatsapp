@@ -13,9 +13,8 @@ from step_7_write_pages.checks import problems, repair, rules_for
 from step_7_write_pages.inputs import Corpus
 from step_7_write_pages.withhold import REASON, withheld_ids, withholds
 from step_8_review.inputs import ReviewInput
-from tests.claim_fixtures import claim_record
+from tests.claim_fixtures import claim_record, claim_records
 from tests.pages_fixtures import IDS, FakeWriter, PagesWorkspace
-from tests.plan_fixtures import make_groups
 from tests.site_fixtures import issues_of, make_page, make_site_plan, run_site
 from utils.llm_client import _flatten
 
@@ -208,15 +207,15 @@ def test_a_sentence_resting_on_a_withheld_claim_is_deleted_whole() -> None:
     assert repairs == ["deleted a sentence resting on withheld claim(s) g-0000000w"]
 
 
-def test_step_9_reports_a_page_that_cites_a_withheld_group(tmp_path: Path) -> None:
+def test_step_9_reports_a_page_that_cites_a_withheld_claim(tmp_path: Path) -> None:
     plan = make_site_plan()
     pages = {"agencies": make_page(plan, "agencies", f"טקסט.[^{TWO_REPORTS}]\n"),
-             "costs": make_page(plan, "costs", "טקסט.[^g-00000002]\n")}
-    groups = make_groups(4)  # group 1: negative, two supporters, entity e0001
+             "costs": make_page(plan, "costs", f"טקסט.[^{IDS[2]}]\n")}
+    claims = claim_records(4)  # claim 1: negative, two supporters, entity e0001
     for name in "ab":
         (tmp_path / name).mkdir()
-    published = run_site(tmp_path / "a", plan, pages, groups)
+    published = run_site(tmp_path / "a", plan, pages, claims)
     assert issues_of(published, "withheld_reference") == []
-    groups[1]["supporter_count"] = 1
-    flagged = run_site(tmp_path / "b", plan, pages, groups)
+    claims[1] = claim_record(1, supporter_count=1, contradicts=claims[1]["contradicts"])
+    flagged = run_site(tmp_path / "b", plan, pages, claims)
     assert issues_of(flagged, "withheld_reference") == [("agencies", TWO_REPORTS)]
