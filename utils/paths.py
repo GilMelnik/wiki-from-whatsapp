@@ -21,6 +21,8 @@ STEP_6 = "step_6_plan"
 # The assignment step's id in the review tool's step registry; it writes into STEP_6's folder.
 STEP_6_ASSIGN = "step_6_assign"
 STEP_7 = "step_7_write_pages"
+# The same-complaint check's id in the review tool's step registry; it writes into STEP_7's folder.
+STEP_7_SAME_COMPLAINT = "step_7_same_complaint"
 STEP_8 = "step_8_review"
 # The proofreading pass's id in the review tool's step registry; it writes into STEP_8's folder
 # (its record) and into the pages' edited file.

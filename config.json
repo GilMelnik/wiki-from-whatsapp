@@ -784,6 +784,7 @@
       "pii": "the new claims (privacy: names, phone numbers, details about people)",
       "entities": "the new entities (people, providers, places)",
       "plan": "the pending proposals for new pages and labels",
+      "withheld": "the lone complaints the same-complaint check released (mark any of them \"keep withheld\")",
       "suggestions": "the review's suggestions (accept or reject, then apply the accepted ones)"
     },
     "waiting_hints": {

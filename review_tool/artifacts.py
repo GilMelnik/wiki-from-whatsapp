@@ -29,6 +29,8 @@ from utils.paths import (
     GOLD_THREADS_PATH,
     PLAN,
     PROOFREAD_RECORD,
+    SAME_COMPLAINT_PATH,
+    SAME_COMPLAINT_VETOES_PATH,
     STEP_1,
     STEP_2,
     STEP_3,
@@ -36,6 +38,7 @@ from utils.paths import (
     STEP_6,
     STEP_6_ASSIGN,
     STEP_7,
+    STEP_7_SAME_COMPLAINT,
     STEP_8,
     STEP_8_PROOFREAD,
     STEP_9,
@@ -209,8 +212,18 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
             "assignments", "Claims assigned to pages", ASSIGNMENTS, STEP_6_ASSIGN,
             ("claims", "entities", "plan"),
         ),
+        # The same-complaint check (paid): which lone complaints about a named thing a second
+        # person's same complaint releases. It reads the claim records (and step 3's audit).
+        ArtifactNode(
+            "same_complaint", "Same-complaint answers", SAME_COMPLAINT_PATH,
+            step=STEP_7_SAME_COMPLAINT, upstream=("claims", "entities"),
+        ),
+        # The owner's "keep withheld" marks (the Withheld page): no step; with the check's
+        # answers they decide which claims the pages may use, so a change makes the pages stale.
+        ArtifactNode("withheld_vetoes", "Claims kept withheld", SAME_COMPLAINT_VETOES_PATH),
         ArtifactNode.from_pair(
-            "pages", "Wiki pages", WIKI_PAGES, STEP_7, ("claims", "entities", "plan", "assignments")
+            "pages", "Wiki pages", WIKI_PAGES, STEP_7,
+            ("claims", "entities", "plan", "assignments", "same_complaint", "withheld_vetoes"),
         ),
         # The whole-wiki review's suggestions (a human gate: the owner decides on each one).
         ArtifactNode.from_pair(

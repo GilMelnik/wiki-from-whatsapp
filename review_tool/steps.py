@@ -69,6 +69,10 @@ STEP_SPECS: tuple[StepSpec, ...] = (
         "assignments", "Step 6b · Assign claims to pages", "step_6_plan.assign",
         incremental_safe=True, paid=True, review_tool="plan",
     ),
+    StepSpec(
+        "same_complaint", "Step 7a · Check same complaints", "step_7_write_pages.same_complaint",
+        incremental_safe=True, paid=True, review_tool="withheld",
+    ),
     StepSpec("pages", "Step 7 · Write the pages", "step_7_write_pages.run", incremental_safe=True, paid=True),
     StepSpec(
         "suggestions", "Step 8 · Review the whole wiki", "step_8_review.run",

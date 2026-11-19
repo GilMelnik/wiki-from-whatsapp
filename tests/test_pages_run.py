@@ -234,7 +234,8 @@ def test_a_failed_page_keeps_its_old_text(ws: PagesWorkspace) -> None:
 
 def test_pages_node_and_step_row() -> None:
     node = GRAPH.node("pages")
-    assert node.upstream == ("claims", "entities", "plan", "assignments")
+    assert node.upstream == ("claims", "entities", "plan", "assignments", "same_complaint",
+                             "withheld_vetoes")
     step = SERVED_STEPS.step(node.step)
     assert step.spec.incremental_safe and step.spec.paid
     assert step.command()[1:] == ["-m", "step_7_write_pages.run"]

@@ -27,13 +27,15 @@ from utils.paths import (
     STEP_4,
     STEP_6_ASSIGN,
     STEP_7,
+    STEP_7_SAME_COMPLAINT,
     STEP_8,
     STEP_8_PROOFREAD,
     STEP_9,
 )
 
 SITE = section("site")
-UNCHANGED = (STEP_2, STEP_3, STEP_4, STEP_6_ASSIGN, STEP_7, STEP_8, STEP_8_PROOFREAD)
+UNCHANGED = (STEP_2, STEP_3, STEP_4, STEP_6_ASSIGN, STEP_7_SAME_COMPLAINT, STEP_7, STEP_8,
+             STEP_8_PROOFREAD)
 
 
 class SiteWorld(World):
