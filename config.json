@@ -409,7 +409,7 @@
   },
   "wiki_review": {
     "stage": "review",
-    "prompt_version": 2,
+    "prompt_version": 3,
     "max_output_tokens": 100000,
     "context_window_tokens": 1000000,
     "chars_per_token": 1.56,
@@ -460,14 +460,14 @@
       "wrong_status": "Suggestion {id} is {status}, so it cannot be {action}.",
       "bad_proposal": "The proposal is not valid: {errors}",
       "plan_refused": "The plan was not changed: the resulting plan would break its rules: {errors}",
-      "no_change": "The page writer found nothing to change on page {page_id} for this suggestion (the groups may not support the correction).",
+      "no_change": "The page writer found nothing to change on page {page_id} for this suggestion (the claims may not support the correction).",
       "failed_checks": "The correction of page {page_id} failed the checks: {problems}",
       "too_much_changed": "The correction of page {page_id} changed too much: only {kept} of the sentences stayed word for word (at least {required} is required).",
-      "groups_refused": "The contradiction link was not saved: {error}",
+      "link_refused": "The contradiction link was not saved: {error}",
       "plan_applied": "The change is saved in the plan. Run the assignment step (6b) and then step 7 so the pages follow it.",
       "page_applied": "Page {page_id} was corrected ({kept} of the sentences stayed word for word).",
       "page_unchanged": "Page {page_id} already showed both sides and was not changed.",
-      "link_applied": "The contradiction link is saved in the claim groups."
+      "link_applied": "The contradiction link is saved: the claims contradict each other from now on, in every step."
     },
     "ui": {
       "apply_outcomes_kept": 20,

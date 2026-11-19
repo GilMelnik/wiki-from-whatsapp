@@ -40,6 +40,7 @@ import logging
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from functools import cached_property
+from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Body, HTTPException
@@ -63,7 +64,7 @@ from step_8_review.parts import ReviewPasses, batch_available, review_usd, store
 from step_8_review.proposals import ACCEPTED
 from utils.config import LLM_CONFIG
 from utils.json_io import read_json_if_present
-from utils.paths import BACKUPS_DIR
+from utils.paths import AUDIT_PATH, BACKUPS_DIR, MANUAL_CONTRADICTIONS_PATH
 from utils.token_counters import CharTokenCounter
 
 logger = logging.getLogger(__name__)
@@ -88,17 +89,22 @@ class Withdrawal(BaseModel):
 class SuggestionsTool:
     NAME = "suggestions"
     TITLE = "Suggestions"
-    READS = ("plan", "assignments", "pages", "groups")
-    # The tool saves the suggestions; an apply writes the plan, the pages or the groups.
-    WRITES = ("suggestions", "plan", "pages", "groups")
+    READS = ("plan", "assignments", "pages", "claims", "entities")
+    # The tool saves the suggestions; an apply writes the plan, the pages or the owner's
+    # contradiction pairs (a file no step writes: it has no node of its own).
+    WRITES = ("suggestions", "plan", "pages")
 
     def __init__(self, graph: ArtifactGraph, *,
                  store: Callable[[], SuggestionsStore] = SuggestionsStore,
-                 publish: Callable[..., Any] = events.publish) -> None:
+                 publish: Callable[..., Any] = events.publish,
+                 audit_path: Path = AUDIT_PATH,
+                 contradictions_path: Path = MANUAL_CONTRADICTIONS_PATH) -> None:
         self._make_store = store
+        # The evidence reloads when a file it is read from changes: the claim records' inputs
+        # with no node of their own (the audit, the manual pairs) are watched too.
         self._view: StoreHandle[WikiView] = StoreHandle(
             lambda: WikiView(self.store.applier.review()),
-            graph.files("plan", "assignments", "pages", "groups"), lock_paths=())
+            (*graph.files(*self.READS), audit_path, contradictions_path), lock_paths=())
         self._passes: tuple[WikiView, ReviewPasses] | None = None
         self.applies = ApplyRunner(
             lambda: self.store,

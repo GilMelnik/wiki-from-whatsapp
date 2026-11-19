@@ -1,13 +1,13 @@
 import { Bidi, formatDateTime, Ltr, Panel, PanelState } from "@shell";
 import { Changes } from "./Changes.jsx";
-import { Groups, Pages, Quote, Section, Sides, StructuralEvidence } from "./Evidence.jsx";
+import { Claims, Pages, Quote, Section, Sides, StructuralEvidence } from "./Evidence.jsx";
 import { Proposal } from "./Proposal.jsx";
 import { KIND_BADGES, outcomeFor, proposalOf, STATUS_BADGES } from "./suggestions.js";
 
 // The main column for one suggestion, in the order the owner decides: what changed on its
 // pages since the review, the last failed apply, what an apply changed; then the reviewer's
 // reason, the context it is about (the sentence in its paragraph, the two sides, the pages),
-// the proposal next to it (with the dry run of a plan change), and the claim groups behind it.
+// the proposal next to it (with the dry run of a plan change), and the claims behind it.
 
 export function Outcome({ outcome }) {
   if (!outcome || outcome.status === "applied") return null;
@@ -55,8 +55,8 @@ function MistakeContext({ suggestion, evidence }) {
         <Quote quote={evidence.quote} sentence={proposalOf(suggestion).sentence} />
       </Section>
       <Proposal suggestion={suggestion} />
-      <Section title="The claim groups the sentence rests on">
-        <Groups groups={evidence.groups} />
+      <Section title="The claims the sentence rests on">
+        <Claims claims={evidence.claims} />
       </Section>
       <Section title="The page">
         <Pages pages={[evidence.page]} />

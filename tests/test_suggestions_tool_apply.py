@@ -1,7 +1,8 @@
 """Applying suggestions from the suggestions tool: in the background, one at a time, with
 events; what each kind changed; refusals and a failing provider writing nothing; "apply all
 accepted"; a suggestion being applied cannot be decided on; the frame's 423 while a step runs.
-Synthetic data, a fake page corrector and a fake group linker."""
+Synthetic data and a fake page corrector; an applied contradiction goes to the workspace's
+manual contradiction pairs."""
 
 from __future__ import annotations
 
@@ -15,8 +16,10 @@ from review_tool.events import EventBus
 from review_tool.jobs import JOB_SETTINGS, JobRunner
 from review_tool.steps import StepRegistry, StepSpec
 from review_tool.tools.suggestions.changes import sentence_changes, snapshot_after
+from step_6_plan.claim_records import load_claim_records, load_manual_pairs
 from step_6_plan.operations import delete
 from step_8_review.inputs import REVIEW_CONFIG
+from tests.pages_fixtures import IDS
 from tests.review_fixtures import corrector, sentence_a
 from tests.suggestions_tool_support import FIXED, Gate, ToolSetup, failing_provider
 from utils.config import PROJECT_ROOT
@@ -59,7 +62,7 @@ def test_a_mistake_apply_shows_the_sentences_before_and_after(setup: ToolSetup) 
     changes = setup.get(f"/suggestions/{sid}")["changes"]
     page = changes["pages"][0]
     assert page["page_id"] == "agencies" and page["changed"] and not page["rewritten_since"]
-    assert page["sentences"] == [{"before": [sentence_a("g-00000004").split("[^")[0]],
+    assert page["sentences"] == [{"before": [sentence_a(IDS[4]).split("[^")[0]],
                                   "after": [FIXED.split("[^")[0]]}]
     assert changes["backup"] is None  # the pages had no edited copy before: "before" = original
 
@@ -85,11 +88,14 @@ def test_a_contradiction_apply_saves_the_links_and_names_them(setup: ToolSetup) 
     setup.apply(sid)
     outcome = setup.wait()["outcomes"][0]
     assert outcome["status"] == "applied" and outcome["paid"] is True
-    assert setup.ws.linker.links == [("g-00000000", "g-00000002", True)]
+    assert load_manual_pairs(setup.ws.sources.contradictions) == [tuple(sorted((IDS[0], IDS[2])))]
+    claims = {claim["short_id"]: claim for claim in load_claim_records(setup.ws.sources)}
+    assert IDS[2] in claims[IDS[0]]["contradicts"]
     changes = setup.get(f"/suggestions/{sid}")["changes"]
-    assert changes["links"][0]["a"]["group_id"] == "g-00000000" and changes["links"][0]["b"]["claim_text"]
+    assert changes["links"][0]["a"]["short_id"] == IDS[0] and changes["links"][0]["b"]["claim_text"]
     assert {page["page_id"] for page in changes["pages"]} == {"agencies", "clinics"}
-    assert changes["groups_file"] == str(setup.ws.linker.edited)
+    assert changes["links_file"] == str(setup.ws.sources.contradictions)
+    assert changes["links_backup"] is None
 
 
 def test_a_refused_apply_reports_why_and_writes_nothing(setup: ToolSetup) -> None:
@@ -140,7 +146,7 @@ def test_apply_refusals_before_queueing(setup: ToolSetup) -> None:
 
 
 def test_the_tool_keeps_working_while_an_apply_runs(tmp_path: Path) -> None:
-    gate = Gate(corrector(sentence_a("g-00000004"), FIXED))
+    gate = Gate(corrector(sentence_a(IDS[4]), FIXED))
     setup = ToolSetup(tmp_path, respond=gate)
     ids = setup.ids()
     setup.decide("accept", ids["mistake"], ids["add_label"])

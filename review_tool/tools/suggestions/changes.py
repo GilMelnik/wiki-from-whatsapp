@@ -1,13 +1,13 @@
 """What an applied suggestion changed, from its ``apply_result`` and the backups it names.
 
 - structural: the plan change as the plan operation reported it (created, removed pages and
-  labels, redirects, pages whose groups are classified again) and the steps that must follow;
+  labels, redirects, pages whose claims are classified again) and the steps that must follow;
 - mistake / contradiction: per corrected page, the sentences before and after. "Before" is the
   pages' edited file as the apply found it (the backup the result names; without one, the
   step's original, from which the edited file was created). "After" is the edited file as the
   apply left it: every later write of that file backs it up first, so it is the first backup
   taken after the apply, or the file itself while nothing has written it since;
-- contradiction: also the group pairs saved as contradiction links.
+- contradiction: also the claim pairs saved as contradiction links.
 
 A wrong apply is repaired from the backup the result names; there is no undo here.
 """
@@ -72,7 +72,7 @@ class AppliedChanges:
 
     def of(self, suggestion: Mapping[str, Any], view: WikiView | None) -> dict[str, Any] | None:
         """What ``suggestion`` changed (``None`` while it is not applied). ``view`` names the
-        linked groups of a contradiction (``None``: ids only)."""
+        linked claims of a contradiction (``None``: short ids only)."""
         result = suggestion.get("apply_result")
         if suggestion["status"] != APPLIED or not result:
             return None
@@ -84,11 +84,11 @@ class AppliedChanges:
         changes = {**common, "pages": self._pages(result, suggestion.get("applied_at") or "")}
         if suggestion["kind"] == CONTRADICTION:
             changes["links"] = [
-                {"a": view.group(a) if view else {"group_id": a},
-                 "b": view.group(b) if view else {"group_id": b}}
+                {"a": view.claim(a) if view else {"short_id": a},
+                 "b": view.claim(b) if view else {"short_id": b}}
                 for a, b in result.get("links") or []]
-            changes["groups_file"] = result.get("groups_file")
-            changes["groups_backup"] = result.get("groups_backup")
+            changes["links_file"] = result.get("links_file")
+            changes["links_backup"] = result.get("links_backup")
         return changes
 
     def _pages(self, result: Mapping[str, Any], applied_at: str) -> list[dict[str, Any]]:

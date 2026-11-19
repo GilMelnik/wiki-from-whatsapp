@@ -2,12 +2,12 @@ import { Bidi, countText, formatCount, Ltr, stanceOf } from "@shell";
 import { quoteParts } from "./suggestions.js";
 
 // What the owner judges a suggestion by, from the wiki as it is now (GET /suggestions/{id} →
-// evidence): the quoted sentence in its paragraph, the claim groups a sentence rests on (text,
+// evidence): the quoted sentence in its paragraph, the claims a sentence rests on (text,
 // stance, supporters / opposers, dates, main page, the page sentences that cite it), the two
 // sides of a contradiction, and the pages a suggestion touches with their scope and size.
 
 function Said({ said }) {
-  if (!said?.length) return <p className="text-xs text-slate-500">No sentence in the wiki cites this group.</p>;
+  if (!said?.length) return <p className="text-xs text-slate-500">No sentence in the wiki cites this claim.</p>;
   return (
     <ul className="space-y-1">
       {said.map((place) => (
@@ -26,51 +26,51 @@ function Said({ said }) {
   );
 }
 
-export function GroupCard({ group }) {
-  if (group.missing) {
+export function ClaimCard({ claim }) {
+  if (claim.missing) {
     return (
       <li className="card text-xs text-slate-500">
-        Group <Ltr>{group.group_id}</Ltr> is no longer in the groups file.
+        Claim <Ltr>{claim.short_id}</Ltr> is no longer among the claims.
       </li>
     );
   }
-  const stance = stanceOf(group.stance);
+  const stance = stanceOf(claim.stance);
   return (
     <li className="card space-y-2">
       <Bidi as="p" className="leading-relaxed">
-        {group.claim_text}
+        {claim.claim_text}
       </Bidi>
       <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600">
         <span className={`badge ${stance.badge}`}>{stance.label}</span>
-        <span>{countText(group.supporters, "supporter")}</span>
-        <span className={group.opposers > 0 ? "font-medium text-rose-700" : ""}>{countText(group.opposers, "opposer")}</span>
+        <span>{countText(claim.supporters, "supporter")}</span>
+        <span className={claim.opposers > 0 ? "font-medium text-rose-700" : ""}>{countText(claim.opposers, "opposer")}</span>
         <span>
-          <Ltr>{group.first_date}</Ltr>
-          {group.last_date !== group.first_date && (
+          <Ltr>{claim.first_date}</Ltr>
+          {claim.last_date !== claim.first_date && (
             <>
               {" – "}
-              <Ltr>{group.last_date}</Ltr>
+              <Ltr>{claim.last_date}</Ltr>
             </>
           )}
         </span>
-        {group.primary_title && (
+        {claim.primary_title && (
           <span>
-            Main page: “<Bidi>{group.primary_title}</Bidi>”
+            Main page: “<Bidi>{claim.primary_title}</Bidi>”
           </span>
         )}
-        <Ltr className="text-slate-400">{group.group_id}</Ltr>
+        <Ltr className="text-slate-400">{claim.short_id}</Ltr>
       </p>
-      <Said said={group.said_in} />
+      <Said said={claim.said_in} />
     </li>
   );
 }
 
-export function Groups({ groups }) {
-  if (!groups.length) return <p className="text-slate-500">The suggestion names no claim groups.</p>;
+export function Claims({ claims }) {
+  if (!claims.length) return <p className="text-slate-500">The suggestion names no claims.</p>;
   return (
     <ul className="space-y-2">
-      {groups.map((group) => (
-        <GroupCard key={group.group_id} group={group} />
+      {claims.map((claim) => (
+        <ClaimCard key={claim.short_id} claim={claim} />
       ))}
     </ul>
   );
@@ -95,7 +95,7 @@ export function PageCard({ page }) {
         {page.description}
       </Bidi>
       <p className="text-xs text-slate-500">
-        Main page of {countText(page.groups.main, "group")}, mentions {formatCount(page.groups.mention)} more ·{" "}
+        Main page of {countText(page.claims.main, "claim")}, mentions {formatCount(page.claims.mention)} more ·{" "}
         {page.written ? countText(page.words, "word") : "not written yet"}
       </p>
       <details className="text-xs">
@@ -157,11 +157,11 @@ export function Sides({ sides }) {
     <div className="grid gap-3 lg:grid-cols-2">
       <div>
         <p className="mb-1 text-xs font-medium text-slate-600">One side</p>
-        <Groups groups={sides.a} />
+        <Claims claims={sides.a} />
       </div>
       <div>
         <p className="mb-1 text-xs font-medium text-slate-600">The other side</p>
-        <Groups groups={sides.b} />
+        <Claims claims={sides.b} />
       </div>
     </div>
   );

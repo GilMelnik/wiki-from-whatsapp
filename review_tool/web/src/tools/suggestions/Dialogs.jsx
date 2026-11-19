@@ -77,7 +77,7 @@ function CorrectionEdit({ suggestion, onClose, save }) {
       <div className="space-y-3">
         <p className="text-slate-600">
           {suggestion.kind === "mistake"
-            ? "The instruction to the page writer: what to fix in the sentence. The writer corrects only from the page's claim groups and keeps the rest of the page word for word."
+            ? "The instruction to the page writer: what to fix in the sentence. The writer corrects only from the page's claims and keeps the rest of the page word for word."
             : "The instruction to the page writer: how to show both sides on each of the pages."}
         </p>
         <TextArea value={draft} onChange={setDraft} rows={5} />
