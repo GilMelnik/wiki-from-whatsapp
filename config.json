@@ -299,9 +299,9 @@
     }
   },
   "plan": {
-    "prompt_version": 2,
+    "prompt_version": 3,
     "max_pages": 80,
-    "page_groups": {
+    "page_claims": {
       "fold_below": 15,
       "typical_min": 30,
       "typical_max": 100,
@@ -318,7 +318,7 @@
     "chars_per_token": 1.49,
     "sample_seed": 56,
     "max_model_calls": 3,
-    "example_group_ids": {"min": 3, "max": 8},
+    "example_claims": {"min": 3, "max": 8},
     "coverage": {
       "stage": "assign",
       "sample_size": 300,
@@ -330,10 +330,10 @@
     },
     "review": {
       "undo_depth": 20,
-      "groups_page_size": 50,
-      "max_groups_page_size": 200,
+      "claims_page_size": 50,
+      "max_claims_page_size": 200,
       "scope_sample": 5,
-      "label_findings": {"few_groups": 10, "large_share": 0.25}
+      "label_findings": {"few_claims": 10, "large_share": 0.25}
     }
   },
   "assign": {
@@ -347,8 +347,8 @@
     "question_prefix": {"label": "label:", "screen": "screen:"},
     "proposals": {
       "stage": "propose",
-      "min_groups": 3,
-      "max_groups_per_call": 300,
+      "min_claims": 3,
+      "max_claims_per_call": 300,
       "max_proposals": 8,
       "max_output_tokens": 16000,
       "id_prefix": "prop-",
@@ -844,7 +844,7 @@
         "entity_senses": 1800
       },
       "proposal_input_tokens": 30000,
-      "classifier_tokens_per_group": 12200,
+      "classifier_tokens_per_claim": 12200,
       "usd_per_million_tokens": {
         "claude-fable-5-2": {"input": 8.0, "output": 40.0},
         "claude-opus-5-5": {"input": 4.0, "output": 20.0},

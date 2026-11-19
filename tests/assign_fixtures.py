@@ -1,9 +1,9 @@
-"""Synthetic inputs for the assignment step: a plan, groups on disk and a fake classifier.
+"""Synthetic inputs for the assignment step: a plan, claim inputs on disk and a fake classifier.
 
-The plan and groups come from ``tests.plan_fixtures`` (pages agencies / costs / clinics /
-hospital, labels usa / georgia; group ``i`` is "about topic i % 4"). The fake classifier
-answers every question kind from small rules, so a test can say which page a group "is
-about" by its topic number. Nothing here comes from real data.
+The plan comes from ``tests.plan_fixtures`` (pages agencies / costs / clinics / hospital, labels
+usa / georgia), the claims from ``tests.claim_fixtures`` (claim ``i`` is "about topic i % 4").
+The fake classifier answers every question kind from small rules, so a test can say which page
+a claim "is about" by its topic number. Nothing here comes from real data.
 """
 
 from __future__ import annotations
@@ -14,8 +14,10 @@ from pathlib import Path
 from typing import Any
 
 from step_6_plan.assign import run
+from step_6_plan.claim_records import Record, load_claim_records
 from step_6_plan.coverage import NONE
-from tests.plan_fixtures import PAGE_IDS, FakeLLM, make_groups, make_plan
+from tests.claim_fixtures import claim_records, write_claim_inputs
+from tests.plan_fixtures import PAGE_IDS, FakeLLM, make_plan
 from utils.json_io import write_json_file
 from utils.llm_client import Answer, Question
 from utils.paths import Artifact
@@ -28,7 +30,7 @@ def topic(state: str) -> int:
 
 
 def by_topic(state: str, options: Sequence[str]) -> dict[str, float]:
-    """Group of topic t -> page PAGE_IDS[t] with 0.9 (if that page is still an option)."""
+    """Claim of topic t -> page PAGE_IDS[t] with 0.9 (if that page is still an option)."""
 
     probs = {option: 0.0 for option in options}
     page = PAGE_IDS[topic(state)]
@@ -77,20 +79,22 @@ class FakeClassifier:
 
 
 class Workspace:
-    """Groups, plan and the assignments artifact in a temp folder."""
+    """Claim inputs, plan and the assignments artifact in a temp folder."""
 
-    def __init__(self, root: Path, group_count: int = 12) -> None:
-        self.groups_path = root / "groups.json"
+    def __init__(self, root: Path, claim_count: int = 12) -> None:
+        self.root = root
         self.plan_path = root / "plan.json"
         self.artifact = Artifact(root / "assignments.json", root / "assignments_edited.json")
-        self.write_groups(make_groups(group_count))
+        self.sources = write_claim_inputs(claim_records(claim_count), root)
         self.write_plan(make_plan())
 
-    def write_groups(self, groups: list[dict[str, Any]]) -> None:
-        write_json_file({"groups": groups, "metadata": {}}, self.groups_path)
+    def write_claims(self, claims: list[Record]) -> None:
+        """Write the claim inputs ``claims`` load from (``tests.claim_fixtures``)."""
 
-    def groups(self) -> list[dict[str, Any]]:
-        return json.loads(self.groups_path.read_text(encoding="utf-8"))["groups"]
+        self.sources = write_claim_inputs(claims, self.root)
+
+    def claims(self) -> list[Record]:
+        return load_claim_records(self.sources)
 
     def write_plan(self, plan: dict[str, Any]) -> None:
         write_json_file(plan, self.plan_path)
@@ -106,6 +110,6 @@ class Workspace:
 
     def run(self, classifier: FakeClassifier | None = None, llm: FakeLLM | None = None,
             **kwargs: Any) -> dict[str, Any]:
-        return run(aggregated_path=self.groups_path, plan_path=self.plan_path,
+        return run(sources=self.sources, plan_path=self.plan_path,
                    artifact=self.artifact, classifier=classifier or FakeClassifier(),
                    llm=llm or FakeLLM([]), **kwargs)

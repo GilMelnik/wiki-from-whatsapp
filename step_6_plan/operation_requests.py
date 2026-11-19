@@ -18,7 +18,7 @@ from step_6_plan.model import PlanError, find_node, iter_nodes
 from step_6_plan.operations import PlanEdit
 
 Position = Annotated[int | None, Field(default=None, ge=0)]
-FIELD_NAMES = {"example_group_ids": "example groups"}
+FIELD_NAMES = {"example_claims": "example claims"}
 
 
 def title_of(plan: dict[str, Any], item_id: str) -> str:
