@@ -188,9 +188,9 @@ def _inputs(tmp_path: Path, records: list[Record], pages: dict[str, Any] | None)
 
 def test_the_report_estimates_from_the_assignments_before_pages_exist(tmp_path: Path) -> None:
     records = [*named("e0001", "Clinica Sol", 0), *named("e0002", "Clinica Luna", 10, 2)]
-    source, result = _inputs(tmp_path, records, None).run()
-    assert source == FROM_ASSIGNMENTS
-    lines = list(report_lines(source, result))
+    data = _inputs(tmp_path, records, None).load()
+    assert data.source == FROM_ASSIGNMENTS
+    lines = list(report_lines(data.source, data.result()))
     assert "ESTIMATED from the assignments" in lines[len(TAGS_CONFIG["report_min_claims"]) + 1]
     assert f"  N = {MIN_CLAIMS:>4}: 1 entities" in lines
     assert "  N =    2: 2 entities" in lines
@@ -201,8 +201,8 @@ def test_the_report_estimates_from_the_assignments_before_pages_exist(tmp_path: 
 def test_the_report_reads_the_written_pages_when_there_are_some(tmp_path: Path) -> None:
     records = named("e0001", "Clinica Sol", 0)
     pages = {"clinics": {"points": [{"kind": "k", "statement": "s", "claims": ids(records)}]}}
-    source, result = _inputs(tmp_path, records, pages).run()
-    assert (source, result.counts()[FEW_PAGES]) == (FROM_PAGES, 1)
+    data = _inputs(tmp_path, records, pages).load()
+    assert (data.source, data.result().counts()[FEW_PAGES]) == (FROM_PAGES, 1)
 
 
 def test_main_logs_the_report(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,

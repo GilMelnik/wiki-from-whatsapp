@@ -29,6 +29,8 @@ manual contradictions; a change to any of them reloads the store. Endpoints, und
 - ``POST /proposals/{id}/reject``, ``/proposals/{id}/reopen`` → ``{overview, label}``
 - ``POST /undo``                  the newest change of this session undone (plan and / or
   assignments) → ``{overview, label, focus}``
+- ``GET  /entity-tags``, ``POST /entity-tags/{entity_id}``  the numbers of the entity tag rule and
+  the owner's covered / tag decisions (``entity_tags``)
 
 Unknown page / label / proposal → 404; a change that breaks the plan's rules, a move or a
 decision that does not fit (or nothing to undo) → 409 in English; missing plan, or no
@@ -51,12 +53,18 @@ from review_tool.registry import ToolSpec
 from review_tool.stores import StoreHandle
 from review_tool.tools.plan.assignment_views import REVIEW_CONFIG, ROLES, SCOPES, SORTS
 from review_tool.tools.plan.assignments import AssignmentsConflict, ClaimEdit
+from review_tool.tools.plan.entity_tags import EntityTagsView, TagDecision
 from review_tool.tools.plan.history import PlanHistory
 from review_tool.tools.plan.proposals import PENDING, REJECTED
 from review_tool.tools.plan.store import ItemNotFound, PlanConflict, PlanStore
 from step_6_plan.claim_records import ClaimSources
 from step_6_plan.operation_requests import Operation
-from utils.paths import AUDIT_PATH, MANUAL_CONTRADICTIONS_PATH, PLAN_COVERAGE_PATH
+from utils.paths import (
+    AUDIT_PATH,
+    ENTITY_TAG_DECISIONS_PATH,
+    MANUAL_CONTRADICTIONS_PATH,
+    PLAN_COVERAGE_PATH,
+)
 
 PLAN_KEY = "plan"
 CLAIMS_KEY = "claims"
@@ -80,6 +88,7 @@ class PlanTool:
         coverage_path: Path = PLAN_COVERAGE_PATH,
         audit_path: Path = AUDIT_PATH,
         contradictions_path: Path = MANUAL_CONTRADICTIONS_PATH,
+        decisions_path: Path = ENTITY_TAG_DECISIONS_PATH,
         lock_timeout: float | None = None,
     ) -> None:
         plan, assignments = graph.node(PLAN_KEY), graph.node(ASSIGNMENTS_KEY)
@@ -102,6 +111,8 @@ class PlanTool:
             lock_paths=graph.files(*self.WRITES),
             lock_timeout=lock_timeout,
         )
+        self._tags = EntityTagsView(graph, audit_path=audit_path, contradictions_path=contradictions_path,
+                                    decisions_path=decisions_path, lock_timeout=lock_timeout)
         router = APIRouter()
         for path, endpoint in (
             ("/plan", self.overview),
@@ -110,6 +121,7 @@ class PlanTool:
             ("/ids", self.check_id),
             ("/assignments/claims", self.claims),
             ("/proposals", self.proposals),
+            ("/entity-tags", self._tags.view),
         ):
             router.add_api_route(path, endpoint, methods=["GET"])
         for path, endpoint in (
@@ -120,6 +132,7 @@ class PlanTool:
             ("/proposals/{proposal_id}/reject", self.reject),
             ("/proposals/{proposal_id}/reopen", self.reopen),
             ("/undo", self.undo),
+            ("/entity-tags/{entity_id}", self.decide_tag),
         ):
             router.add_api_route(path, endpoint, methods=["POST"])
         self.spec = ToolSpec(
@@ -185,6 +198,10 @@ class PlanTool:
     def undo(self) -> dict[str, Any]:
         with _as_http_errors(), self._handle.mutate() as store:
             return store.undo()
+
+    def decide_tag(self, entity_id: str, body: TagDecision = Body()) -> dict[str, Any]:
+        with _as_http_errors():
+            return self._tags.decide(entity_id, body.decision)
 
 
 @contextmanager

@@ -336,14 +336,30 @@ class TagInputs:
             return FROM_ASSIGNMENTS, assigned_claims(assignments)
         return NO_PAGES, {}
 
-    def run(self) -> tuple[str, EntityTags]:
-        """The rule over the files on disk: ``(source of the pages, result)``."""
+    def load(self) -> TagData:
+        """Everything the rule reads, from the files on disk."""
         records = load_claim_records(self.sources)
-        plan = read_json_file(self.plan or resolve_plan_path())
         source, page_claims = self.page_claims()
-        result = entity_tags(records, self.names(), plan, page_claims,
-                             load_decisions(self.decisions), withheld_ids(records))
-        return source, result
+        return TagData(records, self.names(), read_json_file(self.plan or resolve_plan_path()), source,
+                       page_claims, load_decisions(self.decisions), withheld_ids(records))
+
+
+@dataclass
+class TagData:
+    """The rule's inputs in memory; ``source`` says where ``page_claims`` come from. Only the
+    owner's ``decisions`` change while the Plan page holds it."""
+
+    records: list[Record]
+    names: dict[str, list[str]]
+    plan: dict[str, Any]
+    source: str
+    page_claims: dict[str, set[str]]
+    decisions: dict[str, str]
+    withheld: frozenset[str]
+
+    def result(self) -> EntityTags:
+        return entity_tags(self.records, self.names, self.plan, self.page_claims, self.decisions,
+                           self.withheld)
 
 
 SOURCE_NOTES = {
@@ -374,8 +390,8 @@ def main(argv: list[str] | None = None) -> None:
                         help="log the counts for the thresholds of config.json (site.entity_tags)")
     parser.parse_args(argv)
     setup_step_logging(STEP_9)
-    source, result = TagInputs().run()
-    for line in report_lines(source, result):
+    data = TagInputs().load()
+    for line in report_lines(data.source, data.result()):
         logger.info(line)
 
 
