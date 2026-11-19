@@ -26,6 +26,7 @@ from utils.paths import (
     CLASSIFIED,
     DOCS_DIR,
     ENTITIES,
+    ENTITY_TAG_DECISIONS_PATH,
     GOLD_THREADS_PATH,
     PLAN,
     PROOFREAD_RECORD,
@@ -235,10 +236,12 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
             "proofread", "Proofreading", PROOFREAD_RECORD, step=STEP_8_PROOFREAD,
             upstream=("claims", "entities", "plan", "assignments", "pages"),
         ),
+        # The owner's covered / make-a-tag decisions on the Plan page (hand-made, no step).
+        ArtifactNode("entity_tag_decisions", "Entity tag decisions", ENTITY_TAG_DECISIONS_PATH),
         # The published site (docs/ + mkdocs.yml); its index file stands for the whole folder.
         ArtifactNode(
             "site", "Site", DOCS_DIR / WIKI_INDEX_FILE, step=STEP_9,
-            upstream=("plan", "pages", "claims", "entities", "threads"),
+            upstream=("plan", "pages", "claims", "entities", "threads", "entity_tag_decisions"),
         ),
     )
 

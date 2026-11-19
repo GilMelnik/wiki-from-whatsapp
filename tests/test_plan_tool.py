@@ -40,6 +40,8 @@ def plan_graph(root: Path) -> ArtifactGraph:
         ArtifactNode("same_complaint", "Same-complaint answers", root / "same_complaint.json",
                      None, "step_7a", ("claims", "entities")),
         ArtifactNode("withheld_vetoes", "Kept withheld", root / "same_complaint_vetoes.json"),
+        ArtifactNode("pages", "Pages", root / "wiki_pages.json", root / "wiki_pages_edited.json", "step_7",
+                     ("claims", "entities", "plan", "assignments")),
     ])
 
 
@@ -72,6 +74,7 @@ class PlanSetup:
         """A fresh tool (new store handle, empty history) on the same files, as after a restart."""
         tool = PlanTool(self.graph, coverage_path=self.coverage, audit_path=self.sources.audit,
                         contradictions_path=self.sources.contradictions,
+                        decisions_path=self.root / "entity_tag_decisions.json",
                         lock_timeout=SHORT_LOCK_TIMEOUT)
         app = build_app(self.root, specs=(tool.spec,), graph=self.graph)
         return TestClient(app, base_url=BASE_URL)

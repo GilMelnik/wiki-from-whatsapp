@@ -10,7 +10,10 @@ of the latest one), then writes:
 - ``docs/<page_id>.md``: each planned page that has a written page, OKF front matter (hidden by
   mkdocs) + body with its wiki links resolved and its references (short id, when, how many
   people took part) rendered as footnotes from the claim records;
-- ``docs/<labels_dir>/<label_id>.md``: one page per label that a published page carries;
+- ``docs/<labels_dir>/<label_id>.md``: one page per label that a published page carries, and
+  one per entity tag (``entity_tags``: an entity named often that the plan does not cover; the
+  owner's decisions in ``ENTITY_TAG_DECISIONS_PATH``; entities still waiting for one are
+  counted in a warning);
 - ``docs/index.md``: the home page, an intro with the months of the first and the last message,
   then the plan's tree with each page's one-line description;
 - ``docs/about.md`` ("how this wiki was made", linked only from the home page),
@@ -51,6 +54,7 @@ from step_8_review.proofreader import PROOFREAD_CONFIG, sentence_split
 from step_9_site import agent_hook, hebrew_search
 from step_9_site.agent_pages import AgentPages
 from step_9_site.content import INFO_FILES, WITHHELD_REFERENCE, NavEntry, Site
+from step_9_site.entity_tags import TagInputs, load_decisions
 from step_9_site.info_pages import STATEMENT_CONFIG
 from step_9_site.index import index_text
 from step_9_site.rtl import HEBREW_CSS
@@ -58,6 +62,7 @@ from utils.config import PROJECT_ROOT, section
 from utils.logging_setup import setup_step_logging
 from utils.paths import (
     DOCS_DIR,
+    ENTITY_TAG_DECISIONS_PATH,
     MKDOCS_PATH,
     STEP_9,
     WIKI_INDEX_FILE,
@@ -179,18 +184,23 @@ def run(
     threads_path: Path | None = None,
     docs_dir: Path = DOCS_DIR,
     mkdocs_path: Path = MKDOCS_PATH,
+    decisions_path: Path = ENTITY_TAG_DECISIONS_PATH,
 ) -> dict[str, Any]:
     """Build the site into ``docs_dir`` + ``mkdocs_path``; nothing is written if an input fails.
 
-    Returns ``published`` (page count), ``labels`` (label pages), ``redirects``, ``written`` /
-    ``removed`` (docs-relative paths; ``mkdocs.yml`` by its file name), ``issues``,
-    ``issue_counts`` and ``unproofread`` (published pages holding text never proofread).
+    Returns ``published`` (page count), ``labels`` (label pages of the plan), ``entity_tags``
+    (tag pages), ``entity_tags_waiting`` (entities waiting for the owner's decision),
+    ``redirects``, ``written`` / ``removed`` (docs-relative paths; ``mkdocs.yml`` by its file
+    name), ``issues``, ``issue_counts`` and ``unproofread`` (published pages holding text never
+    proofread).
     """
     plan = _load(plan_path or resolve_plan_path(), "plan (step 6)")
     pages = _load(pages_path or resolve_wiki_pages_path(), "written pages (step 7)")["pages"]
     claims = load_claim_records(sources)
     period = messages_period(_load(threads_path or resolve_threads_path(), "conversations (step 1)"))
-    site = Site(plan, pages, claims, period, withheld_ids(claims, sources))
+    names = TagInputs(sources).names()
+    site = Site(plan, pages, claims, period, withheld_ids(claims, sources), names,
+                load_decisions(decisions_path))
     files = {**site.files, **AgentPages(site).files(), WIKI_INDEX_FILE: index_text(site, docs_dir / WIKI_INDEX_FILE)}
     config = build_config(
         site.nav,
@@ -205,6 +215,9 @@ def run(
     for issue in site.issues:
         level = logging.ERROR if issue["issue"] == WITHHELD_REFERENCE else logging.WARNING
         logger.log(level, f"{issue['issue']}: page {issue['page']!r} target {issue['target']!r}")
+    if site.waiting:
+        logger.warning(f"{len(site.waiting)} entities named often only partly match a page or label of "
+                       "the plan: they get no tag until the owner decides on the Plan page (Entity tags)")
     unproofread = ([pid for pid in site.order if sentence_split(pages[pid])[1]]
                    if PROOFREAD_CONFIG["enabled"] else [])
     if unproofread:
@@ -212,7 +225,9 @@ def run(
                        f"(python -m step_8_review.proofread): {unproofread}")
     result = {
         "published": len(site.order),
-        "labels": len(site.labels),
+        "labels": len(site.labels) - len(site.entity_tags),
+        "entity_tags": len(site.entity_tags),
+        "entity_tags_waiting": len(site.waiting),
         "redirects": len(site.redirect_files),
         "written": written,
         "removed": removed,
@@ -223,8 +238,8 @@ def run(
         "mkdocs_path": str(mkdocs_path),
     }
     logger.info(
-        f"{result['published']} pages, {result['labels']} label pages, {result['redirects']} "
-        f"redirects -> {docs_dir}: {len(written)} files written, {len(removed)} removed; "
+        f"{result['published']} pages, {result['labels']} label pages, {result['entity_tags']} "
+        f"entity tag pages, {result['redirects']} redirects -> {docs_dir}: {len(written)} files written, {len(removed)} removed; "
         f"issues: {result['issue_counts'] or 'none'}"
     )
     return result

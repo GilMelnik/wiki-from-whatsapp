@@ -20,7 +20,7 @@
       "$ref": "#/$defs/nonEmpty"
     },
     "labels": {
-      "description": "Every label of the plan (C7 labels), keyed by label id.",
+      "description": "Every label of the plan (C7 labels), then every entity tag (a provider, place, body or person named by many claims that no page or label of the plan covers; id config.site.entity_tags.id_prefix + entity id, kind config.site.entity_tags.kind, empty description), keyed by id.",
       "type": "object",
       "additionalProperties": { "$ref": "#/$defs/label" }
     },
@@ -53,9 +53,9 @@
       "required": ["title", "description", "kind"],
       "additionalProperties": false,
       "properties": {
-        "title": { "description": "C7 labels[id].title_he.", "$ref": "#/$defs/nonEmpty" },
-        "description": { "description": "C7 labels[id].description.", "type": "string" },
-        "kind": { "description": "C7 labels[id].kind, e.g. country, topic.", "$ref": "#/$defs/nonEmpty" }
+        "title": { "description": "C7 labels[id].title_he; an entity tag's: the entity's canonical name.", "$ref": "#/$defs/nonEmpty" },
+        "description": { "description": "C7 labels[id].description; empty for an entity tag.", "type": "string" },
+        "kind": { "description": "C7 labels[id].kind, e.g. country, topic; entity for an entity tag.", "$ref": "#/$defs/nonEmpty" }
       }
     },
     "navNode": {
@@ -86,7 +86,7 @@
         "summary": { "description": "Front matter summary (optional; one paragraph).", "type": ["string", "null"] },
         "questions": { "description": "Front matter questions, [] when absent.", "type": "array", "items": { "$ref": "#/$defs/nonEmpty" } },
         "labels": {
-          "description": "Label ids of the page (front matter labels[].id); each must be a key of the top-level labels.",
+          "description": "Label ids of the page (front matter labels[].id), then the ids of the entity tags that list it; each must be a key of the top-level labels.",
           "type": "array",
           "uniqueItems": true,
           "items": { "$ref": "#/$defs/id" }

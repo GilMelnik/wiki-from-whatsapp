@@ -37,6 +37,11 @@
       "title": "רפואי",
       "description": "בדיקות וטיפולים רפואיים",
       "kind": "topic"
+    },
+    "entity_e0007": {
+      "title": "Vitalis Fertility",
+      "description": "",
+      "kind": "entity"
     }
   },
   "pages": [
@@ -51,7 +56,8 @@
         "כמה זמן מחכים לפונדקאית בקולומביה?"
       ],
       "labels": [
-        "colombia"
+        "colombia",
+        "entity_e0007"
       ],
       "path": [
         {
@@ -300,7 +306,8 @@
       "description": "בחירת תורמת ביציות ומאגרי תורמות",
       "questions": [],
       "labels": [
-        "medical"
+        "medical",
+        "entity_e0007"
       ],
       "path": [
         {

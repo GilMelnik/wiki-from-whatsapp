@@ -17,6 +17,8 @@ import {
 } from "./assign.js";
 import { ClaimsPanel } from "./AssignmentViews.jsx";
 import { DialogHost } from "./Dialogs.jsx";
+import { DECISION_LABELS, ENTITY_TAGS_ID, ENTITY_TAGS_KEYS, waitingCount } from "./entityTags.js";
+import { EntityTagsView } from "./EntityTagsView.jsx";
 import { CategoryView, LabelView } from "./ItemViews.jsx";
 import { Overview } from "./Overview.jsx";
 import { PageView } from "./PageView.jsx";
@@ -28,8 +30,9 @@ import { Toolbar } from "./Toolbar.jsx";
 // The wiki plan: the page tree the planning model proposed, made the owner's, and (once step
 // 6b has run) where the classifier put every claim. The list is the tree (phases →
 // categories → pages, with the claims on no page and the step's proposals, each to decide,
-// on top) or the labels by kind; the main column shows the selected item (the overview: what
-// there is to do; a page: its scope next to a sample of its claims, the closest claims it did
+// on top, then the entity tags the site will add) or the labels by kind; the main column shows
+// the selected item (the overview: what there is to do; the entity tags: their numbers and a
+// yes / no on each entity whose name partly matches the plan; a page: its scope next to a sample of its claims, the closest claims it did
 // not get and its exact size, or all its claims; a proposal: its claims and dry run);
 // the side column holds the actions, or the decision on a proposal.
 // Every plan change is one validated operation on the server, previewed in a dialog first
@@ -63,8 +66,12 @@ function PlanTool({ tool }) {
   const assigned = Boolean(overview?.assignments?.exists && !overview.assignments.problem);
   const proposals = useResource(() => (assigned ? api.get("/proposals") : null), [assigned], { watch });
   const proposalItems = proposals.data?.items ?? [];
+  // The entity tags follow the written pages too (they count the pages that cite an entity).
+  const tagWatch = useMemo(() => [...new Set([...watch, ...ENTITY_TAGS_KEYS])], [watch]);
+  const tags = useResource(() => api.get("/entity-tags"), [], { watch: tagWatch, keepPrevious: true });
+  const tagsRow = { id: ENTITY_TAGS_ID, kind: "entity_tags", waiting: waitingCount(tags.data) };
   const labelsView = view === LABELS_VIEW;
-  const items = labelsView ? labelItems(overview) : ready ? [treeItems(overview)[0], ...assignmentRows(overview, proposalItems), ...overview.nodes] : [];
+  const items = labelsView ? labelItems(overview) : ready ? [treeItems(overview)[0], ...assignmentRows(overview, proposalItems), tagsRow, ...overview.nodes] : [];
   const selectedId = labelsView ? labelId : nodeId;
   const kind = kindOf(overview, selectedId);
   const proposal = labelsView ? null : proposalOfRow(proposalItems, selectedId);
@@ -72,7 +79,7 @@ function PlanTool({ tool }) {
   // Keep the selection on something that exists (after a merge, a delete or a re-plan).
   useEffect(() => {
     if (!ready) return;
-    if (nodeId !== OVERVIEW_ID && !isAssignmentRow(nodeId) && !nodeById(overview, nodeId)) setNodeId(OVERVIEW_ID);
+    if (nodeId !== OVERVIEW_ID && nodeId !== ENTITY_TAGS_ID && !isAssignmentRow(nodeId) && !nodeById(overview, nodeId)) setNodeId(OVERVIEW_ID);
     // A proposal decided elsewhere (or gone with a new run) leaves its row: back to the list.
     if (proposals.data && isProposalRow(nodeId) && !proposalOfRow(proposalItems, nodeId)) {
       setNodeId(PROPOSALS_ID);
@@ -159,6 +166,12 @@ function PlanTool({ tool }) {
       proposals.reload();
       toast.success(result.label);
       if (action === "reject") moveOn(decided);
+    }).catch((error) => toast.error(error));
+  const decideTag = (entity, decision) =>
+    saveWith(async () => {
+      const result = await api.post(`/entity-tags/${encodeURIComponent(entity.entity_id)}`, { decision });
+      tags.setData(result);
+      toast.success(decision ? `“${entity.name}”: ${DECISION_LABELS[decision].toLowerCase()}` : `“${entity.name}”: decision removed`);
     }).catch((error) => toast.error(error));
   const undo = async () => {
     if (saving || !overview?.undo) return;
@@ -252,6 +265,8 @@ function PlanTool({ tool }) {
   else if (!labelsView && selectedId === OVERVIEW_ID) main = <Overview overview={overview} reads={watch} on={on} />;
   else if (!labelsView && (selectedId === UNPLACED_ID || selectedId === WAITING_ID)) {
     main = <ClaimsPanel {...claims} scope={selectedId === UNPLACED_ID ? "unplaced" : "waiting"} />;
+  } else if (!labelsView && selectedId === ENTITY_TAGS_ID) {
+    main = <EntityTagsView tags={tags} busy={saving} onDecide={decideTag} />;
   } else if (!labelsView && selectedId === PROPOSALS_ID) {
     main = <ProposalsView overview={overview} proposals={proposals} busy={saving || locked} offer={offer} on={on} />;
   } else if (proposal) {

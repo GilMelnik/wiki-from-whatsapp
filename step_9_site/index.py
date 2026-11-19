@@ -2,9 +2,10 @@
 
 The shape is the Worker's (``worker/wiki_index.schema.json``; field sources in
 ``tasks/41-wiki-mcp/report.md``): the site's disclaimer line (the one the markdown twins open
-with, which ``get_page`` puts before every page body), every plan label, then every published page in navigation
-order with its front-matter metadata, its resolved labels / related pages / out-links (only
-published pages) and its body as written, wiki links and ``[^g-…]`` marks kept, without
+with, which ``get_page`` puts before every page body), every plan label and every entity tag (a
+label of kind ``site.entity_tags.kind``, ``step_9_site.entity_tags``), then every published page
+in navigation order with its front-matter metadata, its resolved labels and entity tags / related
+pages / out-links (only published pages) and its body as written, wiki links and ``[^g-…]`` marks kept, without
 references (a definition stored by an older step 7 is left out, and so is a mark of a claim
 that exists nowhere).
 """
@@ -60,9 +61,12 @@ def _page_entry(site: Site, page_id: str) -> dict[str, Any]:
 
 
 def build_index(site: Site, generated_at: str) -> dict[str, Any]:
+    """Every label of the plan, then every entity tag (a label of kind ``site.entity_tags.kind``
+    with no description), then the pages."""
+    catalog = {**site.plan["labels"], **{tag_id: site.catalog[tag_id] for tag_id in site.entity_tags}}
     labels = {
         label_id: {"title": label["title_he"], "description": label["description"], "kind": label["kind"]}
-        for label_id, label in site.plan["labels"].items()
+        for label_id, label in catalog.items()
     }
     return {
         "index_version": MCP_CONFIG["index_version"],

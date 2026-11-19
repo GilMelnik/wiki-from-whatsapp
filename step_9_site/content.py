@@ -6,6 +6,12 @@ page), builds the navigation from the plan's tree, renders every generated markd
 (pages with their OKF front matter, label pages, the home page, redirect stubs for merged
 ids) and collects the problems found on the way in ``issues``. Nothing here touches the disk.
 
+Entity tags (``step_9_site.entity_tags``, the owner's rule over the claims each page cites) are
+labels of kind ``site.entity_tags.kind`` that only the site has: ``catalog`` holds the plan's
+labels and the tags alike, so a tag gets a page next to the label pages (its title, then the
+pages, nothing else), a place in the labels' navigation and its id in ``page_labels``.
+Entities the owner still has to decide on (``waiting``) get no tag.
+
 Wiki links in page bodies are resolved here: ``[[page_id|text]]`` becomes a relative markdown
 link to that page, ``[[label:label_id|text]]`` a link to the label's page; a link to a merged
 id goes to the survivor; a link to anything not published becomes its plain text. The
@@ -19,12 +25,13 @@ write again before the site is published.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import Any
 
 import yaml
 
 from step_6_plan.model import check_plan, iter_nodes
+from step_9_site.entity_tags import TAG_KIND, Candidate, cited_claims, entity_tags
 from step_9_site.info_pages import STATEMENT_CONFIG, about_body, statement_body, terms_body
 from step_7_write_pages.checks import cited_ids
 from step_7_write_pages.inputs import hebrew_month
@@ -89,6 +96,8 @@ class Site:
         claims: list[dict[str, Any]],
         period: tuple[str, str],
         withheld: Collection[str] = (),
+        entity_names: Mapping[str, Sequence[str]] | None = None,
+        tag_decisions: Mapping[str, str] | None = None,
     ) -> None:
         self.plan = check_plan(plan)
         self.period = period
@@ -114,9 +123,14 @@ class Site:
         for label_id in plan["labels"]:
             if label_id not in carried:
                 self._issue("label_not_carried", "", label_id)
+        self.withheld = frozenset(withheld)
+        tags = entity_tags(claims, entity_names or {}, plan, cited_claims(pages), tag_decisions or {},
+                           self.withheld)
+        self.entity_tags: dict[str, Candidate] = {tag.tag_id: tag for tag in tags.tags}
+        self.waiting = tags.waiting
+        self._add_entity_tags()
         self.related = {page_id: self._resolve_related(page_id) for page_id in self.order}
         self.references = References(claims)
-        self.withheld = frozenset(withheld)
         self.bodies = {page_id: self._resolve_marks(page_id) for page_id in self.order}
         self.nav = self._nav()
         self.files = self._files()
@@ -138,6 +152,16 @@ class Site:
 
     def _issue(self, kind: str, page: str, target: str = "") -> None:
         self.issues.append({"issue": kind, "page": page, "target": target})
+
+    def _add_entity_tags(self) -> None:
+        """The tags join the labels: in ``catalog``, ``labels`` (after the plan's) and the
+        ``page_labels`` of every page they list."""
+        self.catalog = {label_id: self.plan["labels"][label_id] for label_id in self.labels}
+        for tag in self.entity_tags.values():
+            self.catalog[tag.tag_id] = {"title_he": tag.title, "description": "", "kind": TAG_KIND}
+            self.labels.append(tag.tag_id)
+            for page_id in tag.pages:
+                self.page_labels[page_id].append(tag.tag_id)
 
     # ------------------------------------------------------------------ resolution
 
@@ -197,7 +221,7 @@ class Site:
                 found = target and (self.title(target), page_file(target))
             else:
                 target = self._label_target(link.target)
-                found = target and (self.plan["labels"][target]["title_he"], label_file(target))
+                found = target and (self.catalog[target]["title_he"], label_file(target))
             if not found:
                 if report:
                     self._issue(f"broken_{link.kind}_link", page_id, link.target)
@@ -216,7 +240,7 @@ class Site:
         nav = [{SITE_CONFIG["home_nav_title"]: HOME_FILE}, *self._nav_nodes(self.plan["tree"])]
         kinds: dict[str, list[NavEntry]] = {}
         for label_id in self.labels:
-            label = self.plan["labels"][label_id]
+            label = self.catalog[label_id]
             kinds.setdefault(label["kind"], []).append({label["title_he"]: label_file(label_id)})
         if kinds:
             sections = [{self._kind_title(kind): entries} for kind, entries in kinds.items()]
@@ -312,11 +336,17 @@ class Site:
         return lines
 
     def _label_page(self, label_id: str) -> str:
-        label = self.plan["labels"][label_id]
+        """A label's page: its description, then the pages that carry it. An entity tag has no
+        description: its page is its title and the pages."""
+        label = self.catalog[label_id]
         source = label_file(label_id)
         items = [self._page_item(source, p) for p in self.order if label_id in self.page_labels[p]]
-        body = "\n".join([label["description"], "", f"## {SITE_CONFIG['label_pages_heading']}", "", *items])
-        return with_front_matter({"title": label["title_he"], "description": label["description"]}, body)
+        intro = [label["description"], ""] if label["description"] else []
+        body = "\n".join([*intro, f"## {SITE_CONFIG['label_pages_heading']}", "", *items])
+        meta = {"title": label["title_he"]}
+        if label["description"]:
+            meta["description"] = label["description"]
+        return with_front_matter(meta, body)
 
     @staticmethod
     def _stub(source: str, target: str, title: str) -> str:
