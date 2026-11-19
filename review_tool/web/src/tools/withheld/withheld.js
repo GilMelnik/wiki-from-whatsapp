@@ -83,7 +83,7 @@ export function countsText(counts) {
 export function listsWarning(lists) {
   if (!lists) return null;
   const parts = [];
-  if (lists.waiting > 0) parts.push(`${countText(lists.waiting, "entity", formatCount, "entities")} wait for the check (run ${RUN_COMMAND})`);
+  if (lists.waiting > 0) parts.push(`${countText(lists.waiting, "entity", formatCount, "entities")} ${lists.waiting === 1 ? "waits" : "wait"} for the check (run ${RUN_COMMAND})`);
   if (lists.unusable > 0) parts.push(`the answer about ${countText(lists.unusable, "entity", formatCount, "entities")} was unusable`);
   return parts.length > 0 ? `${parts.join("; ")}: nothing of them is released.` : null;
 }

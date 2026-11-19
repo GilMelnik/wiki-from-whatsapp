@@ -35,6 +35,7 @@ test("the toolbar counts and the warning about lists the check has not answered"
   );
   assert.equal(countsText(undefined), "");
   assert.equal(listsWarning({ answered: 4, waiting: 0, unusable: 0 }), null);
+  assert.match(listsWarning({ answered: 0, waiting: 1, unusable: 0 }), /^1 entity waits for the check/);
   assert.equal(
     listsWarning({ answered: 0, waiting: 2, unusable: 1 }),
     "2 entities wait for the check (run python -m step_7_write_pages.same_complaint); the answer about 1 entity was unusable: nothing of them is released."

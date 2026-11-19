@@ -19,6 +19,7 @@ from review_tool.tools.status.update_status import UpdateStatus
 from review_tool.tools.suggestions.tool import SuggestionsTool
 from review_tool.tools.tagged.tool import TaggedTool
 from review_tool.tools.threads.tool import ThreadsTool
+from review_tool.tools.withheld.tool import WithheldTool
 from utils.config import DATA_DIR
 from utils.paths import UPDATE_LEASE_PATH, UPDATE_STATE_PATH
 
@@ -31,5 +32,6 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
     PiiTool(GRAPH).spec,
     EntitiesTool(GRAPH).spec,
     PlanTool(GRAPH).spec,
+    WithheldTool(GRAPH).spec,
     SuggestionsTool(GRAPH).spec,
 )

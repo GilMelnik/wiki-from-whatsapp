@@ -20,7 +20,7 @@ import { DialogHost } from "./Dialogs.jsx";
 import { CategoryView, LabelView } from "./ItemViews.jsx";
 import { Overview } from "./Overview.jsx";
 import { PageView } from "./PageView.jsx";
-import { LABELS_VIEW, OVERVIEW_ID, reorderOp, TOOL_ID, TREE_VIEW, treeItems } from "./plan.js";
+import { LABELS_VIEW, OVERVIEW_ID, reorderOp, TOOL_ID, TREE_VIEW, treeItems, WITHHELD_KEYS } from "./plan.js";
 import { ProposalDetail, ProposalsView } from "./ProposalsView.jsx";
 import { LabelRow, TreeRow } from "./Rows.jsx";
 import { Toolbar } from "./Toolbar.jsx";
@@ -50,8 +50,9 @@ function PlanTool({ tool }) {
   const [offer, setOffer] = useState(null);
   const scopeRef = useRef(null);
   const { runningByArtifact } = useJobs();
-  // The assignments are a write of the tool (an optional file): views follow them too.
-  const watch = useMemo(() => [...new Set([...tool.reads, ...tool.writes])], [tool.reads, tool.writes]);
+  // The assignments are a write of the tool (an optional file): views follow them too, and the
+  // optional files that decide which claims are withheld from the wiki.
+  const watch = useMemo(() => [...new Set([...tool.reads, ...tool.writes, ...WITHHELD_KEYS])], [tool.reads, tool.writes]);
   // While a step rewrites a file the tool writes, the server refuses saves (423).
   const lockedBy = tool.writes.map((key) => runningByArtifact[key]).find(Boolean) ?? null;
   const locked = Boolean(lockedBy);
