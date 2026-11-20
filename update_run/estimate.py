@@ -11,7 +11,7 @@ reported usage, task 55): its Hebrew conversations are counted at their own
 ``cache_read_price_factor`` of the input price, and the claims it writes grow with the
 conversations it reads, not with the number of calls: output is ``extract_output_ratio``
 times the conversations' tokens. Prices are ``usd_per_million_tokens`` per model, with
-``batch_discount`` when step 3 or step 9 uses the batch API. Step 9's Hebrew prompts are
+``batch_discount`` when step 3, step 8 or step 9 uses the batch API. Step 9's Hebrew prompts are
 counted with their own measured ratio (``wiki_review.chars_per_token``), one output figure per
 due review pass. Step 10, the Hebrew language edit (one call per page holding text that was
 never proofread), reads the page body: its prompt is counted at the review's ratio too, output
@@ -192,13 +192,15 @@ class Estimator:
                 ESTIMATE_CONFIG["output_tokens_per_call"][stages[row["mode"]]])
             for row in result["estimate"]
         )
+        if result["batch"]:
+            cost *= ESTIMATE_CONFIG["batch_discount"]
         modes = result["modes"]
         return Estimate(
             key, len(result["estimate"]), cost,
             f"{len(result['estimate'])} pages to write ({modes.get('write', 0)} in full, "
             f"{modes.get('update', 0)} updated), {modes.get('keep', 0)} untouched",
             f"{result['input_tokens']} input tokens by characters, output at a typical figure "
-            "per page (+ retries)",
+            f"per page (+ retries){', batch price' if result['batch'] else ''}",
         )
 
     def _review(self, run: RunFunction, key: str) -> Estimate:

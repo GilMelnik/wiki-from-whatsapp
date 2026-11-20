@@ -1,22 +1,27 @@
 """Step 8's batch route (task 74), fake models only: the same requests and the same pages as
 the sync route, retries as a second batch round, failures per page, the route switches, a
-re-run after an interrupted batch and the shared disk cache. Every page here is
+re-run after an interrupted batch, the shared disk cache and the estimate. Every page here is
 synthetic."""
 
 from __future__ import annotations
 
 import json
 from collections.abc import Callable, Collection, Sequence
+from functools import partial
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from review_tool.steps import SERVED_STEPS
 from step_8_write_pages import run as pages_run
 from step_8_write_pages.inputs import PAGES_CONFIG
 from step_8_write_pages.run import UPDATE_CONFIG, WRITE_CONFIG
 from tests.pages_fixtures import FakeWriter, PagesWorkspace
+from update_run.estimate import Estimator
 from utils.llm_client import BatchRequest, LLMClient, _flatten
+from utils.paths import STEP_8
+from utils.token_counters import CharTokenCounter
 
 PAGES = ["agencies", "costs", "clinics", "hospital"]
 WRITES = [f"write:{page_id}" for page_id in PAGES]
@@ -263,3 +268,21 @@ def test_either_route_reuses_the_answers_the_other_got(tmp_path: Path, first_bat
     assert sent == ((1, 0) if first_batch else (0, 4))
     again = ws.run(*_clients(tmp_path, provider), use_batch=not first_batch, rebuild=True)
     assert again["write"] == 4 and (len(provider.batches), len(provider.sync)) == sent
+
+
+# ------------------------------------------------------------------ the estimate
+
+
+def test_the_estimate_names_the_route_and_prices_the_batch_at_half(tmp_path: Path) -> None:
+    ws = PagesWorkspace(tmp_path)
+    write, update = FakeWriter(batch=True), FakeWriter("fake-update", batch=True)
+    counter = CharTokenCounter()
+    assert ws.run(write, update, estimate=True, count_tokens=counter)["batch"] is True
+    assert ws.run(write, update, estimate=True, count_tokens=counter,
+                  use_batch=False)["batch"] is False
+    step = SERVED_STEPS.step(STEP_8)
+    prices = {batch: Estimator(lambda _: partial(ws.run, write, update, use_batch=batch))(step)
+              for batch in (False, True)}
+    assert prices[False].usd > 0 and prices[True].usd == pytest.approx(prices[False].usd / 2)
+    assert "batch price" in prices[True].counted and "batch" not in prices[False].counted
+    assert write.calls == [] and update.calls == [] and not ws.artifact.original.exists()
