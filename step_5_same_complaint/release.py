@@ -10,9 +10,10 @@ claims naming the entity make the same complaint, and stores its groups (``SAME_
 
 ``withheld_ids(records, sources)`` is THE answer to "what is withheld now": the rule, minus what
 the check releases, with the owner's "keep withheld" marks applied. Every reader calls it once
-per load of the records (step 8's ``Corpus``, step 11, the Plan page); the Withheld page, which
-shows the check's details, reads the same ``Check.withheld``. With no answers file (the check
-never ran) nothing is released and neither the audit nor the marks are read.
+per load of the records (step 6's planning list, step 8's ``Corpus``, step 11, the Plan page);
+the Withheld page, which shows the check's details, reads the same ``Check.withheld``. With no
+answers file (the check never ran) nothing is released and neither the audit nor the marks are
+read.
 
 A claim the rule withholds is RELEASED when, in at least one entity's list, a usable stored
 answer put it in a group whose claims are backed by at least ``min_supporters`` different

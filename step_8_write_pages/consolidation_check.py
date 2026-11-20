@@ -1,8 +1,8 @@
 """The three-page check of task 27b: a few pages written with the current prompt, side by side
 with the stored ones, in a scratch data dir.
 
-PAID (the ``write`` stage, Sonnet 5.5): about $1 for the three default pages, $2 at most with
-a retry on each. Run it only against a private copy, never the canonical data:
+PAID (the ``write`` stage, Opus 5.5): about $1 for the three default pages on Sonnet 5.5, so
+about $2 on Opus 5.5 at twice its price per token; $4 at most with a retry on each. Run it only against a private copy, never the canonical data:
 
     WIKI_DATA_DIR=<empty scratch dir> .venv/bin/python -m step_8_write_pages.consolidation_check \\
         --source <data dir that holds the current pages>

@@ -2,7 +2,7 @@
 
 How it works, in plain words: for every page of the reviewed plan (C7) the step collects the
 claims assigned to it (C8; the claim records of C6, ``step_8_write_pages.inputs``) and asks
-the ``write`` stage (Sonnet 5.5) for the whole page in one call: first the page's points (each
+the ``write`` stage (Opus 5.5) for the whole page in one call: first the page's points (each
 one thing the page says, with every claim behind it, ``points``: the same thing said in many
 conversations is one point), then the article written from them, one
 statement per point: readable Hebrew prose grounded in those claims, both sides wherever

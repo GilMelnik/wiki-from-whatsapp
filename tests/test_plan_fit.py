@@ -15,6 +15,7 @@ from step_6_plan import coverage
 from step_6_plan.fit import PlanPrompt, backed_by_many, fitted_prompt
 from step_6_plan.model import PLAN_CONFIG
 from step_5_same_complaint.claim_records import Record
+from step_5_same_complaint.withhold import withholds
 from step_6_plan.prompt import claim_line, scaled_guide
 from step_6_plan.run import run
 from tests.claim_fixtures import claim_record, claim_records, write_claim_inputs
@@ -159,17 +160,21 @@ def test_a_sampled_run_records_it_and_checks_coverage_and_revises_on_all_claims(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     claims = _dated_claims()
-    many = [claim for claim in claims if backed_by_many(claim)]
-    _budget_between(monkeypatch, PlanPrompt(many, claims), PlanPrompt(claims, claims))
-    shown_ids = {claim["short_id"] for claim in fitted_prompt(claims).shown}
+    # the lone negative claims about an entity are withheld: the planning list leaves them out
+    planned = [claim for claim in claims if not withholds(claim)]
+    many = [claim for claim in planned if backed_by_many(claim)]
+    _budget_between(monkeypatch, PlanPrompt(many, planned), PlanPrompt(planned, planned))
+    shown_ids = {claim["short_id"] for claim in fitted_prompt(planned).shown}
     llm = FakeLLM([make_proposal(), make_proposal()])
     result = _run(tmp_path, claims, llm, _nowhere)
     meta = result["plan"]["metadata"]
-    assert (meta["claim_count"], meta["shown_claim_count"]) == (len(claims), len(shown_ids))
+    assert (meta["claim_count"], meta["withheld_left_out"], meta["shown_claim_count"]) == (
+        len(planned), len(claims) - len(planned), len(shown_ids))
+    assert len(claims) - len(planned) == 100
     assert meta["sample_seed"] == PLAN_CONFIG["sample_seed"]
-    assert meta["planned_claims"] == sorted(claim["short_id"] for claim in claims)
+    assert meta["planned_claims"] == sorted(claim["short_id"] for claim in planned)
     report = result["coverage"]
-    assert report["total_claims"] == len(claims)
+    assert report["total_claims"] == len(planned)
     assert set(report["none_claims"]) - shown_ids  # the check also placed claims not listed
     assert [call["task"] for call in llm.calls] == ["plan", "plan-revise"]
     first, revision = (call["user"] for call in llm.calls)

@@ -1,7 +1,8 @@
 """What the planning model reads and returns: the prompt, the response schema, and the
 conversion of its flat answer into a C7 plan (``step_6_plan.model``).
 
-The model sees every claim record (``step_5_same_complaint.claim_records``) as one compact line (short
+The model sees every claim record (``step_5_same_complaint.claim_records``) that is not
+withheld from the wiki (the planning list, ``step_6_plan.claim_list``) as one compact line (short
 id, stance, distinct supporters and opposers, first and last month, entity names, claim text)
 and nothing about the people or the conversation behind it; when the list does not fit
 ``plan.max_input_tokens`` it sees a sample (``step_6_plan.fit``), with a note and the size
