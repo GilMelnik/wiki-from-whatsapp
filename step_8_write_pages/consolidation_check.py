@@ -14,8 +14,9 @@ about $2 on Opus 5.5 at twice its price per token; $4 at most with a retry on ea
    from ``--source`` into the current data dir (``WIKI_DATA_DIR``); refuses when the two are the
    same folder.
 2. Writes the pages (``pages.consolidation_check.pages``, or ``--pages``) in full with the
-   current prompt (step 8's own ``run(only=…, rebuild=True)``; answers are cached in the
-   scratch dir, so a re-run after a crash costs nothing). ``--compare-only`` skips this.
+   current prompt (step 8's own ``run(only=…, rebuild=True, use_batch=False)``: one sync call
+   per page, so the three pages are back at once; answers are cached in the scratch dir, so a
+   re-run after a crash costs nothing). ``--compare-only`` skips this.
 3. Logs per page, before / after: prose words, statements, marks, claims cited, years named
    in the prose, links; after only: points by kind, claims left out with their reason, and
    what the checks still found.
@@ -182,7 +183,7 @@ class ConsolidationCheck:
                    plan_path=resolve(_under(PLAN, self.target)),
                    assignments_path=resolve(_under(ASSIGNMENTS, self.target)),
                    artifact=_under(WIKI_PAGES, self.target), only=self.pages, rebuild=True,
-                   llm=llm, update_llm=update_llm)
+                   use_batch=False, llm=llm, update_llm=update_llm)
 
     def claim_sources(self) -> ClaimSources:
         """The claim records' input files in the target (effective claims and entities)."""

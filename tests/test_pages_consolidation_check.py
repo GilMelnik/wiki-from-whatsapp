@@ -56,11 +56,12 @@ def test_the_check_writes_the_pages_in_a_copy_and_compares_them(tmp_path: Path,
     before = {p: p.read_bytes() for p in source.rglob("*.json")}
     check = ConsolidationCheck(source, tmp_path / "scratch", ["agencies", "hospital"], LOGGER)
     check.prepare()
-    llm = FakeWriter()
+    llm = FakeWriter(batch=True)
     with caplog.at_level(logging.INFO):
-        result = check.write(llm, FakeWriter("fake-update"))
+        result = check.write(llm, FakeWriter("fake-update", batch=True))
         comparisons = check.compare()
     assert sorted(llm.tasks()) == ["write:agencies", "write:hospital"] and result["write"] == 2
+    assert llm.batches == [] and result["batch"] is False  # the plain route: pages back at once
     assert {p: p.read_bytes() for p in source.rglob("*.json")} == before  # the source is untouched
     agencies = comparisons[0]
     assert agencies.page_id == "agencies" and CHRONICLE in agencies.before

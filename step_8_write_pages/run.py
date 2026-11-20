@@ -37,20 +37,33 @@ decisions (``step_10_proofread.run``) and writes into the EDITED file. An update
 that effective, proofread text and carries the page's ``language_edits`` record over, so only
 the sentences it adds are proofread on the next pass; a page written in full drops it (all its
 text is new). Proofreading changes no fingerprint: it never makes a page due here.
+The calls go through the provider's batch API (half price; results within minutes to about
+an hour) when ``pages.batch`` is on and both stages' clients have one: every page's first
+request in one batch per stage, the retries of the answers that failed their checks in a
+second round (``step_8_write_pages.batch``). ``--sync`` (``run(use_batch=False)``) keeps one
+call per page, ``pages.concurrency`` at a time, for a few pages wanted right away. Both routes
+send the same requests and check, retry and fail an answer the same way, and share the LLM disk
+cache (an answer one route got is not asked again by the other). A page whose answer is
+unusable (or whose call or batch failed) is listed in ``metadata.run.failed`` and keeps its old
+text and state, so the next run asks for it again; there is no fallback from an update to a
+full write. A batch the run did not see finish stops the run before anything is written; the
+next run with the same requests picks it up (``LLMClient`` keeps its id under
+``llm.batch_state_dir``) and takes every answer already fetched from the cache.
 Pages are written through ``utils.reconcile`` once per run (front matter and fingerprint are
 refresh keys, so a kept manual edit gets current front matter). A crash costs nothing on the
 re-run: prompts are deterministic and answers are in the LLM disk cache. Nothing is written
 when nothing changed, unless an input file is newer than the output (the review tool's stale
 notice then clears).
 
-    python -m step_8_write_pages.run [--rebuild] [--only PAGE_ID ...] [--estimate]
+    python -m step_8_write_pages.run [--sync] [--rebuild] [--only PAGE_ID ...] [--estimate]
 
 Output: ``wiki_pages.json`` (C9) ``{pages: {page_id: {front_matter, body_md, points,
 left_out, language_edits?, input_fingerprint}}, metadata: {sources, inputs, pages, as_of,
-models, config, git_commit, generated_at, run, summary, withheld}}``; ``points`` = ``[{kind,
+models, batch, config, git_commit, generated_at, run, summary, withheld}}``; ``points`` = ``[{kind,
 statement, claims}]``, ``left_out`` = ``[{claim, reason}]`` (short ids); ``language_edits`` =
 the last proofreading of the text (``step_10_proofread.proofreader``), carried over by an update;
 ``withheld`` = ``[{claim, page_id, entity_ids, supporter_count}]`` (ids and numbers only);
+``batch`` = whether this run's calls went through the batch API;
 ``sources`` = the files read, by role (``claims``, ``entities``, ``audit``, ``contradictions``
 when present, ``plan``, ``assignments``).
 """
@@ -66,9 +79,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import anthropic
-
+from step_4_entities.match_judge import CALL_ERRORS
 from step_5_same_complaint.claim_records import ClaimSources
+from step_8_write_pages.batch import BatchRounds
 from step_8_write_pages.checks import strip_definitions
 from step_8_write_pages.front_matter import LabelRule, page_front_matter
 from step_8_write_pages.inputs import (
@@ -80,9 +93,15 @@ from step_8_write_pages.inputs import (
     writer_fingerprint,
 )
 from step_8_write_pages.points import LeftOut, Point
-from step_8_write_pages.prompts import update_prompt, write_prompt
 from step_5_same_complaint.withhold import WITHHOLD_CONFIG
-from step_8_write_pages.writer import ClaimDelta, PageText, PageWriter, changed_share, current_text
+from step_8_write_pages.writer import (
+    ClaimDelta,
+    PageCall,
+    PageText,
+    PageWriter,
+    changed_share,
+    current_text,
+)
 from utils.json_io import read_json_if_present
 from utils.llm_client import LLMClient, _flatten
 from utils.logging_setup import git_commit, setup_step_logging
@@ -174,48 +193,60 @@ class PagesRun:
                              "reconcile line lists it as superseded; the edit is carried over)")
         return Job(page_id, "update", context, state, source or old_page, delta)
 
-    def _call(self, writer: PageWriter, job: Job) -> PageText:
+    @staticmethod
+    def _page_call(writer: PageWriter, job: Job) -> PageCall:
         if job.mode == "write":
-            return writer.write(job.context)
-        return writer.update(job.context, current_text(job.source), job.delta)
+            return writer.write_call(job.context)
+        return writer.update_call(job.context, current_text(job.source), job.delta)
 
-    def write(self, writer: PageWriter) -> dict[str, PageText]:
-        """Run the model calls of every ``write`` / ``update`` job (a failed page is logged
-        and keeps its old text, so the next run tries again)."""
-        due = [job for job in self.jobs if job.mode != "keep"]
+    def due(self) -> list[Job]:
+        """The jobs that make a model call (``write`` and ``update``)."""
+        return [job for job in self.jobs if job.mode != "keep"]
+
+    def write(self, writer: PageWriter, *, batch: bool) -> dict[str, PageText]:
+        """Run the model calls of every ``write`` / ``update`` job, through the batch API or
+        one sync call per page (a failed page is logged and keeps its old text, so the next run
+        tries again)."""
         texts: dict[str, PageText] = {}
-        with ThreadPoolExecutor(max_workers=PAGES_CONFIG["concurrency"]) as pool:
-            futures = {job.page_id: pool.submit(self._call, writer, job) for job in due}
-            for page_id, future in futures.items():
+        if batch:
+            calls = {}
+            for job in self.due():
                 try:
-                    texts[page_id] = future.result()
-                except (anthropic.APIError, RuntimeError, ValueError, OSError) as exc:
-                    self.failed[page_id] = repr(exc)
-                    self.logger.error(f"{page_id}: writing failed, old text kept: {exc!r}")
+                    calls[job.page_id] = self._page_call(writer, job)
+                except CALL_ERRORS as exc:
+                    self.failed[job.page_id] = repr(exc)
+            texts, failed = BatchRounds(writer, self.logger).run(calls)
+            self.failed.update(failed)
+        else:
+            with ThreadPoolExecutor(max_workers=PAGES_CONFIG["concurrency"]) as pool:
+                futures = {job.page_id: pool.submit(
+                    lambda job: writer.complete(self._page_call(writer, job)), job)
+                    for job in self.due()}
+                for page_id, future in futures.items():
+                    try:
+                        texts[page_id] = future.result()
+                    except CALL_ERRORS as exc:
+                        self.failed[page_id] = repr(exc)
+        for page_id, why in self.failed.items():
+            self.logger.error(f"{page_id}: writing failed, old text kept: {why}")
         return texts
 
-    def estimate(self, count_tokens: TokenCounter) -> dict[str, Any]:
-        """Input tokens of every call this run would make (no writing call)."""
+    def estimate(self, writer: PageWriter, count_tokens: TokenCounter, *,
+                 batch: bool) -> dict[str, Any]:
+        """Input tokens of every call this run would make and its route (no writing call)."""
         rows = []
-        for job in self.jobs:
-            if job.mode == "keep":
-                continue
-            if job.mode == "write":
-                system, user = write_prompt(job.context)
-            else:
-                system, user = update_prompt(job.context, current_text(job.source),
-                                             new=job.delta.new, changed=job.delta.changed,
-                                             removed=job.delta.removed,
-                                             brief_changed=job.delta.brief_changed)
-            tokens = count_tokens(system, _flatten(user))
+        for job in self.due():
+            call = self._page_call(writer, job)
+            tokens = count_tokens(call.system, _flatten(call.user))
             rows.append({"page": job.page_id, "mode": job.mode, "claims": len(job.context.records),
                          "input_tokens": tokens})
             self.logger.info(f"estimate {job.mode:6} {job.page_id}: {len(job.context.records)} "
                              f"claims, {tokens} input tokens")
         total = sum(row["input_tokens"] for row in rows)
         self.logger.info(f"estimate: {len(rows)} calls (+ retries), {total} input tokens; "
-                         f"{sum(1 for job in self.jobs if job.mode == 'keep')} pages untouched")
-        return {"estimate": rows, "input_tokens": total, "written": False,
+                         f"{sum(1 for job in self.jobs if job.mode == 'keep')} pages untouched; "
+                         f"route: {route(batch)}")
+        return {"estimate": rows, "input_tokens": total, "written": False, "batch": batch,
                 "modes": dict(Counter(job.mode for job in self.jobs))}
 
     # ----------------------------------------------------------------- payload
@@ -265,7 +296,7 @@ class PagesRun:
         return {**item, "body_md": old_page["body_md"]}
 
     def payload(self, texts: Mapping[str, PageText], sources: Mapping[str, Path],
-                models: Mapping[str, str]) -> dict[str, Any]:
+                models: Mapping[str, str], *, batch: bool) -> dict[str, Any]:
         pages: dict[str, Any] = dict(self.carried)
         states = {pid: self.old_states[pid] for pid in self.carried if pid in self.old_states}
         for job in self.jobs:
@@ -295,6 +326,7 @@ class PagesRun:
                 "pages": states,
                 "as_of": self.corpus.as_of,
                 "models": dict(models),
+                "batch": batch,
                 "config": PAGES_CONFIG,
                 "git_commit": git_commit(),
                 "generated_at": utc_now_z(),
@@ -313,6 +345,11 @@ class PagesRun:
                 "withheld": withheld,
             },
         }
+
+
+def route(batch: bool) -> str:
+    """The route of a run's calls, as the log names it."""
+    return "the batch API (half price)" if batch else "one sync call per page"
 
 
 def _unchanged(payload: Mapping[str, Any], before: Mapping[str, Any], original: Path,
@@ -334,6 +371,7 @@ def run(
     only: Collection[str] | None = None,
     rebuild: bool = False,
     estimate: bool = False,
+    use_batch: bool = True,
     llm: LLMClient | None = None,
     update_llm: LLMClient | None = None,
     count_tokens: TokenCounter | None = None,
@@ -345,10 +383,13 @@ def run(
     default to their effective (edited) files. ``only``: work on
     these page ids only (every other page stays as it is). ``rebuild``: write every page (in
     ``only``) in full; without ``only`` the edited file is backed up and replaced.
-    ``estimate``: no writing call; returns the input tokens of every call the run would make.
+    ``estimate``: no writing call; returns the input tokens of every call the run would make
+    and ``batch``, the route it would take. ``use_batch=False`` (``--sync``): one sync call per
+    page; otherwise the batch API when ``pages.batch`` is on and both clients have one.
     ``llm`` / ``update_llm`` default to the ``pages.write`` / ``pages.update`` stages. Returns
     the run counters (``write``, ``update``, ``no_change``, ``kept``, ``dropped``,
-    ``no_claims``, ``failed``, ``skipped_claims``), ``summary``, ``written`` and ``backup``.
+    ``no_claims``, ``failed``, ``skipped_claims``), ``summary``, ``batch``, ``written`` and
+    ``backup``.
     """
     logger = setup_step_logging(STEP_8)
     corpus = Corpus.load(sources, plan_path, assignments_path)
@@ -371,12 +412,17 @@ def run(
     job = PagesRun(corpus, previous, effective, model=llm.model, rebuild=rebuild, only=only,
                    logger=logger)
     job.plan()
+    batch = (use_batch and bool(PAGES_CONFIG["batch"]) and llm.supports_batch()
+             and update_llm.supports_batch())
+    writer = PageWriter(llm, update_llm, corpus.plan, logger)
     if estimate:
-        return job.estimate(count_tokens or AnthropicTokenCounter(llm.model))
-    texts = job.write(PageWriter(llm, update_llm, corpus.plan, logger))
+        return job.estimate(writer, count_tokens or AnthropicTokenCounter(llm.model), batch=batch)
+    logger.info(f"Pages: {len(job.due())} to write or update, route: {route(batch)}")
+    texts = job.write(writer, batch=batch)
     models = {"write": llm.model, "update": update_llm.model}
-    payload = job.payload(texts, corpus.sources, models)
-    result = {**payload["metadata"]["run"], "summary": payload["metadata"]["summary"], "backup": None}
+    payload = job.payload(texts, corpus.sources, models, batch=batch)
+    result = {**payload["metadata"]["run"], "summary": payload["metadata"]["summary"],
+              "batch": batch, "backup": None}
     if not full_rebuild and _unchanged(payload, previous, artifact.original,
                                        corpus.sources.values()):
         logger.info(f"Pages unchanged ({len(payload['pages'])} pages); nothing written")
@@ -395,8 +441,10 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--only", nargs="+", metavar="PAGE_ID", help="work on these pages only")
     parser.add_argument("--estimate", action="store_true",
                         help="count the input tokens of the calls a run would make; write nothing")
+    parser.add_argument("--sync", action="store_true",
+                        help="call the pages one by one instead of through the batch API")
     args = parser.parse_args(argv)
-    run(rebuild=args.rebuild, only=args.only, estimate=args.estimate)
+    run(rebuild=args.rebuild, only=args.only, estimate=args.estimate, use_batch=not args.sync)
 
 
 if __name__ == "__main__":
