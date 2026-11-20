@@ -11,7 +11,7 @@ with neutral reactions (a heart, praying hands) left out. A claim is referred to
 
 Claims withheld from the wiki now (``step_5_same_complaint.release.withheld_ids``: the owner's rule
 of ``step_5_same_complaint.withhold``, a negative statement about a named entity that fewer than
-two members reported, minus what the same-complaint check released) are treated as placed on
+two members reported, minus what the same-complaint check or the owner released) are treated as placed on
 no page:
 they are in no page's claims, in no other claim's ``contradicts``, in no front matter and in
 no label count. Each is accounted for in its primary page's ``left_out`` (``withheld_on``)

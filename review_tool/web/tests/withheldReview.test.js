@@ -1,6 +1,24 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { canKeep, countsText, groupPeopleText, keepSelection, keepToast, listsWarning, monthDate, peopleText, whyText, WHY_LABELS } from "../src/tools/withheld/withheld.js";
+import {
+  BY_YOU_KEY,
+  canKeep,
+  claimState,
+  conversationParams,
+  countsText,
+  groupPeopleText,
+  keepSelection,
+  keepToast,
+  listsWarning,
+  monthDate,
+  peopleText,
+  releasedRows,
+  releaseToast,
+  shownClaims,
+  STATUS,
+  whyText,
+  WHY_LABELS,
+} from "../src/tools/withheld/withheld.js";
 
 test("people are counted, never named", () => {
   assert.equal(peopleText(1), "backed by 1 person");
@@ -30,8 +48,8 @@ test("only a claim the rule withholds can be kept withheld", () => {
 
 test("the toolbar counts and the warning about lists the check has not answered", () => {
   assert.equal(
-    countsText({ withheld: 391, released: 12, still_withheld: 379, kept: 1 }),
-    "391 withheld by the rule · 12 released by the check · 379 still withheld · 1 kept withheld by you"
+    countsText({ withheld: 391, released: 12, released_by_you: 5, still_withheld: 374, kept: 1 }),
+    "391 withheld by the rule · 374 withheld now · 12 released by the check · 5 released by you · 1 kept withheld by you"
   );
   assert.equal(countsText(undefined), "");
   assert.equal(listsWarning({ answered: 4, waiting: 0, unusable: 0 }), null);
@@ -52,4 +70,38 @@ test("months, toasts and the selection after a change", () => {
   assert.equal(keepSelection(items, key, "b"), "b");
   assert.equal(keepSelection(items, key, "z"), "a");
   assert.equal(keepSelection([], key, "a"), null);
+});
+
+test("a claim released in the view keeps its place until the view is loaded again", () => {
+  const items = [
+    { short_id: "g-a", withheld: true },
+    { short_id: "g-b", withheld: false, hand_released: true },
+    { short_id: "g-c", withheld: true },
+    { short_id: "g-d", withheld: false, hand_released: false },
+  ];
+  assert.deepEqual(
+    shownClaims(items, new Set()).map((claim) => claim.short_id),
+    ["g-a", "g-c"]
+  );
+  assert.deepEqual(
+    shownClaims(items, new Set(["g-b", "g-d"])).map((claim) => claim.short_id),
+    ["g-a", "g-b", "g-c", "g-d"]
+  );
+  assert.deepEqual(items.map(claimState), ["withheld", "by_you", "withheld", "released"]);
+  for (const state of ["by_you", "released"]) assert.ok(STATUS[state].label, state);
+  assert.equal(STATUS.by_you.label, "Released by you");
+});
+
+test("the Released view lists your own releases first, then the entities", () => {
+  const byYou = [{ short_id: "g-b" }];
+  const rows = releasedRows([{ entity_id: "e0001" }], byYou);
+  assert.deepEqual(rows.map((row) => row.entity_id), [BY_YOU_KEY, "e0001"]);
+  assert.equal(rows[0].by_you, byYou);
+  assert.equal(releasedRows([], []).length, 1);
+});
+
+test("the release toasts and the conversation link", () => {
+  assert.match(releaseToast(true), /^Released/);
+  assert.match(releaseToast(false), /^Withheld again/);
+  assert.deepEqual(conversationParams({ thread_id: "t-1" }), { thread: "t-1" });
 });

@@ -76,8 +76,8 @@ class ClaimSources:
     file when present, else the original, at load time.
 
     ``same_complaint`` and ``same_complaint_vetoes`` are not read by the loader: they are the
-    same-complaint check's answers and the owner's "keep withheld" marks, which decide with the
-    records what is withheld from the wiki now
+    same-complaint check's answers and the owner's marks ("keep withheld", "released"), which
+    decide with the records what is withheld from the wiki now
     (``step_5_same_complaint.release.withheld_ids``)."""
 
     claims: Path | None = None

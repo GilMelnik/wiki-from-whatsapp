@@ -1,10 +1,12 @@
-"""What the Withheld page shows: the claims the same-complaint check releases, and the ones the
-withholding rule still keeps off every page, from the claim records and the check's answers.
+"""What the Withheld page shows: the claims the same-complaint check releases, the ones the owner
+released by hand, and the ones the withholding rule still keeps off every page, from the claim
+records and the check's answers.
 
 ``ClaimsData`` is the slow part (the claim records and who backs each claim, about half a second
 on the real files), loaded once per change of its files. ``WithheldView`` applies the owner's
-"keep withheld" marks to it per request (``step_5_same_complaint.release.Check``, whose ``withheld``
-is what every step and page treats as withheld now), so a mark shows at once. The backers are identities: they stay in memory here, only their counts are served.
+marks ("keep withheld", "released") to it per request (``step_5_same_complaint.release.Check``,
+whose ``withheld`` is what every step and page treats as withheld now), so a mark shows at once.
+The backers are identities: they stay in memory here, only their counts are served.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from step_5_same_complaint.release import (
     WAITING,
     Check,
     Group,
+    Marks,
     entity_name,
     load_answers,
 )
@@ -33,6 +36,7 @@ from step_5_same_complaint.withhold import withholds
 # Where a claim of a released group stands.
 RELEASED = "released"
 KEPT = "kept"  # the owner's mark: never released
+BY_YOU = "by_you"  # the owner released it by hand
 PUBLISHED = "published"  # the rule never withheld it
 SHORT = "short"  # withheld: without the marked claims, fewer than two people back the group
 # Why a claim stays withheld, in this order of precedence.
@@ -60,27 +64,31 @@ def _month(record: Mapping[str, Any]) -> str | None:
 
 @dataclass
 class WithheldView:
-    """The page's three answers over one ``ClaimsData`` and the current marks."""
+    """The page's answers over one ``ClaimsData`` and the current marks."""
 
     data: ClaimsData
-    vetoes: frozenset[str]
+    marks: Marks
 
     def __post_init__(self) -> None:
-        self.check = Check(self.data.records, self.data.backers, self.data.answers, self.vetoes)
+        self.check = Check(self.data.records, self.data.backers, self.data.answers, self.marks)
         self.by_rule = [r for r in self.data.records if withholds(r)]
 
     def _claim(self, record: Mapping[str, Any]) -> dict[str, Any]:
-        return {"short_id": record["short_id"], "text": record["claim_text"],
-                "stance": record["stance"], "supporter_count": record["supporter_count"],
-                "month": _month(record), "entity_names": list(record["entity_names"]),
-                "kept": record["short_id"] in self.vetoes}
+        short_id = record["short_id"]
+        return {"short_id": short_id, "thread_id": record["thread_id"],
+                "text": record["claim_text"], "stance": record["stance"],
+                "supporter_count": record["supporter_count"], "month": _month(record),
+                "entity_names": list(record["entity_names"]),
+                "kept": short_id in self.marks.keep_withheld,
+                "hand_released": short_id in self.marks.hand_released}
 
     def summary(self) -> dict[str, Any]:
         states = list(self.check.states.values())
-        kept = sum(1 for r in self.by_rule if r["short_id"] in self.vetoes)
+        kept = sum(1 for r in self.by_rule if r["short_id"] in self.marks.keep_withheld)
         return {
             "min_supporters": MIN_SUPPORTERS,
             "counts": {"withheld": len(self.by_rule), "released": len(self.check.released),
+                       "released_by_you": len(self.by_you()),
                        "still_withheld": len(self.check.withheld),
                        "kept": kept, "released_groups": len(self.shown_groups())},
             "lists": {state: states.count(state) for state in (ANSWERED, WAITING, UNUSABLE)},
@@ -96,8 +104,10 @@ class WithheldView:
     def _status(self, short_id: str) -> str:
         if short_id in self.check.released:
             return RELEASED
-        if short_id in self.vetoes:
+        if short_id in self.marks.keep_withheld:
             return KEPT
+        if short_id in self.marks.hand_released and withholds(self.check.records[short_id]):
+            return BY_YOU
         return SHORT if withholds(self.check.records[short_id]) else PUBLISHED
 
     def released_entities(self) -> list[dict[str, Any]]:
@@ -121,21 +131,44 @@ class WithheldView:
         short_id = record["short_id"]
         states = {self.check.states[e] for e in record["entity_ids"]}
         grouped = any(short_id in g.claims for g in self.check.groups)
-        reasons = {KEPT: short_id in self.vetoes, WAITING: WAITING in states,
+        reasons = {KEPT: short_id in self.marks.keep_withheld, WAITING: WAITING in states,
                    UNUSABLE: UNUSABLE in states, SHORT: grouped,
                    "unmatched": ANSWERED in states, "alone": states == {NO_CALL}}
         return next(why for why in WHY if reasons[why])
 
-    def still_withheld(self, query: str) -> list[dict[str, Any]]:
-        """The claims withheld now (the rule's, minus what the check releases), matching
-        ``query`` (text or entity name, any case), in the order of the claims file."""
+    def by_you(self) -> list[dict[str, Any]]:
+        """The claims the rule withholds that the owner released by hand, in the order of the
+        claims file."""
+
+        return [{**self._claim(r), "status": self._status(r["short_id"])} for r in self.by_rule
+                if r["short_id"] in self.marks.hand_released]
+
+    def rule_withheld(self, query: str) -> list[dict[str, Any]]:
+        """The claims the rule withholds, matching ``query`` (text or entity name, any case), in
+        the order of the claims file; each says whether it is ``withheld`` now and, when it
+        is, ``why`` (else ``None``: the check or the owner released it)."""
 
         words = query.casefold().split()
         rows = []
         for record in self.by_rule:
-            if record["short_id"] not in self.check.withheld:
-                continue
             haystack = " ".join([record["claim_text"], *record["entity_names"]]).casefold()
             if all(word in haystack for word in words):
-                rows.append({**self._claim(record), "why": self._why(record)})
+                withheld = record["short_id"] in self.check.withheld
+                rows.append({**self._claim(record), "withheld": withheld,
+                             "why": self._why(record) if withheld else None})
         return rows
+
+    def release_marks(self, short_id: str, release: bool) -> Marks:
+        """The marks after the owner released ``short_id`` (``release``) or withheld it again:
+        the fewest marks that leave it published, or withheld, now. Both of its marks are taken
+        away first; then it is marked "released" when it would still be withheld, or "keep
+        withheld" when the check would still release it."""
+
+        bare = Marks(self.marks.keep_withheld - {short_id}, self.marks.released - {short_id})
+        withheld = short_id in Check(self.data.records, self.data.backers, self.data.answers,
+                                     bare).withheld
+        if release and withheld:
+            return Marks(bare.keep_withheld, bare.released | {short_id})
+        if not release and not withheld:
+            return Marks(bare.keep_withheld | {short_id}, bare.released)
+        return bare

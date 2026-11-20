@@ -9,7 +9,7 @@ about $2 on Opus 5.5 at twice its price per token; $4 at most with a retry on ea
 
 1. Copies what the claim records are joined from (the claims, the entities, the private audit
    and the manual contradiction pairs), what decides which claims are withheld (the
-   same-complaint check's answers and the owner's "keep withheld" marks), the plan (step 6),
+   same-complaint check's answers and the owner's marks), the plan (step 6),
    the assignments (step 7) and the stored pages (step 8, "before"), original and edited files,
    from ``--source`` into the current data dir (``WIKI_DATA_DIR``); refuses when the two are the
    same folder.

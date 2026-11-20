@@ -19,8 +19,10 @@ from step_5_same_complaint.release import (
     entity_lists,
     list_fingerprint,
     load_answers,
-    load_vetoes,
-    save_vetoes,
+    Marks,
+    load_marks,
+    save_marks,
+    withheld_ids,
 )
 from step_5_same_complaint.withhold import withholds
 from tests.same_complaint_support import World, person
@@ -198,12 +200,12 @@ def test_a_claim_kept_withheld_is_never_released_and_backs_nobody(setup: Setup) 
     d = setup.world.add(["e0001"], [4])
     setup.records()
     setup.answer("e0001", [a, b], [c, d])
-    save_vetoes([a], setup.vetoes)
+    save_marks(Marks(frozenset([a])), setup.vetoes)
     # b's only other person was a's: b stays withheld; c and d are not touched
     assert setup.released() == {c, d}
     group = next(g for g in setup.check().groups if a in g.claims)
     assert (group.people, group.people_unmarked, group.released) == (1, 2, ())
-    save_vetoes([], setup.vetoes)
+    save_marks(Marks(), setup.vetoes)
     assert setup.released() == {a, b, c, d}
 
 
@@ -213,17 +215,57 @@ def test_three_people_survive_one_mark(setup: Setup) -> None:
     c = setup.world.add(["e0001"], [3])
     setup.records()
     setup.answer("e0001", [a, b, c])
-    save_vetoes([b], setup.vetoes)
+    save_marks(Marks(frozenset([b])), setup.vetoes)
     assert setup.released() == {a, c}
 
 
-def test_the_vetoes_file(setup: Setup) -> None:
-    assert load_vetoes(setup.vetoes) == frozenset()
-    save_vetoes(["g-b", "g-a", "g-b"], setup.vetoes)
+def test_the_marks_file(setup: Setup) -> None:
+    assert load_marks(setup.vetoes) == Marks()
+    save_marks(Marks(frozenset(["g-b", "g-a"]), frozenset(["g-c"])), setup.vetoes)
     stored = read_json_file(setup.vetoes)
-    assert stored["keep_withheld"] == ["g-a", "g-b"]
-    assert stored["metadata"]["count"] == 2
-    assert load_vetoes(setup.vetoes) == {"g-a", "g-b"}
-    write_json_file({"keep_withheld": "g-a"}, setup.vetoes)
-    with pytest.raises(ValueError, match="keep withheld"):
-        load_vetoes(setup.vetoes)
+    assert (stored["keep_withheld"], stored["released"]) == (["g-a", "g-b"], ["g-c"])
+    assert (stored["metadata"]["keep_withheld_count"], stored["metadata"]["released_count"]) == (2, 1)
+    assert load_marks(setup.vetoes) == Marks(frozenset({"g-a", "g-b"}), frozenset({"g-c"}))
+    # a file written before hand releases existed releases nothing by hand
+    write_json_file({"keep_withheld": ["g-a"], "metadata": {"count": 1}}, setup.vetoes)
+    assert load_marks(setup.vetoes) == Marks(frozenset({"g-a"}))
+    for broken in ({"keep_withheld": "g-a"}, {"keep_withheld": [], "released": "g-a"},
+                   {"keep_withheld": [], "released": [1]}, {"released": ["g-a"]}, ["g-a"]):
+        write_json_file(broken, setup.vetoes)  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="marks file"):
+            load_marks(setup.vetoes)
+
+
+def test_a_hand_release_publishes_a_claim_with_or_without_the_check(setup: Setup) -> None:
+    a = setup.world.add(["e0001"], [1])
+    b = setup.world.add(["e0001"], [2])
+    c = setup.world.add(["e0002"], [3])
+    records = setup.records()
+    assert withheld_ids(records, setup.sources) == {a, b, c}
+    save_marks(Marks(released=frozenset([c])), setup.vetoes)
+    assert withheld_ids(records, setup.sources) == {a, b}  # the check never ran
+    setup.answer("e0001", [a, b])
+    assert withheld_ids(records, setup.sources) == frozenset()
+    save_marks(Marks(frozenset([a]), frozenset([c])), setup.vetoes)
+    assert withheld_ids(records, setup.sources) == {a, b}  # a kept back, b without a second person
+
+
+def test_a_claim_in_both_lists_stays_withheld(setup: Setup, caplog: pytest.LogCaptureFixture
+                                              ) -> None:
+    a = setup.world.add(["e0001"], [1])
+    records = setup.records()
+    write_json_file({"keep_withheld": [a], "released": [a], "metadata": {}}, setup.vetoes)
+    with caplog.at_level(logging.WARNING):
+        assert withheld_ids(records, setup.sources) == {a}
+    assert "both kept withheld and released by hand" in caplog.text
+    setup.answer("e0001")
+    assert withheld_ids(records, setup.sources) == {a}
+
+
+def test_a_release_the_rule_does_not_need_changes_nothing(setup: Setup) -> None:
+    a = setup.world.add(["e0001"], [1])
+    backed = setup.world.add(["e0001"], [2, 3])
+    records = setup.records()
+    save_marks(Marks(released=frozenset([backed, "g-gone0000"])), setup.vetoes)
+    assert withheld_ids(records, setup.sources) == {a}
+    assert backed not in setup.check().withheld and a in setup.check().withheld

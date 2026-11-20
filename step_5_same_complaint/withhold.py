@@ -12,13 +12,13 @@ is below ``min_supporters`` (2). A negative claim that names no entity is publis
 The record's keys are read with ``[...]``: a record of another shape raises ``KeyError``
 instead of letting a lone complaint through as "names nothing".
 
-The one way out for a claim the rule withholds is the same-complaint check
-(``step_5_same_complaint.run``): a model found a second person making the SAME
-complaint about the same entity, and the owner did not mark the claim "keep withheld" on the
-Withheld page. What is withheld NOW (the rule, minus what the check released) is
-``step_5_same_complaint.release.withheld_ids``: every reader (step 8, step 11, the
-Plan page, the Withheld page) uses that one function, once per load of the records. Without the
-check's answers file nothing is released.
+A claim the rule withholds has two ways out: the same-complaint check
+(``step_5_same_complaint.run``) found a second person making the SAME complaint about the same
+entity, and the owner did not mark the claim "keep withheld" on the Withheld page; or the owner
+released it by hand there. What is withheld NOW (the rule, minus what the check released, minus
+the hand releases) is ``step_5_same_complaint.release.withheld_ids``: every reader (step 8,
+step 11, the Plan page, the Withheld page) uses that one function, once per load of the records.
+Without the check's answers file the check releases nothing.
 
 Step 8's ``Corpus`` treats a withheld claim as placed on no page (it never reaches the writer,
 another claim's ``contradicts``, the front matter or step 9's claim lines) and accounts for it

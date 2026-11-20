@@ -1,5 +1,5 @@
 """The same-complaint check wired into the pipeline: what is withheld now follows the check's
-answers and the owner's "keep withheld" marks in step 8 (the writer), step 11 (the site), the
+answers and the owner's marks ("keep withheld", "released" by hand) in step 8 (the writer), step 11 (the site), the
 Plan page and the update run. Synthetic claims, people and answers, a fake model; no paid call.
 """
 
@@ -17,9 +17,10 @@ from review_tool.toolset import TOOL_SPECS
 from step_5_same_complaint.claim_records import ClaimSources, Record, load_claim_records
 from step_5_same_complaint import run as same_complaint
 from step_5_same_complaint.release import (
+    Marks,
     entity_lists,
     list_fingerprint,
-    save_vetoes,
+    save_marks,
     withheld_ids,
 )
 from step_5_same_complaint.withhold import REASON
@@ -85,16 +86,19 @@ def ws(tmp_path: Path) -> PagesWorkspace:
 # ------------------------------------------------------------------- what is withheld now
 
 
-def test_without_an_answers_file_the_rule_alone_decides_and_nothing_else_is_read(
-        tmp_path: Path) -> None:
-    lone = claim_record(1, supporter_count=1)
+def test_without_an_answers_file_the_rule_and_the_hand_releases_decide(tmp_path: Path) -> None:
+    lone, other = claim_record(1, supporter_count=1), claim_record(2, supporter_count=1)
+    marks = tmp_path / "no_marks.json"
     missing = ClaimSources(audit=tmp_path / "no_audit.json",
                            same_complaint=tmp_path / "no_answers.json",
-                           same_complaint_vetoes=tmp_path / "no_marks.json")
+                           same_complaint_vetoes=marks)
     assert withheld_ids([lone, claim_record(5)], missing) == {lone["short_id"]}
-    # a broken marks file is not even read while the check has never answered
-    (tmp_path / "no_marks.json").write_text("[]", encoding="utf-8")
-    assert withheld_ids([lone], missing) == {lone["short_id"]}
+    save_marks(Marks(released=frozenset([other["short_id"]])), marks)
+    assert withheld_ids([lone, other], missing) == {lone["short_id"]}
+    # a broken marks file raises: ignoring it could publish or withhold by accident
+    marks.write_text("[]", encoding="utf-8")
+    with pytest.raises(ValueError, match="marks file"):
+        withheld_ids([lone], missing)
 
 
 def test_without_an_answers_file_step_7_withholds_both(ws: PagesWorkspace) -> None:
@@ -120,19 +124,28 @@ def test_a_released_claim_reaches_the_writer(ws: PagesWorkspace) -> None:
 def test_a_claim_kept_withheld_stays_out_and_the_mark_can_be_taken_away(
         ws: PagesWorkspace) -> None:
     check(ws.sources)
-    save_vetoes([FIRST], ws.sources.same_complaint_vetoes)
+    save_marks(Marks(frozenset([FIRST])), ws.sources.same_complaint_vetoes)
     llm = FakeWriter()
     ws.run(llm)
     # the mark keeps FIRST back, and without it one person is left behind SECOND
     assert FIRST not in prompts(llm) and SECOND not in prompts(llm)
     assert withheld(ws) == [FIRST, SECOND]
-    save_vetoes([], ws.sources.same_complaint_vetoes)
+    save_marks(Marks(), ws.sources.same_complaint_vetoes)
     update = FakeWriter("fake-update")
     ws.run(FakeWriter(), update)
     # hospital shows claim 3's contradiction with SECOND again
     assert sorted(update.tasks()) == ["update:agencies", "update:clinics", "update:costs",
                                       "update:hospital"]
     assert withheld(ws) == []
+
+
+def test_a_claim_released_by_hand_reaches_the_writer_without_the_check(
+        ws: PagesWorkspace) -> None:
+    save_marks(Marks(released=frozenset([FIRST])), ws.sources.same_complaint_vetoes)
+    llm = FakeWriter()
+    ws.run(llm)
+    assert FIRST in prompts(llm) and SECOND not in prompts(llm)
+    assert withheld(ws) == [SECOND]
 
 
 def test_a_stale_answer_releases_nothing_until_the_check_asks_again(ws: PagesWorkspace) -> None:
@@ -170,7 +183,7 @@ def test_the_site_follows_the_check_and_the_marks(tmp_path: Path) -> None:
     assert issues_of(site(), "withheld_reference") == [("agencies", first)]
     assert check(sources)["released"] == 2
     assert issues_of(site(), "withheld_reference") == []
-    save_vetoes([first], sources.same_complaint_vetoes)
+    save_marks(Marks(frozenset([first])), sources.same_complaint_vetoes)
     assert issues_of(site(), "withheld_reference") == [("agencies", first)]
 
 
@@ -199,7 +212,7 @@ def test_the_plan_page_follows_a_release_and_a_mark_without_a_restart(tmp_path: 
              "answered_at": "2026-11-19T00:00:00+00:00"}
     write_json_file({"entities": {entity_id: entry}, "metadata": {}}, sources.same_complaint)
     assert marked() == [False, False]
-    save_vetoes([pair[0]], sources.same_complaint_vetoes)
+    save_marks(Marks(frozenset([pair[0]])), sources.same_complaint_vetoes)
     assert marked() == [True, True]
 
 

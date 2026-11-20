@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from step_5_same_complaint.release import save_vetoes
+from step_5_same_complaint.release import Marks, save_marks
 from step_5_same_complaint.run import run as check_same_complaints
 from step_6_plan.claim_list import PlanningRefused
 from step_6_plan.model import PLAN_CONFIG
@@ -87,7 +87,8 @@ def test_a_planning_run_refuses_before_any_call_while_a_list_waits_for_the_check
 
 def test_after_the_check_the_planner_works_on_the_claims_not_withheld(planning: Planning) -> None:
     planning.check()
-    save_vetoes([planning.ids["d"]], planning.sources.same_complaint_vetoes)  # "keep withheld"
+    kept = Marks(frozenset([planning.ids["d"]]))  # "keep withheld"
+    save_marks(kept, planning.sources.same_complaint_vetoes)
     llm = FakeLLM([make_proposal(), make_proposal()])
     classifier = FakeClassifier(_on_agencies)
     result = run(sources=planning.sources, artifact=planning.artifact, llm=llm,  # type: ignore[arg-type]
@@ -107,6 +108,16 @@ def test_after_the_check_the_planner_works_on_the_claims_not_withheld(planning: 
     assert (meta["claim_count"], meta["withheld_left_out"]) == (6, 2)
     assert meta["planned_claims"] == planning.short_ids(*listed)
     assert result["coverage"]["total_claims"] == 6
+
+
+def test_a_claim_released_by_hand_reaches_the_planner(planning: Planning) -> None:
+    planning.check()
+    save_marks(Marks(released=frozenset([planning.ids["f"]])), planning.sources.same_complaint_vetoes)
+    llm = FakeLLM([])
+    estimate = planning.plan(llm, estimate=True)
+    assert (estimate["claim_count"], estimate["withheld_left_out"]) == (8, 0)
+    (_, user), = planning.counted
+    assert planning.ids["f"] in user and llm.calls == []
 
 
 def test_a_run_that_makes_no_planning_call_is_not_affected(planning: Planning) -> None:
