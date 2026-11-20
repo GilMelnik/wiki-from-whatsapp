@@ -1,10 +1,11 @@
 import { Bidi, Panel, PanelState } from "@shell";
-import { ClaimCard, ClaimFacts, KeepSwitch } from "./ClaimCard.jsx";
-import { groupPeopleText, whyText } from "./withheld.js";
+import { ClaimCard, ClaimFacts, ConversationLink, EntityNames, KeepSwitch, ReleaseButton } from "./ClaimCard.jsx";
+import { claimState, CONVERSATION_LINK_ID, groupPeopleText, whyText } from "./withheld.js";
 
-// The main column. Released by the check: the selected entity's groups, each with the English
-// label the model gave the complaint they share and its claims. Still withheld: the selected
-// claim, the entities it names and why nothing releases it.
+// The main column. Released: the selected entity's groups, each with the English label the
+// model gave the complaint they share and its claims; or the claims the owner released by
+// hand. Still withheld: the selected claim, the entities it names, why nothing releases it,
+// and the owner's "Release" (or, once released, "Withhold again").
 
 export function EntityGroups({ entity, minSupporters, saving, onKeep }) {
   return (
@@ -34,7 +35,32 @@ export function EntityGroups({ entity, minSupporters, saving, onKeep }) {
   );
 }
 
-export function ClaimDetail({ claim, minSupporters, saving, onKeep }) {
+export function ReleasedByYou({ claims, saving, onRelease }) {
+  return (
+    <Panel title="Released by you" subtitle="Claims the rule withholds that you released by hand: the pages may use them">
+      <PanelState empty={claims.length === 0} emptyText="You released no claim by hand. Release one in the “Still withheld” view.">
+        <ul className="space-y-2 p-4">
+          {claims.map((claim) => (
+            <ClaimCard key={claim.short_id} claim={claim} saving={saving} onRelease={onRelease} />
+          ))}
+        </ul>
+      </PanelState>
+    </Panel>
+  );
+}
+
+function StateNote({ claim, minSupporters }) {
+  switch (claimState(claim)) {
+    case "by_you":
+      return <p className="note note-success">You released it by hand: the pages may use it.</p>;
+    case "released":
+      return <p className="note note-success">The check releases it now that you took your “keep withheld” mark away.</p>;
+    default:
+      return <p className="note note-warning">{whyText(claim.why, minSupporters)}</p>;
+  }
+}
+
+export function ClaimDetail({ claim, minSupporters, saving, onKeep, onRelease, releaseKey }) {
   return (
     <Panel title="Withheld claim">
       <PanelState empty={!claim} emptyText="Pick a claim in the list">
@@ -44,16 +70,13 @@ export function ClaimDetail({ claim, minSupporters, saving, onKeep }) {
               {claim.text}
             </Bidi>
             <ClaimFacts claim={claim} />
-            <p>
-              Names{" "}
-              {claim.entity_names.map((name, index) => (
-                <span key={name}>
-                  {index > 0 && ", "}“<Bidi>{name}</Bidi>”
-                </span>
-              ))}
-            </p>
-            <p className="note note-warning">{whyText(claim.why, minSupporters)}</p>
-            {claim.kept && <KeepSwitch claim={claim} saving={saving} onKeep={onKeep} />}
+            <EntityNames claim={claim} />
+            <StateNote claim={claim} minSupporters={minSupporters} />
+            <div className="flex flex-wrap items-center gap-4">
+              <ReleaseButton claim={claim} published={!claim.withheld} saving={saving} onRelease={onRelease} keyName={releaseKey} />
+              {claim.kept && <KeepSwitch claim={claim} saving={saving} onKeep={onKeep} />}
+              <ConversationLink claim={claim} id={CONVERSATION_LINK_ID} />
+            </div>
           </div>
         )}
       </PanelState>

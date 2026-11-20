@@ -4,18 +4,24 @@ import { countText, formatCount } from "@shell";
 export const TOOL_ID = "withheld";
 export const VETOES_KEY = "withheld_vetoes";
 export const RUN_COMMAND = "python -m step_5_same_complaint.run";
+// The Conversations page, where a claim's conversation opens (`?thread=<id>`).
+export const THREADS_TOOL = "threads";
+export const CONVERSATION_LINK_ID = "withheld-conversation-link";
 
 export const RELEASED_VIEW = "released";
 export const WITHHELD_VIEW = "withheld";
 export const VIEWS = [
-  { value: RELEASED_VIEW, label: "Released by the check", key: "r" },
+  { value: RELEASED_VIEW, label: "Released", key: "r" },
   { value: WITHHELD_VIEW, label: "Still withheld", key: "w" },
 ];
+// The first row of the Released view's list: the claims released by the owner's hand.
+export const BY_YOU_KEY = "by-you";
 
 // Where a claim of a released group stands.
 export const STATUS = {
-  released: { label: "Released", badge: "badge-emerald" },
+  released: { label: "Released by the check", badge: "badge-emerald" },
   kept: { label: "Kept withheld", badge: "badge-amber" },
+  by_you: { label: "Released by you", badge: "badge-sky" },
   short: { label: "Still withheld", badge: "badge-rose" },
   published: { label: "Published anyway", badge: "badge-slate" },
 };
@@ -73,8 +79,9 @@ export function countsText(counts) {
   if (!counts) return "";
   return [
     `${formatCount(counts.withheld)} withheld by the rule`,
+    `${formatCount(counts.still_withheld)} withheld now`,
     `${formatCount(counts.released)} released by the check`,
-    `${formatCount(counts.still_withheld)} still withheld`,
+    `${formatCount(counts.released_by_you)} released by you`,
     `${formatCount(counts.kept)} kept withheld by you`,
   ].join(" · ");
 }
@@ -96,6 +103,33 @@ export function monthDate(month) {
 
 export function keepToast(keep) {
   return keep ? "Kept withheld: the check will not release this claim" : "Mark removed: the check may release this claim again";
+}
+
+export function releaseToast(release) {
+  return release ? "Released: the pages may use this claim" : "Withheld again: the claim stays off every page";
+}
+
+/** Where a claim of the "Still withheld" view stands now: withheld, released by you, or
+ * released by the check (after you took your "keep withheld" mark away). */
+export function claimState(claim) {
+  if (claim.withheld) return "withheld";
+  return claim.hand_released ? "by_you" : "released";
+}
+
+/** The rows of the "Still withheld" view: the claims withheld now, and the ones released in
+ * this view since it was loaded (`releasedHere`), so a card keeps its place under the cursor. */
+export function shownClaims(items, releasedHere) {
+  return items.filter((claim) => claim.withheld || releasedHere.has(claim.short_id));
+}
+
+/** The Released view's list: the claims you released by hand first, then the entities. */
+export function releasedRows(entities, byYou) {
+  return [{ entity_id: BY_YOU_KEY, by_you: byYou }, ...entities];
+}
+
+/** The Conversations page's link parameters for a claim's conversation. */
+export function conversationParams(claim) {
+  return { thread: claim.thread_id };
 }
 
 /** The selection after the list changed: the same key while listed, else the first. */
