@@ -208,18 +208,22 @@ def test_every_configured_stage_builds_a_client() -> None:
     }
 
 
-@pytest.mark.parametrize(("stage", "model"), [
-    ("plan", "claude-fable-5-2"),  # the owner: "For planing use fable"
-    ("write", "claude-opus-5-5"),  # "for writing the pages use opus"
+@pytest.mark.parametrize(("stage", "model", "effort"), [
+    ("plan", "claude-fable-5-2", "high"),  # the owner: "For planing use fable"
+    ("write", "claude-opus-5-5", "high"),  # "for writing the pages use opus"
+    # "I accept review fable, applying review opus, update opus."
+    ("review", "claude-fable-5-2", "high"),
+    ("apply", "claude-opus-5-5", "medium"),
+    ("update", "claude-opus-5-5", "medium"),
 ])
-def test_the_planning_and_writing_stages_send_only_what_their_model_takes(
-    stage: str, model: str
+def test_the_stages_the_owner_chose_a_model_for_send_only_what_it_takes(
+    stage: str, model: str, effort: str
 ) -> None:
     assert CONFIG["stages"][stage] == {"provider": "anthropic", "model": model,
-                                       "thinking_param": "high"}
+                                       "thinking_param": effort}
     params = LLMClient.for_stage(stage)._provider._message_params("sys", "usr", {"type": "object"})
 
     assert params["model"] == model
     assert params["output_config"] == {
-        "effort": "high", "format": {"type": "json_schema", "schema": {"type": "object"}}}
+        "effort": effort, "format": {"type": "json_schema", "schema": {"type": "object"}}}
     assert "thinking" not in params and "temperature" not in params

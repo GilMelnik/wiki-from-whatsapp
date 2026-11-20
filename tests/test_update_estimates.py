@@ -96,10 +96,11 @@ def _results() -> dict[str, dict[str, Any]]:
 @pytest.mark.parametrize(("key", "calls", "usd"), [
     (STEP_3, 2, ((EXTRACT_CONVERSATIONS + 2 * 2170 * 0.1) * 2 + EXTRACT_OUTPUT * 10) / 1e6 * 0.5),
     (STEP_7, 1, 10 * 12200 * 0.042 / 1e6 + (30000 * 2 + 4000 * 10) / 1e6),
-    # a page written in full (the write stage, Opus 5.5) and one updated (the update stage,
-    # Sonnet 5.5)
-    (STEP_8, 2, (500_000 * 4 + 13000 * 20 + 500_000 * 2 + 6000 * 10) / 1e6),
-    (STEP_9, 2, (200_000 * 4 + 6000 * 2 * 20) / 1e6 * 0.5),
+    # a page written in full (the write stage) and one updated (the update stage), both on
+    # Opus 5.5
+    (STEP_8, 2, (500_000 * 4 + 13000 * 20 + 500_000 * 4 + 6000 * 20) / 1e6),
+    # two review calls (Fable 5.2, batch)
+    (STEP_9, 2, (200_000 * 8 + 6000 * 2 * 40) / 1e6 * 0.5),
     # two proofreading calls (Fable, batch): 10,000 and 10,001 input tokens at the review's
     # 1.56 characters per token, 23,000 output tokens each
     (STEP_10, 2, ((10_000 + 10_001) * 8 + 2 * 23000 * 40) / 1e6 * 0.5),

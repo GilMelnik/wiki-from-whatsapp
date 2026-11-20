@@ -10,10 +10,10 @@
       "extract": {"provider": "anthropic", "model": "claude-sonnet-5-5", "thinking_param": "high"},
       "plan": {"provider": "anthropic", "model": "claude-fable-5-2", "thinking_param": "high"},
       "write": {"provider": "anthropic", "model": "claude-opus-5-5", "thinking_param": "high"},
-      "review": {"provider": "anthropic", "model": "claude-opus-5-5", "thinking_param": "high"},
-      "apply": {"provider": "anthropic", "model": "claude-sonnet-5-5", "thinking_param": "medium"},
+      "review": {"provider": "anthropic", "model": "claude-fable-5-2", "thinking_param": "high"},
+      "apply": {"provider": "anthropic", "model": "claude-opus-5-5", "thinking_param": "medium"},
       "propose": {"provider": "anthropic", "model": "claude-sonnet-5-5", "thinking_param": "low"},
-      "update": {"provider": "anthropic", "model": "claude-sonnet-5-5", "thinking_param": "medium"},
+      "update": {"provider": "anthropic", "model": "claude-opus-5-5", "thinking_param": "medium"},
       "proofread": {"provider": "anthropic", "model": "claude-fable-5-2", "thinking_param": "high"},
       "entity_judge": {"provider": "anthropic", "model": "claude-opus-5-5", "thinking_param": "high"},
       "same_complaint": {"provider": "anthropic", "model": "claude-opus-5-5", "thinking_param": "high"}
