@@ -1,8 +1,9 @@
 """Step 6: let the planning model propose the wiki's structure from the claims (contract C7).
 
 How it works, in plain words: the model configured for stage ``plan.stage`` (Fable 5.2) reads
-every claim record (C6, ``step_5_same_complaint.claim_records``), one compact line each (or, when they do
-not fit ``plan.max_input_tokens``, a sample of them: ``step_6_plan.fit``), and proposes a tree of
+the claim records (C6, ``step_5_same_complaint.claim_records``) without the claims withheld from
+the wiki now (``step_6_plan.claim_list``), one compact line each (or, when they do not fit
+``plan.max_input_tokens``, a sample of them: ``step_6_plan.fit``), and proposes a tree of
 content: an abstraction layer on top (for example the phases of the process), categories
 below it, and pages as the leaves (sized by ``plan.page_claims``, with ``plan.max_pages``
 only as a safety ceiling), each with a scope that says
@@ -17,8 +18,11 @@ clear message instead of being truncated.
 
 A plan is curated, not derived: the owner edits it (``step_6_plan.operations``, the plan
 review tool). So a normal run on an existing plan makes NO model call and writes nothing: it
-validates the plan and reports how many claims are newer than it (step 7 assigns them). Only
-``run(rebuild=True)`` / ``--rebuild`` plans again, after backing up the edited plan.
+validates the plan and reports how many claim records are not among the plan's
+``planned_claims`` (the claims newer than it, and the ones withheld when it was planned; step
+7 assigns them all). Only ``run(rebuild=True)`` / ``--rebuild`` plans again, after backing up
+the edited plan. A run that would plan refuses, before any model call, while an entity list
+still waits for the same-complaint check (step 5): the owner reviews the Withheld page first.
 
     python -m step_6_plan.run [--rebuild]
 
@@ -35,6 +39,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from step_5_same_complaint.claim_records import ClaimSources, Record, load_claim_records
+from step_6_plan.claim_list import PlanningList, PlanningRefused
 from step_6_plan.coverage import COVERAGE_CONFIG, coverage_check, findings, named_claims
 from step_6_plan.fit import fitted_prompt
 from step_6_plan.model import PLAN_CONFIG, PlanError, validation_errors
@@ -184,33 +189,44 @@ def run(
     """Plan the wiki if there is no plan yet (or on ``rebuild``); otherwise only check it.
 
     ``sources``: the files the claim records are joined from (default: the effective claims
-    and entities, the audit and the manual contradictions). ``llm``, ``classifier`` and
-    ``count_tokens`` default to the configured stages. Returns ``written``, ``model_calls``,
-    ``page_count``, ``label_count``, ``plan_path`` and, after a planning run, ``input_tokens``,
-    ``coverage`` (the report) and ``backup``; after a check run, ``unplanned_claims`` (claims
-    newer than the plan).
+    and entities, the audit and the manual contradictions), with the same-complaint answers
+    and marks that decide what is withheld. ``llm``, ``classifier`` and ``count_tokens``
+    default to the configured stages. Returns ``written``, ``model_calls``, ``page_count``,
+    ``label_count``, ``plan_path`` and, after a planning run, ``input_tokens``, ``coverage``
+    (the report) and ``backup``; after a check run, ``unplanned_claims`` (claim records not
+    among the plan's ``planned_claims``). A planning run raises
+    ``PlanningRefused`` before any model call while an entity list waits for the
+    same-complaint check.
     """
 
     logger = setup_step_logging(STEP_6)
-    claims = load_claim_records(sources)
+    records = load_claim_records(sources)
     current = resolve(artifact)
-    if current.is_file() and not rebuild:
+    would_call = rebuild or not current.is_file()
+    if not would_call:
         plan = json.loads(current.read_text(encoding="utf-8"))
         errors = validation_errors(plan)
         if errors:
             raise PlanError([f"{current} is not a valid C7 plan; fix it in the plan review "
                              "tool, or plan again with --rebuild (backs it up first)", *errors])
         planned = set(plan["metadata"].get("planned_claims") or [])
-        unplanned = sum(1 for claim in claims if claim["short_id"] not in planned)
+        unplanned = sum(1 for claim in records if claim["short_id"] not in planned)
         logger.info(
             f"Plan {current}: {len(plan['pages'])} pages, {len(plan['labels'])} labels; kept "
-            f"as is (curated; --rebuild to plan again). {unplanned} of {len(claims)} claims "
+            f"as is (curated; --rebuild to plan again). {unplanned} of {len(records)} claims "
             "are newer than the plan."
         )
         return {"written": False, "model_calls": 0, "page_count": len(plan["pages"]),
                 "label_count": len(plan["labels"]), "unplanned_claims": unplanned,
                 "plan_path": str(current)}
 
+    planning = PlanningList.load(records, sources)
+    refusal = planning.refusal()
+    if refusal:
+        raise PlanningRefused(refusal)
+    claims = planning.claims
+    logger.info(f"Planning list: {len(claims)} of {len(records)} claims; "
+                f"{planning.withheld_left_out} withheld from the wiki are left out")
     llm = llm or LLMClient.for_stage(
         PLAN_CONFIG["stage"], max_tokens=PLAN_CONFIG["max_output_tokens"], logger=logger
     )
@@ -228,6 +244,7 @@ def run(
         "git_commit": git_commit(),
         "config": PLAN_CONFIG,
         "claim_count": len(claims),
+        "withheld_left_out": planning.withheld_left_out,
         "shown_claim_count": planner.shown_count,
         "sample_seed": PLAN_CONFIG["sample_seed"],
         "planned_claims": sorted(planner.short_ids),
