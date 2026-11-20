@@ -206,3 +206,20 @@ def test_every_configured_stage_builds_a_client() -> None:
     assert set(stages) >= {
         "extract", "plan", "write", "review", "apply", "propose", "update",
     }
+
+
+@pytest.mark.parametrize(("stage", "model"), [
+    ("plan", "claude-fable-5-2"),  # the owner: "For planing use fable"
+    ("write", "claude-opus-5-5"),  # "for writing the pages use opus"
+])
+def test_the_planning_and_writing_stages_send_only_what_their_model_takes(
+    stage: str, model: str
+) -> None:
+    assert CONFIG["stages"][stage] == {"provider": "anthropic", "model": model,
+                                       "thinking_param": "high"}
+    params = LLMClient.for_stage(stage)._provider._message_params("sys", "usr", {"type": "object"})
+
+    assert params["model"] == model
+    assert params["output_config"] == {
+        "effort": "high", "format": {"type": "json_schema", "schema": {"type": "object"}}}
+    assert "thinking" not in params and "temperature" not in params

@@ -1,6 +1,6 @@
 """Step 6: let the planning model propose the wiki's structure from the claims (contract C7).
 
-How it works, in plain words: the model configured for stage ``plan.stage`` (Opus 5.5) reads
+How it works, in plain words: the model configured for stage ``plan.stage`` (Fable 5.2) reads
 every claim record (C6, ``step_5_same_complaint.claim_records``), one compact line each (or, when they do
 not fit ``plan.max_input_tokens``, a sample of them: ``step_6_plan.fit``), and proposes a tree of
 content: an abstraction layer on top (for example the phases of the process), categories
