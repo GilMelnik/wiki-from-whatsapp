@@ -2,7 +2,7 @@
 
 The planner never sees a claim withheld from the wiki now (``step_5_same_complaint.release.
 withheld_ids``: the withholding rule, minus what the same-complaint check released, with the
-owner's "keep withheld" marks). What is withheld is settled only once the check has answered
+owner's "keep withheld" marks, minus what the owner released by hand). What is withheld is settled only once the check has answered
 every entity list it could release a claim from, so a run that would make a planning call
 refuses while a list still waits for it (the check's own state ``WAITING``, the lists a run
 of ``step_5_same_complaint.run`` would ask about). The assignment (step 7) still places every

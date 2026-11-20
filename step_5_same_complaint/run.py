@@ -44,11 +44,12 @@ from step_4_entities.match_judge import CALL_ERRORS
 from step_5_same_complaint.claim_records import ClaimSources, Record, claim_backers, load_claim_records
 from step_5_same_complaint.release import (
     Check,
+    Marks,
     entity_name,
     groups_problem,
     list_fingerprint,
     load_answers,
-    load_vetoes,
+    load_marks,
 )
 from utils.config import LLM_CONFIG, section
 from utils.json_io import write_json_file
@@ -191,7 +192,7 @@ class SameComplaintRun:
     def __init__(self, sources: ClaimSources, llm: LLMClient | None,
                  logger: logging.Logger) -> None:
         self.answers_path = sources.same_complaint
-        self.vetoes_path = sources.same_complaint_vetoes
+        self.marks_path = sources.same_complaint_vetoes
         self.logger = logger
         self.llm = llm or LLMClient.for_stage(CONFIG["stage"], logger=logger,
                                               max_tokens=CONFIG["max_output_tokens"])
@@ -201,7 +202,7 @@ class SameComplaintRun:
     def run(self, *, rebuild: bool, only: Collection[str] | None, estimate: bool
             ) -> dict[str, Any]:
         stored = load_answers(self.answers_path)
-        check = Check(self.records, self.backers, stored, frozenset())
+        check = Check(self.records, self.backers, stored, Marks())
         asked = check.asked()
         due = due_lists(asked, {} if rebuild else stored, only=only, logger=self.logger)
         requests = {entity_id: build_request(entity_id, claims) for entity_id, claims in due.items()}
@@ -231,7 +232,7 @@ class SameComplaintRun:
             entries[entity_id] = {"fingerprint": list_fingerprint(claims), "groups": groups,
                                   "problem": problem, "answered_at": utc_now()}
         written = self._write(entries, stored, counts)
-        check = Check(self.records, self.backers, entries, load_vetoes(self.vetoes_path))
+        check = Check(self.records, self.backers, entries, load_marks(self.marks_path))
         counts["released"] = len(check.released)
         self.logger.info(f"Same-complaint check done: {counts}; written: {written}")
         return {**counts, "written": written}

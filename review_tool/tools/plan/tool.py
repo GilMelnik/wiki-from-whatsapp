@@ -8,7 +8,7 @@ where the classifier put each claim (contract C8): moves claims between pages an
 (which pins them) and decides on the step's proposals. The claims are the C6 records
 (``step_5_same_complaint.claim_records``), joined from the claims, the entities, step 3's audit and the
 manual contradictions; a change to any of them reloads the store, and so does a change to the
-same-complaint check's answers or the owner's "keep withheld" marks (they decide which claims
+same-complaint check's answers or the owner's marks of the Withheld page (they decide which claims
 the rows mark as withheld from the wiki). Endpoints, under
 ``/api/plan``:
 

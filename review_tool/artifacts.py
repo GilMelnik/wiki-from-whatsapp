@@ -212,9 +212,11 @@ def _pipeline_nodes() -> tuple[ArtifactNode, ...]:
             "same_complaint", "Same-complaint answers", SAME_COMPLAINT_PATH,
             step=STEP_5, upstream=("claims", "entities"),
         ),
-        # The owner's "keep withheld" marks (the Withheld page): no step; with the check's
-        # answers they decide which claims the pages may use, so a change makes the pages stale.
-        ArtifactNode("withheld_vetoes", "Claims kept withheld", SAME_COMPLAINT_VETOES_PATH),
+        # The owner's marks of the Withheld page ("keep withheld", "released"): no step; with the
+        # check's answers they decide which claims the pages may use, so a change makes the
+        # pages stale.
+        ArtifactNode("withheld_vetoes", "Claims kept withheld or released by you",
+                     SAME_COMPLAINT_VETOES_PATH),
         # Curated: a normal step-6 run keeps the owner's plan as is, so new claims never make
         # it stale; the assignment step places them.
         ArtifactNode.from_pair("plan", "Wiki plan", PLAN, STEP_6, ("claims", "entities"), curated=True),

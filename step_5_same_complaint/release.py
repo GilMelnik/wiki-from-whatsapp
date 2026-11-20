@@ -9,11 +9,11 @@ claim record (C6) whose stance is ``negative``, that names at least one entity a
 claims naming the entity make the same complaint, and stores its groups (``SAME_COMPLAINT_PATH``).
 
 ``withheld_ids(records, sources)`` is THE answer to "what is withheld now": the rule, minus what
-the check releases, with the owner's "keep withheld" marks applied. Every reader calls it once
-per load of the records (step 6's planning list, step 8's ``Corpus``, step 11, the Plan page);
-the Withheld page, which shows the check's details, reads the same ``Check.withheld``. With no
-answers file (the check never ran) nothing is released and neither the audit nor the marks are
-read.
+the check releases (the owner's "keep withheld" marks applied), minus what the owner released by
+hand. Every reader calls it once per load of the records (step 6's planning list, step 8's
+``Corpus``, step 11, the Plan page); the Withheld page, which shows the check's details, reads
+the same ``Check.withheld``. With no answers file (the check never ran) the check releases
+nothing and the audit is not read; the owner's hand releases still apply.
 
 A claim the rule withholds is RELEASED when, in at least one entity's list, a usable stored
 answer put it in a group whose claims are backed by at least ``min_supporters`` different
@@ -21,6 +21,11 @@ people together. "Backed" is the record's own ``supporter_count`` rule, with the
 read from the private audit (``claim_backers``), in memory only: one person complaining twice
 releases nothing. A claim the owner marked "keep withheld" on the Withheld page
 (``SAME_COMPLAINT_VETOES_PATH``) is never released and backs no other claim of its group.
+
+The owner's other mark, "released" (the same page, one decision per claim), publishes a claim the
+rule withholds whatever the check says. A released short id the rule does not withhold (the claim
+gained a second backer, changed or is gone) changes nothing. The two marks exclude each other; a
+short id found in both (a hand-edited file) counts as "keep withheld" only, with a warning.
 
 Every doubt ends in "stays withheld":
 - an entity's list (``entity_lists``) is its negative claims, in the order of the claims file;
@@ -35,8 +40,10 @@ Files (private, 2-space JSON):
 - answers: ``{"entities": {entity_id: {"fingerprint": sha1, "groups": [{"label": English
   text, "claims": [short_id, ...]}], "problem": str | null, "answered_at": iso}},
   "metadata": {...}}``; no claim text, no person;
-- vetoes: ``{"keep_withheld": [short_id, ...], "metadata": {"count", "updated_at"}}``,
-  written by the Withheld page only (``save_vetoes``), never by a run.
+- the owner's marks: ``{"keep_withheld": [short_id, ...], "released": [short_id, ...],
+  "metadata": {"keep_withheld_count", "released_count", "updated_at"}}``, written by the
+  Withheld page only (``save_marks``), never by a run; a file without ``released`` (written
+  before hand releases existed) reads as releasing nothing by hand.
 """
 
 from __future__ import annotations
@@ -140,26 +147,56 @@ def load_answers(path: Path = SAME_COMPLAINT_PATH) -> dict[str, Any]:
     return entities
 
 
-def load_vetoes(path: Path = SAME_COMPLAINT_VETOES_PATH) -> frozenset[str]:
-    """The short ids the owner marked "keep withheld"; empty when there is no file yet. A file
-    that cannot be read raises: ignoring it would release what the owner kept back."""
+@dataclass(frozen=True)
+class Marks:
+    """The owner's marks of the Withheld page: the short ids kept withheld (the check never
+    releases them) and the ones released by hand (published whatever the check says)."""
+
+    keep_withheld: frozenset[str] = frozenset()
+    released: frozenset[str] = frozenset()
+
+    @property
+    def hand_released(self) -> frozenset[str]:
+        """The hand releases that count: a short id also kept withheld stays withheld."""
+
+        return self.released - self.keep_withheld
+
+
+def _short_ids(payload: dict[str, Any], key: str, path: Path) -> frozenset[str]:
+    ids = payload.get(key, [])
+    if not isinstance(ids, list) or not all(isinstance(short_id, str) for short_id in ids):
+        raise ValueError(f'{path} is not the owner\'s marks file: "{key}" must be a list of short '
+                         'ids; expected {"keep_withheld": [short_id, ...], "released": [short_id, '
+                         '...], "metadata": {...}}')
+    return frozenset(ids)
+
+
+def load_marks(path: Path = SAME_COMPLAINT_VETOES_PATH) -> Marks:
+    """The owner's marks; none when there is no file yet. A file that cannot be read raises:
+    ignoring it would release what the owner kept back, or withhold what they released."""
 
     payload = read_json_if_present(path)
     if payload is None:
-        return frozenset()
-    kept = payload.get("keep_withheld") if isinstance(payload, dict) else None
-    if not isinstance(kept, list) or not all(isinstance(short_id, str) for short_id in kept):
-        raise ValueError(f'{path} is not the "keep withheld" file: expected '
-                         '{"keep_withheld": [short_id, ...], "metadata": {...}}')
-    return frozenset(kept)
+        return Marks()
+    if not isinstance(payload, dict) or "keep_withheld" not in payload:
+        raise ValueError(f'{path} is not the owner\'s marks file: expected {{"keep_withheld": '
+                         '[short_id, ...], "released": [short_id, ...], "metadata": {...}}')
+    marks = Marks(_short_ids(payload, "keep_withheld", path), _short_ids(payload, "released", path))
+    both = marks.keep_withheld & marks.released
+    if both:
+        logger.warning(f"{path}: {len(both)} claim(s) are both kept withheld and released by "
+                       f"hand ({sorted(both)}); they stay withheld")
+    return marks
 
 
-def save_vetoes(vetoes: Collection[str], path: Path = SAME_COMPLAINT_VETOES_PATH) -> None:
-    """Replace the "keep withheld" file atomically (the caller holds its lock)."""
+def save_marks(marks: Marks, path: Path = SAME_COMPLAINT_VETOES_PATH) -> None:
+    """Replace the owner's marks file atomically (the caller holds its lock)."""
 
-    kept = sorted(set(vetoes))
-    write_json_file({"keep_withheld": kept,
-                     "metadata": {"count": len(kept), "updated_at": utc_now()}}, path)
+    kept, released = sorted(marks.keep_withheld), sorted(marks.released)
+    write_json_file({"keep_withheld": kept, "released": released,
+                     "metadata": {"keep_withheld_count": len(kept),
+                                  "released_count": len(released), "updated_at": utc_now()}},
+                    path)
 
 
 @dataclass(frozen=True)
@@ -179,10 +216,10 @@ class Check:
     what they release (see the module docstring)."""
 
     def __init__(self, records: Sequence[Record], backers: Mapping[str, frozenset[str]],
-                 answers: Mapping[str, Any], vetoes: frozenset[str]) -> None:
+                 answers: Mapping[str, Any], marks: Marks) -> None:
         self.records = {record["short_id"]: record for record in records}
         self.backers = backers
-        self.vetoes = vetoes
+        self.marks = marks
         self.lists = entity_lists(records)
         self.states: dict[str, str] = {}
         self.problems: dict[str, str] = {}
@@ -193,16 +230,18 @@ class Check:
         for group in self.groups:
             for short_id in group.released:
                 self.released.setdefault(short_id, []).append(group)
-        # What is withheld now: the rule, minus what the check released.
+        # What is withheld now: the rule, minus what the check released, minus the owner's
+        # hand releases.
         self.withheld = frozenset(short_id for short_id, record in self.records.items()
-                                  if withholds(record) and short_id not in self.released)
+                                  if withholds(record) and short_id not in self.released
+                                  and short_id not in marks.hand_released)
 
     @classmethod
     def load(cls, records: Sequence[Record], sources: ClaimSources = ClaimSources()) -> Check:
         """The check over ``records`` with the audit, the answers and the marks of ``sources``."""
 
         return cls(records, claim_backers(records, sources.audit),
-                   load_answers(sources.same_complaint), load_vetoes(sources.same_complaint_vetoes))
+                   load_answers(sources.same_complaint), load_marks(sources.same_complaint_vetoes))
 
     def asked(self) -> dict[str, list[Record]]:
         """The lists an answer could release something from (the ones the check asks about)."""
@@ -223,7 +262,7 @@ class Check:
         order = {claim["short_id"]: k for k, claim in enumerate(claims)}
         for raw in entry["groups"]:
             members = tuple(sorted(raw["claims"], key=order.__getitem__))
-            kept = [short_id for short_id in members if short_id not in self.vetoes]
+            kept = [short_id for short_id in members if short_id not in self.marks.keep_withheld]
             people = len(people_of(kept, self.backers))
             released = tuple(s for s in kept if withholds(self.records[s])
                              ) if people >= MIN_SUPPORTERS else ()
@@ -235,13 +274,15 @@ class Check:
 def withheld_ids(records: Sequence[Record], sources: ClaimSources = ClaimSources()
                  ) -> frozenset[str]:
     """The short ids of the claims withheld from the wiki now: the ones the rule withholds,
-    minus the ones the check releases today (the owner's "keep withheld" marks applied).
-    ``sources`` names the audit, the answers and the marks (the ones ``records`` were loaded
-    with). Call it once per load of the records."""
+    minus the ones the check releases today (the owner's "keep withheld" marks applied), minus
+    the ones the owner released by hand. ``sources`` names the audit, the answers and the marks
+    (the ones ``records`` were loaded with). Call it once per load of the records."""
 
     by_rule = frozenset(record["short_id"] for record in records if withholds(record))
-    answers = load_answers(sources.same_complaint) if by_rule else {}
-    if not answers:  # the check never ran (or has nothing to say): nothing is released
+    if not by_rule:
         return by_rule
-    return Check(records, claim_backers(records, sources.audit), answers,
-                 load_vetoes(sources.same_complaint_vetoes)).withheld
+    marks = load_marks(sources.same_complaint_vetoes)
+    answers = load_answers(sources.same_complaint)
+    if not answers:  # the check never ran (or has nothing to say): it releases nothing
+        return by_rule - marks.hand_released
+    return Check(records, claim_backers(records, sources.audit), answers, marks).withheld
