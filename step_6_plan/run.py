@@ -220,7 +220,7 @@ def run(
         logger.info(
             f"Plan {current}: {len(plan['pages'])} pages, {len(plan['labels'])} labels; kept "
             f"as is (curated; --rebuild to plan again). {unplanned} of {len(records)} claims "
-            "are newer than the plan."
+            "were not in the planner's list: newer than the plan, or withheld when it was made."
         )
         return {"written": False, "model_calls": 0, "page_count": len(plan["pages"]),
                 "label_count": len(plan["labels"]), "unplanned_claims": unplanned,
