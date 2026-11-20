@@ -284,6 +284,7 @@
     "chars_per_token": 1.49,
     "sample_seed": 56,
     "max_model_calls": 3,
+    "estimate": {"output_tokens_per_call": {"low": 20000, "high": 60000}},
     "example_claims": {"min": 3, "max": 8},
     "coverage": {
       "stage": "assign",

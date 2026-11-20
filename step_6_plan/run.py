@@ -23,8 +23,10 @@ validates the plan and reports how many claim records are not among the plan's
 7 assigns them all). Only ``run(rebuild=True)`` / ``--rebuild`` plans again, after backing up
 the edited plan. A run that would plan refuses, before any model call, while an entity list
 still waits for the same-complaint check (step 5): the owner reviews the Withheld page first.
+``--estimate`` (``step_6_plan.estimate``) reports what a planning run would send and cost; no
+model call, nothing written.
 
-    python -m step_6_plan.run [--rebuild]
+    python -m step_6_plan.run [--rebuild] [--estimate]
 
 Output: ``wiki_plan.json`` == ``wiki_plan_edited.json`` after a planning run (C7, see
 ``step_6_plan.model``) and ``coverage_report.json`` (the coverage numbers of that run).
@@ -41,6 +43,7 @@ from typing import Any
 from step_5_same_complaint.claim_records import ClaimSources, Record, load_claim_records
 from step_6_plan.claim_list import PlanningList, PlanningRefused
 from step_6_plan.coverage import COVERAGE_CONFIG, coverage_check, findings, named_claims
+from step_6_plan.estimate import estimate_plan
 from step_6_plan.fit import fitted_prompt
 from step_6_plan.model import PLAN_CONFIG, PlanError, validation_errors
 from step_6_plan.prompt import (
@@ -54,6 +57,7 @@ from utils.config import LLM_CONFIG
 from utils.json_io import write_json_file
 from utils.llm_client import Classifier, LLMClient
 from utils.logging_setup import git_commit, setup_step_logging
+from utils.model_prices import stage_model
 from utils.paths import PLAN, PLAN_COVERAGE_PATH, STEP_6, Artifact, resolve, resolve_claims_path
 from utils.reconcile import guarded_write
 from utils.timestamps import utc_now
@@ -182,6 +186,7 @@ def run(
     sources: ClaimSources = ClaimSources(),
     artifact: Artifact = PLAN,
     rebuild: bool = False,
+    estimate: bool = False,
     llm: LLMClient | None = None,
     classifier: Classifier | None = None,
     count_tokens: TokenCounter | None = None,
@@ -194,7 +199,8 @@ def run(
     default to the configured stages. Returns ``written``, ``model_calls``, ``page_count``,
     ``label_count``, ``plan_path`` and, after a planning run, ``input_tokens``, ``coverage``
     (the report) and ``backup``; after a check run, ``unplanned_claims`` (claim records not
-    among the plan's ``planned_claims``). A planning run raises
+    among the plan's ``planned_claims``). ``estimate``: no model call, nothing written; returns
+    ``step_6_plan.estimate.estimate_plan``'s numbers. A planning run raises
     ``PlanningRefused`` before any model call while an entity list waits for the
     same-complaint check.
     """
@@ -203,7 +209,7 @@ def run(
     records = load_claim_records(sources)
     current = resolve(artifact)
     would_call = rebuild or not current.is_file()
-    if not would_call:
+    if not would_call and not estimate:
         plan = json.loads(current.read_text(encoding="utf-8"))
         errors = validation_errors(plan)
         if errors:
@@ -221,6 +227,10 @@ def run(
                 "plan_path": str(current)}
 
     planning = PlanningList.load(records, sources)
+    if estimate:
+        model = stage_model(PLAN_CONFIG["stage"])
+        return estimate_plan(planning, count_tokens or AnthropicTokenCounter(model), model,
+                             would_call=would_call, logger=logger)
     refusal = planning.refusal()
     if refusal:
         raise PlanningRefused(refusal)
@@ -271,8 +281,11 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Step 6: plan the wiki structure (C7).")
     parser.add_argument("--rebuild", action="store_true",
                         help="plan again with the model (backs up the edited plan first)")
+    parser.add_argument("--estimate", action="store_true",
+                        help="count the planning prompt's tokens and price a planning run; no "
+                             "model call, nothing written")
     args = parser.parse_args(argv)
-    run(rebuild=args.rebuild)
+    run(rebuild=args.rebuild, estimate=args.estimate)
 
 
 if __name__ == "__main__":

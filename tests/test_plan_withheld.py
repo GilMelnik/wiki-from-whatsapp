@@ -1,6 +1,7 @@
 """Step 6 plans without the claims withheld from the wiki now, refuses to plan while the
-same-complaint check (step 5) has a list to answer (``step_6_plan.claim_list``). Synthetic
-claims and people, fake models and a fake token counter; no model or endpoint is called."""
+same-complaint check (step 5) has a list to answer, and estimates a planning run without a
+call (``step_6_plan.claim_list``, ``step_6_plan.estimate``). Synthetic claims and people, fake
+models and a fake token counter; no model or endpoint is called."""
 
 from __future__ import annotations
 
@@ -13,9 +14,11 @@ import pytest
 from step_5_same_complaint.release import save_vetoes
 from step_5_same_complaint.run import run as check_same_complaints
 from step_6_plan.claim_list import PlanningRefused
+from step_6_plan.model import PLAN_CONFIG
 from step_6_plan.run import run
 from tests.plan_fixtures import PAGE_IDS, FakeClassifier, FakeLLM, make_proposal
 from tests.same_complaint_support import FakeModel, World, same_text
+from utils.model_prices import stage_model, usd
 from utils.paths import Artifact
 
 TOKENS = 5000
@@ -120,3 +123,36 @@ def test_a_run_that_makes_no_planning_call_is_not_affected(planning: Planning) -
         planning.plan(llm, rebuild=True)
     assert llm.calls == []
 
+
+def test_the_estimate_follows_the_list_makes_no_call_and_writes_nothing(
+    planning: Planning,
+) -> None:
+    llm = FakeLLM([])
+    before = sorted(planning.root.iterdir())
+    waiting = planning.plan(llm, estimate=True)
+    assert llm.calls == [] and sorted(planning.root.iterdir()) == before
+    model = stage_model(PLAN_CONFIG["stage"])
+    low, high = (PLAN_CONFIG["estimate"]["output_tokens_per_call"][end] for end in ("low", "high"))
+    call = [round(usd(model, TOKENS, low), 4), round(usd(model, TOKENS, high), 4)]
+    calls = PLAN_CONFIG["max_model_calls"]
+    assert waiting == {
+        "estimate": True, "written": False, "model_calls": 0, "model": "claude-fable-5-2",
+        "claim_count": 2, "withheld_left_out": 6, "shown_claim_count": 2,
+        "input_tokens": TOKENS, "output_tokens": [low, high],
+        "usd": {"call": call, "revision": call,
+                "ceiling": [round(calls * call[0], 4), round(calls * call[1], 4)]},
+        "max_model_calls": calls, "waiting_lists": 2, "would_call": True, "refused": True,
+    }
+    (system, user), = planning.counted  # the first call's prompt, over the list
+    assert '<claims count="2">' in user and planning.ids["a"] not in user + system
+
+    planning.check()
+    answered = planning.plan(llm, estimate=True)
+    assert (answered["claim_count"], answered["withheld_left_out"]) == (7, 1)
+    assert answered["refused"] is False and answered["waiting_lists"] == 0
+
+    planning.plan(FakeLLM([make_proposal(), make_proposal()]))
+    plan_bytes = planning.artifact.edited.read_bytes()
+    kept = planning.plan(llm, estimate=True)
+    assert kept["would_call"] is False and kept["refused"] is False
+    assert llm.calls == [] and planning.artifact.edited.read_bytes() == plan_bytes
