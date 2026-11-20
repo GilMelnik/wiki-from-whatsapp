@@ -1,7 +1,7 @@
-"""From a dispute recorded in step 3 to the page writer's prompt (read-only on step 7).
+"""From a dispute recorded in step 3 to the page writer's prompt (read-only on step 8).
 
 Two synthetic claims dispute each other (C3 ``counters``); the claim records join them as each
-other's ``contradicts`` and step 7's own input builder then makes the prompt of a full write
+other's ``contradicts`` and step 8's own input builder then makes the prompt of a full write
 (no model call). The other side's text must reach the writer, as task 25b designed it: on the
 same page as its own claim line, on another page inside the ``contradicts`` field with that
 page's id.
@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from step_6_plan.claim_records import ClaimSources
-from step_7_write_pages.inputs import Corpus
-from step_7_write_pages.prompts import write_prompt
+from step_5_same_complaint.claim_records import ClaimSources
+from step_8_write_pages.inputs import Corpus
+from step_8_write_pages.prompts import write_prompt
 from tests.claim_fixtures import claim_record, write_claim_inputs
 from tests.plan_fixtures import make_plan
 from utils.json_io import write_json_file

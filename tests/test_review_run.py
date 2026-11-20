@@ -1,4 +1,4 @@
-"""Step 8's run: C12 shape, stable ids, checks on the model's proposals, and the re-run cases
+"""Step 9's run: C12 shape, stable ids, checks on the model's proposals, and the re-run cases
 of the whole run (offline: fake review model, synthetic wiki). The passes themselves (cutting,
 prompts, scope, batch, failures, ``--only``) are in ``test_review_parts``."""
 
@@ -13,8 +13,8 @@ import pytest
 
 from review_tool.artifacts import GRAPH
 from review_tool.steps import SERVED_STEPS
-from step_8_review.inputs import REVIEW_CONFIG
-from step_8_review.proposals import KINDS, answer_schema
+from step_9_review.inputs import REVIEW_CONFIG
+from step_9_review.proposals import KINDS, answer_schema
 from tests.pages_fixtures import IDS, SECRET
 from tests.review_fixtures import FakeReviewer, ReviewWorkspace, flat, sentence_a, valid_answers
 
@@ -245,10 +245,10 @@ def test_a_pass_too_long_for_the_model_fails_alone_with_the_overshoot(ws: Review
 
 def test_suggestions_node_and_step_row() -> None:
     node = GRAPH.node("suggestions")
-    assert node.upstream == ("plan", "pages") and node.step == "step_8_review"
+    assert node.upstream == ("plan", "pages") and node.step == "step_9_review"
     assert node.original.name == "suggestions.json" and node.edited.name == "suggestions_edited.json"
     keys = [n.key for n in GRAPH.nodes]
     assert keys.index("pages") < keys.index("suggestions") < keys.index("site")
     step = SERVED_STEPS.step(node.step)
     assert step.spec.incremental_safe and step.spec.paid
-    assert step.command(rebuild=True)[1:] == ["-m", "step_8_review.run", "--rebuild"]
+    assert step.command(rebuild=True)[1:] == ["-m", "step_9_review.run", "--rebuild"]

@@ -13,8 +13,8 @@ from fastapi.testclient import TestClient
 
 from review_tool.artifacts import ArtifactNode
 from review_tool.tools.withheld.tool import WithheldTool
-from step_6_plan.claim_records import load_claim_records
-from step_7_write_pages.same_complaint_release import entity_lists, list_fingerprint
+from step_5_same_complaint.claim_records import load_claim_records
+from step_5_same_complaint.release import entity_lists, list_fingerprint
 from tests.review_tool_support import BASE_URL, build_app, build_graph, locked_elsewhere
 from tests.same_complaint_support import World
 from utils.json_io import read_json_file, write_json_file

@@ -1,7 +1,7 @@
 """Counting a request's input tokens: with the API's free counting endpoint, or by characters.
 
-A ``TokenCounter`` takes ``(system, user)`` and returns the input tokens. Steps 3, 6, 7 and 8
-check their prompts with ``AnthropicTokenCounter`` before a call; an estimate (step 8's parts,
+A ``TokenCounter`` takes ``(system, user)`` and returns the input tokens. Steps 3, 6, 8 and 9
+check their prompts with ``AnthropicTokenCounter`` before a call; an estimate (step 9's parts,
 the update's estimates, step 3's split experiment) counts by characters with
 ``CharTokenCounter``, which needs no endpoint.
 """

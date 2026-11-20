@@ -7,7 +7,7 @@ Two forms are recognised, both with an optional display text after ``|``:
 
 The display text may contain balanced square brackets (``[[usa|ארה"ב [חדש]]]``)
 but not a newline. Anything inside fenced code blocks (``` or ~~~) and inline
-code spans is ignored; indented code blocks are not detected. Step 9 resolves
+code spans is ignored; indented code blocks are not detected. Step 11 resolves
 the links to real markdown links; the MCP index reuses ``find_wiki_links``.
 """
 

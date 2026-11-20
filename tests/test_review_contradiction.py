@@ -1,5 +1,5 @@
 """A contradiction applied from the review is saved as the owner's manual pair and survives:
-the claim records join it on every load (also after the claims are written again), and step 7
+the claim records join it on every load (also after the claims are written again), and step 8
 writes both sides (synthetic claim records and fake page writers)."""
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 from review_tool.tools.suggestions.apply import Applier
-from step_6_plan.claim_records import load_claim_records, load_manual_pairs
+from step_5_same_complaint.claim_records import load_claim_records, load_manual_pairs
 from tests.pages_fixtures import IDS, FakeWriter, PagesWorkspace
 from tests.review_fixtures import corrector, long_article
 from utils.llm_client import _flatten

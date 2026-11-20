@@ -1,4 +1,4 @@
-"""Step 6b assignment: decision rules, the C8 shape, questions, proposals, registry entries."""
+"""Step 7 assignment: decision rules, the C8 shape, questions, proposals, registry entries."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pytest
 
 from review_tool.artifacts import GRAPH
 from review_tool.steps import SERVED_STEPS
-from step_6_plan.assign_rules import ASSIGN_CONFIG, decide_labels, decide_pages, claims_on_page
+from step_7_assign.rules import ASSIGN_CONFIG, decide_labels, decide_pages, claims_on_page
 from step_6_plan.coverage import NONE
 from tests.assign_fixtures import FakeClassifier, Workspace, topic
 from tests.claim_fixtures import claim_records
@@ -213,5 +213,5 @@ def test_assignments_are_in_the_graph_and_the_registry() -> None:
     assert keys.index("plan") < keys.index("assignments") < keys.index("pages")
     step = SERVED_STEPS.step(node.step)
     assert step.spec.incremental_safe and step.spec.paid
-    assert step.command()[1:] == ["-m", "step_6_plan.assign"]
+    assert step.command()[1:] == ["-m", "step_7_assign.run"]
     assert step.command(rebuild=True)[-1] == "--rebuild"

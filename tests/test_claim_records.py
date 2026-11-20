@@ -11,8 +11,8 @@ from typing import Any
 
 import pytest
 
-from step_6_plan import claim_records
-from step_6_plan.claim_records import (
+from step_5_same_complaint import claim_records
+from step_5_same_complaint.claim_records import (
     RECORD_KEYS,
     ClaimSources,
     add_manual_contradiction,

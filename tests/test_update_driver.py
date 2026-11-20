@@ -1,4 +1,4 @@
-"""Step 10's driver on a synthetic pipeline (fake steps, estimates and server; no API call):
+"""The update run's driver on a synthetic pipeline (fake steps, estimates and server; no API call):
 C13 files and state, review stops, paid stops, resume, ``--plan``, failures, refusals, the
 re-run after applied suggestions, and a second identical export."""
 
@@ -12,7 +12,8 @@ import pytest
 import pipeline
 from review_tool.steps import SERVED_STEPS, Step
 from review_tool.toolset import TOOL_SPECS
-from step_10_update.driver import (
+from tests.update_support import PAID_STEPS, World, message, newer_chat, old_chat
+from update_run.driver import (
     COMPLETED,
     NOTHING,
     REFUSED,
@@ -21,23 +22,22 @@ from step_10_update.driver import (
     Options,
     StepFailed,
 )
-from tests.update_support import PAID_STEPS, World, message, newer_chat, old_chat
 from utils.paths import (
     STEP_1,
     STEP_2,
     STEP_3,
     STEP_4,
-    STEP_6_ASSIGN,
+    STEP_5,
     STEP_7,
-    STEP_7_SAME_COMPLAINT,
     STEP_8,
-    STEP_8_PROOFREAD,
     STEP_9,
+    STEP_10,
+    STEP_11,
 )
 from utils.step_lease import StepLease
 
-UPDATE_ORDER = [STEP_1, STEP_2, STEP_3, STEP_4, STEP_6_ASSIGN, STEP_7_SAME_COMPLAINT, STEP_7,
-                STEP_8, STEP_8_PROOFREAD, STEP_9]
+UPDATE_ORDER = [STEP_1, STEP_2, STEP_3, STEP_4, STEP_5, STEP_7, STEP_8,
+                STEP_9, STEP_10, STEP_11]
 
 
 @pytest.fixture
@@ -95,7 +95,7 @@ def test_an_export_already_in_the_updates_folder_keeps_its_stamp(world: World) -
 
 def test_it_stops_at_every_review_point_and_goes_on_when_run_again(world: World) -> None:
     stops = run_to_the_end(world, world.export(newer_chat()), pay=PAID_STEPS)
-    assert stops == [STEP_2, STEP_3, STEP_4, STEP_6_ASSIGN, STEP_7_SAME_COMPLAINT, STEP_8]
+    assert stops == [STEP_2, STEP_3, STEP_4, STEP_5, STEP_7, STEP_9]
     assert world.calls == UPDATE_ORDER  # no step was redone after a stop
 
 
@@ -183,20 +183,21 @@ def test_a_saved_update_stopped_at_the_removed_step_goes_on(world: World) -> Non
     world.run(world.export(newer_chat()), pay=PAID_STEPS)
     while world.state()["update"]["stopped"]["step"] != STEP_4:
         world.run(pay=PAID_STEPS)
-    state = world.state()  # as the old pipeline left it: step 5 ran and waits for its review
+    # as the old pipeline left it: its step 5 (removed since) ran and waits for its review
+    state = world.state()
     update = state["update"]
     update["steps"][STEP_4]["gate_passed"] = True
     update["steps"][REMOVED_STEP] = {"runs": 1, "gate_passed": False, "changed": True, "at": "x"}
     update["stopped"] = {"kind": "review", "step": REMOVED_STEP, "message": "review", "at": "x"}
     world.write_json(world.paths.state, state)
     world.calls.clear()
-    assert run_to_the_end(world, pay=PAID_STEPS) == [STEP_6_ASSIGN, STEP_7_SAME_COMPLAINT, STEP_8]
+    assert run_to_the_end(world, pay=PAID_STEPS) == [STEP_5, STEP_7, STEP_9]
     assert world.calls == UPDATE_ORDER[4:]
     assert world.state()["update"]["steps"][REMOVED_STEP]["gate_passed"] is True
 
 
 def test_a_saved_update_that_failed_at_the_removed_step_goes_on(world: World) -> None:
-    world.failing = {STEP_6_ASSIGN}
+    world.failing = {STEP_5}
     with pytest.raises(StepFailed):
         world.run(world.export(newer_chat()), pay=PAID_STEPS, no_stops=True)
     state = world.state()
@@ -235,15 +236,15 @@ def test_the_lease_names_the_running_step(world: World) -> None:
     assert StepLease(world.paths.lease).current() is None
 
 
-def test_after_applied_suggestions_6b_and_7_run_again_before_the_site(world: World) -> None:
-    world.run(world.export(newer_chat()), pay=PAID_STEPS, through=STEP_8)
+def test_after_applied_suggestions_7_and_8_run_again_before_the_site(world: World) -> None:
+    world.run(world.export(newer_chat()), pay=PAID_STEPS, through=STEP_9)
     assert world.calls == UPDATE_ORDER[:-2]
     world.write_json(world.node("plan").edited, {"pages": {"new": {}}, "tree": [], "labels": {}})
     world.calls.clear()
     stops = run_to_the_end(world, pay=PAID_STEPS)
-    # step 8 is not asked again; proofreading reads the pages step 7 rewrote
-    assert world.calls == [STEP_6_ASSIGN, STEP_7, STEP_8_PROOFREAD, STEP_9]
-    assert stops == [STEP_6_ASSIGN]  # its output changed: proposals to look at
+    # step 9 is not asked again; proofreading reads the pages step 8 rewrote
+    assert world.calls == [STEP_7, STEP_8, STEP_10, STEP_11]
+    assert stops == [STEP_7]  # its output changed: proposals to look at
 
 
 def test_a_second_identical_export_is_a_no_op(world: World) -> None:
@@ -289,7 +290,7 @@ def test_the_pipeline_walks_the_same_registry(monkeypatch: pytest.MonkeyPatch) -
     pipeline.run(use_batch=True)
     # every step but the proofreading, which waits for the owner's decisions on the suggestions
     assert [key for key, _ in called] == [step.key for step in SERVED_STEPS.steps
-                                          if step.key != STEP_8_PROOFREAD]
+                                          if step.key != STEP_10]
     assert dict(called)[STEP_3] == {"use_batch": True} and dict(called)[STEP_4] == {}
 
 

@@ -1,4 +1,4 @@
-"""Synthetic step-9 inputs: a small C7 plan and C9 pages built through ``utils.okf``.
+"""Synthetic step-11 inputs: a small C7 plan and C9 pages built through ``utils.okf``.
 
 The plan is ``plan_fixtures.make_plan`` (phases ``before`` / ``during``, categories
 ``choosing`` / ``medical``, pages agencies, costs, clinics, hospital, country labels usa and
@@ -18,9 +18,9 @@ from typing import Any
 
 from step_6_plan import operations
 from step_6_plan.model import find_node
-from step_6_plan.claim_records import ClaimSources, Record
-from step_9_site.entity_tags import write_decisions
-from step_9_site.run import run
+from step_5_same_complaint.claim_records import ClaimSources, Record
+from step_11_site.entity_tags import write_decisions
+from step_11_site.run import run
 from tests.claim_fixtures import claim_records, write_claim_inputs
 from tests.pages_fixtures import IDS
 from tests.plan_fixtures import make_plan
@@ -127,7 +127,7 @@ def issues_of(result: dict[str, Any], kind: str) -> list[tuple[str, str]]:
 def build_html(
     tmp_path: Path, plan: dict[str, Any], pages: dict[str, dict[str, Any]], claims: list[Record] | None = None
 ) -> None:
-    """Step 9 into ``tmp_path/docs``, then ``mkdocs build --strict`` into ``tmp_path/out``."""
+    """Step 11 into ``tmp_path/docs``, then ``mkdocs build --strict`` into ``tmp_path/out``."""
     shutil.copytree(PROJECT_ROOT / "docs" / "stylesheets", tmp_path / "docs" / "stylesheets")
     run_site(tmp_path, plan, pages, claims)
     command = [sys.executable, "-m", "mkdocs", "build", "--strict", "-f", str(tmp_path / "mkdocs.yml")]

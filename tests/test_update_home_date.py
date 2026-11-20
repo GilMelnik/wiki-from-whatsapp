@@ -3,7 +3,7 @@ rebuilds the site, and the home page's sentence moves to the month of the newest
 
 The driver walks every step it has not run in this update (it never skips a step because the
 one before it changed nothing); this runs that walk on the synthetic pipeline of
-``tests.update_support`` with the real step 9 as the last step. No API call, no real data."""
+``tests.update_support`` with the real step 11 as the last step. No API call, no real data."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 
 from review_tool.steps import Step
-from step_9_site.run import run as build_site
+from step_11_site.run import run as build_site
 from tests.claim_fixtures import write_claim_inputs
 from tests.site_fixtures import make_page, make_site_plan, make_threads
 from tests.update_support import PAID_STEPS, World, message, old_chat
@@ -25,22 +25,22 @@ from utils.paths import (
     STEP_2,
     STEP_3,
     STEP_4,
-    STEP_6_ASSIGN,
+    STEP_5,
     STEP_7,
-    STEP_7_SAME_COMPLAINT,
     STEP_8,
-    STEP_8_PROOFREAD,
     STEP_9,
+    STEP_10,
+    STEP_11,
 )
 
 SITE = section("site")
-UNCHANGED = (STEP_2, STEP_3, STEP_4, STEP_6_ASSIGN, STEP_7_SAME_COMPLAINT, STEP_7, STEP_8,
-             STEP_8_PROOFREAD)
+UNCHANGED = (STEP_2, STEP_3, STEP_4, STEP_5, STEP_7, STEP_8, STEP_9,
+             STEP_10)
 
 
 class SiteWorld(World):
     """The synthetic pipeline whose step 1 writes a C1 threads file from the pipeline input and
-    whose step 9 is the real one, reading what the fake steps left under the temp folder."""
+    whose step 11 is the real one, reading what the fake steps left under the temp folder."""
 
     def __init__(self, root: Path) -> None:
         super().__init__(root)
@@ -81,7 +81,7 @@ class SiteWorld(World):
                 self.write_threads()
                 return {"written": True}
             return run_step_1
-        if step.key == STEP_9:
+        if step.key == STEP_11:
             def run_step_9() -> dict[str, Any]:
                 self.calls.append(step.key)
                 return self.build()
@@ -100,7 +100,7 @@ def test_new_messages_alone_move_the_end_month_of_the_home_page(world: SiteWorld
     april = {**message("n1", 0), "date": "15/04/2026"}
     outcome = world.run(world.export([*old_chat(), april]), pay=PAID_STEPS, no_stops=True)
     assert outcome.status == "completed", outcome.message
-    assert world.calls == [STEP_1, *UNCHANGED, STEP_9]
+    assert world.calls == [STEP_1, *UNCHANGED, STEP_11]
     # no step of the claim side changed anything: the report says so, and the site step still ran
     report = json.loads(next(world.paths.updates_dir.glob("*_report.json")).read_text(encoding="utf-8"))
     changed = {event["step"]: event["changed"] for event in report["events"] if event["kind"] == "run"}

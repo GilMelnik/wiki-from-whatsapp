@@ -1,8 +1,8 @@
 """The Withheld page of the review server: ``python -m review_tool --tool withheld``.
 
 The wiki publishes a negative claim about a named provider, place or public body only when at
-least two different members back it (``pages.withhold``). The same-complaint check
-(``step_7_write_pages.same_complaint``) releases a lone one when a model found a second person
+least two different members back it (``withhold`` in ``config.json``). The same-complaint check
+(``step_5_same_complaint.run``) releases a lone one when a model found a second person
 making the same complaint. Here the owner sees what the check released, before the pages are
 written, and can keep any of those claims withheld; and searches the claims that stay withheld.
 Nothing here calls a model, and no person is ever shown: only how many back a claim.
@@ -37,7 +37,7 @@ from review_tool.registry import ToolSpec
 from review_tool.stores import StoreHandle
 from review_tool.tools.withheld.overview import ClaimsData, WithheldView
 from review_tool.tools.withheld.store import VetoTable
-from step_7_write_pages.withhold import withholds
+from step_5_same_complaint.withhold import withholds
 from utils.paths import AUDIT_PATH
 
 CLAIMS_KEY = "claims"

@@ -1,6 +1,6 @@
 """A cross-process lease that says "a pipeline step is running outside the review server".
 
-The update driver (``step_10_update``) runs steps in its own process, so the review server's
+The update driver (``update_run``) runs steps in its own process, so the review server's
 job runner cannot see them. While the driver runs it holds an exclusive ``flock`` on one file
 (``utils.paths.UPDATE_LEASE_PATH``) and writes into it which step it is running::
 

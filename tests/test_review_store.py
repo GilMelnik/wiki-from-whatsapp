@@ -10,7 +10,7 @@ import pytest
 from review_tool.tools.suggestions.apply import ApplyRefused
 from review_tool.tools.suggestions.store import SuggestionConflict, SuggestionNotFound
 from step_6_plan.operations import delete
-from step_8_review.inputs import REVIEW_CONFIG
+from step_9_review.inputs import REVIEW_CONFIG
 from tests.pages_fixtures import FakeWriter
 from tests.review_fixtures import FakeReviewer, ReviewWorkspace, valid_answers
 from utils.paths import BACKUPS_DIR

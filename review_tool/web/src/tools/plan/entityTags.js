@@ -1,6 +1,6 @@
 // Pure helpers of the plan tool's "Entity tags" view (no React): the list row, the texts and
 // the split of the entities into those to decide and those decided. The rule itself runs on
-// the server (step_9_site.entity_tags); these only shape what the owner reads.
+// the server (step_11_site.entity_tags); these only shape what the owner reads.
 
 export const ENTITY_TAGS_ID = "__entity_tags";
 export const ENTITY_TAGS_KEYS = ["plan", "claims", "entities", "pages", "assignments"];
@@ -9,7 +9,7 @@ export const DECISION_LABELS = { covered: "Covered by the plan", tag: "Gets a ta
 
 export const SOURCE_NOTES = {
   pages: "Pages are the written pages that cite the entity.",
-  assignments: "Step 7 has not written pages yet: the pages are estimated from the assignments (step 6b).",
+  assignments: "Step 8 has not written pages yet: the pages are estimated from the assignments (step 7).",
   none: "There are no written pages and no assignments yet: every entity is on no page.",
 };
 

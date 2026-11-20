@@ -149,7 +149,7 @@ def plan_warnings(
     sizes: Mapping[str, Mapping[str, Any]] | None,
 ) -> list[dict[str, Any]]:
     """Every warning about ``plan``. ``short_ids`` = the claim records' ids (``None`` when there
-    are no claim records yet); ``sizes`` = ``sizes.page_sizes`` (``None`` before step 6b has
+    are no claim records yet); ``sizes`` = ``sizes.page_sizes`` (``None`` before step 7 has
     run)."""
 
     found = [

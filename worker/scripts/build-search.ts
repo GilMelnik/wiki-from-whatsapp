@@ -2,7 +2,7 @@
  * Deploy-time step (wrangler.jsonc build.command): read <site>/wiki_index.json and write the
  * search snapshot <site>/wiki_search.json with the same code the Worker searches with, so a cold
  * isolate only parses it instead of indexing every page. No index yet -> warn and exit 0 (the
- * static site still deploys; /mcp then answers 503 until step 9 ships an index).
+ * static site still deploys; /mcp then answers 503 until step 11 ships an index).
  * Usage: tsx scripts/build-search.ts <site dir>
  */
 /// <reference types="node" />

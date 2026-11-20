@@ -1,4 +1,4 @@
-"""Step 10: what a newer export adds (new / changed / missing) and whether it continues the
+"""The update run: what a newer export adds (new / changed / missing) and whether it continues the
 pipeline input. Synthetic messages only."""
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from step_10_update.exports import (
+from update_run.exports import (
     NotAContinuation,
     check_continuation,
     compare_exports,

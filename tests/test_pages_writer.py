@@ -1,4 +1,4 @@
-"""Step 7's code-side guarantees, prompts and front matter, offline on synthetic data."""
+"""Step 8's code-side guarantees, prompts and front matter, offline on synthetic data."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 
 from step_6_plan import operations
-from step_7_write_pages.checks import AnswerRules, cited_ids, problems, repair, rules_for
-from step_7_write_pages.front_matter import LabelRule, page_front_matter
-from step_7_write_pages.inputs import (
+from step_8_write_pages.checks import AnswerRules, cited_ids, problems, repair, rules_for
+from step_8_write_pages.front_matter import LabelRule, page_front_matter
+from step_8_write_pages.inputs import (
     PAGES_CONFIG,
     Corpus,
     PageContext,
@@ -18,8 +18,8 @@ from step_7_write_pages.inputs import (
     page_state,
     writer_fingerprint,
 )
-from step_7_write_pages.prompts import update_prompt, write_prompt
-from step_7_write_pages.writer import ClaimDelta, PageWriter
+from step_8_write_pages.prompts import update_prompt, write_prompt
+from step_8_write_pages.writer import ClaimDelta, PageWriter
 from tests.pages_fixtures import (
     IDS,
     SECRET,
@@ -106,7 +106,7 @@ def test_fingerprint_follows_text_inputs_not_the_catalogue(tmp_path: Path, monke
     ws.write_plan(plan)
     assert fp() == first
     claims = ws.claims()
-    claims[0]["participant_count"] = 7  # rendered by step 9 only: no rewrite
+    claims[0]["participant_count"] = 7  # rendered by step 11 only: no rewrite
     ws.write_claims(claims)
     assert fp() == first
     claims[0]["supporter_count"] += 1

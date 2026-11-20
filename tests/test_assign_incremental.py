@@ -1,4 +1,4 @@
-"""Step 6b re-runs (C14): only what changed is asked, manual records survive, plan edits are
+"""Step 7 re-runs (C14): only what changed is asked, manual records survive, plan edits are
 followed (scope change, new page, merge, delete, labels), and ``apply_plan_edit``."""
 
 from __future__ import annotations
@@ -10,8 +10,8 @@ from typing import Any
 import pytest
 
 from step_6_plan import operations
-from step_6_plan.assign_rules import apply_plan_edit
 from step_6_plan.coverage import NONE
+from step_7_assign.rules import apply_plan_edit
 from tests.assign_fixtures import FakeClassifier, Workspace, by_topic, topic
 from tests.claim_fixtures import claim_records
 from tests.plan_fixtures import PAGE_IDS, FakeLLM, short_id_of

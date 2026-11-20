@@ -1,8 +1,8 @@
 """The plan tool's store: a thin layer over ``step_6_plan.operations`` and the assignments.
 
 It reads the effective plan (edited copy, else the original the planning step wrote), the
-claim records (C6, ``step_6_plan.claim_records``, for the texts), the coverage report of the
-planning run and, when step 6b has run, the effective assignments
+claim records (C6, ``step_5_same_complaint.claim_records``, for the texts), the coverage report of the
+planning run and, when step 7 has run, the effective assignments
 (``assignments.AssignmentsFile``). A plan change runs one operation; the operation validates
 the whole new plan, so an invalid plan is never written. A claim move or a proposal decision
 changes the assignments. Every change is
@@ -45,7 +45,8 @@ from review_tool.tools.plan.views import (
     flat_tree,
     labels_by_kind,
 )
-from step_6_plan.claim_records import ClaimSources, Record, load_claim_records
+from step_5_same_complaint.claim_records import ClaimSources, Record, load_claim_records
+from step_5_same_complaint.release import withheld_ids
 from step_6_plan.model import (
     PLAN_CONFIG,
     PlanError,
@@ -56,7 +57,6 @@ from step_6_plan.model import (
 )
 from step_6_plan.operation_requests import Delete, Merge, Operation, quote, title_of
 from step_6_plan.operations import PlanEdit, kind_of
-from step_7_write_pages.same_complaint_release import withheld_ids
 from utils.json_io import read_json_file, write_json_file
 from utils.reconcile import backup_file
 from utils.timestamps import utc_now
@@ -188,7 +188,7 @@ class PlanStore:
             return {**answer, "unreadable": True}
 
     def _assignments_overview(self) -> dict[str, Any]:
-        """Whether step 6b has run, and its numbers read against today's plan."""
+        """Whether step 7 has run, and its numbers read against today's plan."""
 
         files = self.assignments
         answer = {"exists": files.exists, "file": str(files.source),
@@ -216,7 +216,7 @@ class PlanStore:
         return coverage_view(self.coverage_report, self.plan, self._readable_proposal())
 
     def page_detail(self, page_id: str) -> dict[str, Any]:
-        """What judging a page's scope needs: once step 6b has run, its exact size, a sample of
+        """What judging a page's scope needs: once step 7 has run, its exact size, a sample of
         its claims (least certain first) and the closest claims it did not get; the model's
         example claims with their text, and the coverage numbers of the planning run."""
 
@@ -300,7 +300,7 @@ class PlanStore:
 
     def preview(self, op: Operation) -> dict[str, Any]:
         """What ``op`` would do, without saving (``PlanConflict`` if it cannot be done), also
-        to the assignments (``None`` before step 6b has run)."""
+        to the assignments (``None`` before step 7 has run)."""
 
         edit = self._run(op, "This change is not possible, because the resulting plan breaks the rules:")
         effect = self.view.plan_edit_effect(edit) if self.assignments.usable else None

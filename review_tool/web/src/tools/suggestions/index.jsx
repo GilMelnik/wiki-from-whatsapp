@@ -38,7 +38,7 @@ import {
   TOOL_ID,
 } from "./suggestions.js";
 
-// What the whole-wiki review (step 8) proposed, for the owner to decide on. Decided here: accept,
+// What the whole-wiki review (step 9) proposed, for the owner to decide on. Decided here: accept,
 // reject or correct each suggestion, then apply the accepted ones. The list holds the
 // suggestions in sections (to decide, accepted, applied, rejected; each in the reviewer's
 // order) under "About this review"; the main column one suggestion with the context it is

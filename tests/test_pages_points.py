@@ -13,17 +13,17 @@ from typing import Any
 
 import pytest
 
-from step_7_write_pages.checks import prose_words, problems, repair, rules_for, statements
-from step_7_write_pages.inputs import PAGES_CONFIG, Corpus, PageContext
-from step_7_write_pages.points import KINDS, REASONS, account, point_report, tidy
-from step_7_write_pages.prompts import (
+from step_8_write_pages.checks import prose_words, problems, repair, rules_for, statements
+from step_8_write_pages.inputs import PAGES_CONFIG, Corpus, PageContext
+from step_8_write_pages.points import KINDS, REASONS, account, point_report, tidy
+from step_8_write_pages.prompts import (
     UPDATE_SCHEMA,
     UPDATE_SYSTEM,
     WRITE_SCHEMA,
     WRITE_SYSTEM,
     write_prompt,
 )
-from step_7_write_pages.writer import PageWriter
+from step_8_write_pages.writer import PageWriter
 from tests.claim_fixtures import claim_record
 from tests.pages_fixtures import IDS, FakeWriter, PagesWorkspace
 from utils.llm_client import _flatten

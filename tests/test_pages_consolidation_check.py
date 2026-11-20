@@ -8,15 +8,15 @@ from pathlib import Path
 
 import pytest
 
-from step_6_plan.claim_records import SHORT_ID_PREFIX
-from step_7_write_pages.consolidation_check import (
+from step_5_same_complaint.claim_records import SHORT_ID_PREFIX
+from step_8_write_pages.consolidation_check import (
     ConsolidationCheck,
     Measures,
     _moved,
     _under,
     main,
 )
-from step_7_write_pages.run import run
+from step_8_write_pages.run import run
 from tests.claim_fixtures import write_claim_inputs
 from tests.pages_fixtures import IDS, FakeWriter, page_assignments, page_claims
 from tests.plan_fixtures import make_plan
@@ -70,7 +70,7 @@ def test_the_check_writes_the_pages_in_a_copy_and_compares_them(tmp_path: Path,
     assert "agencies: words" in caplog.text and "3 points {'fact': 3}" in caplog.text
     path = check.save(comparisons)
     page = path.read_text(encoding="utf-8")
-    assert path.parent == tmp_path / "scratch" / "step_7_write_pages"
+    assert path.parent == tmp_path / "scratch" / "step_8_write_pages"
     assert "Synthetic claim number 8" in page
     assert f"<sup>{IDS[4].removeprefix(SHORT_ID_PREFIX)}</sup>" in page
     assert page.count("<section>") == 2 and "prefers-color-scheme: dark" in page

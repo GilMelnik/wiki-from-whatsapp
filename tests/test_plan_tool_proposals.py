@@ -1,6 +1,6 @@
 """The plan tool's proposals (accept / reject / reopen), undo across the plan and the
 assignments, and what the operation dialogs say about the assignments. Synthetic data from
-``tests.test_plan_tool_assignments`` (the real step 6b with a fake classifier)."""
+``tests.test_plan_tool_assignments`` (the real step 7 with a fake classifier)."""
 
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ def test_accepting_a_page_proposal_saves_both_files_and_the_run_places_its_claim
     assert all(records[g]["pages"] == [] for g in UNPLACED)  # not moved by hand
     assert list(BACKUPS_DIR.glob("assignments_edited_*.json"))
     assert answer["overview"]["assignments"]["proposals"]["accepted"] == 1
-    setup.run_step()  # the offered step-6b run asks the claims against the new page
+    setup.run_step()  # the offered step-7 run asks the claims against the new page
     assert ids(setup.claims(scope="page", id=NEW_PAGE)) == UNPLACED
     assert setup.claims(scope="unplaced")["total"] == 0
 

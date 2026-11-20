@@ -11,24 +11,25 @@ from fastapi.testclient import TestClient
 
 from review_tool.tools.status.tool import StatusTool
 from review_tool.tools.status.update_status import UpdateStatus
-from step_10_update.driver import StepFailed
 from tests.review_tool_support import BASE_URL, build_app
 from tests.update_support import PAID_STEPS, World, newer_chat
+from update_run.driver import StepFailed
 from utils.paths import (
     STEP_1,
     STEP_2,
     STEP_3,
     STEP_4,
-    STEP_6_ASSIGN,
+    STEP_5,
     STEP_7,
     STEP_8,
-    STEP_8_PROOFREAD,
     STEP_9,
+    STEP_10,
+    STEP_11,
 )
 from utils.step_lease import StepLease
 
-UPDATE_ORDER = [STEP_1, STEP_2, STEP_3, STEP_4, STEP_6_ASSIGN, STEP_7, STEP_8,
-                STEP_8_PROOFREAD, STEP_9]
+UPDATE_ORDER = [STEP_1, STEP_2, STEP_3, STEP_4, STEP_5, STEP_7, STEP_8, STEP_9,
+                STEP_10, STEP_11]
 
 
 @pytest.fixture
@@ -58,7 +59,7 @@ def test_stopped_after_step_2_for_the_conversations_review(world: World) -> None
     answer = view(world)
     assert [statuses(answer)[key] for key in UPDATE_ORDER[:4]] == ["done", "review", "next", "waiting"]
     assert answer["stopped"]["kind"] == "review" and answer["stopped"]["review_tool"] == "threads"
-    assert answer["estimate"] is None and answer["command"] == "python -m step_10_update.run"
+    assert answer["estimate"] is None and answer["command"] == "python -m update_run.run"
 
 
 def test_stopped_before_a_paid_step_with_its_estimate(world: World) -> None:
@@ -69,13 +70,14 @@ def test_stopped_before_a_paid_step_with_its_estimate(world: World) -> None:
     assert answer["counts"] == {"new": 2, "changed": 0, "missing": 0}
     assert [statuses(answer)[key] for key in UPDATE_ORDER] == [
         "done", "done", "stopped", "waiting", "waiting", "waiting", "waiting", "waiting", "waiting",
+        "waiting",
     ]
     assert answer["stopped"]["kind"] == "paid" and answer["stopped"]["review_tool"] is None
     assert f"--pay {STEP_3}" in answer["stopped"]["message"]
     assert answer["estimate"] == {
         "step": STEP_3, "paid_calls": 2, "usd": 0.5, "what": "2 calls", "counted": "test figures"
     }
-    assert answer["command"] == f"python -m step_10_update.run --pay {STEP_3}"
+    assert answer["command"] == f"python -m update_run.run --pay {STEP_3}"
     assert answer["input_backup"].endswith("_previous_chat_android.json")
     paid = {step["key"] for step in answer["steps"] if step["paid"]}
     assert paid == PAID_STEPS
@@ -87,7 +89,7 @@ def test_stopped_for_a_review_with_the_tool_to_open(world: World) -> None:
     answer = view(world)
     assert [statuses(answer)[key] for key in UPDATE_ORDER[:5]] == ["done", "done", "review", "next", "waiting"]
     assert answer["stopped"]["kind"] == "review" and answer["stopped"]["review_tool"] == "pii"
-    assert answer["estimate"] is None and answer["command"] == "python -m step_10_update.run"
+    assert answer["estimate"] is None and answer["command"] == "python -m update_run.run"
     step_3 = next(step for step in answer["steps"] if step["key"] == STEP_3)
     assert step_3["runs"] == 1 and step_3["changed"] is True and step_3["review_tool"] == "pii"
 
@@ -100,7 +102,7 @@ def test_a_failed_step(world: World) -> None:
     assert [statuses(answer)[key] for key in UPDATE_ORDER[2:6]] == ["done", "failed", "waiting", "waiting"]
     assert answer["failed"]["step"] == STEP_4 and answer["failed"]["error"].startswith("RuntimeError")
     assert answer["failed"]["title"] == "Step 4 · Find entities"
-    assert answer["command"] == "python -m step_10_update.run"  # the next run retries the step
+    assert answer["command"] == "python -m update_run.run"  # the next run retries the step
 
 
 def test_a_saved_update_that_names_the_removed_step_still_shows(world: World) -> None:

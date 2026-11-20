@@ -17,7 +17,7 @@ test("every reason the server gives has a label and a sentence", () => {
     assert.ok(WHY_LABELS[why], why);
     assert.notEqual(whyText(why), why);
   }
-  assert.match(whyText("waiting"), /python -m step_7_write_pages\.same_complaint/);
+  assert.match(whyText("waiting"), /python -m step_5_same_complaint\.run/);
   assert.match(whyText("short", 3), /fewer than 3 people/);
 });
 
@@ -38,7 +38,7 @@ test("the toolbar counts and the warning about lists the check has not answered"
   assert.match(listsWarning({ answered: 0, waiting: 1, unusable: 0 }), /^1 entity waits for the check/);
   assert.equal(
     listsWarning({ answered: 0, waiting: 2, unusable: 1 }),
-    "2 entities wait for the check (run python -m step_7_write_pages.same_complaint); the answer about 1 entity was unusable: nothing of them is released."
+    "2 entities wait for the check (run python -m step_5_same_complaint.run); the answer about 1 entity was unusable: nothing of them is released."
   );
 });
 

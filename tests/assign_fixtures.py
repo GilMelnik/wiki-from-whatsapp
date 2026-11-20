@@ -13,9 +13,9 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from step_6_plan.assign import run
-from step_6_plan.claim_records import Record, load_claim_records
+from step_5_same_complaint.claim_records import Record, load_claim_records
 from step_6_plan.coverage import NONE
+from step_7_assign.run import run
 from tests.claim_fixtures import claim_records, write_claim_inputs
 from tests.plan_fixtures import PAGE_IDS, FakeLLM, make_plan
 from utils.json_io import write_json_file

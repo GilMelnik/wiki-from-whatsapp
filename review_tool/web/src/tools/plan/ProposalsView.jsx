@@ -203,7 +203,7 @@ export function ProposalsView({ overview, proposals, busy, offer, on }) {
   const pending = items.filter((item) => item.status === "pending");
   const decided = items.filter((item) => item.status !== "pending");
   return (
-    <Panel title="Proposals to change the plan" subtitle={summary?.exists ? `From the assignment step, ${formatDateTime(summary.generated_at)}` : "From the assignment step (6b)"}>
+    <Panel title="Proposals to change the plan" subtitle={summary?.exists ? `From the assignment step, ${formatDateTime(summary.generated_at)}` : "From the assignment step (7)"}>
       <div className="max-w-4xl space-y-4 p-4 text-sm">
         {offer && <RunOffer offer={offer} onDismiss={on.dismissOffer} />}
         {!summary?.exists ? (

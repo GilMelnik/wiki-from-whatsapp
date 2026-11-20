@@ -22,7 +22,7 @@ function AssignmentRow({ overview, item }) {
     <span className="flex items-center gap-2 text-slate-700">
       <span>{row.title}</span>
       {count === null ? (
-        <span className="ms-auto text-xs text-slate-500">6b has not run</span>
+        <span className="ms-auto text-xs text-slate-500">Step 7 has not run</span>
       ) : (
         count > 0 && (
           <span className="badge badge-amber ms-auto" title={item.kind === "proposals" ? "Waiting for a decision" : "Claims"}>

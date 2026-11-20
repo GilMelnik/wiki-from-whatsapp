@@ -19,7 +19,7 @@ behind ``python -m <module>`` (``None`` while the step has no command line), and
   (``update.waiting_hints``) and goes on.
 
 The rows are the one description of the pipeline: their order is the order the steps run in
-(``pipeline.py`` and ``step_10_update`` walk them), ``Step.run_function`` is the step's own
+(``pipeline.py`` and the update run walk them), ``Step.run_function`` is the step's own
 ``run()``. ``SERVED_STEPS`` is the registry the server uses.
 """
 
@@ -62,27 +62,27 @@ STEP_SPECS: tuple[StepSpec, ...] = (
         paid=True, review_tool="entities",
     ),
     StepSpec(
+        "same_complaint", "Step 5 · Check same complaints", "step_5_same_complaint.run",
+        incremental_safe=True, paid=True, review_tool="withheld",
+    ),
+    StepSpec(
         "plan", "Step 6 · Plan the wiki", "step_6_plan.run", incremental_safe=True, paid=True,
         review_tool="plan",
     ),
     StepSpec(
-        "assignments", "Step 6b · Assign claims to pages", "step_6_plan.assign",
+        "assignments", "Step 7 · Assign claims to pages", "step_7_assign.run",
         incremental_safe=True, paid=True, review_tool="plan",
     ),
+    StepSpec("pages", "Step 8 · Write the pages", "step_8_write_pages.run", incremental_safe=True, paid=True),
     StepSpec(
-        "same_complaint", "Step 7a · Check same complaints", "step_7_write_pages.same_complaint",
-        incremental_safe=True, paid=True, review_tool="withheld",
-    ),
-    StepSpec("pages", "Step 7 · Write the pages", "step_7_write_pages.run", incremental_safe=True, paid=True),
-    StepSpec(
-        "suggestions", "Step 8 · Review the whole wiki", "step_8_review.run",
+        "suggestions", "Step 9 · Review the whole wiki", "step_9_review.run",
         incremental_safe=True, paid=True, review_tool="suggestions",
     ),
     StepSpec(
-        "proofread", "Step 8b · Proofread the Hebrew", "step_8_review.proofread",
+        "proofread", "Step 10 · Proofread the Hebrew", "step_10_proofread.run",
         incremental_safe=True, paid=True,
     ),
-    StepSpec("site", "Step 9 · Build the site", "step_9_site.run", incremental_safe=True),
+    StepSpec("site", "Step 11 · Build the site", "step_11_site.run", incremental_safe=True),
 )
 
 

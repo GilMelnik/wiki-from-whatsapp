@@ -39,7 +39,7 @@ function WhatApplyDoes({ item }) {
   return (
     <p className="text-xs text-slate-500">
       {STRUCTURAL.includes(item.kind)
-        ? "Applying changes the plan at once. Then steps 6b and 7 run (offered here) so the pages follow."
+        ? "Applying changes the plan at once. Then steps 7 and 8 run (offered here) so the pages follow."
         : "Applying is one paid model call (a minute or two) that rewrites only this part of the page, in the background."}
     </p>
   );

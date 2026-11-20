@@ -1,4 +1,4 @@
-"""Step 8's review passes: the cutting rule, what each pass's prompt holds, the cross pass and
+"""Step 9's review passes: the cutting rule, what each pass's prompt holds, the cross pass and
 its pages, the scope of a pass, batch and sync, a failing pass, what a change re-runs,
 ``--only``, a file of the one-call review, and the estimate (offline: fake review model,
 synthetic wiki whose parts are ``before`` and ``during``, plus ``cross``)."""
@@ -12,9 +12,9 @@ from typing import Any
 import pytest
 
 from step_6_plan.model import iter_nodes
-from step_8_review.inputs import REVIEW_CONFIG
-from step_8_review.parts import CROSS_KINDS, cut
-from step_8_review.proposals import answer_schema
+from step_9_review.inputs import REVIEW_CONFIG
+from step_9_review.parts import CROSS_KINDS, cut
+from step_9_review.proposals import answer_schema
 from tests.pages_fixtures import IDS, SECRET
 from tests.review_fixtures import FakeReviewer, ReviewWorkspace, flat, sentence_a, valid_answers
 from utils.paths import resolve
@@ -132,7 +132,7 @@ def test_a_cross_pass_never_keeps_a_mistake_and_no_pass_names_what_it_did_not_se
 
 
 def test_batch_and_sync_write_the_same_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("step_8_review.run.utc_now_z", lambda: "2026-01-01T00:00:00Z")
+    monkeypatch.setattr("step_9_review.run.utc_now_z", lambda: "2026-01-01T00:00:00Z")
     payloads = []
     for name, batch in (("batch", True), ("sync", False)):
         root = tmp_path / name

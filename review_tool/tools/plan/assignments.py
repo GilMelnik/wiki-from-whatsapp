@@ -22,8 +22,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from review_tool.tools.plan.history import AssignmentsBefore, Record
-from step_6_plan.assign_rules import PlanChanges, follow, redecide, redirects
 from step_6_plan.operation_requests import quote
+from step_7_assign.rules import PlanChanges, follow, redecide, redirects
 from utils.json_io import write_json_file
 from utils.reconcile import backup_file, fingerprint
 
@@ -178,8 +178,8 @@ class AssignmentsFile:
     def require(self) -> None:
         if not self.exists:
             raise AssignmentsConflict(
-                "There is no assignments file yet: run the assignment step (6b, "
-                "python -m step_6_plan.assign) after reviewing the plan."
+                "There is no assignments file yet: run the assignment step (7, "
+                "python -m step_7_assign.run) after reviewing the plan."
             )
         if self.problem:
             raise AssignmentsConflict(self.problem)

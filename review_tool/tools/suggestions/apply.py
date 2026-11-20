@@ -3,18 +3,18 @@ incremental steps do the rest.
 
 - ``split`` / ``merge`` / ``add_page`` / ``add_label``: the plan operation, validated by
   ``step_6_plan.operations``, saved to the plan's EDITED file (as the plan tool saves). No page
-  is written here: the assignment step and step 7 follow through their stale notices (a page
-  that is not in the plan would break step 9).
-- ``mistake``: one call of the ``apply`` stage through step 7's own ``PageWriter.update`` with
-  the correction as its free-text ``request``, from the page's current EFFECTIVE text. Step 7's
+  is written here: the assignment step and step 8 follow through their stale notices (a page
+  that is not in the plan would break step 11).
+- ``mistake``: one call of the ``apply`` stage through step 8's own ``PageWriter.update`` with
+  the correction as its free-text ``request``, from the page's current EFFECTIVE text. Step 8's
   checks hold (only the page's claims cited, valid links, disputed and contradicted claims
   cited; one retry, then refusal); on top, at least ``wiki_review.apply.min_kept_sentence_share``
   of the page's sentences must stay word for word. The corrected page goes to the pages'
   EDITED file, the starting text of every later update. It keeps the page's ``language_edits``
   record: the sentences the correction wrote were never proofread, and the proofreading pass
-  that follows the owner's decisions (``step_8_review.proofread``) edits only those.
+  that follows the owner's decisions (``step_10_proofread.run``) edits only those.
 - ``contradiction``: the pairs (short ids) become the owner's manual contradiction pairs
-  (``step_6_plan.claim_records.add_manual_contradiction``; the claim records join them into
+  (``step_5_same_complaint.claim_records.add_manual_contradiction``; the claim records join them into
   ``contradicts`` on every load), so they survive every re-run and rewrite; and every page of
   the suggestion is corrected as for a mistake so both sides show now (the pages are written
   from the claims as they will be, link included).
@@ -34,14 +34,14 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from step_6_plan.claim_records import ClaimSources, add_manual_contradiction
+from step_5_same_complaint.claim_records import ClaimSources, add_manual_contradiction
 from step_6_plan.model import PlanError
-from step_7_write_pages.checks import sentences, strip_definitions
-from step_7_write_pages.front_matter import LabelRule, page_front_matter
-from step_7_write_pages.inputs import PAGES_CONFIG, Corpus, PageContext
-from step_7_write_pages.writer import ClaimDelta, PageText, PageWriter, current_text
-from step_8_review.inputs import REVIEW_CONFIG, ReviewInput
-from step_8_review.proposals import (
+from step_8_write_pages.checks import sentences, strip_definitions
+from step_8_write_pages.front_matter import LabelRule, page_front_matter
+from step_8_write_pages.inputs import PAGES_CONFIG, Corpus, PageContext
+from step_8_write_pages.writer import ClaimDelta, PageText, PageWriter, current_text
+from step_9_review.inputs import REVIEW_CONFIG, ReviewInput
+from step_9_review.proposals import (
     MISTAKE,
     STRUCTURAL,
     effective_proposal,
@@ -73,7 +73,7 @@ class ApplyRefused(Exception):
 
 @dataclass(frozen=True)
 class Correction:
-    """A page as step 7's writer corrected it; ``language_edits``: the page's record of what
+    """A page as step 8's writer corrected it; ``language_edits``: the page's record of what
     was proofread (kept: the sentences the correction kept are still proofread text)."""
 
     context: PageContext
@@ -188,7 +188,7 @@ class Applier:
     def _corrected(self, corpus: Corpus, review: ReviewInput, page_id: str, request: str,
                    touched: Collection[str], quoted: str = "", *, unchanged_ok: bool = False
                    ) -> tuple[Correction | None, float]:
-        """The page corrected by step 7's writer and the kept share; refused when the writer
+        """The page corrected by step 8's writer and the kept share; refused when the writer
         failed its checks, changed too much, or changed nothing (unless ``unchanged_ok``: the
         correction is then ``None``)."""
         page = review.all_pages[page_id]

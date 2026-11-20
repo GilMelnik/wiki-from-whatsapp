@@ -17,12 +17,12 @@ range:
   new name that no cached verdict covers (each could be listed twice), at its own claims.
 
 ``exact`` is false whenever something was not cached. The update driver's pay gate reads
-the HIGH end (``step_10_update.estimate``), so a call that may happen always asks first.
+the HIGH end (``update_run.estimate``), so a call that may happen always asks first.
 
 Tokens are characters / ``entities.match.estimate.chars_per_token`` (Hebrew claims); output
 is a typical figure per call (``update.estimate.output_tokens_per_call``); prices from
 ``utils.model_prices``, at ``batch_discount`` when the judge uses the batch API. ``paid_calls``
-counts the chat calls only (judge and two meanings), like step 10's other estimates.
+counts the chat calls only (judge and two meanings), like the update run's other estimates.
 """
 
 from __future__ import annotations

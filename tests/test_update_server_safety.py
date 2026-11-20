@@ -1,4 +1,4 @@
-"""Step 10 next to a running review server: the lease, the job runner's refusal, the write
+"""The update run next to a running review server: the lease, the job runner's refusal, the write
 guard's 423 for the step the update runs, and the driver's check of jobs and applies."""
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from review_tool.jobs import JOB_SETTINGS, JobRefused, JobRunner
 from review_tool.port import PortFinder
 from review_tool.registry import ToolSpec
 from review_tool.steps import StepRegistry, StepSpec
-from step_10_update.server import ReviewServerCheck
+from update_run.server import ReviewServerCheck
 from tests.review_tool_support import BASE_URL, HOST, build_app, build_graph, new_bus, running_server
 from utils.config import PROJECT_ROOT
 from utils.step_lease import LeaseHeld, StepLease

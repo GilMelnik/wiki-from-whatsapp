@@ -3,7 +3,7 @@
 A page's size is the number of claims the assignments (C8, edited if present, read through
 today's plan) make its main page (``pages[0]``); a claim that only mentions the page does not
 count, nor does a claim the owner's rule withholds from the wiki
-(``step_7_write_pages.withhold``): it is on no page. The guide: fewer than ``fold_below``
+(``step_5_same_complaint.withhold``): it is on no page. The guide: fewer than ``fold_below``
 claims is a section of a neighbouring page, not a page (``fold``); a page usually rests on
 ``typical_min`` to ``typical_max`` (below: ``small``, above: ``large``); more than
 ``split_above`` is split by sub-subject (``split``). A count exactly on a limit is inside it.

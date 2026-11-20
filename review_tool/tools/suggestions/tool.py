@@ -1,6 +1,6 @@
 """The suggestions tool of the review server: ``python -m review_tool --tool suggestions``.
 
-The owner goes through what the whole-wiki review (step 8, contract C12) proposed: reads each
+The owner goes through what the whole-wiki review (step 9, contract C12) proposed: reads each
 suggestion with its evidence, accepts, rejects or re-opens it (one or several at once),
 corrects the proposal first when it is nearly right, has the accepted ones carried out and
 sees what each changed. A thin layer over
@@ -12,7 +12,7 @@ every move, check and refusal; this module shows, collects and reports. Endpoint
   names, ``paid``, ``busy``), the counts, the review's note and run, the apply queue, and
   ``rerun``: what running the review now would cost (``due`` of ``passes`` review passes,
   ``usd``, ``batch``; counted by characters, no call to any endpoint; ``null`` when the wiki
-  cannot be read); ``exists: false`` (and nothing else to show) before step 8 has run
+  cannot be read); ``exists: false`` (and nothing else to show) before step 9 has run
 - ``GET  /suggestions/{id}``       ``{suggestion, evidence, changes}`` (``evidence``: see
   ``review_tool.tools.suggestions.evidence``; ``changes``: what an applied suggestion
   changed, else ``null``)
@@ -59,9 +59,9 @@ from review_tool.tools.suggestions.store import (
     SuggestionsStore,
 )
 from step_6_plan.model import PlanError
-from step_8_review.inputs import REVIEW_CONFIG
-from step_8_review.parts import ReviewPasses, batch_available, review_usd, stored_passes
-from step_8_review.proposals import ACCEPTED
+from step_9_review.inputs import REVIEW_CONFIG
+from step_9_review.parts import ReviewPasses, batch_available, review_usd, stored_passes
+from step_9_review.proposals import ACCEPTED
 from utils.config import LLM_CONFIG
 from utils.json_io import read_json_if_present
 from utils.paths import AUDIT_PATH, BACKUPS_DIR, MANUAL_CONTRADICTIONS_PATH

@@ -1,5 +1,5 @@
 """The same-complaint check wired into the pipeline: what is withheld now follows the check's
-answers and the owner's "keep withheld" marks in step 7 (the writer), step 9 (the site), the
+answers and the owner's "keep withheld" marks in step 8 (the writer), step 11 (the site), the
 Plan page and the update run. Synthetic claims, people and answers, a fake model; no paid call.
 """
 
@@ -14,17 +14,17 @@ import pytest
 from review_tool.artifacts import GRAPH
 from review_tool.steps import SERVED_STEPS
 from review_tool.toolset import TOOL_SPECS
-from step_6_plan.claim_records import ClaimSources, Record, load_claim_records
-from step_7_write_pages import same_complaint
-from step_7_write_pages.same_complaint_release import (
+from step_5_same_complaint.claim_records import ClaimSources, Record, load_claim_records
+from step_5_same_complaint import run as same_complaint
+from step_5_same_complaint.release import (
     entity_lists,
     list_fingerprint,
     save_vetoes,
     withheld_ids,
 )
-from step_7_write_pages.withhold import REASON
-from step_10_update.driver import STOPPED, UPDATE_CONFIG
-from step_10_update.estimate import Estimator
+from step_5_same_complaint.withhold import REASON
+from update_run.driver import STOPPED, UPDATE_CONFIG
+from update_run.estimate import Estimator
 from tests.claim_fixtures import claim_record, claim_records, write_claim_inputs
 from tests.pages_fixtures import IDS, FakeWriter, PagesWorkspace
 from tests.plan_fixtures import short_id_of
@@ -35,7 +35,7 @@ from tests.update_support import PAID_STEPS, newer_chat
 from tests.update_support import World as UpdateWorld
 from utils.json_io import write_json_file
 from utils.llm_client import _flatten
-from utils.paths import STEP_6_ASSIGN, STEP_7, STEP_7_SAME_COMPLAINT
+from utils.paths import STEP_4, STEP_5, STEP_6, STEP_7
 
 AGENCY_ID, AGENCY_NAME = "e0009", "Agency Nine"
 DEPOSIT = {"deposit": "kept the deposit"}
@@ -156,7 +156,7 @@ def test_the_same_person_twice_releases_nothing(ws: PagesWorkspace) -> None:
     assert withheld(ws) == [FIRST, SECOND]
 
 
-# ------------------------------------------------------------------------------ step 9
+# ------------------------------------------------------------------------------ step 11
 
 
 def test_the_site_follows_the_check_and_the_marks(tmp_path: Path) -> None:
@@ -206,12 +206,12 @@ def test_the_plan_page_follows_a_release_and_a_mark_without_a_restart(tmp_path: 
 # ------------------------------------------------------- the registry and the update run
 
 
-def test_the_check_is_a_paid_step_between_the_assignment_and_the_pages() -> None:
+def test_the_check_is_a_paid_step_between_the_entities_and_the_plan() -> None:
     keys = [step.key for step in SERVED_STEPS.steps]
-    assert keys.index(STEP_6_ASSIGN) + 1 == keys.index(STEP_7_SAME_COMPLAINT) == keys.index(STEP_7) - 1
-    step = SERVED_STEPS.step(STEP_7_SAME_COMPLAINT)
+    assert keys.index(STEP_4) + 1 == keys.index(STEP_5) == keys.index(STEP_6) - 1
+    step = SERVED_STEPS.step(STEP_5)
     assert step.spec.paid and step.spec.incremental_safe and step.spec.review_tool == "withheld"
-    assert step.command()[1:] == ["-m", "step_7_write_pages.same_complaint"]
+    assert step.command()[1:] == ["-m", "step_5_same_complaint.run"]
     assert GRAPH.node("same_complaint").upstream == ("claims", "entities")
     assert {"same_complaint", "withheld_vetoes"} <= set(GRAPH.node("pages").upstream)
     spec = next(spec for spec in TOOL_SPECS if spec.name == "withheld")
@@ -222,23 +222,23 @@ def test_the_check_is_a_paid_step_between_the_assignment_and_the_pages() -> None
 def test_the_update_estimate_runs_the_check_dry(ws: PagesWorkspace) -> None:
     model = FakeModel(same_text(DEPOSIT))
     run = partial(same_complaint.run, sources=ws.sources, llm=model)
-    estimate = Estimator(lambda step: run)(SERVED_STEPS.step(STEP_7_SAME_COMPLAINT))
+    estimate = Estimator(lambda step: run)(SERVED_STEPS.step(STEP_5))
     assert estimate.paid_calls == 1 and estimate.usd > 0 and model.calls == []
     assert estimate.what.startswith("1 model call(s)") and not ws.sources.same_complaint.exists()
     run()
-    again = Estimator(lambda step: run)(SERVED_STEPS.step(STEP_7_SAME_COMPLAINT))
+    again = Estimator(lambda step: run)(SERVED_STEPS.step(STEP_5))
     assert again.paid_calls == 0 and again.what.startswith("no call")
 
 
 def test_the_update_run_stops_for_the_withheld_page(tmp_path: Path) -> None:
     world = UpdateWorld(tmp_path)
     outcome = world.run(world.export(newer_chat()), pay=PAID_STEPS)
-    while world.state()["update"]["stopped"]["step"] != STEP_7_SAME_COMPLAINT:
+    while world.state()["update"]["stopped"]["step"] != STEP_5:
         outcome = world.run(pay=PAID_STEPS)
-    assert outcome.status == STOPPED and world.calls[-1] == STEP_7_SAME_COMPLAINT
+    assert outcome.status == STOPPED and world.calls[-1] == STEP_5
     assert "python -m review_tool --tool withheld" in outcome.message
     assert UPDATE_CONFIG["review_hints"]["withheld"] in outcome.message
-    assert STEP_7 not in world.calls  # the pages wait for the owner's look
+    assert STEP_7 not in world.calls  # the next step waits for the owner's look
     world.calls.clear()
     world.run(pay=PAID_STEPS)
     assert world.calls[0] == STEP_7

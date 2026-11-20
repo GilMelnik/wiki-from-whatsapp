@@ -1,4 +1,4 @@
-"""Step 9 on synthetic inputs: nav, links, label pages, home page, redirects, cleanup, re-runs."""
+"""Step 11 on synthetic inputs: nav, links, label pages, home page, redirects, cleanup, re-runs."""
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ import pytest
 import yaml
 
 from step_6_plan import operations
-from step_9_site.agent_pages import twin_docs_path, twin_url
-from step_9_site.hebrew_search import prefix_variants
-from step_9_site.run import run, sync_docs
+from step_11_site.agent_pages import twin_docs_path, twin_url
+from step_11_site.hebrew_search import prefix_variants
+from step_11_site.run import run, sync_docs
 from tests.claim_fixtures import claim_records, write_claim_inputs
 from tests.site_fixtures import FIRST_MESSAGE, IDS, issues_of, make_page, make_site_plan, make_threads, run_site
 from utils.paths import Artifact
@@ -91,7 +91,7 @@ def test_wiki_links_are_resolved_outside_code(built: tuple[Path, dict[str, Any]]
     assert "ו-גאורגיה." in body  # a label nobody carries has no page: its title, unlinked
     assert "[כאן](agencies.md)" in body
     assert "`[[costs]]`" in body and "```\n[[clinics]]\n```" in body
-    # a body stored with its definition (older step 7): the stored text gives way to the reference
+    # a body stored with its definition (older step 8): the stored text gives way to the reference
     reference = f"[^{IDS[1]}]: {section('site')['references']['start_mark']}{IDS[1]} · "
     assert reference in body and "טענה." not in body
 

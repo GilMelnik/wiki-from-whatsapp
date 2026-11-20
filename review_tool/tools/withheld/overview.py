@@ -3,7 +3,7 @@ withholding rule still keeps off every page, from the claim records and the chec
 
 ``ClaimsData`` is the slow part (the claim records and who backs each claim, about half a second
 on the real files), loaded once per change of its files. ``WithheldView`` applies the owner's
-"keep withheld" marks to it per request (``same_complaint_release.Check``, whose ``withheld``
+"keep withheld" marks to it per request (``step_5_same_complaint.release.Check``, whose ``withheld``
 is what every step and page treats as withheld now), so a mark shows at once. The backers are identities: they stay in memory here, only their counts are served.
 """
 
@@ -16,8 +16,8 @@ from typing import Any
 
 from review_tool.artifacts import ArtifactNode
 from review_tool.fs import stamp
-from step_6_plan.claim_records import ClaimSources, Record, claim_backers, load_claim_records
-from step_7_write_pages.same_complaint_release import (
+from step_5_same_complaint.claim_records import ClaimSources, Record, claim_backers, load_claim_records
+from step_5_same_complaint.release import (
     ANSWERED,
     MIN_SUPPORTERS,
     NO_CALL,
@@ -28,7 +28,7 @@ from step_7_write_pages.same_complaint_release import (
     entity_name,
     load_answers,
 )
-from step_7_write_pages.withhold import withholds
+from step_5_same_complaint.withhold import withholds
 
 # Where a claim of a released group stands.
 RELEASED = "released"

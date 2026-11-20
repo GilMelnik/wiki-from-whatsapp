@@ -1,11 +1,11 @@
-"""The update in progress (``step_10_update``), as the status tool shows it. Read-only.
+"""The update in progress (``update_run``), as the status tool shows it. Read-only.
 
 An update takes a newer chat export through the pipeline's steps and stops after a step a
 person must review and before a step that would spend money. What the owner needs at such a
 moment comes from three files the driver keeps (contract C13): its state
-(``step_10_update/state.json``: the update, the steps run, the stop or the failure), the
+(``update_run/state.json``: the update, the steps run, the stop or the failure), the
 update's report (``updates/<stamp>_report.json``: the estimate recorded before a paid step)
-and its lease (``step_10_update/running.json``: the step running right now). ``view()`` turns
+and its lease (``update_run/running.json``: the step running right now). ``view()`` turns
 them into one answer::
 
     {"state": "none" | "in_progress" | "completed" | "unreadable", "problem"?,
@@ -29,7 +29,7 @@ from typing import Any
 
 from review_tool.artifacts import ArtifactGraph
 from review_tool.steps import Step
-from step_10_update.state import COMMAND, PAID, REVIEW, UpdateState
+from update_run.state import COMMAND, PAID, REVIEW, UpdateState
 from utils.step_lease import StepLease
 
 

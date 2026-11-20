@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://gaysurrogacy.co.il/wiki_index.schema.json",
   "title": "wiki_index.json (contract C11, index_version 1)",
-  "description": "Search and graph index of the published wiki, written by the site generator (step 9) into the mkdocs docs dir so that it is copied into site/ and served as a static asset at /<config.mcp.index_file>. Read by the MCP Worker (worker/src). Plain data: no HTML, no scores, no normalised text.",
+  "description": "Search and graph index of the published wiki, written by the site generator (step 11) into the mkdocs docs dir so that it is copied into site/ and served as a static asset at /<config.mcp.index_file>. Read by the MCP Worker (worker/src). Plain data: no HTML, no scores, no normalised text.",
   "type": "object",
   "required": ["index_version", "generated_at", "disclaimer", "labels", "pages"],
   "additionalProperties": false,
@@ -12,7 +12,7 @@
       "const": 1
     },
     "generated_at": {
-      "description": "When step 9 wrote the index (UTC, ISO 8601 with offset).",
+      "description": "When step 11 wrote the index (UTC, ISO 8601 with offset).",
       "$ref": "#/$defs/timestamp"
     },
     "disclaimer": {

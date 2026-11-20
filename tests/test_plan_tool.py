@@ -157,7 +157,7 @@ def test_overview_shows_tree_budget_labels_and_no_changes(setup: PlanSetup) -> N
 def test_page_detail_has_example_texts_and_coverage(setup: PlanSetup) -> None:
     detail = setup.get("/pages/agencies")
     assert detail["coverage"] is None
-    assert (detail["size"], detail["sample"], detail["near"]) == (None, None, None)  # no 6b yet
+    assert (detail["size"], detail["sample"], detail["near"]) == (None, None, None)  # no step 7 yet
     assert [e["short_id"] for e in detail["examples"]] == [short_id_of(0)]
     assert detail["examples"][0]["claim_text"].startswith("Synthetic claim number 0")
     assert "claim_count" not in detail["examples"][0]

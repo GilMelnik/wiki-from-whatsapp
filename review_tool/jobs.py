@@ -13,7 +13,7 @@ artifact the step produces):
 
 At most one job runs per produced artifact, and a step does not start while a step that
 produces one of its inputs is running (it would read the inputs before they are updated), nor
-while the update driver (``step_10_update``) holds its lease (``utils.step_lease``): it runs
+while the update driver (``update_run``) holds its lease (``utils.step_lease``): it runs
 steps in its own process. The runner only ever signals the process group of a
 child it started itself and has not reaped yet: a cancel sends SIGINT (the step's ``finally``
 blocks and file locks unwind), then SIGKILL after ``review.jobs.stop_timeout_seconds``.
@@ -180,7 +180,7 @@ class JobRunner:
             if self.outside_step() is not None:
                 raise JobRefused(
                     409,
-                    "An update (python -m step_10_update.run) is running and runs the pipeline's "
+                    "An update (python -m update_run.run) is running and runs the pipeline's "
                     f"steps itself; start {spec.title} after it stops.",
                 )
             running = self._running_for(spec.produces)

@@ -1,4 +1,4 @@
-"""Step 9's entity tag pages: next to the label pages, in the labels' navigation, in the agents'
+"""Step 11's entity tag pages: next to the label pages, in the labels' navigation, in the agents'
 pages and in the MCP index; only the entity's name and the pages, never anything private."""
 
 from __future__ import annotations
@@ -12,8 +12,12 @@ from typing import Any
 import pytest
 import yaml
 
-from step_6_plan.claim_records import SHORT_ID_HASH_CHARS, SHORT_ID_PREFIX, Record
-from step_9_site.entity_tags import TAG, TAG_KIND, TAGS_CONFIG
+from step_5_same_complaint.claim_records import (
+    SHORT_ID_HASH_CHARS,
+    SHORT_ID_PREFIX,
+    Record,
+)
+from step_11_site.entity_tags import TAG, TAG_KIND, TAGS_CONFIG
 from tests.claim_fixtures import claim_record
 from tests.schema_check import schema_errors
 from tests.site_fixtures import build_html, make_page, make_site_plan, run_site

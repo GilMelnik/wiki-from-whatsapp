@@ -87,7 +87,7 @@ export class Wiki {
       );
     }
     if (typeof index.disclaimer !== "string" || !index.disclaimer) {
-      throw new Error(`Wiki index ${url.pathname} has no disclaimer; run step 9 again to write it.`);
+      throw new Error(`Wiki index ${url.pathname} has no disclaimer; run step 11 again to write it.`);
     }
     if (!searchResponse.ok) console.warn(`${searchUrl.pathname} missing (HTTP ${searchResponse.status}); indexing in memory.`);
     const snapshot = searchResponse.ok ? ((await searchResponse.json()) as SearchSnapshot) : undefined;

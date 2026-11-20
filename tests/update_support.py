@@ -14,21 +14,20 @@ from typing import Any
 
 from review_tool.artifacts import GRAPH, ArtifactGraph, ArtifactNode
 from review_tool.steps import STEP_SPECS, Step, StepRegistry
-from step_10_update.driver import Options, Outcome, UpdateDriver, UpdatePaths
-from step_10_update.estimate import Estimate
+from update_run.driver import Options, Outcome, UpdateDriver, UpdatePaths
+from update_run.estimate import Estimate
 from utils.config import DATA_DIR, PROJECT_ROOT
 from utils.paths import (
     STEP_3,
     STEP_4,
-    STEP_6_ASSIGN,
+    STEP_5,
     STEP_7,
-    STEP_7_SAME_COMPLAINT,
     STEP_8,
-    STEP_8_PROOFREAD,
+    STEP_9,
+    STEP_10,
 )
 
-PAID_STEPS = frozenset({STEP_3, STEP_4, STEP_6_ASSIGN, STEP_7_SAME_COMPLAINT, STEP_7, STEP_8,
-                        STEP_8_PROOFREAD})
+PAID_STEPS = frozenset({STEP_3, STEP_4, STEP_5, STEP_7, STEP_8, STEP_9, STEP_10})
 
 
 def message(msg_id: str, minute: int, day: int = 1) -> dict[str, Any]:
@@ -81,8 +80,8 @@ class World:
         self.paths = UpdatePaths(
             input=self.graph.node("export").original,
             updates_dir=root / "updates",
-            state=root / "step_10_update" / "state.json",
-            lease=root / "step_10_update" / "running.json",
+            state=root / "update_run" / "state.json",
+            lease=root / "update_run" / "running.json",
         )
         self.clock = Clock()
         self.calls: list[str] = []

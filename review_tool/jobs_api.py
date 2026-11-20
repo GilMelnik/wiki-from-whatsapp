@@ -111,7 +111,7 @@ class WriteGuard:
         outside = self._runner.outside_step() or {}
         if outside.get("produces") in writes:
             return (
-                f"The update (step_10_update) is running {outside.get('title')} and rewriting "
+                f"The update (update_run) is running {outside.get('title')} and rewriting "
                 f"“{self._graph.node(outside['produces']).title}”. Changes cannot be saved until "
                 "that step finishes; try again after it."
             )

@@ -13,13 +13,13 @@ import pytest
 
 import review_tool.tools.suggestions.apply as apply_module
 from review_tool.tools.suggestions.apply import ApplyRefused, kept_share, sentences
-from step_6_plan.claim_records import (
+from step_5_same_complaint.claim_records import (
     add_manual_contradiction,
     load_claim_records,
     load_manual_pairs,
 )
 from step_6_plan.model import validation_errors
-from step_8_review.inputs import REVIEW_CONFIG
+from step_9_review.inputs import REVIEW_CONFIG
 from tests.pages_fixtures import IDS, FakeWriter, Responder
 from tests.review_fixtures import (
     FakeReviewer,
