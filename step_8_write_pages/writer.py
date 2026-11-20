@@ -10,6 +10,13 @@ statements, marks, uncited disputed claims). Each answer is checked
 (``step_8_write_pages.checks``); a failing answer gets ONE retry that names the problems, then
 whatever is still wrong is repaired and recorded. A page leaving out more than
 ``pages.max_left_out_share`` of its main claims is logged as a warning.
+
+A call is prepared first (``write_call`` / ``update_call``: a ``PageCall`` holding the client,
+the prompts, the schema and the rules) and then completed: one sync call after the other
+(``complete``), or with every page's call in one batch per round
+(``step_8_write_pages.batch``). Both routes check an answer with the same methods
+(``checked``, ``retry_problems``, ``finish``), so they send the same requests and treat the
+same answer the same way.
 """
 
 from __future__ import annotations
@@ -83,6 +90,20 @@ def current_text(page: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+@dataclass(frozen=True)
+class PageCall:
+    """One page's request to the model and the rules its answer is checked by."""
+
+    llm: LLMClient
+    system: str
+    user: list[CacheSegment]
+    schema: dict[str, Any]
+    rules: AnswerRules
+    context: PageContext
+    task: str
+    current: Mapping[str, Any] | None
+
+
 class PageWriter:
     """Writes and updates pages with the ``write`` and ``update`` stage clients."""
 
@@ -93,17 +114,33 @@ class PageWriter:
         self.plan = plan
         self.logger = logger
 
-    def write(self, context: PageContext) -> PageText:
-        """The page in full from its claims (stage ``write``)."""
+    def write_call(self, context: PageContext) -> PageCall:
+        """The call that writes the page in full from its claims (stage ``write``)."""
         rules = rules_for(context.page_id, context.records, self.plan,
                           required=context.required_ids(), withheld=context.withheld)
         system, user = write_prompt(context)
-        return self._complete(self.write_llm, system, user, WRITE_SCHEMA, rules, context,
-                              task=f"write:{context.page_id}", current=None)
+        return PageCall(self.write_llm, system, user, WRITE_SCHEMA, rules, context,
+                        task=f"write:{context.page_id}", current=None)
+
+    def update_call(self, context: PageContext, current: Mapping[str, Any], delta: ClaimDelta,
+                    request: str = "") -> PageCall:
+        """The call that updates the page from ``current`` (stage ``update``); see ``update``."""
+        rules = rules_for(context.page_id, context.records, self.plan,
+                          required=context.required_ids(), frozen=sentences(current["body"]),
+                          withheld=context.withheld)
+        system, user = update_prompt(context, current, new=delta.new, changed=delta.changed,
+                                     removed=delta.removed, brief_changed=delta.brief_changed,
+                                     request=request)
+        return PageCall(self.update_llm, system, user, UPDATE_SCHEMA, rules, context,
+                        task=f"update:{context.page_id}", current=current)
+
+    def write(self, context: PageContext) -> PageText:
+        """The page in full from its claims (stage ``write``), by sync calls."""
+        return self.complete(self.write_call(context))
 
     def update(self, context: PageContext, current: Mapping[str, Any], delta: ClaimDelta,
                request: str = "") -> PageText:
-        """The page updated from ``current`` (stage ``update``).
+        """The page updated from ``current`` (stage ``update``), by sync calls.
 
         ``current``: the current EFFECTIVE page as ``current_text`` returns it (body with marks
         but no definitions, summary, questions, related as ``[{page_id, relation}]``, points,
@@ -117,39 +154,51 @@ class PageWriter:
         out (step 9 applies an accepted review suggestion with an empty ``delta`` and a
         request); the checks are the same.
         """
-        rules = rules_for(context.page_id, context.records, self.plan,
-                          required=context.required_ids(), frozen=sentences(current["body"]),
-                          withheld=context.withheld)
-        system, user = update_prompt(context, current, new=delta.new, changed=delta.changed,
-                                     removed=delta.removed, brief_changed=delta.brief_changed,
-                                     request=request)
-        return self._complete(self.update_llm, system, user, UPDATE_SCHEMA, rules, context,
-                              task=f"update:{context.page_id}", current=current)
+        return self.complete(self.update_call(context, current, delta, request))
 
-    def _ask(self, llm: LLMClient, system: str, user: list[CacheSegment], schema: dict[str, Any],
-             task: str, current: Mapping[str, Any] | None) -> dict[str, Any]:
-        answer = llm.complete_json(system, user, task=task, response_schema=schema)
+    def complete(self, call: PageCall) -> PageText:
+        """The page of ``call`` by sync calls: the answer, ONE retry naming its problems when
+        it has any, then ``finish``. A call error or an unusable answer raises."""
+        answer = self._ask(call, call.user)
+        first = self.retry_problems(call, answer)
+        if first:
+            answer = self._ask(call, retry_prompt(call.user, answer, first))
+        return self.finish(call, answer, first)
+
+    def _ask(self, call: PageCall, user: list[CacheSegment]) -> dict[str, Any]:
+        return self.checked(call, call.llm.complete_json(call.system, user, task=call.task,
+                                                         response_schema=call.schema))
+
+    @staticmethod
+    def checked(call: PageCall, answer: Any) -> dict[str, Any]:
+        """The model's ``answer`` as the checks read it (a "no change needed" update gets the
+        current text); ``ValueError`` when it has no body or no points / left_out lists."""
+        task = call.task
         if not isinstance(answer, dict) or not isinstance(answer.get("body"), str):
             raise ValueError(f"{task}: the model's answer has no body: {str(answer)[:200]}")
         if not all(isinstance(answer.get(key), list) for key in ("points", "left_out")):
             raise ValueError(f"{task}: the model's answer has no points / left_out lists: "
                              f"{str(answer)[:200]}")
+        current = call.current
         if current is not None and answer.get("no_change"):
             answer = {**answer, "body": current["body"],
                       **{key: answer.get(key) or current[key]
                          for key in ("summary", "questions", "related")}}
         return answer
 
-    def _complete(self, llm: LLMClient, system: str, user: list[CacheSegment],
-                  schema: dict[str, Any], rules: AnswerRules, context: PageContext, *, task: str,
-                  current: Mapping[str, Any] | None) -> PageText:
-        answer = self._ask(llm, system, user, schema, task, current)
-        first = problems(answer, rules)
-        calls = 1
+    def retry_problems(self, call: PageCall, answer: Mapping[str, Any]) -> list[str]:
+        """The problems of a first answer (logged); an answer with any gets ONE retry
+        (``retry_prompt``)."""
+        first = problems(answer, call.rules)
         if first:
-            self.logger.info(f"{task}: {len(first)} problem(s), one retry: {first}")
-            answer = self._ask(llm, system, retry_prompt(user, answer, first), schema, task, current)
-            calls = 2
+            self.logger.info(f"{call.task}: {len(first)} problem(s), one retry: {first}")
+        return first
+
+    def finish(self, call: PageCall, answer: Mapping[str, Any], first: list[str]) -> PageText:
+        """The page from its last checked ``answer`` (the retry's when ``first`` holds the
+        problems of a first answer): whatever is still wrong is repaired and recorded."""
+        rules, context, current, task = call.rules, call.context, call.current, call.task
+        calls = 2 if first else 1
         final = problems(answer, rules)
         fixed, repairs = repair(answer, rules)
         no_change = bool(current is not None and answer.get("no_change"))

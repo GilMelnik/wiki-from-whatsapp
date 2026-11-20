@@ -84,7 +84,8 @@ def _results() -> dict[str, dict[str, Any]]:
                         "proposal_calls_max": 1},
         STEP_8: {"estimate": [{"page": "a", "mode": "write", "input_tokens": 500_000},
                               {"page": "b", "mode": "update", "input_tokens": 500_000}],
-                 "input_tokens": 1_000_000, "modes": {"write": 1, "update": 1, "keep": 4}},
+                 "input_tokens": 1_000_000, "batch": False,
+                 "modes": {"write": 1, "update": 1, "keep": 4}},
         STEP_9: {"calls": 2, "input_tokens": 200_000, "batch": True,
                  "passes": [{"id": "a"}, {"id": "b"}, {"id": "cross"}]},
         STEP_10: {"calls": 2, "batch": True, "estimate": [
@@ -119,6 +120,15 @@ def test_estimates_are_priced_from_config(key: str, calls: int, usd: float) -> N
         assert isinstance(seen["count_tokens"], CharTokenCounter)
     if key == STEP_3:
         assert seen["count_tokens"].chars_per_token == 1.39
+
+
+def test_step_8_on_the_batch_route_is_priced_at_the_batch_discount() -> None:
+    plain = _results()[STEP_8]
+    prices = {batch: Estimator(lambda step: lambda **kwargs: {**plain, "batch": batch})(
+        STEPS[STEP_8]) for batch in (False, True)}
+    assert prices[True].usd == pytest.approx(prices[False].usd * 0.5)
+    assert prices[True].counted.endswith(", batch price")
+    assert "batch" not in prices[False].counted
 
 
 def test_step_3_is_priced_as_the_api_reported_it() -> None:

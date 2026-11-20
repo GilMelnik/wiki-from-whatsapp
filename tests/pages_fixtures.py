@@ -102,12 +102,24 @@ Responder = Callable[[str, Any, str], dict[str, Any]]
 
 
 class FakeWriter:
-    """A fake ``LLMClient`` for the write / update stages; records every call."""
+    """A fake ``LLMClient`` for the write / update stages; records every call. ``batch``: it
+    has a batch API (``complete_batch_json`` answers each request as ``complete_json`` would;
+    a request whose answer raises is left out, as a batch item without a usable answer) and
+    records the tasks of every batch."""
 
-    def __init__(self, model: str = "fake-sonnet", respond: Responder | None = None) -> None:
+    def __init__(self, model: str = "fake-sonnet", respond: Responder | None = None, *,
+                 batch: bool = False) -> None:
         self.model = model
         self.respond = respond
+        self.batch = batch
         self.calls: list[dict[str, Any]] = []
+        self.batches: list[list[str]] = []
+
+    def supports_batch(self) -> bool:
+        return self.batch
+
+    def cached_json(self, request: BatchRequest) -> None:
+        return None
 
     def complete_json(self, system: Any, user: Any, task: str = "",
                       response_schema: dict | None = None) -> dict[str, Any]:
@@ -121,6 +133,19 @@ class FakeWriter:
         if task.startswith("update:"):
             answer["no_change"] = False
         return answer
+
+    def complete_batch_json(self, requests: Sequence[BatchRequest], *,
+                            resumable: bool = False) -> dict[str, Any]:
+        assert self.batch and resumable, "the pages' batches are resumable"
+        self.batches.append([request.task for request in requests])
+        answers = {}
+        for request in requests:
+            try:
+                answers[request.request_id] = self.complete_json(
+                    request.system, request.user, request.task, request.response_schema)
+            except (RuntimeError, ValueError):
+                continue
+        return answers
 
     def tasks(self) -> list[str]:
         return [call["task"] for call in self.calls]
