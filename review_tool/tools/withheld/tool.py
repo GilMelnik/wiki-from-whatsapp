@@ -32,7 +32,9 @@ A claim is ``{short_id, thread_id, message_ids, text, stance, supporter_count, m
 entity_names, kept, hand_released}`` (``thread_id`` and ``message_ids``, the messages the claim
 rests on, only open the conversation on this local site and mark them there); ``status`` is
 released | kept | by_you | short | published, ``why`` is kept | waiting | unusable | short |
-unmatched | alone. An unknown short id -> 404; marking a claim the rule does not withhold ->
+same_person | unmatched | alone (``short``: the owner's "keep withheld" marks left the claim's
+group with too few people; ``same_person``: the check found the same complaint in another
+claim, but one person made them all). An unknown short id -> 404; marking a claim the rule does not withhold ->
 409; the marks file locked by another writer -> 423.
 """
 

@@ -64,6 +64,8 @@ export function whyText(why, minSupporters = 2) {
       return "The model's answer about an entity it names was unusable, so nothing of that entity is released.";
     case "short":
       return `The check grouped it with the same complaint, but without the claims you kept withheld fewer than ${minSupporters} people back the group.`;
+    case "same_person":
+      return `The check found the same complaint in another claim, but the same member made both: one person who says a thing twice still counts as one, and the rule asks for ${minSupporters} different people.`;
     case "unmatched":
       return "The check found no other claim that makes the same complaint.";
     case "alone":
@@ -79,6 +81,7 @@ export const WHY_LABELS = {
   waiting: "Waiting for the check",
   unusable: "Answer unusable",
   short: "Too few people",
+  same_person: "Same person twice",
   unmatched: "No same complaint",
   alone: "Only complaint",
 };

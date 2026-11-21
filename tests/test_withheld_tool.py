@@ -162,6 +162,17 @@ def test_a_mark_needs_a_withheld_claim_and_a_free_file(page: Setup) -> None:
     assert not page.vetoes.exists()
 
 
+def test_the_same_complaint_twice_from_one_person_stays_withheld_and_says_so(page: Setup) -> None:
+    # "a" (person 1) and "d" (people 1 and 4) share person 1; "f" and "g" are two people
+    page.answer("e0001", ["a", "d"])
+    page.answer("e0003", ["f", "g"])
+    assert "f" not in page.why() and "g" not in page.why()
+    world = Setup(page.world.root / "twice", more={"h": (["e0002"], [5])})
+    world.answer("e0002", ["e", "h"])  # person 5 made the complaint twice
+    assert world.why()["e"] == "same_person" and world.why()["h"] == "same_person"
+    assert world.get("/summary")["counts"]["released"] == 0
+
+
 def test_a_stale_or_unusable_answer_releases_nothing(page: Setup) -> None:
     page.answer("e0001", ["a", "b"], fingerprint="0" * 40)
     page.answer("e0003", ["f", "g"], problem="the model's answer did not parse")

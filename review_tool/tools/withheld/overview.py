@@ -46,8 +46,10 @@ KEPT = "kept"  # the owner's mark: never released
 BY_YOU = "by_you"  # the owner released it by hand
 PUBLISHED = "published"  # the rule never withheld it
 SHORT = "short"  # withheld: without the marked claims, fewer than two people back the group
+# Withheld: the check found the same complaint in another claim, but one person made them all.
+SAME_PERSON = "same_person"
 # Why a claim stays withheld, in this order of precedence.
-WHY = (KEPT, WAITING, UNUSABLE, SHORT, "unmatched", "alone")
+WHY = (KEPT, WAITING, UNUSABLE, SHORT, SAME_PERSON, "unmatched", "alone")
 
 
 class ClaimsData:
@@ -144,9 +146,11 @@ class WithheldView:
     def _why(self, record: Mapping[str, Any]) -> str:
         short_id = record["short_id"]
         states = {self.check.states[e] for e in record["entity_ids"]}
-        grouped = any(short_id in g.claims for g in self.check.groups)
+        groups = [g for g in self.check.groups if short_id in g.claims]
         reasons = {KEPT: short_id in self.marks.keep_withheld, WAITING: WAITING in states,
-                   UNUSABLE: UNUSABLE in states, SHORT: grouped,
+                   UNUSABLE: UNUSABLE in states,
+                   SHORT: any(g.people_unmarked >= MIN_SUPPORTERS for g in groups),
+                   SAME_PERSON: bool(groups),
                    "unmatched": ANSWERED in states, "alone": states == {NO_CALL}}
         return next(why for why in WHY if reasons[why])
 

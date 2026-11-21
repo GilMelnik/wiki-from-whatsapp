@@ -34,12 +34,13 @@ test("people are counted, never named", () => {
 });
 
 test("every reason the server gives has a label and a sentence", () => {
-  for (const why of ["kept", "waiting", "unusable", "short", "unmatched", "alone"]) {
+  for (const why of ["kept", "waiting", "unusable", "short", "same_person", "unmatched", "alone"]) {
     assert.ok(WHY_LABELS[why], why);
     assert.notEqual(whyText(why), why);
   }
   assert.match(whyText("waiting"), /python -m step_5_same_complaint\.run/);
   assert.match(whyText("short", 3), /fewer than 3 people/);
+  assert.match(whyText("same_person", 3), /same member made both.*3 different people/);
 });
 
 test("only a claim the rule withholds can be kept withheld", () => {
