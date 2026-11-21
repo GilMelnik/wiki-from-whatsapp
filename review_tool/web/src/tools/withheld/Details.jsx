@@ -1,6 +1,6 @@
 import { Bidi, Panel, PanelState } from "@shell";
 import { ClaimCard, ClaimFacts, ConversationLink, EntityNames, KeepSwitch, ReleaseButton } from "./ClaimCard.jsx";
-import { claimState, CONVERSATION_LINK_ID, groupPeopleText, whyText } from "./withheld.js";
+import { claimState, CONVERSATION_LINK_ID, groupPeopleText, piecesNote, whyText } from "./withheld.js";
 
 // The main column. Released: the selected entity's groups, each with the English label the
 // model gave the complaint they share and its claims; or the claims the owner released by
@@ -72,6 +72,7 @@ export function ClaimDetail({ claim, minSupporters, saving, onKeep, onRelease, r
             <ClaimFacts claim={claim} />
             <EntityNames claim={claim} />
             <StateNote claim={claim} minSupporters={minSupporters} />
+            {piecesNote(claim) && <p className="text-xs text-slate-600">{piecesNote(claim)}</p>}
             <div className="flex flex-wrap items-center gap-4">
               <ReleaseButton claim={claim} published={!claim.withheld} saving={saving} onRelease={onRelease} keyName={releaseKey} />
               {claim.kept && <KeepSwitch claim={claim} saving={saving} onKeep={onKeep} />}

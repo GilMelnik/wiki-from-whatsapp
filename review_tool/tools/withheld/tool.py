@@ -17,10 +17,12 @@ Endpoints, under ``/api/withheld``:
   the groups that release a claim, or would without the owner's marks, the most released first;
   and the claims the owner released by hand
 - ``GET  /withheld?q=``               ``{items: [claim + withheld + why + filed_under +
-  filed_under_claims], total}``: every claim the rule withholds, each saying whether it is
-  withheld now (``total`` counts those), so a claim the owner just released keeps its place in
-  the page's list; ``filed_under`` is the most specific entity it names (the one the fewest
-  claims name) and ``filed_under_claims`` how many claims name that entity
+  filed_under_claims + published_siblings], total}``: every claim the rule withholds, each
+  saying whether it is withheld now (``total`` counts those), so a claim the owner just
+  released keeps its place in the page's list; ``filed_under`` is the most specific entity it
+  names (the one the fewest claims name) and ``filed_under_claims`` how many claims name that
+  entity; ``published_siblings`` is how many claims that are not withheld rest on a message
+  this claim rests on (above zero: the claim is one piece of a message the wiki tells in part)
 - ``POST /claims/{short_id}/keep``    ``{keep}`` -> ``{summary}``: set or take away the "keep
   withheld" mark (setting it takes a hand release away)
 - ``POST /claims/{short_id}/release`` ``{release}`` -> ``{summary}``: release the claim by hand,

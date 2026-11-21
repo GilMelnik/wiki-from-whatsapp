@@ -12,11 +12,15 @@ A claim the rule withholds is filed under the most specific thing it names: of i
 one the fewest claims of the whole chat name. The page lists the claims by that entity, the most
 talked-about entity first, so the complaints about a country or a public body come before the
 ones about a small provider, where one released complaint weighs the most.
+
+Step 3 writes one idea per claim, so one message often became several claims. A withheld claim
+whose message also carries published claims is one piece of what was said there: the wiki
+would tell the rest without it. ``published_siblings`` counts those published claims.
 """
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -67,6 +71,11 @@ class ClaimsData:
             for claim in read_json_file(sources.claims)["claims"]}
         # How many claims name each entity.
         self.named = Counter(e for record in self.records for e in record["entity_ids"])
+        # The claims (short ids) that rest on each message.
+        self.claims_of_message: dict[str, list[str]] = defaultdict(list)
+        for record in self.records:
+            for message_id in self.message_ids.get(record["claim_id"], []):
+                self.claims_of_message[message_id].append(record["short_id"])
         self.answers = load_answers(sources.same_complaint)
         answers_stamp = stamp(answers)
         self.answered_at = answers_stamp.iso if answers_stamp else None
@@ -162,6 +171,13 @@ class WithheldView:
                            in zip(record["entity_ids"], record["entity_names"], strict=True))
         return {"filed_under": name, "filed_under_claims": claims}
 
+    def _published_siblings(self, record: Mapping[str, Any]) -> int:
+        """How many claims that are not withheld now rest on a message this claim rests on."""
+
+        siblings = {short_id for message_id in self.data.message_ids.get(record["claim_id"], [])
+                    for short_id in self.data.claims_of_message[message_id]}
+        return len(siblings - {record["short_id"]} - self.check.withheld)
+
     def by_you(self) -> list[dict[str, Any]]:
         """The claims the rule withholds that the owner released by hand, in the order of the
         claims file."""
@@ -172,8 +188,9 @@ class WithheldView:
     def rule_withheld(self, query: str) -> list[dict[str, Any]]:
         """The claims the rule withholds, matching ``query`` (text or entity name, any case), in
         the order of the claims file; each says whether it is ``withheld`` now and, when it
-        is, ``why`` (else ``None``: the check or the owner released it), and the entity it is
-        ``filed_under`` with the number of claims that name that entity."""
+        is, ``why`` (else ``None``: the check or the owner released it), the entity it is
+        ``filed_under`` with the number of claims that name that entity, and its
+        ``published_siblings``."""
 
         words = query.casefold().split()
         rows = []
@@ -182,6 +199,7 @@ class WithheldView:
             if all(word in haystack for word in words):
                 withheld = record["short_id"] in self.check.withheld
                 rows.append({**self._claim(record), **self._filed_under(record),
+                             "published_siblings": self._published_siblings(record),
                              "withheld": withheld,
                              "why": self._why(record) if withheld else None})
         return rows

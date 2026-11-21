@@ -175,6 +175,19 @@ export function reasonCounts(claims, format = formatCount) {
     .join(" · ");
 }
 
+/** The claims that are one piece of a message the wiki tells in part: a published claim rests
+ * on a message they rest on. */
+export function piecesOnly(claims) {
+  return claims.filter((claim) => claim.published_siblings > 0);
+}
+
+/** What the detail says about such a claim, or null. */
+export function piecesNote(claim, format = formatCount) {
+  const count = claim.published_siblings ?? 0;
+  if (count === 0) return null;
+  return `One piece of a longer message: ${countText(count, "published claim", format)} ${count === 1 ? "rests" : "rest"} on the same message. The wiki will tell the rest of what was said there without this piece.`;
+}
+
 /** The Conversations page's link parameters for a claim's conversation: opened at the first
  * message the claim rests on, with all of them marked. */
 export function conversationParams(claim) {

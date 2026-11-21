@@ -13,6 +13,7 @@ import {
   keepToast,
   listsWarning,
   ORDERS,
+  piecesOnly,
   reasonCounts,
   releasedRows,
   releaseToast,
@@ -105,6 +106,8 @@ function WithheldTool({ tool }) {
   const [entityId, setEntityId] = useStoredState(TOOL_ID, "entity", null);
   const [claimId, setClaimId] = useStoredState(TOOL_ID, "claim", null);
   const [order, setOrder] = useStoredState(TOOL_ID, "order", BY_ENTITY);
+  // Only the claims that are one piece of a message the wiki tells in part.
+  const [pieces, setPieces] = useStoredState(TOOL_ID, "pieces", false);
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
   // The claims released (or unmarked) in the "Still withheld" view since it was loaded: they
@@ -122,8 +125,10 @@ function WithheldTool({ tool }) {
 
   const entities = released.data?.entities ?? [];
   const rows = releasedRows(entities, released.data?.by_you ?? []);
-  const shown = shownClaims(withheld.data?.items ?? [], releasedHere);
+  const all = shownClaims(withheld.data?.items ?? [], releasedHere);
+  const shown = pieces ? piecesOnly(all) : all;
   const claims = order === BY_ENTITY ? byEntity(shown) : shown;
+  const pieceCount = piecesOnly(all).filter((item) => item.withheld).length;
   const entity = entities.find((item) => item.entity_id === entityId) ?? null;
   const claim = claims.find((item) => item.short_id === claimId) ?? null;
   const minSupporters = summary.data?.min_supporters ?? 2;
@@ -207,7 +212,7 @@ function WithheldTool({ tool }) {
         hasData={Boolean(withheld.data)}
         onRetry={withheld.reload}
         empty={claims.length === 0}
-        emptyText={query ? "No withheld claim matches the search." : "Nothing is withheld."}
+        emptyText={query ? "No withheld claim matches the search." : pieces ? "No withheld claim is a piece of a published message." : "Nothing is withheld."}
       >
         <ItemList
           items={claims}
@@ -219,6 +224,10 @@ function WithheldTool({ tool }) {
           header={
             <span className="flex flex-wrap items-center justify-end gap-2">
               <span>{reasonCounts(claims)}</span>
+              <label className="flex items-center gap-1" title="Claims that share a message with a published claim: the wiki tells the rest of that message without them">
+                <input type="checkbox" checked={pieces} onChange={(event) => setPieces(event.target.checked)} />
+                Pieces of a published message ({formatCount(pieceCount)})
+              </label>
               <select className="field" aria-label="Order of the list" value={order} onChange={(event) => setOrder(event.target.value)}>
                 {ORDERS.map((option) => (
                   <option key={option.value} value={option.value}>

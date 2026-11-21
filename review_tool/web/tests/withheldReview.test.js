@@ -14,6 +14,8 @@ import {
   listsWarning,
   monthDate,
   peopleText,
+  piecesNote,
+  piecesOnly,
   reasonCounts,
   releasedRows,
   releaseToast,
@@ -113,6 +115,19 @@ test("the release toasts and the conversation link", () => {
 
 test("the conversation opens at the first message the claim rests on, with all of them marked", () => {
   assert.deepEqual(conversationParams({ thread_id: "t-1", message_ids: ["m4", "m9"] }), { thread: "t-1", message: "m4", marked: "m4,m9" });
+});
+
+test("a withheld claim that is one piece of a published message can be picked out", () => {
+  const claims = [
+    { short_id: "g-1", published_siblings: 0 },
+    { short_id: "g-2", published_siblings: 1 },
+    { short_id: "g-3", published_siblings: 4 },
+  ];
+  assert.deepEqual(piecesOnly(claims).map((claim) => claim.short_id), ["g-2", "g-3"]);
+  assert.equal(piecesNote(claims[0], String), null);
+  assert.equal(piecesNote({}, String), null);
+  assert.match(piecesNote(claims[1], String), /^One piece of a longer message: 1 published claim rests on the same message\./);
+  assert.match(piecesNote(claims[2], String), /4 published claims rest on the same message/);
 });
 
 test("the withheld claims are listed by entity, the most talked-about entity first", () => {

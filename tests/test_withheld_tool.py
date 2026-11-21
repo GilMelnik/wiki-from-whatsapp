@@ -208,6 +208,29 @@ def test_a_withheld_claim_says_where_it_is_filed_and_which_messages_it_rests_on(
     assert page.get("/released")["by_you"][0]["message_ids"] == ["m2", "m5"]
 
 
+def test_a_withheld_claim_counts_the_published_claims_of_its_message(tmp_path: Path) -> None:
+    page = Setup(tmp_path)
+    claim_id = {r["short_id"]: r["claim_id"] for r in load_claim_records(page.sources)}
+    # "c" and "d" were written from message m5; "c" and "e" from message m7. Two people back
+    # "d", so the rule never withheld it; "c" and "e" are lone complaints
+    messages = {page.ids["c"]: ["m5", "m7"], page.ids["d"]: ["m5"], page.ids["e"]: ["m7"]}
+    stored = read_json_file(page.sources.claims)
+    for claim in stored["claims"]:
+        for short_id, ids in messages.items():
+            if claim["claim_id"] == claim_id[short_id]:
+                claim["supporting_message_ids"] = ids
+    write_json_file(stored, page.sources.claims)
+
+    def siblings() -> dict[str, int]:
+        key_of = {short_id: key for key, short_id in page.ids.items()}
+        return {key_of[row["short_id"]]: row["published_siblings"]
+                for row in page.get("/withheld")["items"]}
+
+    assert siblings() == {"a": 0, "b": 0, "c": 1, "e": 0, "f": 0, "g": 0}
+    page.release("c", True)  # now a published claim rests on the message "e" rests on
+    assert siblings()["e"] == 1
+
+
 # ------------------------------------------------------------------ released by the owner's hand
 
 
