@@ -90,3 +90,42 @@ test("an error replaces the source with backoff and the next hello asks for a re
   assert.equal(channel.getStatus(), OPEN);
   assert.deepEqual(hellos, [false, true]);
 });
+
+test("a hidden page holds no connection and a shown one reconnects and resyncs", () => {
+  const { channel, sources, timers } = makeChannel();
+  const hellos = [];
+  channel.subscribe("hello", (event) => hellos.push(event.resync));
+  sources[0].onopen();
+  sources[0].emit({ type: "hello" });
+
+  channel.pause();
+  assert.equal(sources[0].closed, true);
+  sources[0].onerror(); // a late error of the closed source schedules nothing
+  assert.equal(timers.length, 0);
+  assert.equal(sources.length, 1);
+
+  channel.resume();
+  assert.equal(sources.length, 2);
+  channel.resume(); // shown twice: still one connection
+  assert.equal(sources.length, 2);
+  sources[1].onopen();
+  sources[1].emit({ type: "hello" });
+  assert.deepEqual(hellos, [false, true]);
+});
+
+test("a page that is hidden from the start connects only when it is shown", () => {
+  const { channel, sources, timers } = makeChannel();
+  channel.pause();
+  channel.subscribe("hello", () => {});
+  assert.equal(sources.length, 0);
+  channel.resume();
+  assert.equal(sources.length, 1);
+
+  // a retry that comes due while the page is hidden waits for the page to be shown
+  sources[0].onerror();
+  channel.pause();
+  timers[0].callback();
+  assert.equal(sources.length, 1);
+  channel.resume();
+  assert.equal(sources.length, 2);
+});

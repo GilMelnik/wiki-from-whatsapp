@@ -3,6 +3,12 @@
 // The server sends `hello` as the first frame of every connection (and again when this
 // client was too slow and lost events). Every `hello` after the first is delivered with
 // `resync: true`: events may have been missed, so whoever shows server data must refetch.
+//
+// A browser allows only a few connections to one site (six over HTTP/1.1, over all its tabs),
+// and an EventSource holds one for as long as it is open. So a page nobody looks at gives its
+// connection back (`pause`) and takes a new one when it is shown again (`resume`); the `hello`
+// of that new connection makes every view refetch. Without this, the seventh open tab of the
+// site could load nothing.
 
 export const CONNECTING = "connecting";
 export const OPEN = "open";
@@ -26,6 +32,7 @@ export class EventChannel {
     this.status = CONNECTING;
     this.source = null;
     this.started = false;
+    this.paused = false;
     this.failedAttempts = 0;
     this.hellos = 0;
   }
@@ -52,7 +59,22 @@ export class EventChannel {
     this.connect();
   }
 
+  /** Close the connection and open none until `resume` (the page is hidden). */
+  pause() {
+    this.paused = true;
+    const source = this.source;
+    this.source = null;
+    source?.close();
+  }
+
+  /** Connect again after `pause` (the page is shown again). */
+  resume() {
+    this.paused = false;
+    if (this.started) this.connect();
+  }
+
   connect() {
+    if (this.paused || this.source) return;
     const source = this.createSource(this.url);
     this.source = source;
     source.onopen = () => {

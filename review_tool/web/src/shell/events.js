@@ -8,6 +8,12 @@ import { EventChannel } from "./eventChannel.js";
 
 export const channel = new EventChannel({ url: EVENTS_URL, retryDelaysMs: RECONNECT_DELAYS_MS });
 
+// A hidden tab holds no connection (see eventChannel.js): with a tab per opened conversation,
+// the tabs of the site would otherwise use up the browser's connections to it.
+const followVisibility = () => (document.hidden ? channel.pause() : channel.resume());
+document.addEventListener("visibilitychange", followVisibility);
+followVisibility();
+
 /** Call `handler(event)` for every server event of the given type(s) while mounted. */
 export function useEvents(types, handler) {
   const handlerRef = useRef(handler);
