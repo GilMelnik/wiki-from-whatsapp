@@ -47,7 +47,7 @@ export function ConversationLink({ claim, id }) {
       newTab
       id={id}
       className="text-xs text-blue-700 hover:underline"
-      title="Opens the claim's conversation in the Conversations page, in a new tab"
+      title="Opens the claim's conversation in the Conversations page, in a new tab, at the first message the claim rests on; those messages are marked there"
     >
       Open the conversation
     </ToolLink>

@@ -10,11 +10,14 @@ import { addRange, CLASSIFIED_KEY, DEFAULT_SEARCH, extraParams, listParams, MODE
 // their own; a conversation labelled while a filter is on stays in the list until the search
 // or the filter changes (`keepInList`), so labelling never moves the owner's place. A link
 // `/threads?thread=<id>` (from another tool) opens that conversation among all of them; with
-// `&message=<id>` the views show that message instead of the conversation's start (`focusId`).
+// `&message=<id>` the views show that message instead of the conversation's start (`focusId`);
+// with `&marked=<id>,<id>` those messages stay marked while that conversation is open (`marked`:
+// the messages a claim rests on).
 
 export const api = createApi(TOOL_ID);
 const LINK_PARAM = "thread";
 const MESSAGE_PARAM = "message";
+const MARKED_PARAM = "marked";
 const NO_EXTRA = { include: [], context: [] };
 
 export function useThreads(tool) {
@@ -28,8 +31,9 @@ export function useThreads(tool) {
   useEffect(() => {
     const thread = takeLinkParam(LINK_PARAM);
     const message = takeLinkParam(MESSAGE_PARAM);
+    const marked = takeLinkParam(MARKED_PARAM);
     if (!thread) return;
-    setLinked({ thread, message });
+    setLinked({ thread, message, marked: marked ? new Set(marked.split(",")) : null });
     setMode(MODES.all);
     setSelectedId(thread);
   }, []);
@@ -112,6 +116,7 @@ export function useThreads(tool) {
     summary, list, knowledge, label, windowView, threadView, shown, windowData, shownData,
     mode, setMode, view, setView, search, setSearch, selectedId, setSelectedId,
     focusId: linked?.thread === selectedId ? linked.message : null,
+    marked: linked?.thread === selectedId ? linked.marked : null,
     windows, gold, windowIndex, subject,
     selectWindow: (index) => windows[index] && setWindowStart(windows[index].start),
     loadContext: (range) => range && changeExtra((base) => ({ context: addRange(base.context, range) })),

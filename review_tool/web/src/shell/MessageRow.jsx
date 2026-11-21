@@ -85,9 +85,11 @@ function ReplyLink({ reply, own, colors, onJump }) {
  * One message, always with its exact date and time and its sender. `info`: its
  * conversation's colour; `selected` / `onToggle` (omit `onToggle`
  * for a read-only view); `outside`: dimmed (outside the gold window); `showTag`: the
- * conversation chip before the time (timeline); `highlight`: a search to mark.
+ * conversation chip before the time (timeline); `highlight`: a search to mark; `marked`: a
+ * lasting mark with the words of `markedLabel` (a link named this message, e.g. a claim rests
+ * on it).
  */
-export function MessageRow({ message, info, colors, selected, onToggle, outside, showTag, highlight, onJump }) {
+export function MessageRow({ message, info, colors, selected, onToggle, outside, showTag, highlight, onJump, marked, markedLabel }) {
   const selectable = Boolean(onToggle);
   const activate = (event) => {
     if (!selectable || event.target.closest("a, button")) return;
@@ -107,7 +109,7 @@ export function MessageRow({ message, info, colors, selected, onToggle, outside,
         }
       }}
       className={`flex gap-2 rounded-md border border-s-4 px-2 py-1.5 ${info?.bar ?? ""} ${
-        selected ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500" : "border-slate-200 bg-white"
+        selected ? "border-blue-500 bg-blue-50 ring-1 ring-blue-500" : marked ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-white"
       } ${outside ? "opacity-60" : ""} ${selectable ? "cursor-pointer select-none" : ""}`}
     >
       {selectable && <input type="checkbox" checked={selected} readOnly tabIndex={-1} aria-hidden="true" className="mt-1 shrink-0 pointer-events-none" />}
@@ -116,6 +118,7 @@ export function MessageRow({ message, info, colors, selected, onToggle, outside,
           {showTag && <ThreadTag info={info} threadId={message.thread_id} />}
           <span>{formatMoment(message.datetime)}</span>
           <Bidi className="font-medium text-slate-700">{message.sender}</Bidi>
+          {marked && <span className="badge badge-amber">{markedLabel}</span>}
           {message.reply_to && <ReplyLink reply={message.reply_to} own={message.thread_id} colors={colors} onJump={onJump} />}
         </div>
         {message.quote && (

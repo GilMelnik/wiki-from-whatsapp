@@ -2,16 +2,19 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   BY_YOU_KEY,
+  byEntity,
   canKeep,
   claimState,
   conversationParams,
   countsText,
+  entitySections,
   groupPeopleText,
   keepSelection,
   keepToast,
   listsWarning,
   monthDate,
   peopleText,
+  reasonCounts,
   releasedRows,
   releaseToast,
   shownClaims,
@@ -104,4 +107,34 @@ test("the release toasts and the conversation link", () => {
   assert.match(releaseToast(true), /^Released/);
   assert.match(releaseToast(false), /^Withheld again/);
   assert.deepEqual(conversationParams({ thread_id: "t-1" }), { thread: "t-1" });
+  assert.deepEqual(conversationParams({ thread_id: "t-1", message_ids: [] }), { thread: "t-1" });
+});
+
+test("the conversation opens at the first message the claim rests on, with all of them marked", () => {
+  assert.deepEqual(conversationParams({ thread_id: "t-1", message_ids: ["m4", "m9"] }), { thread: "t-1", message: "m4", marked: "m4,m9" });
+});
+
+test("the withheld claims are listed by entity, the most talked-about entity first", () => {
+  const claim = (short_id, filed_under, filed_under_claims, withheld = true, why = "unmatched") => ({
+    short_id, filed_under, filed_under_claims, withheld, why: withheld ? why : null,
+  });
+  const claims = [
+    claim("g-1", "Small clinic", 3, true, "alone"),
+    claim("g-2", "A country", 1464),
+    claim("g-3", "Agency", 77),
+    claim("g-4", "A country", 1464, false),
+    claim("g-5", "Another agency", 77),
+    claim("g-6", "A country", 1464),
+  ];
+  const listed = byEntity(claims);
+  // a country first, the smallest provider last; inside an entity the order they came in
+  assert.deepEqual(listed.map((item) => item.short_id), ["g-2", "g-4", "g-6", "g-3", "g-5", "g-1"]);
+  assert.deepEqual(claims.map((item) => item.short_id), ["g-1", "g-2", "g-3", "g-4", "g-5", "g-6"]);
+  const heading = entitySections(listed, String);
+  // a claim released in the view keeps its row, and is no longer counted as withheld
+  assert.equal(heading(listed[0]), "“\u2068A country\u2069” · 2 withheld · named by 1464 claims");
+  assert.equal(heading(listed[1]), heading(listed[0]));
+  assert.equal(heading(listed[5]), "“\u2068Small clinic\u2069” · 1 withheld · named by 3 claims");
+  assert.equal(reasonCounts(listed, String), "No same complaint 4 · Only complaint 1");
+  assert.equal(reasonCounts([], String), "");
 });

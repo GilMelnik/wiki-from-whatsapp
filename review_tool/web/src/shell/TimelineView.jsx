@@ -86,7 +86,7 @@ function Legend({ blocks, colors, edges, currentId, onSelectThread, inWindow, on
 }
 
 export function TimelineView({
-  blocks, chatSize, colors, selection, currentId, focusId, onSelectThread, onLoad, step = 10, quietMinutes, inWindow, window,
+  blocks, chatSize, colors, selection, currentId, focusId, marked, markedLabel, onSelectThread, onLoad, step = 10, quietMinutes, inWindow, window,
   highlight,
 }) {
   const rows = useMemo(() => streamRows(blocks), [blocks]);
@@ -132,6 +132,8 @@ export function TimelineView({
                 showTag
                 highlight={highlight}
                 onJump={jump}
+                marked={marked?.has(row.message.id) ?? false}
+                markedLabel={markedLabel}
               />
             </div>
           );

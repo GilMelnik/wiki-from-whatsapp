@@ -16,9 +16,11 @@ Endpoints, under ``/api/withheld``:
   [{label, people, people_unmarked, claims: [claim + status]}]}], by_you: [claim + status]}``:
   the groups that release a claim, or would without the owner's marks, the most released first;
   and the claims the owner released by hand
-- ``GET  /withheld?q=``               ``{items: [claim + withheld + why], total}``: every claim the
-  rule withholds, each saying whether it is withheld now (``total`` counts those), so a claim
-  the owner just released keeps its place in the page's list
+- ``GET  /withheld?q=``               ``{items: [claim + withheld + why + filed_under +
+  filed_under_claims], total}``: every claim the rule withholds, each saying whether it is
+  withheld now (``total`` counts those), so a claim the owner just released keeps its place in
+  the page's list; ``filed_under`` is the most specific entity it names (the one the fewest
+  claims name) and ``filed_under_claims`` how many claims name that entity
 - ``POST /claims/{short_id}/keep``    ``{keep}`` -> ``{summary}``: set or take away the "keep
   withheld" mark (setting it takes a hand release away)
 - ``POST /claims/{short_id}/release`` ``{release}`` -> ``{summary}``: release the claim by hand,
@@ -26,8 +28,9 @@ Endpoints, under ``/api/withheld``:
   or withheld; releasing a claim kept withheld that the check releases only takes the "keep
   withheld" mark away)
 
-A claim is ``{short_id, thread_id, text, stance, supporter_count, month, entity_names, kept,
-hand_released}`` (``thread_id`` only opens the conversation on this local site); ``status`` is
+A claim is ``{short_id, thread_id, message_ids, text, stance, supporter_count, month,
+entity_names, kept, hand_released}`` (``thread_id`` and ``message_ids``, the messages the claim
+rests on, only open the conversation on this local site and mark them there); ``status`` is
 released | kept | by_you | short | published, ``why`` is kept | waiting | unusable | short |
 unmatched | alone. An unknown short id -> 404; marking a claim the rule does not withhold ->
 409; the marks file locked by another writer -> 423.

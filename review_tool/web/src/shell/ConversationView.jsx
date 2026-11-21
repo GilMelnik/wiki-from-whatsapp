@@ -13,7 +13,8 @@ import { Ltr } from "./text.jsx";
 //
 //   <ConversationView blocks={view.blocks} colors={colors} selection={selection}
 //     currentId={id} onSelectThread={open} quietMinutes={25} highlight={q}
-//     inWindow={idsOrNull} window={{start, end} | null} />
+//     inWindow={idsOrNull} window={{start, end} | null}
+//     marked={idsOrNull} markedLabel="the claim rests on this" />
 //
 // Without `selection` the view is read-only (a tool that only shows a thread).
 
@@ -69,7 +70,7 @@ export function BetweenMessages({ previous, row, quietMinutes, countHidden = tru
   );
 }
 
-export function ConversationView({ blocks, colors, selection, currentId, focusId, onSelectThread, quietMinutes, inWindow, window, highlight }) {
+export function ConversationView({ blocks, colors, selection, currentId, focusId, marked, markedLabel, onSelectThread, quietMinutes, inWindow, window, highlight }) {
   const rows = useMemo(() => blocks.flatMap(blockRows), [blocks]);
   const closureOf = useMemo(() => replyClosures(rows), [rows]);
   const index = useMemo(() => new Map(rows.map((row, i) => [row.key, i])), [rows]);
@@ -109,6 +110,8 @@ export function ConversationView({ blocks, colors, selection, currentId, focusId
                   outside={inWindow ? !inWindow.has(row.key) : false}
                   highlight={highlight}
                   onJump={jump}
+                  marked={marked?.has(row.message.id) ?? false}
+                  markedLabel={markedLabel}
                 />
               </div>
             ))}

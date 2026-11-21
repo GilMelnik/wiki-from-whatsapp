@@ -2,13 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import { Bidi, countText, createApi, formatCount, formatDateTime, ItemList, Kbd, Layout, PanelState, useBanner, useResource, useShortcuts, useStoredState, useToast } from "@shell";
 import { ClaimDetail, EntityGroups, ReleasedByYou } from "./Details.jsx";
 import {
+  BY_ENTITY,
   BY_YOU_KEY,
+  byEntity,
   claimState,
   CONVERSATION_LINK_ID,
   countsText,
+  entitySections,
   keepSelection,
   keepToast,
   listsWarning,
+  ORDERS,
+  reasonCounts,
   releasedRows,
   releaseToast,
   RELEASED_VIEW,
@@ -27,8 +32,10 @@ import {
 // what the check released before the pages are written and keeps any of it withheld (a switch
 // per claim; switching it off is the undo); goes through what stays withheld and why, and
 // releases any claim by hand (one decision per claim; "Withhold again" is the undo); and sees
-// their own releases in one place. The interface is English, the claims and names are Hebrew;
-// no person is ever shown.
+// their own releases in one place. The withheld claims are listed by entity (each under the most
+// specific thing it names, the most talked-about entity first, with how many are withheld per
+// entity and per reason), or in the order of the chat. The interface is English, the claims and
+// names are Hebrew; no person is ever shown.
 
 const api = createApi(TOOL_ID);
 const entityKey = (entity) => entity.entity_id;
@@ -97,6 +104,7 @@ function WithheldTool({ tool }) {
   const [view, setView] = useStoredState(TOOL_ID, "view", RELEASED_VIEW);
   const [entityId, setEntityId] = useStoredState(TOOL_ID, "entity", null);
   const [claimId, setClaimId] = useStoredState(TOOL_ID, "claim", null);
+  const [order, setOrder] = useStoredState(TOOL_ID, "order", BY_ENTITY);
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
   // The claims released (or unmarked) in the "Still withheld" view since it was loaded: they
@@ -114,7 +122,8 @@ function WithheldTool({ tool }) {
 
   const entities = released.data?.entities ?? [];
   const rows = releasedRows(entities, released.data?.by_you ?? []);
-  const claims = shownClaims(withheld.data?.items ?? [], releasedHere);
+  const shown = shownClaims(withheld.data?.items ?? [], releasedHere);
+  const claims = order === BY_ENTITY ? byEntity(shown) : shown;
   const entity = entities.find((item) => item.entity_id === entityId) ?? null;
   const claim = claims.find((item) => item.short_id === claimId) ?? null;
   const minSupporters = summary.data?.min_supporters ?? 2;
@@ -200,7 +209,26 @@ function WithheldTool({ tool }) {
         empty={claims.length === 0}
         emptyText={query ? "No withheld claim matches the search." : "Nothing is withheld."}
       >
-        <ItemList items={claims} getKey={claimKey} selectedKey={claimId} onSelect={setClaimId} renderItem={(item) => <ClaimRow claim={item} />} />
+        <ItemList
+          items={claims}
+          getKey={claimKey}
+          selectedKey={claimId}
+          onSelect={setClaimId}
+          renderItem={(item) => <ClaimRow claim={item} />}
+          sectionOf={order === BY_ENTITY ? entitySections(claims) : undefined}
+          header={
+            <span className="flex flex-wrap items-center justify-end gap-2">
+              <span>{reasonCounts(claims)}</span>
+              <select className="field" aria-label="Order of the list" value={order} onChange={(event) => setOrder(event.target.value)}>
+                {ORDERS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </span>
+          }
+        />
       </PanelState>
     );
 

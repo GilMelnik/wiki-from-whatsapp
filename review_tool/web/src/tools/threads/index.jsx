@@ -51,6 +51,8 @@ import { api, useThreads } from "./useThreads.js";
 // step 2's. Nothing here runs a step.
 
 const CONVERSATION = MESSAGE_VIEWS.conversation;
+// On the messages a link from the Withheld page named.
+const MARKED_LABEL = "the claim rests on this";
 const TIMELINE = MESSAGE_VIEWS.timeline;
 
 function OldFormat({ summary }) {
@@ -193,7 +195,7 @@ function ThreadsTool({ tool }) {
 
   const ready = summary?.state === "ready";
   const viewProps = {
-    blocks, colors, selection, currentId: data.selectedId, focusId: data.focusId, onSelectThread: data.setSelectedId,
+    blocks, colors, selection, currentId: data.selectedId, focusId: data.focusId, marked: data.marked, markedLabel: MARKED_LABEL, onSelectThread: data.setSelectedId,
     quietMinutes: summary?.quiet_minutes, inWindow, window: view?.window ?? null, highlight: data.gold ? "" : data.search.q,
   };
   const main = !summary ? (

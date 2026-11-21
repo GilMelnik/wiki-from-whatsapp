@@ -5,6 +5,7 @@ Synthetic claims, people and answers; no model."""
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +25,8 @@ DEPOSIT = "הסוכנות לא החזירה את הפיקדון"  # synthetic He
 
 
 class Setup:
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path,
+                 more: Mapping[str, tuple[Sequence[str], Sequence[int]]] | None = None) -> None:
         self.world = World(root)
         w = self.world
         self.ids = {
@@ -36,6 +38,8 @@ class Setup:
             "f": w.add(["e0003"], [6], text="The lawyer billed too much."),
             "g": w.add(["e0003"], [7], text="The lawyer missed a deadline."),
         }
+        for key, (entities, people) in (more or {}).items():
+            self.ids[key] = w.add(entities, people)
         self.sources = w.write()
         self.answers = root / "same_complaint.json"
         self.vetoes = root / "vetoes.json"
@@ -171,6 +175,26 @@ def test_search_finds_text_and_entity_names_in_any_case(page: Setup) -> None:
     assert set(page.why(q="הפיקדון")) == {"a"}
     assert set(page.why(q="agency deposit")) == {"b"}
     assert page.get("/withheld", q="nothing like this")["total"] == 0
+
+
+def test_a_withheld_claim_says_where_it_is_filed_and_which_messages_it_rests_on(
+        tmp_path: Path) -> None:
+    page = Setup(tmp_path, more={"h": (["e0001", "e0002"], [8])})
+    claim_id = {r["short_id"]: r["claim_id"] for r in load_claim_records(page.sources)}
+    stored = read_json_file(page.sources.claims)
+    for claim in stored["claims"]:
+        if claim["claim_id"] == claim_id[page.ids["h"]]:
+            claim["supporting_message_ids"] = ["m2", "m5"]
+    write_json_file(stored, page.sources.claims)
+    rows = {row["short_id"]: row for row in page.get("/withheld")["items"]}
+    # five claims name the agency and two the clinic: the claim is filed under the rarer name
+    h = rows[page.ids["h"]]
+    assert (h["filed_under"], h["filed_under_claims"], h["message_ids"]) == ("Clinic Two", 2, ["m2", "m5"])
+    a = rows[page.ids["a"]]
+    assert (a["filed_under"], a["filed_under_claims"], a["message_ids"]) == ("Agency One", 5, [])
+    # the Released view's claims open their conversation at their messages too
+    page.release("h", True)
+    assert page.get("/released")["by_you"][0]["message_ids"] == ["m2", "m5"]
 
 
 # ------------------------------------------------------------------ released by the owner's hand

@@ -7,10 +7,16 @@ on the real files), loaded once per change of its files. ``WithheldView`` applie
 marks ("keep withheld", "released") to it per request (``step_5_same_complaint.release.Check``,
 whose ``withheld`` is what every step and page treats as withheld now), so a mark shows at once.
 The backers are identities: they stay in memory here, only their counts are served.
+
+A claim the rule withholds is filed under the most specific thing it names: of its entities, the
+one the fewest claims of the whole chat name. The page lists the claims by that entity, the most
+talked-about entity first, so the complaints about a country or a public body come before the
+ones about a small provider, where one released complaint weighs the most.
 """
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +38,7 @@ from step_5_same_complaint.release import (
     load_answers,
 )
 from step_5_same_complaint.withhold import withholds
+from utils.json_io import read_json_file
 
 # Where a claim of a released group stands.
 RELEASED = "released"
@@ -52,6 +59,12 @@ class ClaimsData:
                                same_complaint=answers)
         self.records: list[Record] = load_claim_records(sources)
         self.backers = claim_backers(self.records, audit)
+        # The messages each claim rests on, in the order of its conversation.
+        self.message_ids: dict[str, list[str]] = {
+            claim["claim_id"]: list(claim.get("supporting_message_ids") or [])
+            for claim in read_json_file(sources.claims)["claims"]}
+        # How many claims name each entity.
+        self.named = Counter(e for record in self.records for e in record["entity_ids"])
         self.answers = load_answers(sources.same_complaint)
         answers_stamp = stamp(answers)
         self.answered_at = answers_stamp.iso if answers_stamp else None
@@ -79,6 +92,7 @@ class WithheldView:
                 "text": record["claim_text"], "stance": record["stance"],
                 "supporter_count": record["supporter_count"], "month": _month(record),
                 "entity_names": list(record["entity_names"]),
+                "message_ids": self.data.message_ids.get(record["claim_id"], []),
                 "kept": short_id in self.marks.keep_withheld,
                 "hand_released": short_id in self.marks.hand_released}
 
@@ -136,6 +150,14 @@ class WithheldView:
                    "unmatched": ANSWERED in states, "alone": states == {NO_CALL}}
         return next(why for why in WHY if reasons[why])
 
+    def _filed_under(self, record: Mapping[str, Any]) -> dict[str, Any]:
+        """The most specific entity the claim names (the one the fewest claims name; on a tie the
+        first by name), with how many claims name it."""
+
+        claims, name = min((self.data.named[entity_id], name) for entity_id, name
+                           in zip(record["entity_ids"], record["entity_names"], strict=True))
+        return {"filed_under": name, "filed_under_claims": claims}
+
     def by_you(self) -> list[dict[str, Any]]:
         """The claims the rule withholds that the owner released by hand, in the order of the
         claims file."""
@@ -146,7 +168,8 @@ class WithheldView:
     def rule_withheld(self, query: str) -> list[dict[str, Any]]:
         """The claims the rule withholds, matching ``query`` (text or entity name, any case), in
         the order of the claims file; each says whether it is ``withheld`` now and, when it
-        is, ``why`` (else ``None``: the check or the owner released it)."""
+        is, ``why`` (else ``None``: the check or the owner released it), and the entity it is
+        ``filed_under`` with the number of claims that name that entity."""
 
         words = query.casefold().split()
         rows = []
@@ -154,7 +177,8 @@ class WithheldView:
             haystack = " ".join([record["claim_text"], *record["entity_names"]]).casefold()
             if all(word in haystack for word in words):
                 withheld = record["short_id"] in self.check.withheld
-                rows.append({**self._claim(record), "withheld": withheld,
+                rows.append({**self._claim(record), **self._filed_under(record),
+                             "withheld": withheld,
                              "why": self._why(record) if withheld else None})
         return rows
 
